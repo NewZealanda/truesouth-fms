@@ -1507,7 +1507,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.19 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.21 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
@@ -2106,7 +2106,7 @@ function renderLoadsheet(){
         <div style="font-size:11px;color:#60a5fa;margin-top:4px">= ${fuelKgVal.toFixed(1)} kg</div>
       </div>
       <div style="background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30);border-radius:10px;padding:10px 12px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#f59e0b;text-transform:uppercase;margin-bottom:6px">Gnd Burn</div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#f59e0b;text-transform:uppercase;margin-bottom:6px">Ground Burn</div>
         <div style="font-size:20px;font-weight:800;color:var(--text)">${a.gndBurn}</div>
         <div style="font-size:11px;color:#f59e0b;margin-top:4px">kg</div>
       </div>
@@ -2826,9 +2826,9 @@ function renderAdminCrew(){
     </tr>`;
   }).join('');
 
-    // My profile banner for non-admin linked users
-  const myProfile=(!isAdmin&&S.user?.linkedCrew)?S.crew.find(cr=>cr.n===S.user.linkedCrew):null;
-  const myProfileBanner=myProfile?`<div class="card" style="border:1px solid var(--accent);margin-bottom:12px">
+    // My profile banner for non-admin users
+  const myProfile=!isAdmin?(S.user?.linkedCrew?S.crew.find(cr=>cr.n===S.user.linkedCrew):null):null;
+  const myProfileBanner=!isAdmin?`<div class="card" style="border:1px solid var(--accent);margin-bottom:12px">
     <div style="display:flex;align-items:center;gap:14px">
       <div style="width:52px;height:52px;border-radius:50%;background:var(--card2);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:2px solid var(--border2)">
         ${myProfile.photo?`<img src="${myProfile.photo}" style="width:100%;height:100%;object-fit:cover">`:'<span style="font-size:22px">👤</span>'}
@@ -2842,7 +2842,8 @@ function renderAdminCrew(){
         Edit My Profile
       </button>
     </div>
-  </div>`:'';
+  </div>`
+  :`<div class="card" style="border:1px solid var(--border2);margin-bottom:12px"><div style="display:flex;align-items:center;gap:12px"><span style="font-size:22px">👤</span><div><div style="font-weight:700;font-size:14px">My Profile</div><div style="font-size:11px;color:var(--text3);margin-top:2px">No crew profile linked — ask an admin to link your account in User Accounts.</div></div></div></div>`;
 
   return `${modalHtml}${myProfileBanner}<div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -3171,6 +3172,9 @@ window.dropFormSeat=(ev,toIdx,acId)=>{
 
 // ── Manifest save/load ──
 window.saveManifest=async()=>{
+  // Read ETD from DOM in case state wasn't updated via onchange
+  const etdSel=document.querySelector('select[onchange*="dispatch"]');
+  if(etdSel&&etdSel.value&&etdSel.value!=='custom'&&!S.dispatch.etd) S.dispatch.etd=etdSel.value;
   const d=S.dispatch,name=d.name||`Manifest ${new Date().toLocaleDateString('en-NZ')}`;
   const id='mn_'+Date.now();
   const data={dep:d.dep,dest:d.dest,date:d.date,etd:d.etd,acSetup:d.acSetup,pax:d.pax,name};
@@ -3909,7 +3913,7 @@ function renderMaintOverview(){
       return`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:${bg};border:1px solid ${bc};color:${bc}">${label}: ${txt}</span>`;
     }
     return`<div style="background:${bgCol};border:2px solid ${col};border-radius:12px;padding:14px;position:relative;cursor:pointer" onclick="S.maintEntryAc='${ac}';S.maintTab='log';window.scrollTo(0,0);render()">
-      ${isAdmin?`<button onclick="event.stopPropagation();window.toggleMaintPriority('${ac}')" style="position:absolute;top:8px;right:8px;background:${isPriority?'#f59e0b':'rgba(255,255,255,.08)'};color:${isPriority?'#000':'rgba(255,255,255,.4)'};font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;border:none;cursor:pointer;letter-spacing:.05em">${isPriority?'★ PRIORITY':'☆'}</button>`:''}
+      `<button onclick="${isAdmin?`event.stopPropagation();window.toggleMaintPriority('${ac}')`:'event.stopPropagation()'}" style="position:absolute;top:8px;right:8px;background:${isPriority?'#f59e0b':'rgba(255,255,255,.08)'};color:${isPriority?'#000':'rgba(255,255,255,.4)'};font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;border:none;cursor:${isAdmin?'pointer':'default'};letter-spacing:.05em;opacity:${isAdmin?1:0.7}">${isPriority?'★ PRIORITY':'☆'}</button>`
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <div style="width:10px;height:10px;border-radius:50%;background:${col}"></div>
         <span style="font-weight:800;font-size:15px">${acDisp(ac)}</span>
