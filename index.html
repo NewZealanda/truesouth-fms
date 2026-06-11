@@ -3891,6 +3891,12 @@ function renderMaintOverview(){
     const hrsUsed=nc&&latest!=null&&lastCheckHrs!=null?Math.max(0,latest-lastCheckHrs):0;
     const pct=checkInterval>0?Math.min(100,Math.max(0,(hrsUsed/checkInterval)*100)):0;
     const isPriority=(m.priority||[]).includes(ac);
+    const _priBg=isPriority?'#f59e0b':'rgba(255,255,255,.08)';
+    const _priCol=isPriority?'#000':'rgba(255,255,255,.4)';
+    const _priLbl=isPriority?'★ PRIORITY':'☆';
+    const _priOc=isAdmin?('event.stopPropagation();window.toggleMaintPriority(\'' + ac + '\')'):'event.stopPropagation()';
+    const _priCursor=isAdmin?'pointer':'default';
+    const priorityBtn=(isPriority||isAdmin)?('<button onclick="'+_priOc+'" style="position:absolute;top:8px;right:8px;background:'+_priBg+';color:'+_priCol+';font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;border:none;cursor:'+_priCursor+';letter-spacing:.05em">'+_priLbl+'</button>'):'';
 
     // Colour: green>30hrs, amber 10-30, red <10
     const col=ac==='ZK-SLA'?'#a75aba':ac==='ZK-SLB'?'#7c7c7c':ac==='ZK-SLD'?'#48925f':ac==='ZK-SLQ'?'#4a99d2':'#e3683e';
@@ -3913,7 +3919,7 @@ function renderMaintOverview(){
       return`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:${bg};border:1px solid ${bc};color:${bc}">${label}: ${txt}</span>`;
     }
     return`<div style="background:${bgCol};border:2px solid ${col};border-radius:12px;padding:14px;position:relative;cursor:pointer" onclick="S.maintEntryAc='${ac}';S.maintTab='log';window.scrollTo(0,0);render()">
-      `<button onclick="${isAdmin?`event.stopPropagation();window.toggleMaintPriority('${ac}')`:'event.stopPropagation()'}" style="position:absolute;top:8px;right:8px;background:${isPriority?'#f59e0b':'rgba(255,255,255,.08)'};color:${isPriority?'#000':'rgba(255,255,255,.4)'};font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;border:none;cursor:${isAdmin?'pointer':'default'};letter-spacing:.05em;opacity:${isAdmin?1:0.7}">${isPriority?'★ PRIORITY':'☆'}</button>`
+      ${priorityBtn}
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <div style="width:10px;height:10px;border-radius:50%;background:${col}"></div>
         <span style="font-weight:800;font-size:15px">${acDisp(ac)}</span>
