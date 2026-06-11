@@ -1460,7 +1460,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.3 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.5 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
@@ -2002,11 +2002,13 @@ function renderLoadsheet(){
   if(a){
     const cW=parseFloat(f.seats[0]||0);
     const seatRows=a.seats.slice(1).map((s,i)=>{const idx=i+1,w=f.seats[idx]||'',b=f.bags[idx]||'',nm=f.names[idx]||'';
+      const infantNm=f.infantNames?.[idx]||'';
       const mom=((parseFloat(w)||0)+(parseFloat(b)||0))*s.arm;
       return`<div style="border-bottom:1px solid var(--border);padding:6px 0">
         <div style="display:grid;grid-template-columns:1.5fr .8fr .8fr .6fr;gap:5px;align-items:end">
           <div><div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:2px">${s.lbl}</div>
-            <input class="fi" type="text" placeholder="Name" value="${nm}" style="font-size:13px;color:${nm&&nm.includes('+')?'#db2777':''};font-weight:${nm&&nm.includes('+')?'700':''}" onblur="lsN(${idx},this.value)"></div>
+            <input class="fi" type="text" placeholder="Name" value="${nm}" style="font-size:13px;color:${nm&&nm.includes('+')?'#db2777':''};font-weight:${nm&&nm.includes('+')?'700':''}" onblur="lsN(${idx},this.value)">
+            ${infantNm?`<div style="font-size:10px;color:#ec4899;font-weight:600;margin-top:2px;padding-left:2px">👶 ${infantNm}</div>`:''}</div>
           <div><div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:2px">WT (kg)</div>
             <input class="fi" type="number" placeholder="kg" value="${w}" style="font-size:13px" onblur="lsS(${idx},this.value)"></div>
           <div><div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:2px">BAG (kg)</div>
@@ -3907,11 +3909,15 @@ function renderMaintLog(){
     const cwTd=isCaravan?`<td style="padding:4px 6px;text-align:center;font-size:13px">${cwDone?`<span style="color:#06b6d4;cursor:pointer" onclick="window.toggleCWLog('${ds}','${ac}')">✓</span>`:`<span style="color:var(--border);cursor:pointer" onclick="window.toggleCWLog('${ds}','${ac}')">○</span>`}</td>`:'';
     const adasTd=isCaravan?`<td style="padding:4px 6px;text-align:center;font-size:13px">${adasDone?`<span style="color:#a78bfa;cursor:pointer" onclick="window.toggleADASLog('${ds}','${ac}')">✓</span>`:`<span style="color:var(--border);cursor:pointer" onclick="window.toggleADASLog('${ds}','${ac}')">○</span>`}</td>`:'';
     if(!hasFlightData){
-      return `<tr style="opacity:.25;border-bottom:1px solid rgba(255,255,255,.02)${isWe?';background:rgba(255,255,255,.01)':''}">
+      return `<tr style="opacity:.35;border-bottom:1px solid rgba(255,255,255,.02)${isWe?';background:rgba(255,255,255,.01)':''}">
         <td style="padding:3px 6px;font-size:10px;color:var(--text3);white-space:nowrap">${fmtMaintDate(ds)}</td>
-        <td style="padding:3px 6px;font-size:10px;color:var(--border)" colspan="${isCaravan?3:2}">—</td>
-        ${isCaravan?'<td></td><td></td>':''}
-        <td></td>${cwTd}${adasTd}<td></td><td></td></tr>`;
+        <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','ttis',this.value)" style="width:58px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text1);font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.closest('tr').style.opacity='1'" onblur2="this.style.borderBottomColor='transparent'"></td>
+        <td style="padding:5px 6px;text-align:right;font-size:12px;color:var(--border)">—</td>
+        ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text1);font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.closest('tr').style.opacity='1'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text1);font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.closest('tr').style.opacity='1'"></td>`:''}
+        <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','oil',this.value)" style="width:44px;background:transparent;border:none;border-bottom:1px solid transparent;color:#f59e0b;font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.closest('tr').style.opacity='1'"></td>
+        ${cwTd}${adasTd}
+        <td style="padding:2px 4px"><input type="text" value="" placeholder="notes…" onblur="window.saveMaintField('${ds}','${ac}','comment',this.value)" style="width:100%;min-width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-size:11px;font-style:italic;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.closest('tr').style.opacity='1'"></td>
+        <td></td></tr>`;
     }
     return `<tr style="border-bottom:1px solid rgba(255,255,255,.05)${isWe?';background:rgba(255,255,255,.01)':''}">
       <td style="padding:5px 6px;font-size:11px;color:var(--text3);white-space:nowrap">${fmtMaintDate(ds)}</td>
