@@ -216,7 +216,30 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 // ═══════════════════════════════════════════════════════
 
 const LOGO='data:image/png;base64,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';
-(function(){var l=document.createElement('link');l.rel='icon';l.type='image/png';l.href=LOGO;document.head.appendChild(l);var a=document.createElement('link');a.rel='apple-touch-icon';a.href=LOGO;document.head.appendChild(a);})();
+(function(){
+  // Create icon with dark background for PWA/homescreen
+  function makeIconDataURL(srcUrl,cb){
+    var cv=document.createElement('canvas');cv.width=192;cv.height=192;
+    var ctx=cv.getContext('2d');
+    ctx.fillStyle='#1a2236';ctx.fillRect(0,0,192,192);
+    var img=new Image();
+    img.onload=function(){ctx.drawImage(img,24,24,144,144);cb(cv.toDataURL('image/png'));};
+    img.onerror=function(){cb(srcUrl);};
+    img.src=srcUrl;
+  }
+  // Favicon (can use raw logo)
+  var l=document.createElement('link');l.rel='icon';l.type='image/png';l.href=LOGO;document.head.appendChild(l);
+  // Apple touch icon + manifest icon — use canvas version with background
+  makeIconDataURL(LOGO,function(iconUrl){
+    var a=document.createElement('link');a.rel='apple-touch-icon';a.href=iconUrl;document.head.appendChild(a);
+    // Web app manifest
+    var mf={name:'True South FMS',short_name:'TS FMS',start_url:'/',display:'standalone',
+      background_color:'#1a2236',theme_color:'#1a2236',
+      icons:[{src:iconUrl,sizes:'192x192',type:'image/png'},{src:iconUrl,sizes:'512x512',type:'image/png'}]};
+    var blob=new Blob([JSON.stringify(mf)],{type:'application/manifest+json'});
+    var ml=document.createElement('link');ml.rel='manifest';ml.href=URL.createObjectURL(blob);document.head.appendChild(ml);
+  });
+})();
 
 // ── Supabase ──
 const SB='https://wgycephyuwwfogggcbye.supabase.co';
@@ -259,8 +282,8 @@ const acDisp=id=>id?id.replace('ZK-',''):id;
 const CREW_DEF=[{id:'c1',name:"P. Daniell",weight:104},{id:'c2',name:"A. Adamson",weight:110},{id:'c3',name:"T. Patel",weight:89},{id:'c4',name:"J. Yang",weight:73},{id:'c5',name:"L. McLean",weight:70},{id:'c6',name:"L. Hancock",weight:96},{id:'c7',name:"D. Ogden",weight:85},{id:'c9',name:"J. Cooper",weight:89},{id:'c10',name:"M. Stott",weight:62},{id:'c11',name:"L. Vincent",weight:68}];
 
 const AC_DEF={
-  "ZK-SLD":{id:"ZK-SLD",name:"ZK-SLD",type:"GA-8 Airvan",ew:1059.91,ea:52.46,em:55603.546,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:40,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLDRev.#110626",layout:"ga8",fuelOver:20},
-  "ZK-SLQ":{id:"ZK-SLQ",name:"ZK-SLQ",type:"GA-8 Airvan",ew:1064.9,ea:53.15,em:56599.77,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:40,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLQRev.#110626",layout:"ga8",fuelOver:20},
+  "ZK-SLD":{id:"ZK-SLD",name:"ZK-SLD",type:"GA-8 Airvan",ew:1059.91,ea:52.46,em:55603.546,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:35,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLDRev.#110626",layout:"ga8",fuelOver:20},
+  "ZK-SLQ":{id:"ZK-SLQ",name:"ZK-SLQ",type:"GA-8 Airvan",ew:1064.9,ea:53.15,em:56599.77,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:35,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLQRev.#110626",layout:"ga8",fuelOver:20},
   "ZK-SLA":{id:"ZK-SLA",name:"ZK-SLA",type:"C-208B Grand Caravan",ew:2384.58,ea:192.24,em:458411.659,mtow:3968,mlw:3856,mrw:3969,cogMin:182.57,cogMax:204.4,fuelKg:363,fuelArm:201.98,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:133.5,crew:true},{lbl:"Seat 1",arm:133.5},{lbl:"Seat 2",arm:173.5},{lbl:"Seat 3",arm:173.5},{lbl:"Seat 4",arm:203.36},{lbl:"Seat 5",arm:203.36},{lbl:"Seat 6",arm:234.35},{lbl:"Seat 7",arm:234.35},{lbl:"Seat 8",arm:264.35},{lbl:"Seat 9",arm:264.35},{lbl:"Seat 10",arm:294.15},{lbl:"Seat 11",arm:294.15},{lbl:"Seat 12",arm:343},{lbl:"Seat 13",arm:343}],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSLARev.#110626",layout:"c208",fuelOver:50},
   "ZK-SDB":{id:"ZK-SDB",name:"ZK-SDB",type:"C-208B Grand Caravan",ew:2460.17,ea:192.958,em:474709.483,mtow:4110,mlw:4082,mrw:4111,cogMin:183.49,cogMax:204.4,fuelKg:363,fuelArm:203.1,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:135.5,crew:true},{lbl:"Seat 1",arm:135.5},{lbl:"Seat 2",arm:176.9},{lbl:"Seat 3",arm:176.9},{lbl:"Seat 4",arm:211.9},{lbl:"Seat 5",arm:211.9},{lbl:"Seat 6",arm:246.9},{lbl:"Seat 7",arm:246.9},{lbl:"Seat 8",arm:281.9},{lbl:"Seat 9",arm:281.9},{lbl:"Seat 10",arm:344},{lbl:"Seat 11",arm:344}],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSDBRev.#110626B",layout:"c208",fuelOver:50},
   "ZK-SLB":{id:"ZK-SLB",name:"ZK-SLB",type:"C-208B Grand Caravan",ew:2340.91,ea:190.01,em:444796.309,mtow:3968,mlw:3856,mrw:3969,cogMin:181.71,cogMax:204.4,fuelKg:363,fuelArm:201.98,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:133.5,crew:true},{lbl:"Seat 1",arm:133.5},{lbl:"Seat 2",arm:173.5},{lbl:"Seat 3",arm:173.5},{lbl:"Seat 4",arm:203.36},{lbl:"Seat 5",arm:203.36},{lbl:"Seat 6",arm:234.35},{lbl:"Seat 7",arm:234.35},{lbl:"Seat 8",arm:264.35},{lbl:"Seat 9",arm:264.35},{lbl:"Seat 10",arm:294.15},{lbl:"Seat 11",arm:294.15},{lbl:"Seat 12",arm:343},{lbl:"Seat 13",arm:343}],removedSeats:[12,13],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSLBRev.#110626",layout:"c208",fuelOver:50}
@@ -1462,7 +1485,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.17 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.18 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
@@ -2047,26 +2070,28 @@ function renderLoadsheet(){
 
     const fuelRemKg=fuelKgVal-a.gndBurn-burnKgVal;
     const flightMin=a?.layout==='ga8'?(parseFloat(burnVal||a?.burnDef||35)/58*60).toFixed(0):(burnKgVal/136.1*60).toFixed(0);
-    fuelH=`<div class="card"><div class="st">Fuel & Burn</div><div class="g2" style="margin-bottom:12px">
+    const fuelDestLbl=a?.layout==='ga8'
+      ?`${(fuelRemKg/AVGAS).toFixed(0)}L (${fuelRemKg.toFixed(0)}kg) remaining`
+      :`${(fuelRemKg/LB).toFixed(0)} lbs remaining`;
+    fuelH=`<div class="card"><div class="st">Fuel & Burn</div><div class="g2">
       <div>
-        <label>Fuel (${fuelUnit_}) <span style="font-weight:400;color:var(--text3);font-size:10px">= ${fuelKgVal.toFixed(1)}kg</span></label>
+        <label style="font-weight:700;font-size:12px;color:var(--text2)">Fuel Loaded</label>
         <div class="fuel-row">
-          <input class="fi" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:14px" onblur="lsFuel(this.value,'${f.ac}')">
-          <span style="font-size:12px;color:var(--text3);padding-bottom:2px">${fuelUnit_}</span>
+          <input class="fi" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:18px;font-weight:800" onblur="lsFuel(this.value,'${f.ac}')">
+          <span style="font-size:12px;color:var(--text3);padding-bottom:4px">${fuelUnit_}</span>
         </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">Ground burn: ${a.gndBurn}kg</div>
+        <div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:2px">= ${fuelKgVal.toFixed(1)} kg</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">Gnd burn: ${a.gndBurn}kg · Dest: ${fuelDestLbl}</div>
       </div>
       <div>
-        <label>Burn off (${a?.layout==='ga8'?'litres':burnUnit_}) <span style="font-weight:400;color:var(--text3);font-size:10px">= ${burnKgVal.toFixed(1)}kg</span></label>
-        <input class="fi" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:14px" onblur="lsBurn(this.value,'${f.ac}')">
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">${a?.layout==='ga8'?'~58 lph cruise':'~300 lbs/hr cruise'}</div>
+        <label style="font-weight:700;font-size:12px;color:var(--text2)">Flight Burn</label>
+        <div class="fuel-row">
+          <input class="fi" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:18px;font-weight:800" onblur="lsBurn(this.value,'${f.ac}')">
+          <span style="font-size:12px;color:var(--text3);padding-bottom:4px">${a?.layout==='ga8'?'litres':burnUnit_}</span>
+        </div>
+        <div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:2px">= ${burnKgVal.toFixed(1)} kg</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">~${flightMin} min · ${a?.layout==='ga8'?'58 lph cruise':'300 lbs/hr cruise'}</div>
       </div>
-    </div>
-    <div class="g4">
-      <div class="badge bok"><div class="blbl">Fuel Loaded</div><div class="bval">${a?.layout==='ga8'?(fuelKgVal/AVGAS).toFixed(0):(fuelKgVal/LB).toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?`litres · ${fuelKgVal.toFixed(0)}kg`:'lbs'}</div></div>
-      <div class="badge" style="background:rgba(239,68,68,.08);border:1px solid #7f1d1d;color:#fca5a5"><div class="blbl">Gnd Burn</div><div class="bval">${a.gndBurn.toFixed(1)}</div><div class="bsub">kg taxi</div></div>
-      <div class="badge bwarn"><div class="blbl">Flight Burn</div><div class="bval">${a?.layout==='ga8'?(burnKgVal/AVGAS).toFixed(0):(burnKgVal/LB).toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?`L · ${(burnKgVal).toFixed(0)}kg`:'lbs'} · ${flightMin} min</div></div>
-      <div class="badge ${fuelRemKg>=0?'bok':'berr'}"><div class="blbl">Fuel @ Dest</div><div class="bval">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?`litres · ${fuelRemKg.toFixed(0)}kg`:'lbs'} remaining</div></div>
     </div></div>`;
 
     if(r){
@@ -3734,7 +3759,7 @@ function renderMaintOverview(){
       return`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:${bg};border:1px solid ${bc};color:${bc}">${label}: ${txt}</span>`;
     }
     return`<div style="background:${bgCol};border:2px solid ${col};border-radius:12px;padding:14px;position:relative;cursor:pointer" onclick="S.maintEntryAc='${ac}';S.maintTab='log';window.scrollTo(0,0);render()">
-      ${isAdmin?`<button onclick="window.toggleMaintPriority('${ac}')" style="position:absolute;top:8px;right:8px;background:${isPriority?'#f59e0b':'rgba(255,255,255,.08)'};color:${isPriority?'#000':'rgba(255,255,255,.4)'};font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;border:none;cursor:pointer;letter-spacing:.05em">${isPriority?'★ PRIORITY':'☆'}</button>`:''}
+      ${isAdmin?`<button onclick="event.stopPropagation();window.toggleMaintPriority('${ac}')" style="position:absolute;top:8px;right:8px;background:${isPriority?'#f59e0b':'rgba(255,255,255,.08)'};color:${isPriority?'#000':'rgba(255,255,255,.4)'};font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;border:none;cursor:pointer;letter-spacing:.05em">${isPriority?'★ PRIORITY':'☆'}</button>`:''}
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <div style="width:10px;height:10px;border-radius:50%;background:${col}"></div>
         <span style="font-weight:800;font-size:15px">${acDisp(ac)}</span>
