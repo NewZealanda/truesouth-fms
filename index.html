@@ -252,6 +252,13 @@ const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id
 
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
+const DEFAULT_ROLE_PERMS={
+  pilot:       {operations:true, charter:false,maintenance:true},
+  desk:        {operations:true, charter:true, maintenance:false},
+  maint:       {operations:false,charter:false,maintenance:true},
+  maintenance: {operations:false,charter:false,maintenance:true},
+  ground_staff:{operations:false,charter:false,maintenance:true}
+};
 const GRP_COLOURS=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];
 // Airport map: ICAO → full name
 const APTS={
@@ -946,7 +953,7 @@ let S={
   // Charter
   charter:{legs:[{from:'NZQN',to:'NZMF',acId:'',pax:1,note:''}],showQuote:false},
   // Admin
-  admin:{section:'crew',crewEditId:null,crewDraftN:'',crewDraftW:'',newN:'',newW:'',err:'',acSel:'ZK-SLD',acDraft:null,acErr:'',acSaved:false,userEditId:null,userDraft:{},newUser:{name:'',email:'',password:'',role:'desk',linkedCrew:''}},
+  rolePerms:{},admin:{section:'crew',crewEditId:null,crewDraftN:'',crewDraftW:'',newN:'',newW:'',err:'',acSel:'ZK-SLD',acDraft:null,acErr:'',acSaved:false,userEditId:null,userDraft:{},newUser:{name:'',email:'',password:'',role:'desk',linkedCrew:''}},
   // Login form
   loginForm:{email:'',password:'',err:''},
   showReset:false,resetMsg:null,resetEmail:'',resetStep:0,showAccount:false,changePwMsg:null, // 0=login 1=email-sent 2=enter-codeappMsg:null,lockedAcs:[],formDirty:false,mobileAcIdx:0,sigMode:'draw',sigTypedName:'',maintTab:'overview',maintSearch:{},editAcId:null,auditFilter:'',auditFilterUser:'',auditPage:0,
@@ -1044,6 +1051,14 @@ async function loadAll(){
         await sbU('ts_users',[{id:admin.id,name:admin.name,email:admin.email,role:admin.role,linked_crew:admin.linkedCrew,password_hash:admin.passwordHash}]);
       }
     }
+
+    // ── Role Permissions ──
+    try{
+      const _rpCached=lsGet('ts_role_perms');
+      if(_rpCached) S.rolePerms=_rpCached;
+      const _rpRow=await fetch(`${SB}/rest/v1/ts_settings?key=eq.role_perms&select=value`,{headers:SH});
+      if(_rpRow.ok){const _rpData=await _rpRow.json();if(_rpData[0]?.value){S.rolePerms=JSON.parse(_rpData[0].value);lsSet('ts_role_perms',S.rolePerms);}}
+    }catch(e){}
 
     S.syncStatus='ok';
   }catch(e){
@@ -1466,12 +1481,19 @@ function renderApp(){
   const sh={connecting:`<span class="sync-dot dot-spin"></span>Connecting`,ok:`<span class="sync-dot dot-ok"></span>Synced`,error:`<span class="sync-dot dot-err"></span>Offline`}[S.syncStatus]||'';
   const role=S.user?.role||'desk';
   // Tab visibility by role
-  const tabs=[
-    {id:'operations',lbl:'Operations',roles:['admin','desk','pilot']},
-    {id:'charter',lbl:'Charter',roles:['admin','desk']},
-    {id:'maintenance',lbl:'Maintenance',roles:['admin','maintenance','maint','pilot','desk','ground_staff']},
-    {id:'admin',lbl:role==='admin'?'Admin':'Crew',roles:['admin','pilot','desk','maint','maintenance','ground_staff']},
-  ].filter(t=>t.roles.includes(role));
+  // Dynamic tab visibility — admin tab always shown; others controlled by rolePerms
+  const _allTabs=[
+    {id:'operations',lbl:'Operations'},
+    {id:'charter',lbl:'Charter'},
+    {id:'maintenance',lbl:'Maintenance'},
+    {id:'admin',lbl:role==='admin'?'Admin':'Crew & Profile'},
+  ];
+  const tabs=_allTabs.filter(t=>{
+    if(role==='admin') return true; // admins see everything
+    if(t.id==='admin') return true; // crew/profile tab always visible
+    const perms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
+    return perms[t.id]===true;
+  });
 
   return`<div style="min-height:100vh;background:var(--bg)">
     <div style="background:linear-gradient(135deg,#0a0e1a,#0f172a);border-bottom:1px solid var(--border);padding:14px 14px 0">
@@ -1485,7 +1507,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.18 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.19 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
@@ -2535,17 +2557,103 @@ window.loadMoreAudit=async function(){
   }catch(e){toast('Failed to load from DB: '+e.message,'err');}
 };
 
+
+function renderAdminPerms(){
+  const roles=['pilot','desk','maint','ground_staff'];
+  const roleLabels={pilot:'Pilot',desk:'Desk',maint:'Maintenance',ground_staff:'Ground Staff'};
+  const pages=[
+    {id:'operations', lbl:'Operations', icon:'✈️', desc:'Manifest, Seatmap & Loadsheet'},
+    {id:'charter',    lbl:'Charter',    icon:'💰', desc:'Charter pricing & bookings'},
+    {id:'maintenance',lbl:'Maintenance',icon:'🔧', desc:'Aircraft logs & scheduling'},
+  ];
+  const rp=S.rolePerms||{};
+
+  function togStyle(on){
+    return on
+      ?'display:inline-flex;align-items:center;width:42px;height:24px;border-radius:12px;background:var(--accent);cursor:pointer;transition:background .2s;border:none;padding:0;flex-shrink:0'
+      :'display:inline-flex;align-items:center;width:42px;height:24px;border-radius:12px;background:var(--border2);cursor:pointer;transition:background .2s;border:none;padding:0;flex-shrink:0';
+  }
+  function togKnob(on){
+    return`<div style="width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .2s;transform:translateX(${on?'21px':'3px'});pointer-events:none"></div>`;
+  }
+
+  const rows=pages.map(pg=>{
+    const cells=roles.map(role=>{
+      const def=(DEFAULT_ROLE_PERMS[role]||{})[pg.id]||false;
+      const val=(rp[role]!==undefined&&rp[role][pg.id]!==undefined)?rp[role][pg.id]:def;
+      return`<td style="padding:12px 16px;text-align:center;border-bottom:1px solid var(--border)">
+        <button style="${togStyle(val)}" onclick="window.toggleRolePerm('${role}','${pg.id}')" title="${val?'Currently ON — click to disable':'Currently OFF — click to enable'}">
+          ${togKnob(val)}
+        </button>
+      </td>`;
+    }).join('');
+    return`<tr>
+      <td style="padding:12px 16px;border-bottom:1px solid var(--border)">
+        <div style="font-weight:700;font-size:13px">${pg.icon} ${pg.lbl}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${pg.desc}</div>
+      </td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  // Admin/Crew row — always locked on
+  const adminLocked=roles.map(()=>`<td style="padding:12px 16px;text-align:center;border-bottom:1px solid var(--border)">
+    <div style="font-size:18px" title="Always visible — cannot be disabled">🔒</div>
+  </td>`).join('');
+
+  return`<div class="card">
+    <div class="st">Role Permissions</div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:16px">Control which tabs each role can access. Changes apply immediately and sync across all devices. Admin users always see everything.</p>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:480px">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border)">
+            <th style="padding:10px 16px;text-align:left;font-size:11px;color:var(--text3);font-weight:700">PAGE</th>
+            ${roles.map(r=>`<th style="padding:10px 16px;text-align:center;font-size:11px;color:var(--text3);font-weight:700">${roleLabels[r]}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+          <tr>
+            <td style="padding:12px 16px">
+              <div style="font-weight:700;font-size:13px">👤 Crew & Profile</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">Always visible — crew list and own profile editing</div>
+            </td>
+            ${adminLocked}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:16px;padding:10px 14px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;font-size:11px;color:var(--text3)">
+      <strong style="color:var(--accent)">💡 Note:</strong> To persist permissions across all devices, run this in your Supabase SQL editor:<br>
+      <code style="font-size:10px;color:#a5b4fc">CREATE TABLE IF NOT EXISTS ts_settings (key text PRIMARY KEY, value text);</code>
+    </div>
+  </div>`;
+}
+
+window.toggleRolePerm=function(role,page){
+  if(!S.rolePerms) S.rolePerms={};
+  if(!S.rolePerms[role]) S.rolePerms[role]=Object.assign({},DEFAULT_ROLE_PERMS[role]||{});
+  const current=S.rolePerms[role][page];
+  const def=(DEFAULT_ROLE_PERMS[role]||{})[page]||false;
+  S.rolePerms[role][page]=!(current!==undefined?current:def);
+  lsSet('ts_role_perms',S.rolePerms);
+  // Persist to Supabase (fire-and-forget — ts_settings table may not exist yet)
+  sbU('ts_settings',[{key:'role_perms',value:JSON.stringify(S.rolePerms)}]).catch(()=>{});
+  render();
+};
+
 function renderAdmin(){
   const isAdmin=S.user?.role==='admin';
   // Non-admin: show crew overview only (read + own-record editing)
   if(!isAdmin){const ad=S.admin;if(!ad.section||ad.section!=='crew')ad.section='crew';return renderAdminCrew();}
   const ad=S.admin;
-  const sections=['crew','users','gdrive',...(S.user?.superAdmin?['audit']:[])];
-  const sectionLabels={crew:'Crew/Pilots',users:'User Accounts',gdrive:'Google Drive PDF',audit:'Audit Log'};
+  const sections=['crew','users','perms','gdrive',...(S.user?.superAdmin?['audit']:[])];
+  const sectionLabels={crew:'Crew/Pilots',users:'User Accounts',perms:'Permissions',gdrive:'Google Drive PDF',audit:'Audit Log'};
   const tabBar=`<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
     ${sections.map(s=>`<button class="sub-tab ${ad.section===s?'on':''}" onclick="S.admin.section='${s}';render()">${sectionLabels[s]}</button>`).join('')}
   </div>`;
-  return tabBar+{crew:renderAdminCrew,users:renderAdminUsers,gdrive:renderAdminGDrive,audit:renderAdminAudit}[ad.section]?.()||renderAdminCrew();
+  return tabBar+{crew:renderAdminCrew,users:renderAdminUsers,perms:renderAdminPerms,gdrive:renderAdminGDrive,audit:renderAdminAudit}[ad.section]?.()||renderAdminCrew();
 }
 
 function renderAdminGDrive(){
