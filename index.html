@@ -1462,7 +1462,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.15 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.16 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
@@ -1544,7 +1544,7 @@ function renderStep1(){
           <div><label>PIC</label>
             <select class="fi" onchange="setAcField('${a.id}','pic',this.value)">
               <option value="">— select PIC —</option>
-              ${S.crew.filter(c=>{const ac=S.aircraft[a.id];if(!ac)return true;const t=ac.layout==='c208'?'c208':'ga8';return!c.endorse||!c.endorse.length||c.endorse.includes(t);}).map(c=>`<option value="${c.n}"${setup.pic===c.n?' selected':''}>${c.n} (${c.w}kg)</option>`).join('')}
+              ${S.crew.filter(c=>{const ac=S.aircraft[a.id];if(!ac)return true;const t=ac.layout==='c208'?'C208B':'GA8';return!c.endorse||!c.endorse.length||c.endorse.includes(t);}).map(c=>`<option value="${c.n}"${setup.pic===c.n?' selected':''}>${c.n} (${c.w}kg)</option>`).join('')}
             </select></div>
           <div><label>Co-Pilot (optional)</label>
             <select class="fi" onchange="setAcField('${a.id}','coPilot',this.value)">
