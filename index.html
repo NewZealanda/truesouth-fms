@@ -2095,24 +2095,33 @@ function renderLoadsheet(){
     const fuelDestLbl=a?.layout==='ga8'
       ?`${(fuelRemKg/AVGAS).toFixed(0)}L (${fuelRemKg.toFixed(0)}kg) remaining`
       :`${(fuelRemKg/LB).toFixed(0)} lbs remaining`;
-    fuelH=`<div class="card"><div class="st">Fuel & Burn</div><div class="g2">
-      <div>
-        <label style="font-weight:700;font-size:12px;color:var(--text2)">Fuel Loaded</label>
-        <div class="fuel-row">
-          <input class="fi" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:18px;font-weight:800" onblur="lsFuel(this.value,'${f.ac}')">
-          <span style="font-size:12px;color:var(--text3);padding-bottom:4px">${fuelUnit_}</span>
+    fuelH=`<div class="card"><div class="st">Fuel & Burn</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Fuel Loaded</div>
+        <div style="display:flex;align-items:baseline;gap:5px">
+          <input class="fi" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:20px;font-weight:800;width:80px;padding:0;background:transparent;border:none;border-bottom:1px solid var(--border2)" onblur="lsFuel(this.value,'${f.ac}')">
+          <span style="font-size:12px;color:var(--text3)">${fuelUnit_}</span>
         </div>
-        <div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:2px">= ${fuelKgVal.toFixed(1)} kg</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">Gnd burn: ${a.gndBurn}kg · Dest: ${fuelDestLbl}</div>
+        <div style="font-size:11px;color:var(--accent);margin-top:4px">= ${fuelKgVal.toFixed(1)} kg</div>
       </div>
-      <div>
-        <label style="font-weight:700;font-size:12px;color:var(--text2)">Flight Burn</label>
-        <div class="fuel-row">
-          <input class="fi" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:18px;font-weight:800" onblur="lsBurn(this.value,'${f.ac}')">
-          <span style="font-size:12px;color:var(--text3);padding-bottom:4px">${a?.layout==='ga8'?'litres':burnUnit_}</span>
+      <div style="background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Gnd Burn</div>
+        <div style="font-size:20px;font-weight:800">${a.gndBurn}</div>
+        <div style="font-size:11px;color:var(--accent);margin-top:4px">kg</div>
+      </div>
+      <div style="background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Flight Burn</div>
+        <div style="display:flex;align-items:baseline;gap:5px">
+          <input class="fi" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:20px;font-weight:800;width:80px;padding:0;background:transparent;border:none;border-bottom:1px solid var(--border2)" onblur="lsBurn(this.value,'${f.ac}')">
+          <span style="font-size:12px;color:var(--text3)">${a?.layout==='ga8'?'L':burnUnit_}</span>
         </div>
-        <div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:2px">= ${burnKgVal.toFixed(1)} kg</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">~${flightMin} min · ${a?.layout==='ga8'?'58 lph cruise':'300 lbs/hr cruise'}</div>
+        <div style="font-size:11px;color:var(--accent);margin-top:4px">= ${burnKgVal.toFixed(1)} kg</div>
+      </div>
+      <div style="background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Fuel @ Dest</div>
+        <div style="font-size:20px;font-weight:800">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
+        <div style="font-size:11px;color:var(--accent);margin-top:4px">${a?.layout==='ga8'?'L · '+(fuelRemKg.toFixed(0))+' kg':'lbs · '+(fuelRemKg.toFixed(0))+' kg'}</div>
       </div>
     </div></div>`;
 
@@ -2817,7 +2826,25 @@ function renderAdminCrew(){
     </tr>`;
   }).join('');
 
-  return `${modalHtml}<div class="card">
+    // My profile banner for non-admin linked users
+  const myProfile=(!isAdmin&&S.user?.linkedCrew)?S.crew.find(cr=>cr.n===S.user.linkedCrew):null;
+  const myProfileBanner=myProfile?`<div class="card" style="border:1px solid var(--accent);margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="width:52px;height:52px;border-radius:50%;background:var(--card2);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:2px solid var(--border2)">
+        ${myProfile.photo?`<img src="${myProfile.photo}" style="width:100%;height:100%;object-fit:cover">`:'<span style="font-size:22px">👤</span>'}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:15px">${myProfile.n||''}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${(myProfile.endorse||[]).join(' · ')||'No type ratings'}</div>
+      </div>
+      <button onclick="S.admin.crewModal={id:'${myProfile.id}',n:'${(myProfile.n||'').replace(/'/g,"\\'")}',w:'${myProfile.w||''}',code:'${myProfile.code||''}',dlNum:'${myProfile.dlNum||''}',caaNum:'${myProfile.caaNum||''}',medExpiry:'${myProfile.medExpiry||''}',ocaDue:'${myProfile.ocaDue||''}',firstAid:'${myProfile.firstAid||''}',avsecExpiry:'${myProfile.avsecExpiry||''}',endorse:[${(myProfile.endorse||[]).map(e=>`'${e}'`).join(',')}],photo:'${myProfile.photo||''}'};render()"
+        style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">
+        Edit My Profile
+      </button>
+    </div>
+  </div>`:'';
+
+  return `${modalHtml}${myProfileBanner}<div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div class="st" style="margin-bottom:0">Crew Members</div>
       ${isAdmin?`<button onclick="S.admin.crewModal={id:null,n:'',w:'',code:'',dlNum:'',caaNum:'',medExpiry:'',ocaDue:'',firstAid:'',avsecExpiry:'',endorse:[],photo:''};render()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">+ Add Crew</button>`:''}
