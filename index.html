@@ -1453,6 +1453,38 @@ function renderAccountModal(){
   </div>`;
 }
 
+window.changePasswordFromModal=async function(){
+  const m=S.admin.personModal;if(!m||!m.userId)return;
+  const isOwnAccount=m.userId===S.user?.id;
+  const curEl=document.getElementById('pm_curpw');
+  const newEl=document.getElementById('pm_newpw');
+  const confEl=document.getElementById('pm_confpw');
+  const cur=curEl?curEl.value:'';
+  const nw=newEl?newEl.value:'';
+  const conf=confEl?confEl.value:'';
+  if(isOwnAccount&&btoa(cur)!==S.user.passwordHash){S.admin.pwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
+  if(nw.length<6){S.admin.pwMsg={ok:false,text:'Min 6 characters.'};render();return;}
+  if(nw!==conf){S.admin.pwMsg={ok:false,text:'Passwords do not match.'};render();return;}
+  const user=S.users.find(function(x){return x.id===m.userId;});
+  if(user)user.passwordHash=btoa(nw);
+  if(isOwnAccount){S.user.passwordHash=btoa(nw);sessionStorage.setItem('ts_user',JSON.stringify(S.user));}
+  lsSet('ts_users_cache',S.users);
+  try{await sbU('ts_users',[{id:m.userId,password_hash:btoa(nw)}]);}catch(e){}
+  S.admin.pwMsg={ok:true,text:'Password updated.'};render();
+};
+
+window.goToMyProfile=function(){
+  S.tab='admin';
+  S.admin=S.admin||{};
+  S.admin.section='people';
+  S.showAccount=false;
+  const myUserId=S.user?.id;
+  const myUser=S.users.find(function(x){return x.id===myUserId;});
+  const myCrewName=(myUser?.linkedCrew||'').trim().toLowerCase();
+  const myCrew=myCrewName?S.crew.find(function(cr){return(cr.n||'').trim().toLowerCase()===myCrewName;}):null;
+  window.openPersonModal(myCrew?myCrew.id:null,myUserId||null);
+};
+
 window.changeMyPassword=async function(){
   const cur=document.getElementById('acc_cur')?.value||'';
   const nw=document.getElementById('acc_new')?.value||'';
@@ -1507,10 +1539,10 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.22 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.23 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
-            <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
+            <button onclick="event.stopPropagation();window.goToMyProfile()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">👤 My Profile</button>
             <button onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
           </div>
         </div>
@@ -2810,8 +2842,14 @@ function renderAdminPeople(){
         +'<option value="maint"'+(d.role==='maint'?' selected':'')+'>Maintenance</option>'
         +'<option value="ground_staff"'+(d.role==='ground_staff'?' selected':'')+'>Ground Staff</option>'
         +'</select></div>':'')
-        +'<div><label style="font-size:11px;color:var(--text3)">'+(m.userId?'NEW PASSWORD <span style="font-weight:400;font-size:10px">(leave blank to keep)</span>':'PASSWORD')+'</label>'
-        +'<input class="fi" type="password" value="'+(d.password||'')+'" placeholder="'+(m.userId?'Enter new password':'Set temporary password')+'" style="font-size:14px" oninput="S.admin.personModal.draft.password=this.value" autocomplete="new-password"></div>'
+        +(m.userId?'<div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px">'
+        +'<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em">CHANGE PASSWORD</div>'
+        +(isOwnAccount?'<input class="fi" id="pm_curpw" type="password" placeholder="Current password" autocomplete="current-password" style="font-size:13px">':'')
+        +'<input class="fi" id="pm_newpw" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="font-size:13px">'
+        +'<input class="fi" id="pm_confpw" type="password" placeholder="Confirm new password" autocomplete="new-password" style="font-size:13px">'
+        +'<button onclick="window.changePasswordFromModal()" style="padding:9px;background:var(--accent);border:none;border-radius:7px;color:#fff;font-size:13px;font-weight:700;cursor:pointer">🔑 Update Password</button>'
+        +(ad.pwMsg?'<div style="font-size:12px;font-weight:600;padding:4px 0;color:'+(ad.pwMsg.ok?'var(--ok-text)':'var(--err-text)')+'">'+ad.pwMsg.text+'</div>':'')
+        +'</div>':'')
         +(!m.userId?'<div style="padding:8px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:7px;font-size:12px;color:var(--text3)">💡 Email + password creates a login account. Leave both blank to save as crew-only (no login).</div>':'')
         +'</div>';
     }
@@ -2819,13 +2857,14 @@ function renderAdminPeople(){
     // Footer
     const canDelete=isAdmin&&(m.crewId||m.userId);
     const saveBtn='<button onclick="window.savePerson()" style="flex:1;padding:11px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">💾 Save</button>';
-    const delBtn=canDelete?'<button onclick="window.deletePerson(\''+m.crewId+'\',\''+m.userId+'\')" style="padding:11px 14px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#ef4444;font-size:13px;cursor:pointer">🗑</button>':'';
+    const _dc=m.crewId?("'"+m.crewId+"'"):'null';const _du=m.userId?("'"+m.userId+"'"):'null';
+    const delBtn=canDelete?'<button onclick="window.deletePerson('+_dc+','+_du+')" style="padding:11px 14px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#ef4444;font-size:13px;cursor:pointer">🗑</button>':'';
 
     modalHtml='<div style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 12px">'
       +'<div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:440px;padding:0 0 24px">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;border-bottom:1px solid var(--border)">'
       +'<span style="font-size:16px;font-weight:700">'+(m.crewId||m.userId?'Edit Person':'New Person')+'</span>'
-      +'<button onclick="S.admin.personModal=null;render()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1">×</button>'
+      +'<button onclick="S.admin.personModal=null;S.admin.err=\'\';S.admin.pwMsg=null;render()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1">×</button>'
       +'</div>'
       +tabBar
       +'<div style="padding:0 20px">'+bodyHtml+'</div>'
@@ -3517,6 +3556,8 @@ window.toggleEndorse=function(type,checked){
   else if(!checked) S.admin.crewDraftEndorse=S.admin.crewDraftEndorse.filter(e=>e!==type);
 };
 window.openPersonModal=function(crewId,userId){
+  crewId=(crewId&&crewId!=='null')?crewId:null;
+  userId=(userId&&userId!=='null')?userId:null;
   const cr=crewId?S.crew.find(function(x){return x.id===crewId;}):null;
   const u=userId?S.users.find(function(x){return x.id===userId;}):null;
   S.admin.personModal={
@@ -3615,7 +3656,7 @@ window.savePerson=async function(){
     }
   }
 
-  S.admin.personModal=null;S.admin.err='';
+  S.admin.personModal=null;S.admin.err='';S.admin.pwMsg=null;
   toast(finalName+' saved','ok');
   render();
 };
