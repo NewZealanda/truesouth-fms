@@ -223,7 +223,7 @@ const SB='https://wgycephyuwwfogggcbye.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndneWNlcGh5dXd3Zm9nZ2djYnllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NjEzNzAsImV4cCI6MjA5NjQzNzM3MH0.6ac1fI7NxOJla_cI6P2bMwBXr3qkBTaHoyipcG9r95Q';
 const SH={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK,'Prefer':'return=representation'};
 const sbF=async(t,q='')=>{try{const r=await fetch(`${SB}/rest/v1/${t}?select=*${q}&order=created_at.desc`,{headers:SH});return r.ok?r.json():null;}catch{return null;}};
-const sbU=async(t,d)=>{try{const r=await fetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});return r.ok?r.json():null;}catch{return null;}};
+const sbU=async(t,d)=>{try{const r=await fetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);return null;}};
 const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:SH});return r.ok;}catch{return false;}};
 
 
@@ -1462,7 +1462,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.14 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.15 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
@@ -2616,7 +2616,7 @@ function renderAdminCrew(){
               <label style="font-size:11px;color:${col};font-weight:600">${lbl.toUpperCase()}</label>
               <div style="display:flex;align-items:center;gap:6px">
                 ${v?`<span style="font-size:11px;color:${ec};font-weight:600">${fmt(v)}${daysLabel(v)}</span>`:''}
-                <input type="date" class="fi" value="${v}" style="font-size:12px;max-width:140px" onchange="S.admin.crewModal['${k}']=this.value;render()">
+                <input type="date" id="cm_${k}" class="fi" value="${v}" style="font-size:12px;max-width:140px" onchange="S.admin.crewModal['${k}']=this.value;render()">
               </div>
             </div>`;
           }).join('')}
@@ -3376,7 +3376,7 @@ window.saveCrewModal=async function(){
   if(!n){toast('Name is required','warn');return;}
   const id=m.id||('c_'+Date.now());
   const record={id,n,w,endorse:m.endorse||[],code,dlNum,caaNum,
-    medExpiry:m.medExpiry||'',ocaDue:m.ocaDue||'',firstAid:m.firstAid||'',avsecExpiry:m.avsecExpiry||'',photo:m.photo||''};
+    medExpiry:(_g('cm_medExpiry')?.value||m.medExpiry||''),ocaDue:(_g('cm_ocaDue')?.value||m.ocaDue||''),firstAid:(_g('cm_firstAid')?.value||m.firstAid||''),avsecExpiry:(_g('cm_avsecExpiry')?.value||m.avsecExpiry||''),photo:m.photo||''};
   const existing=S.crew.find(cr=>cr.id===id);
   if(existing) S.crew=S.crew.map(cr=>cr.id===id?record:cr);
   else S.crew.push(record);
