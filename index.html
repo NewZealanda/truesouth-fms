@@ -309,7 +309,7 @@ function fuelUnit(acId){return S.aircraft[acId]?.layout==='ga8'?'L':'lbs';}
 function toKg(v,acId){const n=parseFloat(v)||0;return S.aircraft[acId]?.layout==='ga8'?n*AVGAS:n*LB;}
 function fromKg(kg,acId){return S.aircraft[acId]?.layout==='ga8'?kg/AVGAS:kg/LB;}
 function fuelKgForSetup(acId){const a=S.aircraft[acId];if(!a)return 0;const s=S.dispatch.acSetup.find(x=>x.acId===acId);const raw=s?.fuelInput!=null?s.fuelInput:fromKg(a.fuelKg,acId);return toKg(raw,acId);}
-function burnToKg(v,acId){const a=S.aircraft[acId];if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*0.715;return val;}
+function burnToKg(v,acId){const a=S.aircraft[acId];if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*AVGAS;return val;}
 function seat1IsCoPilot(acId){return !!(S.dispatch.acSetup.find(s=>s.acId===acId)?.coPilot);}
 function paxSeatIdxs(acId){const a=S.aircraft[acId];if(!a||!a.seats)return[];const removed=a.removedSeats||[];return a.seats.map((_,i)=>i).filter(i=>i!==0&&!(i===1&&seat1IsCoPilot(acId))&&!removed.includes(i));}
 
@@ -1460,7 +1460,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.8 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.9 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
@@ -2061,10 +2061,10 @@ function renderLoadsheet(){
       </div>
     </div>
     <div class="g4">
-      <div class="badge bok"><div class="blbl">Fuel Loaded</div><div class="bval">${a?.layout==='ga8'?(fuelKgVal/AVGAS).toFixed(0):(fuelKgVal/LB).toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?'litres':'lbs'}</div></div>
+      <div class="badge bok"><div class="blbl">Fuel Loaded</div><div class="bval">${a?.layout==='ga8'?(fuelKgVal/AVGAS).toFixed(0):(fuelKgVal/LB).toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?`litres · ${fuelKgVal.toFixed(0)}kg`:'lbs'}</div></div>
       <div class="badge" style="background:rgba(239,68,68,.08);border:1px solid #7f1d1d;color:#fca5a5"><div class="blbl">Gnd Burn</div><div class="bval">${a.gndBurn.toFixed(1)}</div><div class="bsub">kg taxi</div></div>
-      <div class="badge bwarn"><div class="blbl">Flight Burn</div><div class="bval">${a?.layout==='ga8'?(burnKgVal/AVGAS).toFixed(0):burnKgVal.toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?'L':'kg'} · ${flightMin} min</div></div>
-      <div class="badge ${fuelRemKg>=0?'bok':'berr'}"><div class="blbl">Fuel @ Dest</div><div class="bval">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?'litres':'lbs'} remaining</div></div>
+      <div class="badge bwarn"><div class="blbl">Flight Burn</div><div class="bval">${a?.layout==='ga8'?(burnKgVal/AVGAS).toFixed(0):(burnKgVal/LB).toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?`L · ${(burnKgVal).toFixed(0)}kg`:'lbs'} · ${flightMin} min</div></div>
+      <div class="badge ${fuelRemKg>=0?'bok':'berr'}"><div class="blbl">Fuel @ Dest</div><div class="bval">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?`litres · ${fuelRemKg.toFixed(0)}kg`:'lbs'} remaining</div></div>
     </div></div>`;
 
     if(r){
@@ -2524,11 +2524,6 @@ function renderAdmin(){
 function renderAdminGDrive(){
   const enabled=S.gdriveEnabled;
   return `<div class="card"><div class="st">Google Drive PDF Upload</div>
-    <p style="font-size:13px;color:var(--text3);margin-bottom:14px;line-height:1.7">
-      When enabled, signed loadsheets are automatically uploaded to Google Drive under
-      <strong style="color:#e2e8f0">Loadsheets / Year / Month</strong>.
-      Requires a one-time Google OAuth Client ID setup.
-    </p>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:12px;background:var(--card2);border-radius:8px">
       <div style="flex:1"><div style="font-weight:600;margin-bottom:2px">Upload to Google Drive</div>
         <div style="font-size:12px;color:var(--text3)">Toggle off for testing</div></div>
@@ -2540,16 +2535,12 @@ function renderAdminGDrive(){
     <div style="margin-bottom:12px"><label>Google OAuth Client ID</label>
       <input class="fi" type="text" placeholder="xxxxxxx.apps.googleusercontent.com"
         value="${S.gdriveClientId||''}" onblur="S.gdriveClientId=this.value;lsSet('gdrive_client_id',this.value)">
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">
-        Get from <strong>console.cloud.google.com</strong> → APIs &amp; Services → Credentials → Create OAuth 2.0 Client ID (Web). Add your Netlify URL as an authorised JavaScript origin.
-      </div></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">From Google Cloud Console → APIs &amp; Services → Credentials. Add your Netlify URL as an authorised origin.</div></div>
     <div style="margin-bottom:12px"><label>Existing Folder ID <span style="font-weight:400;color:var(--text3);font-size:10px">(recommended — paste from Drive URL)</span></label>
       <input class="fi" type="text" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs"
         value="${S.gdriveFolderId||''}" onblur="S.gdriveFolderId=this.value;lsSet('gdrive_folder_id',this.value)">
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">Open your folder in Google Drive — copy the ID from the URL after <strong>/folders/</strong>. Year and Month subfolders will be created inside it automatically.</div></div>
-    <div style="margin-bottom:14px"><label>Fallback Folder Name <span style="font-weight:400;color:var(--text3);font-size:10px">(used if no ID set — creates new folder)</span></label>
-      <input class="fi" type="text" value="${S.gdriveFolder||'Loadsheets'}"
-        onblur="S.gdriveFolder=this.value;lsSet('gdrive_folder',this.value)"></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">Copy the folder ID from the Drive URL after <strong>/folders/</strong>.</div></div>
+
     <div style="padding:10px 14px;background:${enabled?'var(--ok-bg)':'var(--warn-bg)'};border:1px solid ${enabled?'var(--ok-border)':'var(--warn-border)'};border-radius:8px;color:${enabled?'var(--ok-text)':'var(--warn-text)'};font-size:13px;font-weight:600">
       ${enabled?'✓ Drive upload ENABLED — signed loadsheets will upload automatically':'⚠ Testing mode — loadsheets save to Supabase only, not Drive'}
     </div>
@@ -2623,7 +2614,7 @@ function renderAdminCrew(){
               <label style="font-size:11px;color:${col};font-weight:600">${lbl.toUpperCase()}</label>
               <div style="display:flex;align-items:center;gap:6px">
                 ${v?`<span style="font-size:11px;color:${ec};font-weight:600">${fmt(v)}${daysLabel(v)}</span>`:''}
-                <input type="date" class="fi" value="${v}" style="font-size:12px;max-width:140px" oninput="S.admin.crewModal['${k}']=this.value;render()">
+                <input type="date" class="fi" value="${v}" style="font-size:12px;max-width:140px" onchange="S.admin.crewModal['${k}']=this.value;render()">
               </div>
             </div>`;
           }).join('')}
@@ -2742,7 +2733,7 @@ function renderAdminUsers(){
 
   const newU=ad.newUser||{};
   return`<div class="card"><div class="st">User Accounts</div>
-    <p style="font-size:12px;color:var(--text3);margin-bottom:10px">Pilots can sign loadsheets. Desk staff can create manifests and save unsigned loadsheets. Only admins can edit aircraft and rates.</p>
+
     ${userList}
   </div>
   <div class="card"><div class="st">Add New User</div>
@@ -2990,11 +2981,14 @@ window.startDragForm=(ev,idx,acId)=>{S.dragState={fromFormIdx:idx,fromFormAc:acI
 window.dropFormSeat=(ev,toIdx,acId)=>{
   ev.preventDefault();if(!S.dragState?.fromFormIdx&&S.dragState?.fromFormIdx!==0)return;
   const from=S.dragState.fromFormIdx;
-  // Swap names, weights, bags
+  // Swap names, weights, bags, infant names
   const f=S.form;
-  const tmp={n:f.names[from],s:f.seats[from],b:f.bags[from]};
+  if(!f.infantNames)f.infantNames={};
+  const tmp={n:f.names[from],s:f.seats[from],b:f.bags[from],inf:f.infantNames[from]||''};
   f.names[from]=f.names[toIdx]||'';f.seats[from]=f.seats[toIdx]||'';f.bags[from]=f.bags[toIdx]||'';
+  if(f.infantNames[toIdx])f.infantNames[from]=f.infantNames[toIdx];else delete f.infantNames[from];
   f.names[toIdx]=tmp.n;f.seats[toIdx]=tmp.s;f.bags[toIdx]=tmp.b;
+  if(tmp.inf)f.infantNames[toIdx]=tmp.inf;else delete f.infantNames[toIdx];
   S.dragState=null;render();
 };
 
@@ -3934,6 +3928,9 @@ function renderMaintLog(){
     const hrsUsedToday=ttis!=null&&prevHrs2!=null?(parseFloat(ttis)-prevHrs2).toFixed(1):null;
     const starts=e[ac+'_starts']||null;
     const landings=e[ac+'_landings']||null;
+    // Running cumulative totals up to this date (inclusive)
+    const cumStarts=allDays3.slice(0,allDays3.indexOf(ds)+1).reduce(function(sum,d){return sum+(histMap2[d]?histMap2[d][ac+'_starts']||0:0);},0);
+    const cumLandings=allDays3.slice(0,allDays3.indexOf(ds)+1).reduce(function(sum,d){return sum+(histMap2[d]?histMap2[d][ac+'_landings']||0:0);},0);
     const oil=oe[ac]||null;
     const hasFlightData=ttis!=null||starts!=null||landings!=null||oil!=null||e.comment;
     const cwDone=cwDoneMap[ds];
@@ -3958,7 +3955,7 @@ function renderMaintLog(){
       <td style="padding:5px 6px;font-size:11px;color:var(--text3);white-space:nowrap">${fmtMaintDate(ds)}</td>
       <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="${ttis||''}" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','ttis',this.value)" style="width:58px;background:transparent;border:none;border-bottom:1px solid transparent;color:${ttis?'var(--text1)':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)'" onblur2="this.style.borderBottomColor='transparent'"></td>
       <td style="padding:5px 6px;text-align:right;font-size:12px">${hrsUsedToday!=null?`<span style="color:${col2}">+${hrsUsedToday}</span>`:'<span style="color:var(--border)">—</span>'}</td>
-      ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${starts||''}" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:${starts!=null?'var(--text1)':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${landings||''}" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:${landings!=null?'var(--text1)':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)'"></td>`:''}
+      ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${starts||''}" placeholder="—" title="${cumStarts>0?'Total starts: '+cumStarts:''}" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:${starts!=null?'var(--text1)':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${landings||''}" placeholder="—" title="${cumLandings>0?'Total landings: '+cumLandings:''}" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:${landings!=null?'var(--text1)':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)'"></td>`:''}
       <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="${oil||''}" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','oil',this.value)" style="width:44px;background:transparent;border:none;border-bottom:1px solid transparent;color:${oil!=null?'#f59e0b':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)'"></td>
       ${cwTd}${adasTd}
       <td style="padding:2px 4px"><input type="text" value="${e.comment||''}" placeholder="notes…" onblur="window.saveMaintField('${ds}','${ac}','comment',this.value)" style="width:100%;min-width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-size:11px;font-style:italic;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)'"></td>
