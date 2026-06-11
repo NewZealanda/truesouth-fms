@@ -339,7 +339,7 @@ function fuelUnit(acId){return S.aircraft[acId]?.layout==='ga8'?'L':'lbs';}
 function toKg(v,acId){const n=parseFloat(v)||0;const a=S.aircraft[acId];if(!a)return n;return a.layout==='ga8'?n*AVGAS:n*LB;}
 function fromKg(kg,acId){return S.aircraft[acId]?.layout==='ga8'?kg/AVGAS:kg/LB;}
 function fuelKgForSetup(acId){const a=S.aircraft[acId];if(!a)return 0;const s=S.dispatch.acSetup.find(x=>x.acId===acId);const raw=s?.fuelInput!=null?s.fuelInput:fromKg(a.fuelKg,acId);return toKg(raw,acId);}
-function burnToKg(v,acId){const a=S.aircraft[acId];if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*(a.layout==='ga8'?AVGAS:JETA);return val;}
+function burnToKg(v,acId){const a=S.aircraft[acId];if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.layout==='ga8'||a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*AVGAS;if(a.burnDefUnit==='kg') return val;return val*LB;}
 function seat1IsCoPilot(acId){return !!(S.dispatch.acSetup.find(s=>s.acId===acId)?.coPilot);}
 function paxSeatIdxs(acId){const a=S.aircraft[acId];if(!a||!a.seats)return[];const removed=a.removedSeats||[];return a.seats.map((_,i)=>i).filter(i=>i!==0&&!(i===1&&seat1IsCoPilot(acId))&&!removed.includes(i));}
 
@@ -1507,7 +1507,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.21 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.22 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
@@ -2577,7 +2577,7 @@ function renderAdminPerms(){
   ];
   const adminPages=[
     {id:'admin_crew',  lbl:'Crew & Profile', icon:'👤', desc:'View crew list and edit own profile'},
-    {id:'admin_users', lbl:'User Accounts',  icon:'🔐', desc:'Manage user logins and roles'},
+    {id:'admin_users', lbl:'User Accounts',  icon:'🔐', desc:'Manage user logins and roles (admin-only)'},
   ];
   const rp=S.rolePerms||{};
 
@@ -2661,23 +2661,16 @@ function renderAdmin(){
   if(!isAdmin){
     const _role=S.user?.role||'desk';
     const _rp=S.rolePerms?.[_role]||DEFAULT_ROLE_PERMS[_role]||{};
-    const _nonAdminSections=[];
-    if(_rp.admin_crew!==false) _nonAdminSections.push('crew');
-    if(_rp.admin_users===true) _nonAdminSections.push('users');
-    const ad=S.admin;
-    if(!ad.section||!_nonAdminSections.includes(ad.section)) ad.section=_nonAdminSections[0]||'crew';
-    if(_nonAdminSections.length<=1) return renderAdminCrew();
-    const _naLabels={crew:'Crew & Profile',users:'User Accounts'};
-    const _naBar=`<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">${_nonAdminSections.map(s=>`<button class="sub-tab ${ad.section===s?'on':''}" onclick="S.admin.section='${s}';render()">${_naLabels[s]}</button>`).join('')}</div>`;
-    return _naBar+({crew:renderAdminCrew,users:renderAdminUsers}[ad.section]?.()||renderAdminCrew());
+    if(_rp.admin_crew!==false) return renderAdminPeople();
+    return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
   }
   const ad=S.admin;
-  const sections=['crew','users','perms','gdrive',...(S.user?.superAdmin?['audit']:[])];
-  const sectionLabels={crew:'Crew/Pilots',users:'User Accounts',perms:'Permissions',gdrive:'Google Drive PDF',audit:'Audit Log'};
+  const sections=['people','perms','gdrive',...(S.user?.superAdmin?['audit']:[])];
+  const sectionLabels={people:'People',perms:'Permissions',gdrive:'Google Drive PDF',audit:'Audit Log'};
   const tabBar=`<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
     ${sections.map(s=>`<button class="sub-tab ${ad.section===s?'on':''}" onclick="S.admin.section='${s}';render()">${sectionLabels[s]}</button>`).join('')}
   </div>`;
-  return tabBar+{crew:renderAdminCrew,users:renderAdminUsers,perms:renderAdminPerms,gdrive:renderAdminGDrive,audit:renderAdminAudit}[ad.section]?.()||renderAdminCrew();
+  return tabBar+{people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,audit:renderAdminAudit}[ad.section]?.()||renderAdminPeople();
 }
 
 function renderAdminGDrive(){
@@ -2718,225 +2711,211 @@ function renderAdminGDrive(){
     </div>
   </div>`;
 }
-function renderAdminCrew(){
+function renderAdminPeople(){
   const isAdmin=S.user?.role==='admin';
+  const ad=S.admin;
   const today=new Date();today.setHours(0,0,0,0);
+  const roleColour={admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10b981',maint:'#a78bfa',ground_staff:'#64748b'};
   function expiryCol(v){if(!v)return'var(--text3)';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'#ef4444':dy<30?'#f59e0b':'#22c55e';}
   function expiryBg(v){if(!v)return'transparent';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'rgba(239,68,68,.08)':dy<30?'rgba(245,158,11,.08)':'transparent';}
   function fmt(v){if(!v)return'—';const p=v.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:v;}
   function daysLabel(v){if(!v)return'';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);if(dy<0)return' (expired)';if(dy<30)return' ('+dy+'d)';return'';}
 
-  // ── Modal ──────────────────────────────────────────────────────
-  const m=S.admin.crewModal;
-  const modalHtml=m?`<div style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 12px">
-    <div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:440px;padding:0 0 24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;border-bottom:1px solid var(--border)">
-        <span style="font-size:16px;font-weight:700">${m.id?'Edit Crew Member':'New Crew Member'}</span>
-        <button onclick="S.admin.crewModal=null;render()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1">×</button>
-      </div>
-      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
-        <!-- Photo -->
-        <div style="display:flex;align-items:center;gap:14px">
-          <div onclick="document.getElementById('crew_photo_inp').click()" style="width:72px;height:72px;border-radius:50%;border:2px solid var(--border2);background:var(--card2);overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            ${m.photo?`<img src="${m.photo}" style="width:100%;height:100%;object-fit:cover">`:'<span style="font-size:28px;color:var(--text3)">👤</span>'}
-          </div>
-          <div>
-            <div style="font-size:13px;font-weight:600;color:var(--text2)">Photo</div>
-            <div style="font-size:11px;color:var(--text3)">Tap to upload</div>
-            ${m.photo?`<button onclick="S.admin.crewModal.photo=null;render()" style="margin-top:4px;background:none;border:none;color:#ef4444;font-size:11px;cursor:pointer;padding:0">Remove</button>`:''}
-          </div>
-          <input type="file" id="crew_photo_inp" accept="image/*" style="display:none" onchange="window.crewPhotoUpload(this)">
-        </div>
-        <!-- Name + Code -->
-        <div style="display:grid;grid-template-columns:1fr 90px;gap:8px">
-          <div><label style="font-size:11px;color:var(--text3)">FULL NAME</label>
-            <input class="fi" type="text" id="cm_name" value="${m.n||''}" placeholder="Full name" style="font-size:14px" oninput="S.admin.crewModal.n=this.value"></div>
-          <div><label style="font-size:11px;color:var(--text3)">CODE</label>
-            <input class="fi" type="text" id="cm_code" value="${m.code||''}" placeholder="e.g. PD" style="font-size:13px;text-transform:uppercase" oninput="S.admin.crewModal.code=this.value.toUpperCase()"></div>
-        </div>
-        <!-- Weight + DL -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div><label style="font-size:11px;color:var(--text3)">WEIGHT (kg)</label>
-            <input class="fi" type="number" id="cm_weight" value="${m.w||''}" placeholder="kg" style="font-size:13px" oninput="S.admin.crewModal.w=this.value"></div>
-          <div><label style="font-size:11px;color:var(--text3)">DL NUMBER</label>
-            <input class="fi" type="text" id="cm_dlNum" value="${m.dlNum||''}" placeholder="Driver licence #" style="font-size:13px" oninput="S.admin.crewModal.dlNum=this.value"></div>
-        </div>
-        <!-- CAA # -->
-        <div><label style="font-size:11px;color:var(--text3)">CAA LICENSE NUMBER</label>
-          <input class="fi" type="text" id="cm_caaNum" value="${m.caaNum||''}" placeholder="CAA pilot licence #" style="font-size:14px" oninput="S.admin.crewModal.caaNum=this.value"></div>
-        <!-- Expiry dates -->
-        <div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px">
-          <div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em">EXPIRY DATES</div>
-          ${[['medExpiry','Medical Expiry','#22c55e'],['ocaDue','OCA Due','#7B9EC6'],['firstAid','First Aid','#f59e0b'],['avsecExpiry','AVSEC Expiry','#a78bfa']].map(([k,lbl,col])=>{
-            const v=m[k]||'';const ec=v?expiryCol(v):'var(--text3)';const eb=v?expiryBg(v):'transparent';
-            return`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:${eb};border-radius:6px;padding:4px 6px">
-              <label style="font-size:11px;color:${col};font-weight:600">${lbl.toUpperCase()}</label>
-              <div style="display:flex;align-items:center;gap:6px">
-                ${v?`<span style="font-size:11px;color:${ec};font-weight:600">${fmt(v)}${daysLabel(v)}</span>`:''}
-                <input type="date" id="cm_${k}" class="fi" value="${v}" style="font-size:12px;max-width:140px" onchange="S.admin.crewModal['${k}']=this.value;render()">
-              </div>
-            </div>`;
-          }).join('')}
-        </div>
-        <!-- Type Ratings -->
-        <div><label style="font-size:11px;color:var(--text3)">TYPE RATINGS</label>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
-            ${['C208B','GA8'].map(e=>{
-              const on=(m.endorse||[]).includes(e);
-              return`<button onclick="(function(){var en=S.admin.crewModal.endorse||[];var ix=en.indexOf('${e}');if(ix>=0)en.splice(ix,1);else en.push('${e}');S.admin.crewModal.endorse=en;render();})()" style="padding:5px 12px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'rgba(99,102,241,.15)':'var(--card)'};color:${on?'var(--accent)':'var(--text2)'}">${e}</button>`;
-            }).join('')}
-          </div>
-        </div>
-        <!-- Role (admin only: add/delete) -->
-        ${isAdmin&&m.id?`<div style="border-top:1px solid var(--border);padding-top:12px;display:flex;gap:8px">
-          <button onclick="window.saveCrewModal()" style="flex:1;padding:11px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">💾 Save</button>
-          <button onclick="window.deleteCrewMember('${m.id}')" style="padding:11px 14px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#ef4444;font-size:13px;cursor:pointer">🗑</button>
-        </div>`:`<button onclick="window.saveCrewModal()" style="width:100%;padding:11px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">💾 Save</button>`}
-      </div>
-    </div>
-  </div>`:'';
+  // ── Build merged people list ──────────────────────────────────
+  const people=[];
+  const matchedUserIds=new Set();
+  const sortedCrew=[...S.crew].sort((a,b)=>(a.n||'').localeCompare(b.n||''));
+  sortedCrew.forEach(function(cr){
+    const user=S.users.find(function(u){return u.linkedCrew&&(u.linkedCrew||'').trim().toLowerCase()===(cr.n||'').trim().toLowerCase();});
+    if(user)matchedUserIds.add(user.id);
+    people.push({crewId:cr.id,userId:user?user.id:null,cr:cr,user:user||null});
+  });
+  S.users.forEach(function(u){
+    if(!matchedUserIds.has(u.id)) people.push({crewId:null,userId:u.id,cr:null,user:u});
+  });
 
-  // ── Table ────────────────────────────────────────────────────────
-  const cols=[
-    {k:'medExpiry',lbl:'Medical',col:'#22c55e'},
-    {k:'ocaDue',lbl:'OCA',col:'#7B9EC6'},
-    {k:'firstAid',lbl:'1st Aid',col:'#f59e0b'},
-    {k:'avsecExpiry',lbl:'AVSEC',col:'#a78bfa'},
-  ];
-  const thead=`<tr style="border-bottom:2px solid var(--border)">
-    <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">CREW MEMBER</th>
-    ${cols.map(col=>`<th style="padding:8px 6px;text-align:center;font-size:11px;color:${col.col}">${col.lbl.toUpperCase()}</th>`).join('')}
-    <th></th>
-  </tr>`;
-  const tbody=[...S.crew].sort((a,b)=>(a.n||"").localeCompare(b.n||"")).map(cr=>{
-    const canEdit=isAdmin||(S.user?.linkedCrew&&S.user.linkedCrew===cr.n);
-    const worstBg=cols.reduce((bg,col)=>{const v=cr[col.k];if(!v)return bg;const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);if(dy<0)return'rgba(239,68,68,.06)';if(dy<30&&bg!=='rgba(239,68,68,.06)')return'rgba(245,158,11,.06)';return bg;},'transparent');
-    return`<tr style="border-bottom:1px solid var(--border);background:${worstBg}" onclick="${canEdit?`S.admin.crewModal={id:'${cr.id}',n:'${(cr.n||'').replace(/'/g,"\\'")}',w:'${cr.w||''}',code:'${cr.code||''}',dlNum:'${cr.dlNum||''}',caaNum:'${cr.caaNum||''}',medExpiry:'${cr.medExpiry||''}',ocaDue:'${cr.ocaDue||''}',firstAid:'${cr.firstAid||''}',avsecExpiry:'${cr.avsecExpiry||''}',endorse:[${(cr.endorse||[]).map(e=>`'${e}'`).join(',')}],photo:'${cr.photo||''}'};render()`:''}">
-      <td style="padding:8px 10px">
-        <div style="display:flex;align-items:center;gap:8px">
-          ${cr.photo?`<img src="${cr.photo}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">👤</div>`}
-          <div>
-            <div style="font-weight:600;font-size:13px">${cr.code?`<span style="font-size:10px;background:var(--card2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;margin-right:5px">${cr.code}</span>`:''}${cr.n}</div>
-            ${cr.caaNum?`<div style="font-size:10px;color:var(--text3)">CAA ${cr.caaNum}</div>`:''}
-          </div>
-        </div>
-      </td>
-      ${cols.map(col=>{const v=cr[col.k];const ec=expiryCol(v);return`<td style="padding:8px 6px;text-align:center"><span style="font-size:11px;font-weight:${v?'600':'400'};color:${v?ec:'var(--border)'}">${fmt(v)}</span></td>`;}).join('')}
-      <td style="padding:8px 10px;text-align:right">${canEdit?`<span style="font-size:11px;color:var(--text3);cursor:pointer">✎</span>`:''}</td>
-    </tr>`;
-  }).join('');
+  // ── Determine current user's person entry ────────────────────
+  const myEntry=people.find(function(p){return p.userId===S.user?.id;});
 
-    // My profile banner for non-admin users
-  const myProfile=!isAdmin?(S.user?.linkedCrew?S.crew.find(cr=>cr.n===S.user.linkedCrew):null):null;
-  const myProfileBanner=!isAdmin?`<div class="card" style="border:1px solid var(--accent);margin-bottom:12px">
-    <div style="display:flex;align-items:center;gap:14px">
-      <div style="width:52px;height:52px;border-radius:50%;background:var(--card2);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:2px solid var(--border2)">
-        ${myProfile.photo?`<img src="${myProfile.photo}" style="width:100%;height:100%;object-fit:cover">`:'<span style="font-size:22px">👤</span>'}
-      </div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:15px">${myProfile.n||''}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${(myProfile.endorse||[]).join(' · ')||'No type ratings'}</div>
-      </div>
-      <button onclick="S.admin.crewModal={id:'${myProfile.id}',n:'${(myProfile.n||'').replace(/'/g,"\\'")}',w:'${myProfile.w||''}',code:'${myProfile.code||''}',dlNum:'${myProfile.dlNum||''}',caaNum:'${myProfile.caaNum||''}',medExpiry:'${myProfile.medExpiry||''}',ocaDue:'${myProfile.ocaDue||''}',firstAid:'${myProfile.firstAid||''}',avsecExpiry:'${myProfile.avsecExpiry||''}',endorse:[${(myProfile.endorse||[]).map(e=>`'${e}'`).join(',')}],photo:'${myProfile.photo||''}'};render()"
-        style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">
-        Edit My Profile
-      </button>
-    </div>
-  </div>`
-  :`<div class="card" style="border:1px solid var(--border2);margin-bottom:12px"><div style="display:flex;align-items:center;gap:12px"><span style="font-size:22px">👤</span><div><div style="font-weight:700;font-size:14px">My Profile</div><div style="font-size:11px;color:var(--text3);margin-top:2px">No crew profile linked — ask an admin to link your account in User Accounts.</div></div></div></div>`;
+  // ── Modal ────────────────────────────────────────────────────
+  const m=ad.personModal;
+  let modalHtml='';
+  if(m){
+    const d=m.draft;
+    const tab=m.tab||'profile';
+    const canSeeLogin=isAdmin||(m.userId===S.user?.id);
 
-  return `${modalHtml}${myProfileBanner}<div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div class="st" style="margin-bottom:0">Crew Members</div>
-      ${isAdmin?`<button onclick="S.admin.crewModal={id:null,n:'',w:'',code:'',dlNum:'',caaNum:'',medExpiry:'',ocaDue:'',firstAid:'',avsecExpiry:'',endorse:[],photo:''};render()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">+ Add Crew</button>`:''}
-    </div>
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse">
-        <thead>${thead}</thead>
-        <tbody>${tbody}</tbody>
-      </table>
-    </div>
-  </div>`;
-}
+    // Tab bar
+    const tabBar='<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:0 0 16px">'
+      +'<button onclick="S.admin.personModal.tab=\'profile\';render()" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid '+(tab==='profile'?'var(--accent)':'transparent')+';color:'+(tab==='profile'?'var(--accent)':'var(--text3)')+';font-size:13px;font-weight:700;cursor:pointer">👤 Profile</button>'
+      +(canSeeLogin?'<button onclick="S.admin.personModal.tab=\'login\';render()" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid '+(tab==='login'?'var(--accent)':'transparent')+';color:'+(tab==='login'?'var(--accent)':'var(--text3)')+';font-size:13px;font-weight:700;cursor:pointer">🔐 Login</button>':'')
+      +'</div>';
 
-function renderAdminUsers(){
-  const ad=S.admin;
-  const roleColour={admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10b981',maint:'#a78bfa',ground_staff:'#64748b'};
+    // Profile tab
+    let bodyHtml='';
+    if(tab==='profile'){
+      const expiryRows=[['medExpiry','Medical Expiry','#22c55e'],['ocaDue','OCA Due','#7B9EC6'],['firstAid','First Aid','#f59e0b'],['avsecExpiry','AVSEC Expiry','#a78bfa']].map(function(t){
+        const k=t[0],lbl=t[1],col=t[2];
+        const v=d[k]||'';const ec=v?expiryCol(v):'var(--text3)';const eb=v?expiryBg(v):'transparent';
+        return'<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:'+eb+';border-radius:6px;padding:4px 6px">'
+          +'<label style="font-size:11px;color:'+col+';font-weight:600">'+lbl.toUpperCase()+'</label>'
+          +'<div style="display:flex;align-items:center;gap:6px">'
+          +(v?'<span style="font-size:11px;color:'+ec+';font-weight:600">'+fmt(v)+daysLabel(v)+'</span>':'')
+          +'<input type="date" class="fi" value="'+v+'" style="font-size:12px;max-width:140px" onchange="S.admin.personModal.draft[\''+k+'\']=this.value;render()">'
+          +'</div></div>';
+      }).join('');
+      const endorseButtons=['C208B','GA8'].map(function(e){
+        const on=(d.endorse||[]).includes(e);
+        return'<button onclick="(function(){var en=S.admin.personModal.draft.endorse||[];var ix=en.indexOf(\''+e+'\');if(ix>=0)en.splice(ix,1);else en.push(\''+e+'\');S.admin.personModal.draft.endorse=en;render();})()" style="padding:5px 12px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'rgba(99,102,241,.15)':'var(--card)')+';color:'+(on?'var(--accent)':'var(--text2)')+'">'+e+'</button>';
+      }).join('');
+      bodyHtml='<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">'
+        +'<div onclick="document.getElementById(\'person_photo_inp\').click()" style="width:72px;height:72px;border-radius:50%;border:2px solid var(--border2);background:var(--card2);overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+        +(d.photo?'<img src="'+d.photo+'" style="width:100%;height:100%;object-fit:cover">':'<span style="font-size:28px;color:var(--text3)">👤</span>')
+        +'</div>'
+        +'<div><div style="font-size:13px;font-weight:600;color:var(--text2)">Photo</div>'
+        +'<div style="font-size:11px;color:var(--text3)">Tap to upload</div>'
+        +(d.photo?'<button onclick="S.admin.personModal.draft.photo=\'\';render()" style="margin-top:4px;background:none;border:none;color:#ef4444;font-size:11px;cursor:pointer;padding:0">Remove</button>':'')
+        +'</div>'
+        +'<input type="file" id="person_photo_inp" accept="image/*" style="display:none" onchange="window.personPhotoUpload(this)">'
+        +'</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 90px;gap:8px;margin-bottom:8px">'
+        +'<div><label style="font-size:11px;color:var(--text3)">FULL NAME</label>'
+        +'<input class="fi" type="text" value="'+(d.n||'')+'" placeholder="Full name" style="font-size:14px" oninput="S.admin.personModal.draft.n=this.value"></div>'
+        +'<div><label style="font-size:11px;color:var(--text3)">CODE</label>'
+        +'<input class="fi" type="text" value="'+(d.code||'')+'" placeholder="e.g. PD" style="font-size:13px;text-transform:uppercase" oninput="S.admin.personModal.draft.code=this.value.toUpperCase()"></div>'
+        +'</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+        +'<div><label style="font-size:11px;color:var(--text3)">WEIGHT (kg)</label>'
+        +'<input class="fi" type="number" value="'+(d.w||'')+'" placeholder="kg" style="font-size:13px" oninput="S.admin.personModal.draft.w=this.value"></div>'
+        +'<div><label style="font-size:11px;color:var(--text3)">DL NUMBER</label>'
+        +'<input class="fi" type="text" value="'+(d.dlNum||'')+'" placeholder="Driver licence #" style="font-size:13px" oninput="S.admin.personModal.draft.dlNum=this.value"></div>'
+        +'</div>'
+        +'<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--text3)">CAA LICENSE NUMBER</label>'
+        +'<input class="fi" type="text" value="'+(d.caaNum||'')+'" placeholder="CAA pilot licence #" style="font-size:14px" oninput="S.admin.personModal.draft.caaNum=this.value"></div>'
+        +'<div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px;margin-bottom:10px">'
+        +'<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em">EXPIRY DATES</div>'
+        +expiryRows+'</div>'
+        +'<div><label style="font-size:11px;color:var(--text3)">TYPE RATINGS</label>'
+        +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'+endorseButtons+'</div></div>';
+    } else if(tab==='login'){
+      const isOwnAccount=m.userId===S.user?.id;
+      bodyHtml='<div style="display:flex;flex-direction:column;gap:12px">'
+        +'<div><label style="font-size:11px;color:var(--text3)">EMAIL ADDRESS</label>'
+        +'<input class="fi" type="email" value="'+(d.email||'')+'" placeholder="email@truesouth.co.nz" style="font-size:14px" oninput="S.admin.personModal.draft.email=this.value"></div>'
+        +(isAdmin?'<div><label style="font-size:11px;color:var(--text3)">ROLE</label>'
+        +'<select class="fi" style="font-size:13px" onchange="S.admin.personModal.draft.role=this.value">'
+        +'<option value="desk"'+(d.role==='desk'?' selected':'')+'>Desk</option>'
+        +'<option value="pilot"'+(d.role==='pilot'?' selected':'')+'>Pilot</option>'
+        +'<option value="admin"'+(d.role==='admin'?' selected':'')+'>Admin</option>'
+        +'<option value="maint"'+(d.role==='maint'?' selected':'')+'>Maintenance</option>'
+        +'<option value="ground_staff"'+(d.role==='ground_staff'?' selected':'')+'>Ground Staff</option>'
+        +'</select></div>':'')
+        +'<div><label style="font-size:11px;color:var(--text3)">'+(m.userId?'NEW PASSWORD <span style="font-weight:400;font-size:10px">(leave blank to keep)</span>':'PASSWORD')+'</label>'
+        +'<input class="fi" type="password" value="'+(d.password||'')+'" placeholder="'+(m.userId?'Enter new password':'Set temporary password')+'" style="font-size:14px" oninput="S.admin.personModal.draft.password=this.value" autocomplete="new-password"></div>'
+        +(!m.userId?'<div style="padding:8px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:7px;font-size:12px;color:var(--text3)">💡 Email + password creates a login account. Leave both blank to save as crew-only (no login).</div>':'')
+        +'</div>';
+    }
 
-  // ── Inline edit form ──
-  if(ad.userEditId){
-    const draft=ad.userDraft||{};
-    const isMe=ad.userEditId===S.user?.id;
-    return`<div class="card"><div class="st">Edit User</div>
-      <div class="g2" style="margin-bottom:12px">
-        <div><label>Full Name</label>
-          <input class="fi" type="text" value="${draft.name||''}" onblur="S.admin.userDraft.name=this.value"></div>
-        <div><label>Email</label>
-          <input class="fi" type="email" value="${draft.email||''}" onblur="S.admin.userDraft.email=this.value"></div>
-        <div><label>New Password <span style="font-weight:400;color:var(--text3);font-size:10px">(leave blank to keep current)</span></label>
-          <input class="fi" type="password" placeholder="Enter new password" value="${draft.password||''}" onblur="S.admin.userDraft.password=this.value"></div>
-        <div><label>Role</label>
-          <select class="fi" onchange="S.admin.userDraft.role=this.value">
-            <option value="desk"${(draft.role||'desk')==='desk'?' selected':''}>Desk</option>
-            <option value="pilot"${draft.role==='pilot'?' selected':''}>Pilot</option>
-            <option value="admin"${draft.role==='admin'?' selected':''}>Admin</option>
-            <option value="maint"${draft.role==='maint'?' selected':''}>Maintenance</option>
-            <option value="ground_staff"${draft.role==='ground_staff'?' selected':''}>Ground Staff</option>
-          </select></div>
-        <div><label>Linked Crew (pilots only)</label>
-          <select class="fi" onchange="S.admin.userDraft.linkedCrew=this.value">
-            <option value="">— none —</option>
-            ${S.crew.map(c=>`<option value="${c.n}"${draft.linkedCrew===c.n?' selected':''}>${c.n}</option>`).join('')}
-          </select></div>
-      </div>
-      ${ad.err?`<div style="padding:8px;background:var(--err-bg);border-radius:7px;color:var(--err-text);font-size:13px;margin-bottom:10px">${ad.err}</div>`:''}
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-sky" onclick="saveUser()">Save Changes</button>
-        <button class="btn btn-ghost" onclick="S.admin.userEditId=null;S.admin.userDraft={};S.admin.err='';render()">Cancel</button>
-      </div>
-    </div>`;
+    // Footer
+    const canDelete=isAdmin&&(m.crewId||m.userId);
+    const saveBtn='<button onclick="window.savePerson()" style="flex:1;padding:11px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">💾 Save</button>';
+    const delBtn=canDelete?'<button onclick="window.deletePerson(\''+m.crewId+'\',\''+m.userId+'\')" style="padding:11px 14px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#ef4444;font-size:13px;cursor:pointer">🗑</button>':'';
+
+    modalHtml='<div style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 12px">'
+      +'<div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:440px;padding:0 0 24px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;border-bottom:1px solid var(--border)">'
+      +'<span style="font-size:16px;font-weight:700">'+(m.crewId||m.userId?'Edit Person':'New Person')+'</span>'
+      +'<button onclick="S.admin.personModal=null;render()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1">×</button>'
+      +'</div>'
+      +tabBar
+      +'<div style="padding:0 20px">'+bodyHtml+'</div>'
+      +(ad.err?'<div style="margin:8px 20px 0;padding:8px;background:var(--err-bg);border-radius:7px;color:var(--err-text);font-size:13px">'+ad.err+'</div>':'')
+      +'<div style="padding:16px 20px 0;display:flex;gap:8px">'+saveBtn+delBtn+'</div>'
+      +'</div>'
+      +'</div>';
   }
 
-  // ── User list ──
-  const userList=S.users.map(u=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
-    <div style="flex:1">
-      <div style="font-weight:600">${u.name}${u.id===S.user?.id?' <span style="font-size:10px;color:var(--text3)">(you)</span>':''}</div>
-      <div style="font-size:12px;color:var(--text3)">${u.email} · <span style="color:${roleColour[u.role]||'#64748b'}">${u.role}</span>${u.linkedCrew?' · Linked: '+u.linkedCrew:''}</div>
-    </div>
-    <div style="display:flex;gap:5px">
-      <button class="btn btn-ghost" style="font-size:12px;padding:5px 10px" onclick="editUser('${u.id}')">Edit</button>
-      ${u.id!=='u_admin'?`<button class="btn btn-red" style="font-size:12px;padding:5px 10px" onclick="delUser('${u.id}')">Delete</button>`:''}
-    </div>
-  </div>`).join('');
+  // ── People list ──────────────────────────────────────────────
+  const expiryKeys=['medExpiry','ocaDue','firstAid','avsecExpiry'];
+  const expiryLabels={medExpiry:'Med',ocaDue:'OCA',firstAid:'Aid',avsecExpiry:'AVSEC'};
+  const expiryColors={medExpiry:'#22c55e',ocaDue:'#7B9EC6',firstAid:'#f59e0b',avsecExpiry:'#a78bfa'};
 
-  const newU=ad.newUser||{};
-  return`<div class="card"><div class="st">User Accounts</div>
+  const personCards=people.map(function(p){
+    const cr=p.cr;const u=p.user;
+    const name=(cr?cr.n:u?u.name:'')||'Unknown';
+    const photo=cr?cr.photo:'';
+    const code=cr?cr.code:'';
+    const caaNum=cr?cr.caaNum:'';
+    const endorses=cr?cr.endorse||[]:[];
+    const role=u?u.role:'';
+    const email=u?u.email:'';
+    const isMe=p.userId===S.user?.id;
+    const canEdit=isAdmin||isMe;
 
-    ${userList}
-  </div>
-  <div class="card"><div class="st">Add New User</div>
-    <div class="g2" style="margin-bottom:10px">
-      <div><label>Full Name</label><input class="fi" type="text" value="${newU.name||''}" onblur="S.admin.newUser.name=this.value"></div>
-      <div><label>Email</label><input class="fi" type="email" value="${newU.email||''}" onblur="S.admin.newUser.email=this.value"></div>
-      <div><label>Password</label><input class="fi" type="password" placeholder="Temporary password" value="${newU.password||''}" onblur="S.admin.newUser.password=this.value" autocomplete="new-password"></div>
-      <div><label>Role</label>
-        <select class="fi" onchange="S.admin.newUser.role=this.value">
-          <option value="desk"${(newU.role||'desk')==='desk'?' selected':''}>Desk</option>
-          <option value="pilot"${newU.role==='pilot'?' selected':''}>Pilot</option>
-          <option value="admin"${newU.role==='admin'?' selected':''}>Admin</option>
-          <option value="maint"${newU.role==='maint'?' selected':''}>Maintenance</option>
-          <option value="ground_staff"${newU.role==='ground_staff'?' selected':''}>Ground Staff</option>
-        </select></div>
-      <div><label>Linked Crew (for pilots)</label>
-        <select class="fi" onchange="S.admin.newUser.linkedCrew=this.value">
-          <option value="">— none —</option>
-          ${S.crew.map(c=>`<option value="${c.n}"${newU.linkedCrew===c.n?' selected':''}>${c.n}</option>`).join('')}
-        </select></div>
-    </div>
-    <button class="btn btn-sky" onclick="addUser()">Add User</button>
-    ${ad.err?`<div style="padding:8px;background:var(--err-bg);border-radius:7px;color:var(--err-text);font-size:13px;margin-top:8px">${ad.err}</div>`:''}
-  </div>`;
+    // Worst expiry bg
+    let worstBg='transparent';
+    if(cr){
+      expiryKeys.forEach(function(k){
+        const v=cr[k];if(!v)return;
+        const dy=Math.round((new Date(v+'T00:00:00')-today)/86400000);
+        if(dy<0)worstBg='rgba(239,68,68,.06)';
+        else if(dy<30&&worstBg!=='rgba(239,68,68,.06)')worstBg='rgba(245,158,11,.06)';
+      });
+    }
+
+    // Expiry pills (only show if expired or within 30 days)
+    const pills=cr?expiryKeys.map(function(k){
+      const v=cr[k];if(!v)return'';
+      const dy=Math.round((new Date(v+'T00:00:00')-today)/86400000);
+      if(dy>=30)return'';
+      const col=dy<0?'#ef4444':'#f59e0b';
+      const bg=dy<0?'rgba(239,68,68,.15)':'rgba(245,158,11,.12)';
+      return'<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;background:'+bg+';color:'+col+'">'+expiryLabels[k]+(dy<0?' EXP':' '+dy+'d')+'</span>';
+    }).join(''):'' ;
+
+    // Opener
+    let opener='';
+    if(canEdit){
+      const endStr='['+(endorses.map(function(e){return"'"+e+"'";}).join(','))+']';
+      const safeN=(name||'').replace(/'/g,"\\'");
+      opener='window.openPersonModal(\''+p.crewId+'\',\''+p.userId+'\')';
+    }
+
+    return'<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);background:'+worstBg+';cursor:'+(canEdit?'pointer':'default')+'" onclick="'+opener+'">'
+      +'<div style="width:38px;height:38px;border-radius:50%;background:var(--card2);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1px solid var(--border2)">'
+      +(photo?'<img src="'+photo+'" style="width:100%;height:100%;object-fit:cover">':'<span style="font-size:17px">👤</span>')
+      +'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+      +(code?'<span style="font-size:10px;background:var(--card2);border:1px solid var(--border);border-radius:3px;padding:1px 5px">'+code+'</span>':'')
+      +name
+      +(isMe?'<span style="font-size:10px;color:var(--text3)">(you)</span>':'')
+      +'</div>'
+      +'<div style="font-size:11px;color:var(--text3);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+      +(role?'<span style="color:'+(roleColour[role]||'#64748b')+';font-weight:600">'+role+'</span>':'')
+      +(email?'<span>'+email+'</span>':'')
+      +(endorses.length?'<span>'+endorses.join(' · ')+'</span>':'')
+      +(caaNum?'<span>CAA '+caaNum+'</span>':'')
+      +'</div>'
+      +(pills?'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">'+pills+'</div>':'')
+      +'</div>'
+      +(canEdit?'<span style="font-size:11px;color:var(--text3)">✎</span>':'')
+      +'</div>';
+  }).join('');
+
+  const addBtn=isAdmin?'<button onclick="window.openPersonModal(null,null)" style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">+ Add Person</button>':'';
+
+  return modalHtml
+    +'<div class="card">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+    +'<div class="st" style="margin-bottom:0">People</div>'
+    +addBtn
+    +'</div>'
+    +personCards
+    +'</div>';
 }
+
+
 function renderAdminAircraft(){
   const ad=S.admin;
   const chips=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(k=>S.aircraft[k]).map(k=>`<button style="padding:6px 12px;border-radius:7px;border:2px solid ${ad.acSel===k?AC_COL[k]||'#7B9EC6':'var(--border2)'};background:${ad.acSel===k?'#0c1a3a':'transparent'};color:${ad.acSel===k?AC_COL[k]||'#7B9EC6':'var(--text2)'};font-size:12px;font-weight:700;cursor:pointer;margin:3px" onclick="S.admin.acSel='${k}';S.admin.acDraft=null;S.admin.acSaved=false;render()">${k}</button>`).join('');
@@ -3537,106 +3516,125 @@ window.toggleEndorse=function(type,checked){
   if(checked&&!S.admin.crewDraftEndorse.includes(type)) S.admin.crewDraftEndorse.push(type);
   else if(!checked) S.admin.crewDraftEndorse=S.admin.crewDraftEndorse.filter(e=>e!==type);
 };
-window.crewPhotoUpload=function(inp){
-  const file=inp.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=function(e){S.admin.crewModal.photo=e.target.result;render();};
-  reader.readAsDataURL(file);
+window.openPersonModal=function(crewId,userId){
+  const cr=crewId?S.crew.find(function(x){return x.id===crewId;}):null;
+  const u=userId?S.users.find(function(x){return x.id===userId;}):null;
+  S.admin.personModal={
+    crewId:crewId||null,
+    userId:userId||null,
+    tab:'profile',
+    draft:{
+      n:cr?cr.n:(u?u.name:''),
+      code:cr?cr.code||'':'',
+      w:cr?cr.w||'':'',
+      dlNum:cr?cr.dlNum||'':'',
+      caaNum:cr?cr.caaNum||'':'',
+      medExpiry:cr?cr.medExpiry||'':'',
+      ocaDue:cr?cr.ocaDue||'':'',
+      firstAid:cr?cr.firstAid||'':'',
+      avsecExpiry:cr?cr.avsecExpiry||'':'',
+      endorse:cr?JSON.parse(JSON.stringify(cr.endorse||[])):[],
+      photo:cr?cr.photo||'':'',
+      email:u?u.email||'':'',
+      role:u?u.role||'desk':'desk',
+      password:'',
+    }
+  };
+  S.admin.err='';
+  render();
 };
-window.saveCrewModal=async function(){
-  const m=S.admin.crewModal;if(!m)return;
-  // Read directly from DOM so we capture values even if oninput didn't fire
-  const _g=id=>document.getElementById(id);
-  const n=((_g('cm_name')?.value||m.n||'')).trim();
-  const code=(_g('cm_code')?.value||m.code||'').toUpperCase();
-  const w=parseFloat(_g('cm_weight')?.value??m.w)||0;
-  const dlNum=_g('cm_dlNum')?.value||m.dlNum||'';
-  const caaNum=_g('cm_caaNum')?.value||m.caaNum||'';
-  if(!n){toast('Name is required','warn');return;}
-  const id=m.id||('c_'+Date.now());
-  const record={id,n,w,endorse:m.endorse||[],code,dlNum,caaNum,
-    medExpiry:(_g('cm_medExpiry')?.value||m.medExpiry||''),ocaDue:(_g('cm_ocaDue')?.value||m.ocaDue||''),firstAid:(_g('cm_firstAid')?.value||m.firstAid||''),avsecExpiry:(_g('cm_avsecExpiry')?.value||m.avsecExpiry||''),photo:m.photo||''};
-  const existing=S.crew.find(cr=>cr.id===id);
-  if(existing) S.crew=S.crew.map(cr=>cr.id===id?record:cr);
-  else S.crew.push(record);
-  S.admin.crewModal=null;
-  lsSet('ts_crew_cache',S.crew);
-  toast(n+' saved','ok');render();
-  await sbU('ts_crew',[{id,name:n,weight:w||null,endorsements:JSON.stringify(record.endorse),
-    code:record.code,dl_num:record.dlNum,caa_license:record.caaNum,
-    medical_expiry:record.medExpiry||null,oca_due:record.ocaDue||null,
-    first_aid:record.firstAid||null,avsec_expiry:record.avsecExpiry||null}]);
-  // Store photo in localStorage (separate key to avoid DB size issues)
-  if(m.photo) lsSet('ts_crew_photo_'+id,m.photo);
+
+window.personPhotoUpload=function(input){
+  const file=input.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      const canvas=document.createElement('canvas');
+      const MAX=200;
+      let w=img.width,h=img.height;
+      if(w>h){if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}}else{if(h>MAX){w=Math.round(w*MAX/h);h=MAX;}}
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      S.admin.personModal.draft.photo=canvas.toDataURL('image/jpeg',0.75);
+      render();
+    };
+    img.src=e.target.result;
+  };
+  r.readAsDataURL(file);
 };
-window.deleteCrewMember=async function(id){
-  const cr=S.crew.find(c=>c.id===id);
-  if(!confirm('Delete '+(cr?.n||id)+'? This cannot be undone.')) return;
-  S.crew=S.crew.filter(c=>c.id!==id);
-  S.admin.crewModal=null;
-  lsSet('ts_crew_cache',S.crew);
-  toast('Crew member deleted','ok');render();
-  await sbDel('ts_crew',id);
+
+window.savePerson=async function(){
+  const m=S.admin.personModal;if(!m)return;
+  const d=m.draft;
+  const name=(d.n||'').trim();
+  const isAdmin=S.user?.role==='admin';
+  // Validate
+  if(!name&&!d.email){S.admin.err='Name is required.';render();return;}
+  const finalName=name||(d.email?d.email.split('@')[0]:'');
+  // Check duplicate email
+  if(d.email){
+    const dupUser=S.users.find(function(x){return x.email.toLowerCase()===d.email.toLowerCase()&&x.id!==m.userId;});
+    if(dupUser){S.admin.err='That email is already used by another account.';render();return;}
+  }
+
+  // ── Save crew record ──
+  let crewId=m.crewId;
+  if(crewId||finalName){
+    crewId=crewId||('c_'+Date.now());
+    const crewRec={id:crewId,n:finalName,w:parseFloat(d.w)||0,endorse:d.endorse||[],
+      code:d.code||'',dlNum:d.dlNum||'',caaNum:d.caaNum||'',
+      medExpiry:d.medExpiry||'',ocaDue:d.ocaDue||'',firstAid:d.firstAid||'',
+      avsecExpiry:d.avsecExpiry||'',photo:d.photo||''};
+    const existIdx=S.crew.findIndex(function(cr){return cr.id===crewId;});
+    if(existIdx>=0) S.crew[existIdx]=crewRec;else S.crew.push(crewRec);
+    lsSet('ts_crew_cache',S.crew);
+    if(d.photo) lsSet('ts_crew_photo_'+crewId,d.photo);
+    await sbU('ts_crew',[{id:crewId,name:finalName,weight:parseFloat(d.w)||null,
+      endorsements:JSON.stringify(d.endorse||[]),code:d.code||'',dl_num:d.dlNum||'',
+      caa_license:d.caaNum||'',medical_expiry:d.medExpiry||null,oca_due:d.ocaDue||null,
+      first_aid:d.firstAid||null,avsec_expiry:d.avsecExpiry||null,photo:d.photo||''}]);
+  }
+
+  // ── Save user record (only if email present OR already has userId) ──
+  let userId=m.userId;
+  if(userId||(d.email&&(isAdmin||userId===S.user?.id))){
+    if(d.email){
+      userId=userId||('u_'+Date.now());
+      const existing=S.users.find(function(x){return x.id===userId;});
+      const userRec=existing
+        ?{...existing,name:finalName,email:d.email,role:isAdmin?(d.role||existing.role):existing.role,linkedCrew:finalName}
+        :{id:userId,name:finalName,email:d.email,role:d.role||'desk',linkedCrew:finalName,passwordHash:''};
+      if(d.password) userRec.passwordHash=btoa(d.password);
+      else if(!existing&&!d.password){toast('Password required for new login account','warn');return;}
+      if(userId===S.user?.id){S.user={...S.user,...userRec};sessionStorage.setItem('ts_user',JSON.stringify(S.user));}
+      const uIdx=S.users.findIndex(function(x){return x.id===userId;});
+      if(uIdx>=0) S.users[uIdx]=userRec;else S.users.push(userRec);
+      lsSet('ts_users_cache',S.users);
+      await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,role:userRec.role,linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash}]);
+    }
+  }
+
+  S.admin.personModal=null;S.admin.err='';
+  toast(finalName+' saved','ok');
+  render();
 };
-// Legacy support
-window.saveCrew=async id=>{
-  // Redirect to modal save if crewModal is set, otherwise no-op (old code path)
-  if(S.admin.crewModal) return window.saveCrewModal();
+
+window.deletePerson=async function(crewId,userId){
+  if(!confirm('Delete this person? This cannot be undone.'))return;
+  if(crewId){S.crew=S.crew.filter(function(cr){return cr.id!==crewId;});lsSet('ts_crew_cache',S.crew);await sbDel('ts_crew',crewId);}
+  if(userId){S.users=S.users.filter(function(u){return u.id!==userId;});lsSet('ts_users_cache',S.users);await sbDel('ts_users',userId);}
+  S.admin.personModal=null;S.admin.err='';
+  render();
 };
-window.delCrew=async id=>{const c=S.crew.find(x=>x.id===id);if(!confirm(`Remove ${c?.n}?`))return;S.crew=S.crew.filter(x=>x.id!==id);lsSet('ts_crew_cache',S.crew);render();await sbDel('ts_crew',id);};
-window.addCrew=async()=>{
-  const n=(S.admin.newN||'').trim(),w=parseFloat(S.admin.newW);
-  if(!n||!w||w<30||w>250){S.admin.err='Check name and weight (30–250kg).';render();return;}
-  const nc={id:'c_'+Date.now(),n,w};S.crew.push(nc);S.admin.newN='';S.admin.newW='';S.admin.err='';render();
-  await sbU('ts_crew',[{id:nc.id,name:nc.n,weight:nc.w}]);
-};
+
+
 window.saveAircraftDraft=async()=>{
   const d=S.admin.acDraft;if(!d)return;
   if(!d.ew||!d.mtow||!d.mlw){S.admin.acErr='Empty weight, MTOW and max landing required.';render();return;}
   if(d.cogMin>=d.cogMax){S.admin.acErr='C of G min must be less than max.';render();return;}
   S.aircraft[S.admin.acSel]=dc(d);S.admin.acDraft=null;S.admin.acSaved=true;lsSet('ts_aircraft_cache',S.aircraft);render();
   await sbU('ts_aircraft',[{id:d.id,data:d}]);
-};
-window.addUser=async()=>{
-  const u=S.admin.newUser||{};
-  if(!u.name||!u.email||!u.password){S.admin.err='Name, email and password required.';render();return;}
-  if(S.users.find(x=>x.email.toLowerCase()===u.email.toLowerCase())){S.admin.err='Email already in use.';render();return;}
-  const nu={id:'u_'+Date.now(),name:u.name,email:u.email,role:u.role||'desk',linkedCrew:u.linkedCrew||'',passwordHash:btoa(u.password)};
-  S.users.push(nu);S.admin.newUser={};S.admin.err='';
-  localStorage.setItem('ts_users_cache',JSON.stringify(S.users));
-  render();
-  await sbU('ts_users',[{id:nu.id,name:nu.name,email:nu.email,role:nu.role,linked_crew:nu.linkedCrew,password_hash:nu.passwordHash}]);
-};
-window.saveUser=async()=>{
-  const id=S.admin.userEditId;const draft=S.admin.userDraft||{};
-  if(!draft.name||!draft.email){S.admin.err='Name and email are required.';render();return;}
-  const existing=S.users.find(x=>x.email.toLowerCase()===draft.email.toLowerCase()&&x.id!==id);
-  if(existing){S.admin.err='That email is already used by another account.';render();return;}
-  S.users=S.users.map(u=>{
-    if(u.id!==id)return u;
-    const updated={...u,name:draft.name,email:draft.email,role:draft.role||u.role,linkedCrew:draft.linkedCrew||''};
-    if(draft.password)updated.passwordHash=btoa(draft.password);
-    return updated;
-  });
-  // If editing own account, update session
-  if(id===S.user?.id){
-    const updated=S.users.find(x=>x.id===id);
-    S.user={...S.user,...updated};
-    sessionStorage.setItem('ts_user',JSON.stringify(S.user));
-  }
-  S.admin.userEditId=null;S.admin.userDraft={};S.admin.err='';
-  localStorage.setItem('ts_users_cache',JSON.stringify(S.users));
-  render();
-  const u=S.users.find(x=>x.id===id);
-  await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,linked_crew:u.linkedCrew,password_hash:u.passwordHash}]);
-  S.appMsg={type:'ok',text:'User account updated.'};
-};
-window.delUser=async id=>{if(!confirm('Delete this user?'))return;S.users=S.users.filter(u=>u.id!==id);render();await sbDel('ts_users',id);};
-window.editUser=(id)=>{
-  const u=S.users.find(x=>x.id===id);if(!u)return;
-  S.admin.userEditId=id;
-  S.admin.userDraft={name:u.name,email:u.email,role:u.role,linkedCrew:u.linkedCrew||'',password:''};
-  render();
 };
 window.saveCharterRates=async()=>{
   lsSet('ts_charter_rates_cache',S.charterRates);
@@ -3705,8 +3703,8 @@ window.forceUploadAll=async function(){
 
 // ── MAINTENANCE MODULE ──
 // Seed data from spreadsheet import
-const MAINT_SEED={"hist":[{"date":"2025-06-10","ZK-SLB":11901.0,"ZK-SLD":7975.7,"ZK-SLQ":7141.3},{"date":"2025-06-12","ZK-SLA":3365.0,"ZK-SLD":7976.9,"ZK-SDB":18312.1},{"date":"2025-06-13","ZK-SLD":7979.3},{"date":"2025-06-14","ZK-SLD":7980.5,"ZK-SLQ":7143.4,"ZK-SDB":18313.3},{"date":"2025-06-15","ZK-SLA":3366.1},{"date":"2025-06-17","ZK-SLA":3368.0,"ZK-SLD":7981.9,"ZK-SLQ":7149.2,"ZK-SDB":18315.5},{"date":"2025-06-18","ZK-SLA":3371.1,"ZK-SLQ":7151.0,"ZK-SDB":18316.5},{"date":"2025-06-21","ZK-SLA":3374.4,"ZK-SLQ":7155.7,"ZK-SDB":18317.6},{"date":"2025-06-23","ZK-SLA":3377.0,"ZK-SLQ":7158.7,"ZK-SDB":18320.6},{"date":"2025-06-24","ZK-SDB":18321.5},{"date":"2025-06-26","ZK-SLD":7982.2},{"date":"2025-06-27","ZK-SLB":11902.2,"ZK-SLD":7984.6,"ZK-SLQ":7160.0},{"date":"2025-06-29","ZK-SLB":11905.0,"ZK-SLD":7985.8,"ZK-SLQ":7162.4,"ZK-SDB":18323.0},{"date":"2025-06-30","ZK-SLA":3380.9,"ZK-SLB":11906.0,"ZK-SLD":7987.1,"ZK-SLQ":7164.3,"ZK-SDB":18324.0},{"date":"2025-07-01","ZK-SLA":3382.0,"ZK-SLB":11907.0,"ZK-SLQ":7167.0,"ZK-SDB":18325.2},{"date":"2025-07-02","ZK-SLA":3382.9,"ZK-SLB":11908.0,"ZK-SLD":7988.3,"ZK-SLQ":7169.0,"ZK-SDB":18326.3},{"date":"2025-07-04","ZK-SLA":3383.9,"ZK-SLB":11909.0,"ZK-SLD":7991.8,"ZK-SLQ":7172.6,"ZK-SDB":18327.4},{"date":"2025-07-05","ZK-SLA":3384.9,"ZK-SLB":11910.9,"ZK-SLD":7993.5,"ZK-SLQ":7174.9},{"date":"2025-07-06","ZK-SLD":7994.6},{"date":"2025-07-07","ZK-SLA":3386.9,"ZK-SLB":1191.3,"ZK-SLD":7996.2,"ZK-SDB":18329.4},{"date":"2025-07-08","ZK-SLA":3389.7,"ZK-SLB":11911.3,"ZK-SLD":7999.4,"ZK-SLQ":7175.9,"ZK-SDB":18330.4},{"date":"2025-07-10","ZK-SLD":8001.3},{"date":"2025-07-11","ZK-SLA":3390.8,"ZK-SLB":11913.8,"ZK-SLD":8002.5},{"date":"2025-07-14","ZK-SLA":3394.2,"ZK-SLB":11916.4,"ZK-SLD":8003.8},{"date":"2025-07-15","ZK-SLD":8005.7},{"date":"2025-07-16","ZK-SLA":3396.2,"ZK-SLB":11919.3,"ZK-SLD":8009.0,"ZK-SDB":18333.2},{"date":"2025-07-17","ZK-SLA":3398.1,"ZK-SLB":11921.3,"ZK-SLD":8010.7,"ZK-SDB":18334.3},{"date":"2025-07-18","ZK-SLD":8014.5},{"date":"2025-07-19","ZK-SLA":3399.3,"ZK-SLB":11923.2,"ZK-SLD":8015.6,"ZK-SDB":18336.5},{"date":"2025-07-20","ZK-SLA":3400.3,"ZK-SLB":11924.5,"ZK-SLD":8018.6,"ZK-SDB":18337.5},{"date":"2025-07-21","ZK-SLA":3401.3,"ZK-SLB":11925.6,"ZK-SLD":8020.4,"ZK-SDB":18338.4},{"date":"2025-07-22","ZK-SLA":3403.2,"ZK-SLB":11926.5,"ZK-SLD":8022.2},{"date":"2025-07-23","ZK-SLA":3404.2,"ZK-SLB":11928.6},{"date":"2025-07-24","ZK-SLA":3405.3,"ZK-SLB":11932.1,"ZK-SLD":8025.6,"ZK-SLQ":7177.2},{"date":"2025-07-25","ZK-SLA":3406.3,"ZK-SLB":11933.2,"ZK-SLD":8027.0,"ZK-SLQ":7178.6},{"date":"2025-07-27","ZK-SLA":3407.3,"ZK-SLD":8029.6,"ZK-SLQ":7180.1},{"date":"2025-07-28","ZK-SLA":3408.3,"ZK-SLB":11934.4,"ZK-SLD":8030.3,"ZK-SLQ":7180.4},{"date":"2025-07-29","ZK-SLB":11935.5},{"date":"2025-07-30","ZK-SLA":3410.3,"ZK-SLB":11936.5,"ZK-SLD":8032.4,"ZK-SDB":18339.3},{"date":"2025-07-31","ZK-SLA":3411.3,"ZK-SLB":11938.3,"ZK-SLD":8034.9,"ZK-SLQ":7180.7},{"date":"2025-08-01","ZK-SLA":3412.4,"ZK-SLB":11940.2,"ZK-SLD":8037.1,"ZK-SDB":18340.2},{"date":"2025-08-02","ZK-SLA":3413.6,"ZK-SLB":11941.4,"ZK-SLD":8038.2,"ZK-SLQ":7183.1,"ZK-SDB":18341.6},{"date":"2025-08-03","ZK-SLB":11944.5,"ZK-SLD":8040.7,"ZK-SLQ":7185.2,"ZK-SDB":18342.6},{"date":"2025-08-04","ZK-SLA":3416.5,"ZK-SLB":11946.4,"ZK-SDB":18343.7},{"date":"2025-08-05","ZK-SLA":3417.5,"ZK-SLB":11947.5,"ZK-SLD":8043.4,"ZK-SLQ":7186.4,"ZK-SDB":18344.7},{"date":"2025-08-06","ZK-SLD":8045.7},{"date":"2025-08-08","ZK-SLA":3419.0,"ZK-SLD":8048.0,"ZK-SLQ":7188.0},{"date":"2025-08-09","ZK-SLA":3420.2,"ZK-SLB":11950.0,"ZK-SLQ":7189.4},{"date":"2025-08-10","ZK-SLB":11952.0,"ZK-SLD":8050.2,"ZK-SLQ":7190.6},{"date":"2025-08-11","ZK-SLA":3423.4,"ZK-SDB":18345.9},{"date":"2025-08-12","ZK-SLA":3425.7,"ZK-SLD":8054.8,"ZK-SLQ":7195.4,"ZK-SDB":18346.9},{"date":"2025-08-13","ZK-SLA":3428.4,"ZK-SLB":11953.2,"ZK-SLD":8056.7,"ZK-SLQ":7196.7,"ZK-SDB":18347.9},{"date":"2025-08-14","ZK-SLB":11953.9,"ZK-SLD":8059.1},{"date":"2025-08-15","ZK-SLA":3430.1,"ZK-SLQ":7201.1},{"date":"2025-08-16","ZK-SLD":8060.8},{"date":"2025-08-17","ZK-SLD":8062.5},{"date":"2025-08-19","ZK-SLQ":7201.9},{"date":"2025-08-20","ZK-SLA":3433.0,"ZK-SLB":11956.7,"ZK-SLD":8064.7,"ZK-SLQ":7204.0},{"date":"2025-08-21","ZK-SLA":3435.7,"ZK-SLB":11959.6,"ZK-SLD":8067.1,"ZK-SLQ":7205.4},{"date":"2025-08-22","ZK-SLA":3438.4,"ZK-SLD":8070.1,"ZK-SLQ":7207.3},{"date":"2025-08-23","ZK-SLA":3440.4,"ZK-SLD":8072.4,"ZK-SLQ":7209.5},{"date":"2025-08-24","ZK-SLA":3443.2,"ZK-SLD":8073.7,"ZK-SLQ":7211.0},{"date":"2025-08-25","ZK-SLA":3444.3,"ZK-SLD":8075.8,"ZK-SLQ":7213.3},{"date":"2025-08-26","ZK-SLA":3446.2,"ZK-SLB":11961.7,"ZK-SLD":8077.1,"ZK-SLQ":7214.5},{"date":"2025-08-31","ZK-SLA":3447.2,"ZK-SLB":11962.6,"ZK-SLQ":7214.9,"ZK-SDB":18348.9},{"date":"2025-09-02","ZK-SLA":3448.4,"ZK-SLB":11963.8,"ZK-SLQ":7216.3,"ZK-SDB":18350.0},{"date":"2025-09-03","ZK-SLA":3449.5,"ZK-SLB":11964.8,"ZK-SLQ":7218.9,"ZK-SDB":18351.1},{"date":"2025-09-06","ZK-SLA":3450.6,"ZK-SLB":11966.0,"ZK-SLQ":7220.1,"ZK-SDB":18352.2},{"date":"2025-09-07","ZK-SLA":3451.9,"ZK-SLB":11967.1,"ZK-SLQ":7222.1},{"date":"2025-09-08","ZK-SLA":3454.8,"ZK-SLB":11970.0,"ZK-SLQ":7225.4,"ZK-SDB":18354.0},{"date":"2025-09-11","ZK-SLA":3456.8,"ZK-SLQ":7227.1,"ZK-SDB":8355.2},{"date":"2025-09-12","ZK-SLA":3458.7,"ZK-SLQ":7227.4},{"date":"2025-09-13","ZK-SLQ":7228.1},{"date":"2025-09-14","ZK-SLA":3460.0,"ZK-SLB":11973.6,"ZK-SLQ":7229.4,"ZK-SDB":18356.3},{"date":"2025-09-17","ZK-SLQ":7231.1},{"date":"2025-09-18","ZK-SLB":11974.3},{"date":"2025-09-19","ZK-SLA":3465.0,"ZK-SLB":11978.0,"ZK-SLQ":7235.6,"ZK-SDB":18359.1},{"date":"2025-09-23","ZK-SLA":3467.7,"ZK-SLB":11980.8,"ZK-SLQ":7236.6,"ZK-SDB":18361.9},{"date":"2025-09-24","ZK-SLA":3469.5,"ZK-SLD":8077.9,"ZK-SLQ":7236.9},{"date":"2025-09-25","ZK-SLA":3470.6,"ZK-SLD":8079.3,"ZK-SDB":18362.9},{"date":"2025-09-26","ZK-SLB":11982.9},{"date":"2025-09-29","ZK-SLA":3470.8,"ZK-SLD":8080.8},{"date":"2025-09-30","ZK-SLB":11983.4},{"date":"2025-10-01","ZK-SLB":11987.4,"ZK-SLD":8085.7,"ZK-SLQ":7239.5,"ZK-SDB":18367.0},{"date":"2025-10-02","ZK-SLB":11988.5,"ZK-SLD":8087.0},{"date":"2025-10-03","ZK-SLA":3473.1,"ZK-SLB":11992.3,"ZK-SLD":8090.2,"ZK-SLQ":7243.8,"ZK-SDB":18369.5},{"date":"2025-10-04","ZK-SLQ":7245.9},{"date":"2025-10-06","ZK-SLB":11994.4,"ZK-SLD":8092.7,"ZK-SDB":18372.3},{"date":"2025-10-10","ZK-SLA":3475.3,"ZK-SLB":11995.5,"ZK-SLD":8095.2,"ZK-SLQ":7247.6},{"date":"2025-10-14","ZK-SLA":3479.3,"ZK-SLB":11999.4,"ZK-SLD":8100.0,"ZK-SLQ":7250.4},{"date":"2025-10-28","ZK-SLB":12002.5,"ZK-SLD":8103.7,"ZK-SLQ":7252.7},{"date":"2025-10-29","ZK-SLA":3486.1,"ZK-SLB":12006.7,"ZK-SLD":8107.7,"ZK-SLQ":7254.9},{"date":"2025-11-01","ZK-SLD":8116.5},{"date":"2025-11-02","ZK-SLA":3494.3,"ZK-SLD":8118.1},{"date":"2025-11-03","ZK-SLA":3496.5,"ZK-SLB":12016.7,"ZK-SLQ":7262.0},{"date":"2025-11-04","ZK-SLB":12017.5},{"date":"2025-11-05","ZK-SLB":12021.1,"ZK-SLD":8126.9},{"date":"2025-11-07","ZK-SLA":3504.4,"ZK-SLB":12025.1,"ZK-SLD":8133.0,"ZK-SLQ":7267.4},{"date":"2025-11-09","ZK-SLA":3509.3,"ZK-SLQ":7272.9},{"date":"2025-11-11","ZK-SLA":3513.2,"ZK-SLB":12029.5,"ZK-SLD":8137.8,"ZK-SLQ":7275.8},{"date":"2025-11-12","ZK-SLB":12032.3,"ZK-SLD":8140.3,"ZK-SLQ":7276.1},{"date":"2025-11-13","ZK-SLA":3519.2,"ZK-SLB":12036.1,"ZK-SLD":8143.1},{"date":"2025-11-14","ZK-SLD":8143.6},{"date":"2025-11-15","ZK-SLA":3520.6,"ZK-SLB":12039.4,"ZK-SLD":8145.2,"ZK-SLQ":7277.7},{"date":"2025-11-16","ZK-SLA":3524.4,"ZK-SLB":12043.9,"ZK-SLD":8148.0,"ZK-SLQ":7280.0},{"date":"2025-11-19","ZK-SLA":3528.7,"ZK-SLB":12047.8,"ZK-SLD":8150.9,"ZK-SLQ":7282.8},{"date":"2025-11-20","ZK-SLA":3532.4,"ZK-SLB":12051.2,"ZK-SLD":8155.0,"ZK-SLQ":7284.7},{"date":"2025-11-22","ZK-SLA":3536.6,"ZK-SLB":12055.3,"ZK-SLD":8157.1,"ZK-SLQ":7287.1},{"date":"2025-11-23","ZK-SLA":3540.7,"ZK-SLB":12056.6,"ZK-SLD":8159.5,"ZK-SLQ":7292.2},{"date":"2025-11-24","ZK-SLA":3543.5,"ZK-SLD":8164.4},{"date":"2025-11-25","ZK-SLA":3547.9,"ZK-SLD":8170.0,"ZK-SLQ":7302.0},{"date":"2025-11-26","ZK-SLD":8170.6},{"date":"2025-11-28","ZK-SLA":3551.4,"ZK-SLD":8175.0,"ZK-SLQ":7303.1},{"date":"2025-12-02","ZK-SLA":3555.2,"ZK-SLD":8180.0,"ZK-SLQ":7307.7},{"date":"2025-12-03","ZK-SLA":3556.3,"ZK-SLD":8181.2,"ZK-SLQ":7309.9},{"date":"2025-12-04","ZK-SLA":3559.7,"ZK-SLQ":7312.3},{"date":"2025-12-06","ZK-SLQ":7317.6},{"date":"2025-12-08","ZK-SLA":3568.2,"ZK-SLB":12056.9,"ZK-SLD":8181.5,"ZK-SLQ":7320.4},{"date":"2025-12-09","ZK-SLA":3572.2,"ZK-SLQ":7324.2},{"date":"2025-12-10","ZK-SLB":12063.9,"ZK-SLD":8181.8,"ZK-SLQ":7326.4},{"date":"2025-12-11","ZK-SLB":12065.0,"ZK-SLD":8185.3,"ZK-SLQ":7328.9},{"date":"2025-12-12","ZK-SLB":12066.1,"ZK-SLD":8188.2,"ZK-SLQ":7331.7},{"date":"2025-12-13","ZK-SLA":3576.6,"ZK-SLB":12067.2,"ZK-SLD":8190.5,"ZK-SLQ":7332.9},{"date":"2025-12-14","ZK-SLA":3577.9,"ZK-SLD":8194.1,"ZK-SLQ":7335.9},{"date":"2025-12-16","ZK-SLB":12068.7},{"date":"2025-12-17","ZK-SLA":3581.9,"ZK-SLD":8199.0},{"date":"2025-12-18","ZK-SLA":3584.7,"ZK-SLB":12069.0,"ZK-SLD":8203.8,"ZK-SLQ":7343.9},{"date":"2025-12-20","ZK-SLB":12073.3,"ZK-SLD":8206.8,"ZK-SLQ":7347.0},{"date":"2025-12-21","ZK-SLA":3593.0,"ZK-SLB":12077.1,"ZK-SLD":8211.9,"ZK-SLQ":7351.6},{"date":"2025-12-22","ZK-SLA":3594.2,"ZK-SLB":12078.2,"ZK-SLD":8214.1,"ZK-SLQ":7352.8},{"date":"2025-12-23","ZK-SLA":3597.0,"ZK-SLB":12081.0,"ZK-SLD":8218.5,"ZK-SLQ":7355.5},{"date":"2025-12-27","ZK-SLA":3601.1,"ZK-SLB":12085.3,"ZK-SLD":8222.8,"ZK-SLQ":7360.4},{"date":"2025-12-28","ZK-SLA":3604.9,"ZK-SLB":12089.0,"ZK-SLD":8225.7,"ZK-SLQ":7365.9},{"date":"2025-12-29","ZK-SLA":3608.8,"ZK-SLB":12092.2,"ZK-SLD":8230.3,"ZK-SLQ":7370.4},{"date":"2025-12-30","ZK-SLA":3615.1},{"date":"2025-12-31","ZK-SLA":3619.7,"ZK-SLB":12095.6,"ZK-SLD":8235.8,"ZK-SLQ":7373.0},{"date":"2026-01-01","ZK-SLB":12099.4,"ZK-SLD":8240.3},{"date":"2026-01-02","ZK-SLA":3625.5,"ZK-SLD":8241.9},{"date":"2026-01-03","ZK-SLB":12103.3,"ZK-SLD":8246.9,"ZK-SLQ":7375.7},{"date":"2026-01-04","ZK-SLB":12104.3,"ZK-SLD":8249.5,"ZK-SLQ":7377.1},{"date":"2026-01-05","ZK-SLB":12107.1,"ZK-SLD":8254.2,"ZK-SLQ":7378.1},{"date":"2026-01-06","ZK-SLA":3643.2,"ZK-SLD":8257.7},{"date":"2026-01-07","ZK-SLB":12109.9,"ZK-SLD":8259.5,"ZK-SLQ":7381.5},{"date":"2026-01-08","ZK-SLA":3645.0},{"date":"2026-01-09","ZK-SLA":3649.4,"ZK-SLB":12114.2,"ZK-SLD":8263.6,"ZK-SLQ":7386.7},{"date":"2026-01-12","ZK-SLA":3654.1,"ZK-SLB":12118.9,"ZK-SLD":8269.1,"ZK-SLQ":7389.7},{"date":"2026-01-13","ZK-SLD":8272.6,"ZK-SLQ":7391.3},{"date":"2026-01-14","ZK-SLA":3657.8,"ZK-SLB":12123.8,"ZK-SLD":8276.0,"ZK-SLQ":7395.4},{"date":"2026-01-15","ZK-SLA":3661.6,"ZK-SLB":12127.7,"ZK-SLD":8277.3,"ZK-SLQ":7396.8},{"date":"2026-01-16","ZK-SLA":3663.6,"ZK-SLB":12129.6,"ZK-SLD":8278.7,"ZK-SLQ":7400.4},{"date":"2026-01-17","ZK-SLA":3664.6,"ZK-SLB":12131.6,"ZK-SLD":8280.0,"ZK-SLQ":7403.9},{"date":"2026-01-18","ZK-SLA":3666.5,"ZK-SLB":12135.4,"ZK-SLD":8281.2,"ZK-SLQ":7406.2},{"date":"2026-01-19","ZK-SLA":3670.0,"ZK-SLB":12139.4,"ZK-SLQ":7410.5},{"date":"2026-01-20","ZK-SLB":12143.3,"ZK-SLQ":7413.2},{"date":"2026-01-21","ZK-SLA":3674.5,"ZK-SLB":12146.5,"ZK-SLQ":7414.3},{"date":"2026-01-22","ZK-SLB":12149.6,"ZK-SLD":8285.1,"ZK-SLQ":7417.5},{"date":"2026-01-23","ZK-SLB":12151.0,"ZK-SLQ":7419.0},{"date":"2026-01-24","ZK-SLB":12152.2,"ZK-SLD":8289.9,"ZK-SLQ":7423.2},{"date":"2026-01-25","ZK-SLB":12153.3},{"date":"2026-01-26","ZK-SLB":12157.1},{"date":"2026-01-27","ZK-SLD":8302.6,"ZK-SLQ":7429.2},{"date":"2026-01-28","ZK-SLB":12165.6,"ZK-SLQ":7430.7},{"date":"2026-01-29","ZK-SLB":12166.0,"ZK-SLD":8309.7},{"date":"2026-01-30","ZK-SLA":3682.7,"ZK-SLB":12170.5,"ZK-SLD":8314.6,"ZK-SLQ":7433.0},{"date":"2026-01-31","ZK-SLA":3684.9,"ZK-SLB":12173.8,"ZK-SLD":8317.3,"ZK-SLQ":7435.1},{"date":"2026-02-01","ZK-SLQ":7436.8},{"date":"2026-02-02","ZK-SLD":8321.7},{"date":"2026-02-03","ZK-SLA":3685.5},{"date":"2026-02-04","ZK-SLA":3690.2,"ZK-SLB":12181.6,"ZK-SLD":8326.2,"ZK-SLQ":7440.2},{"date":"2026-02-05","ZK-SLA":3694.3,"ZK-SLB":12187.1,"ZK-SLD":8329.7,"ZK-SLQ":7443.3},{"date":"2026-02-06","ZK-SLB":12190.2,"ZK-SLD":8331.4,"ZK-SLQ":7447.5},{"date":"2026-02-07","ZK-SLD":8331.8},{"date":"2026-02-08","ZK-SLA":3701.9,"ZK-SLB":12195.3,"ZK-SLD":8336.6,"ZK-SLQ":7452.2},{"date":"2026-02-09","ZK-SLA":3708.2,"ZK-SLB":12200.7,"ZK-SLD":8341.6,"ZK-SLQ":7454.6,"ZK-SDB":18701.9},{"date":"2026-02-10","ZK-SDB":18706.8},{"date":"2026-02-11","ZK-SLB":12203.5,"ZK-SLD":8345.0,"ZK-SLQ":7457.0,"ZK-SDB":18707.7},{"date":"2026-02-12","ZK-SLA":3715.1,"ZK-SLB":12207.5,"ZK-SLD":8347.8,"ZK-SLQ":7461.9,"ZK-SDB":18709.9},{"date":"2026-02-13","ZK-SLA":3716.1,"ZK-SLB":12208.4,"ZK-SLD":8349.1,"ZK-SLQ":7464.4,"ZK-SDB":18710.8},{"date":"2026-02-14","ZK-SLB":12209.9},{"date":"2026-02-15","ZK-SLA":3719.8,"ZK-SLB":12213.5,"ZK-SLD":8351.4,"ZK-SLQ":7469.3,"ZK-SDB":18714.5},{"date":"2026-02-16","ZK-SLA":3722.0,"ZK-SLB":12216.7,"ZK-SLD":8353.8,"ZK-SDB":18715.3},{"date":"2026-02-17","ZK-SLB":12221.1,"ZK-SLD":8356.2,"ZK-SLQ":7472.0,"ZK-SDB":18718.1},{"date":"2026-02-18","ZK-SLA":3730.0,"ZK-SLD":8359.8,"ZK-SLQ":7472.4,"ZK-SDB":18722.3},{"date":"2026-02-19","ZK-SLA":3731.1,"ZK-SLB":12226.4},{"date":"2026-02-20","ZK-SLQ":7472.8},{"date":"2026-02-21","ZK-SLA":3732.2,"ZK-SLD":8363.1,"ZK-SLQ":7474.0},{"date":"2026-02-22","ZK-SLA":3736.7,"ZK-SLB":12235.3,"ZK-SLD":8368.9,"ZK-SLQ":7478.8,"ZK-SDB":18726.4},{"date":"2026-02-23","ZK-SLA":3739.8,"ZK-SLB":12238.3,"ZK-SLD":8372.6,"ZK-SLQ":7481.1,"ZK-SDB":18729.5},{"date":"2026-02-24","ZK-SLA":3743.7,"ZK-SLB":12242.4,"ZK-SLD":8377.2,"ZK-SLQ":7486.3,"ZK-SDB":18733.2},{"date":"2026-02-25","ZK-SLA":3747.9,"ZK-SLB":12246.4,"ZK-SLD":8381.8,"ZK-SLQ":7489.6,"ZK-SDB":18735.3},{"date":"2026-02-27","ZK-SLA":3751.9,"ZK-SLB":12250.5,"ZK-SLD":8382.1,"ZK-SLQ":7493.1,"ZK-SDB":18738.2},{"date":"2026-02-28","ZK-SLA":3755.8,"ZK-SLB":12254.5,"ZK-SLQ":7496.6,"ZK-SDB":18740.0},{"date":"2026-03-01","ZK-SLA":3758.3,"ZK-SLB":12259.1,"ZK-SLD":8382.1},{"date":"2026-03-02","ZK-SLA":3760.5,"ZK-SLB":12259.4,"ZK-SLQ":7504.7,"ZK-SDB":18741.2},{"date":"2026-03-03","ZK-SLA":3765.1,"ZK-SLQ":7509.0,"ZK-SDB":18744.9},{"date":"2026-03-04","ZK-SLA":3769.1,"ZK-SLQ":7513.5,"ZK-SDB":18749.0},{"date":"2026-03-05","ZK-SLA":3770.6,"ZK-SLQ":7516.5,"ZK-SDB":18753.6},{"date":"2026-03-09","ZK-SLB":12262.0,"ZK-SLQ":7519.4,"ZK-SDB":18755.8},{"date":"2026-03-10","ZK-SLB":12266.5,"ZK-SLQ":7523.7,"ZK-SDB":18760.3},{"date":"2026-03-11","ZK-SLA":3770.8,"ZK-SLQ":7525.2},{"date":"2026-03-12","ZK-SLB":12268.9,"ZK-SLQ":7525.5},{"date":"2026-03-13","ZK-SLA":3772.0,"ZK-SLB":12270.0,"ZK-SDB":18761.4},{"date":"2026-03-14","ZK-SLA":3773.1,"ZK-SLB":12271.9,"ZK-SDB":18762.4},{"date":"2026-03-15","ZK-SLA":3775.0},{"date":"2026-03-16","ZK-SLQ":7525.9},{"date":"2026-03-17","ZK-SLA":3777.1,"ZK-SLB":12274.6,"ZK-SLQ":7528.1},{"date":"2026-03-18","ZK-SLA":3780.8,"ZK-SLB":12278.3,"ZK-SLQ":7531.6,"ZK-SDB":18764.3},{"date":"2026-03-19","ZK-SLA":3784.5,"ZK-SLB":12281.8,"ZK-SLQ":7533.7,"ZK-SDB":18767.7},{"date":"2026-03-20","ZK-SLA":3788.2,"ZK-SLB":12285.6,"ZK-SLD":8383.7,"ZK-SLQ":7534.8,"ZK-SDB":18769.5},{"date":"2026-03-21","ZK-SLA":3791.6,"ZK-SLB":12289.0,"ZK-SLD":8385.6},{"date":"2026-03-22","ZK-SLA":3793.5,"ZK-SLB":12291.7,"ZK-SDB":18770.5},{"date":"2026-03-23","ZK-SLA":3798.4,"ZK-SLB":12295.8,"ZK-SLQ":7539.2,"ZK-SDB":18774.5},{"date":"2026-03-24","ZK-SLA":3802.0,"ZK-SLB":12300.2,"ZK-SLQ":7541.4,"ZK-SDB":18775.5},{"date":"2026-03-25","ZK-SLA":3805.6,"ZK-SLB":12303.6,"ZK-SLD":8389.9,"ZK-SLQ":7544.1,"ZK-SDB":18777.2},{"date":"2026-03-26","ZK-SLA":3807.4,"ZK-SLA_starts":8,"ZK-SLA_landings":8,"ZK-SLA_landTot":5292,"ZK-SLA_startTot":5173,"ZK-SLB":12259.4,"ZK-SLB_starts":8,"ZK-SLB_landings":8,"ZK-SLB_landTot":22010,"ZK-SLB_startTot":21956,"ZK-SLD":8391.7,"ZK-SLQ":7545.2},{"date":"2026-03-30","ZK-SLA":3808.4,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5294,"ZK-SLA_startTot":5181,"ZK-SLB":12305.7,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22012,"ZK-SLB_startTot":21958,"ZK-SLD":8393.2,"ZK-SDB":18779.1,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":2,"ZK-SDB_startTot":2},{"date":"2026-03-31","ZK-SLA":3812.3,"ZK-SLA_starts":8,"ZK-SLA_landings":8,"ZK-SLA_landTot":5302,"ZK-SLA_startTot":5183,"ZK-SLB":12309.3,"ZK-SLB_starts":8,"ZK-SLB_landings":8,"ZK-SLB_landTot":22020,"ZK-SLB_startTot":21966,"ZK-SLD":8397.1,"ZK-SDB":18782.7,"ZK-SDB_starts":8,"ZK-SDB_landings":8,"ZK-SDB_landTot":10,"ZK-SDB_startTot":10},{"date":"2026-04-01","ZK-SLA":3815.8,"ZK-SLA_starts":8,"ZK-SLA_landings":8,"ZK-SLA_landTot":5310,"ZK-SLA_startTot":5191,"ZK-SLB":12312.0,"ZK-SLB_starts":6,"ZK-SLB_landings":6,"ZK-SLB_landTot":22026,"ZK-SLB_startTot":21972,"ZK-SLD":8400.8,"ZK-SDB":18784.5,"ZK-SDB_starts":4,"ZK-SDB_landings":4,"ZK-SDB_landTot":14,"ZK-SDB_startTot":14},{"date":"2026-04-02","ZK-SLA":3818.6,"ZK-SLA_starts":6,"ZK-SLA_landings":6,"ZK-SLA_landTot":5316,"ZK-SLA_startTot":5199,"ZK-SLB":12313.8,"ZK-SLB_starts":4,"ZK-SLB_landings":4,"ZK-SLB_landTot":22030,"ZK-SLB_startTot":21976,"ZK-SLD":8404.7,"ZK-SLQ":7558.2,"ZK-SDB":18786.3,"ZK-SDB_starts":4,"ZK-SDB_landings":4,"ZK-SDB_landTot":18,"ZK-SDB_startTot":18},{"date":"2026-04-05","ZK-SLA":3821.5,"ZK-SLA_starts":4,"ZK-SLA_landings":4,"ZK-SLA_landTot":5320,"ZK-SLA_startTot":5205,"ZK-SLQ":7560.0},{"date":"2026-04-06","ZK-SLA":3824.4,"ZK-SLA_starts":6,"ZK-SLA_landings":6,"ZK-SLA_landTot":5326,"ZK-SLA_startTot":5209,"ZK-SLB":12316.5,"ZK-SLB_starts":6,"ZK-SLB_landings":6,"ZK-SLB_landTot":22036,"ZK-SLB_startTot":21982,"ZK-SLD":8406.4,"ZK-SLQ":7563.3,"ZK-SDB":18789.0,"ZK-SDB_starts":7,"ZK-SDB_landings":6,"ZK-SDB_landTot":24,"ZK-SDB_startTot":25,"comment":"Shut down due delay"},{"date":"2026-04-07","ZK-SLD":8407.2,"comment":"25hr Oil Change"},{"date":"2026-04-08","ZK-SLB":12317.2,"ZK-SLB_starts":3,"ZK-SLB_landings":3,"ZK-SLB_landTot":22039,"ZK-SLB_startTot":21985,"comment":"Flux Valve, Compass Swing"},{"date":"2026-04-10","ZK-SLA":3827.9,"ZK-SLA_starts":7,"ZK-SLA_landings":7,"ZK-SLA_landTot":5333,"ZK-SLA_startTot":5215,"ZK-SLB":12320.7,"ZK-SLB_starts":7,"ZK-SLB_landings":7,"ZK-SLB_landTot":22046,"ZK-SLB_startTot":21992,"ZK-SLD":8412.1,"ZK-SLQ":7567.1,"ZK-SDB":18791.7,"ZK-SDB_starts":6,"ZK-SDB_landings":6,"ZK-SDB_landTot":30,"ZK-SDB_startTot":31},{"date":"2026-04-11","ZK-SLA":3832.0,"ZK-SLA_starts":8,"ZK-SLA_landings":8,"ZK-SLA_landTot":5341,"ZK-SLA_startTot":5222,"ZK-SLB":12324.9,"ZK-SLB_starts":8,"ZK-SLB_landings":8,"ZK-SLB_landTot":22054,"ZK-SLB_startTot":22000,"ZK-SLD":8416.0,"ZK-SLQ":7570.3,"ZK-SDB":18793.8,"ZK-SDB_starts":5,"ZK-SDB_landings":4,"ZK-SDB_landTot":34,"ZK-SDB_startTot":36},{"date":"2026-04-15","ZK-SLA":3833.0,"ZK-SLA_starts":1,"ZK-SLA_landings":1,"ZK-SLA_landTot":5342,"ZK-SLA_startTot":5230,"ZK-SLB":12325.8,"ZK-SLB_starts":1,"ZK-SLB_landings":1,"ZK-SLB_landTot":22055,"ZK-SLB_startTot":22001},{"date":"2026-04-19","ZK-SLA":3834.3,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5344,"ZK-SLA_startTot":5231,"ZK-SLB":12326.8,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22057,"ZK-SLB_startTot":22003,"ZK-SLD":8417.3,"ZK-SLQ":7571.7,"ZK-SDB":18794.9,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":36,"ZK-SDB_startTot":38},{"date":"2026-04-20","ZK-SLA":3835.3,"ZK-SLA_starts":1,"ZK-SLA_landings":1,"ZK-SLA_landTot":5345,"ZK-SLA_startTot":5233,"ZK-SLD":8418.5,"ZK-SLQ":7572.3,"comment":"100 hour"},{"date":"2026-04-21","ZK-SLA":3836.4,"ZK-SLA_starts":1,"ZK-SLA_landings":1,"ZK-SLA_landTot":5346,"ZK-SLA_startTot":5234,"ZK-SLB":12327.9,"ZK-SLB_starts":1,"ZK-SLB_landings":1,"ZK-SLB_landTot":22058,"ZK-SLB_startTot":22004},{"date":"2026-04-22","ZK-SLA":3840.0,"ZK-SLA_starts":8,"ZK-SLA_landings":8,"ZK-SLA_landTot":5354,"ZK-SLA_startTot":5235,"ZK-SLB":12330.7,"ZK-SLB_starts":6,"ZK-SLB_landings":6,"ZK-SLB_landTot":22064,"ZK-SLB_startTot":22010,"ZK-SLD":8420.9,"ZK-SDB":18796.8,"ZK-SDB_starts":4,"ZK-SDB_landings":4,"ZK-SDB_landTot":40,"ZK-SDB_startTot":42},{"date":"2026-04-23","ZK-SLA":3840.9,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5356,"ZK-SLA_startTot":5243,"ZK-SLB":12332.5,"ZK-SLB_starts":4,"ZK-SLB_landings":4,"ZK-SLB_landTot":22068,"ZK-SLB_startTot":22014,"ZK-SLD":8424.2,"ZK-SLQ":7573.7},{"date":"2026-04-24","ZK-SLA":3843.7,"ZK-SLA_starts":6,"ZK-SLA_landings":6,"ZK-SLA_landTot":5362,"ZK-SLA_startTot":5245,"ZK-SLB":12334.2,"ZK-SLB_starts":4,"ZK-SLB_landings":4,"ZK-SLB_landTot":22072,"ZK-SLB_startTot":22018,"ZK-SLQ":7577.0,"ZK-SDB":18797.7,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":42,"ZK-SDB_startTot":44},{"date":"2026-04-25","ZK-SLA":3846.6,"ZK-SLA_starts":6,"ZK-SLA_landings":6,"ZK-SLA_landTot":5368,"ZK-SLA_startTot":5251,"ZK-SLB":12336.2,"ZK-SLB_starts":4,"ZK-SLB_landings":4,"ZK-SLB_landTot":22076,"ZK-SLB_startTot":22022,"ZK-SLD":8427.9,"ZK-SLQ":7580.1},{"date":"2026-04-27","ZK-SLA":3847.5,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5370,"ZK-SLA_startTot":5257,"ZK-SLB":12337.1,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22078,"ZK-SLB_startTot":22024,"ZK-SLD":8431.0,"ZK-SLQ":7582.4,"ZK-SDB":18798.7,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":44,"ZK-SDB_startTot":46},{"date":"2026-04-28","ZK-SLD":8431.6,"comment":"50 hour","ZK-SLQ":7583.0},{"date":"2026-04-30","ZK-SLA":3850.3,"ZK-SLA_starts":6,"ZK-SLA_landings":6,"ZK-SLA_landTot":5376,"ZK-SLA_startTot":5259,"ZK-SLB":12339.7,"ZK-SLB_starts":6,"ZK-SLB_landings":6,"ZK-SLB_landTot":22084,"ZK-SLB_startTot":22030,"ZK-SLD":3435.0,"ZK-SLQ":7585.9,"ZK-SDB":18800.7,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":46,"ZK-SDB_startTot":48},{"date":"2026-05-01","ZK-SLA":3852.1,"ZK-SLA_starts":4,"ZK-SLA_landings":4,"ZK-SLA_landTot":5380,"ZK-SLA_startTot":5265,"ZK-SLB":12342.0,"ZK-SLB_starts":3,"ZK-SLB_landings":8,"ZK-SLB_landTot":22092,"ZK-SLB_startTot":22033,"ZK-SLD":8436.2,"ZK-SLQ":7587.1},{"date":"2026-05-02","ZK-SLA":3854.0,"ZK-SLA_starts":4,"ZK-SLA_landings":4,"ZK-SLA_landTot":5384,"ZK-SLA_startTot":5269,"ZK-SLB":12343.0,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22094,"ZK-SLB_startTot":22035,"ZK-SLQ":7588.1,"ZK-SDB":18801.7,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":48,"ZK-SDB_startTot":50},{"date":"2026-05-03","ZK-SLA":3855.1,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5386,"ZK-SLA_startTot":5273,"ZK-SLB":12343.9,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22096,"ZK-SLB_startTot":22037,"ZK-SLD":8438.4,"ZK-SLQ":7590.3},{"date":"2026-05-04","ZK-SLA":3855.9,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5388,"ZK-SLA_startTot":5275,"ZK-SLB":12345.2,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22098,"ZK-SLB_startTot":22039,"ZK-SLD":8441.6,"ZK-SLQ":7592.9,"ZK-SDB":18802.6,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":50,"ZK-SDB_startTot":52},{"date":"2026-05-05","ZK-SLA":3858.1,"ZK-SLA_starts":4,"ZK-SLA_landings":4,"ZK-SLA_landTot":5392,"ZK-SLA_startTot":5277,"ZK-SLB":12346.2,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22100,"ZK-SLB_startTot":22041,"ZK-SLQ":7596.1,"ZK-SDB":18803.7,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":52,"ZK-SDB_startTot":54},{"date":"2026-05-06","ZK-SDB":18803.9,"ZK-SDB_starts":1,"ZK-SDB_landings":1,"ZK-SDB_landTot":53,"ZK-SDB_startTot":55,"comment":"Maintenance Ferry"},{"date":"2026-05-07","ZK-SDB":18804.2,"ZK-SDB_starts":1,"ZK-SDB_landings":1,"ZK-SDB_landTot":54,"ZK-SDB_startTot":56,"comment":"Brakes/Wheels"},{"date":"2026-05-08","ZK-SLA":3859.1,"ZK-SLA_starts":1,"ZK-SLA_landings":1,"ZK-SLA_landTot":5393,"ZK-SLA_startTot":5281,"ZK-SLQ":7597.5},{"date":"2026-05-09","ZK-SLA":3860.2,"ZK-SLA_starts":1,"ZK-SLA_landings":1,"ZK-SLA_landTot":5394,"ZK-SLA_startTot":5282,"ZK-SLB":12347.2,"ZK-SLB_starts":1,"ZK-SLB_landings":1,"ZK-SLB_landTot":22101,"ZK-SLB_startTot":22042,"ZK-SLQ":7598.9},{"date":"2026-05-10","ZK-SLQ":7599.9},{"date":"2026-05-11","ZK-SLA":3862.9,"ZK-SLA_starts":6,"ZK-SLA_landings":6,"ZK-SLA_landTot":5400,"ZK-SLA_startTot":5283,"ZK-SLB":12349.1,"ZK-SLB_starts":4,"ZK-SLB_landings":4,"ZK-SLB_landTot":22105,"ZK-SLB_startTot":22046,"ZK-SLD":8443.6,"ZK-SLQ":7602.1,"ZK-SDB":18805.2,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":56,"ZK-SDB_startTot":58},{"date":"2026-05-12","ZK-SLA":3864.1,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5402,"ZK-SLA_startTot":5289,"ZK-SLB":12351.2,"ZK-SLB_starts":4,"ZK-SLB_landings":4,"ZK-SLB_landTot":22109,"ZK-SLB_startTot":22050,"ZK-SLQ":7605.3},{"date":"2026-05-13","ZK-SLA":3865.1,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5404,"ZK-SLA_startTot":5291,"ZK-SLB":12352.4,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22111,"ZK-SLB_startTot":22052},{"date":"2026-05-14","ZK-SLA":3866.0,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5406,"ZK-SLA_startTot":5293,"ZK-SLB":12353.4,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22113,"ZK-SLB_startTot":22054,"ZK-SLD":8444.0,"ZK-SLQ":7607.4},{"date":"2026-05-15","ZK-SLA":3866.9,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5408,"ZK-SLA_startTot":5295,"ZK-SLB":12354.3,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22115,"ZK-SLB_startTot":22056,"ZK-SLQ":7610.2},{"date":"2026-05-16","ZK-SLA":3867.9,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5410,"ZK-SLA_startTot":5297,"ZK-SLB":12355.4,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22117,"ZK-SLB_startTot":22058,"ZK-SLQ":7611.4},{"date":"2026-05-17","ZK-SLA":3869.8,"ZK-SLA_starts":3,"ZK-SLA_landings":3,"ZK-SLA_landTot":5413,"ZK-SLA_startTot":5299,"ZK-SLQ":7612.4},{"date":"2026-05-18","ZK-SLA":3870.8,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5415,"ZK-SLA_startTot":5302,"ZK-SLB":12356.3,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22119,"ZK-SLB_startTot":22060,"ZK-SDB":18807.0,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":58,"ZK-SDB_startTot":60},{"date":"2026-05-19","ZK-SLA":3871.0,"ZK-SLA_starts":1,"ZK-SLA_landings":1,"ZK-SLA_landTot":5416,"ZK-SLA_startTot":5304,"ZK-SLB":12357.3,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22121,"ZK-SLB_startTot":22062,"ZK-SLD":8445.0,"ZK-SLQ":7613.6},{"date":"2026-05-20","ZK-SLD":8447.0,"ZK-SLQ":7615.7},{"date":"2026-05-21","ZK-SLB":12358.4,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22123,"ZK-SLB_startTot":22064,"ZK-SLQ":7616.8},{"date":"2026-05-22","ZK-SLB":12359.4,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22125,"ZK-SLB_startTot":22066,"ZK-SLD":8448.2,"ZK-SLQ":7618.0,"ZK-SDB":18808.0,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":60,"ZK-SDB_startTot":62},{"date":"2026-05-23","ZK-SLB":12361.4,"ZK-SLB_starts":4,"ZK-SLB_landings":4,"ZK-SLB_landTot":22129,"ZK-SLB_startTot":22070,"ZK-SLQ":7620.1,"ZK-SDB":18809.0,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":62,"ZK-SDB_startTot":64},{"date":"2026-05-24","ZK-SLB":12362.2,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22131,"ZK-SLB_startTot":22072,"ZK-SLD":8449.4,"ZK-SLQ":7621.3,"ZK-SDB":18809.9,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":64,"ZK-SDB_startTot":66},{"date":"2026-05-27","ZK-SLB":12363.2,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22133,"ZK-SLB_startTot":22074,"ZK-SLQ":7623.5,"ZK-SDB":18810.9,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":66,"ZK-SDB_startTot":68},{"date":"2026-05-28","ZK-SLA":3872.2,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5418,"ZK-SLA_startTot":5305,"ZK-SLB":12364.2,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22135,"ZK-SLB_startTot":22076,"ZK-SLD":8451.6,"ZK-SDB":18811.7,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":68,"ZK-SDB_startTot":70},{"date":"2026-05-29","ZK-SLA":3873.1,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5420,"ZK-SLA_startTot":5307,"ZK-SLB":12365.1,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22137,"ZK-SLB_startTot":22078,"ZK-SLD":8452.7},{"date":"2026-05-30","ZK-SLD":8454.0,"ZK-SLQ":7624.9},{"date":"2026-06-02","ZK-SLA":3875.4,"ZK-SLA_starts":1,"ZK-SLA_landings":1,"ZK-SLA_landTot":5421,"ZK-SLA_startTot":5309,"ZK-SLQ":7625.1,"comment":"50 Hour"},{"date":"2026-06-03","ZK-SLA":3878.3,"ZK-SLA_starts":6,"ZK-SLA_landings":6,"ZK-SLA_landTot":5427,"ZK-SLA_startTot":5310,"ZK-SLB":12368.0,"ZK-SLB_starts":6,"ZK-SLB_landings":6,"ZK-SLB_landTot":22143,"ZK-SLB_startTot":22084,"ZK-SLD":8455.9,"ZK-SLQ":7628.6,"ZK-SDB":18813.7,"ZK-SDB_starts":4,"ZK-SDB_landings":4,"ZK-SDB_landTot":72,"ZK-SDB_startTot":74},{"date":"2026-06-06","ZK-SLA":3879.3,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5429,"ZK-SLA_startTot":5316,"ZK-SLB":12369.1,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22145,"ZK-SLB_startTot":22086,"ZK-SLD":8457.2,"ZK-SDB":18814.7,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SDB_landTot":74,"ZK-SDB_startTot":76},{"date":"2026-06-07","ZK-SLD":8459.2},{"date":"2026-06-09","ZK-SLB":12370.1,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22147,"ZK-SLB_startTot":22088,"ZK-SLD":8460.5,"ZK-SLQ":7627.8},{"date":"2026-06-10","ZK-SLA":3880.2,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLA_landTot":5431,"ZK-SLA_startTot":5318,"ZK-SLB":12371.0,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLB_landTot":22149,"ZK-SLB_startTot":22090,"ZK-SLD":8462.7},{"date":"2026-06-11","ZK-SLB":12372.3,"ZK-SLB_starts":1,"ZK-SLB_landings":1,"ZK-SLB_landTot":22150,"ZK-SLB_startTot":22091,"ZK-SLD":8464.5}],"oil":[{"date":"2026-01-04","ZK-SLD":1.0,"ZK-SLQ":2.0},{"date":"2026-01-05","ZK-SLD":1.0},{"date":"2026-01-06","ZK-SLD":2.0},{"date":"2026-01-08","ZK-SLD":1.0},{"date":"2026-01-10","ZK-SLD":1.0},{"date":"2026-01-12","ZK-SLD":1.0},{"date":"2026-01-14","ZK-SLA":1.0},{"date":"2026-01-16","ZK-SLD":1.0,"ZK-SLQ":1.0},{"date":"2026-01-21","ZK-SLB":1.0,"ZK-SLQ":1.0},{"date":"2026-01-23","ZK-SLQ":1.0},{"date":"2026-01-26","ZK-SLQ":1.0},{"date":"2026-01-27","ZK-SLQ":1.0},{"date":"2026-01-30","ZK-SLD":2.0},{"date":"2026-01-31","ZK-SLD":2.0},{"date":"2026-02-04","ZK-SLA":1.0,"ZK-SLB":1.0},{"date":"2026-02-07","ZK-SLQ":1.0},{"date":"2026-02-11","ZK-SLD":1.0,"ZK-SLQ":1.0},{"date":"2026-02-15","ZK-SLQ":1.0},{"date":"2026-02-16","ZK-SLA":1.0},{"date":"2026-02-17","ZK-SLD":1.0},{"date":"2026-02-18","ZK-SLD":1.0},{"date":"2026-02-21","ZK-SLB":1.0},{"date":"2026-02-22","ZK-SLD":1.0,"ZK-SLQ":1.0},{"date":"2026-02-24","ZK-SLD":1.0},{"date":"2026-02-25","ZK-SLD":1.0},{"date":"2026-02-27","ZK-SLQ":1.0},{"date":"2026-03-04","ZK-SLQ":2.0},{"date":"2026-03-13","ZK-SLB":1.0},{"date":"2026-03-25","ZK-SLA":1.0},{"date":"2026-03-30","ZK-SLB":1.0},{"date":"2026-04-01","ZK-SLQ":1.0},{"date":"2026-04-06","ZK-SDB":1.0},{"date":"2026-04-10","ZK-SLA":1.0,"ZK-SLQ":1.0},{"date":"2026-04-11","ZK-SLQ":1.0},{"date":"2026-04-15","ZK-SLQ":1.0},{"date":"2026-05-03","ZK-SLQ":1.0},{"date":"2026-05-04","ZK-SLQ":1.0},{"date":"2026-05-06","ZK-SLQ":1.0},{"date":"2026-05-11","ZK-SLQ":1.0},{"date":"2026-05-16","ZK-SLQ":2.0},{"date":"2026-05-20","ZK-SLQ":2.0},{"date":"2026-05-28","ZK-SLA":1.0,"ZK-SLB":1.0},{"date":"2026-05-30","ZK-SLQ":1.0}],"nextCheck":{"ZK-SLA":3970,"ZK-SLB":12450.4,"ZK-SLD":8477.1,"ZK-SLQ":7672.4,"ZK-SDB":18878.8},"checkType":{"ZK-SLA":"100 Hour","ZK-SLB":"200 Hour","ZK-SLD":"100 Hour","ZK-SLQ":"100 Hour","ZK-SDB":"100 Hour"},"engineLastOH":{"ZK-SLA":0,"ZK-SLB":11850.4,"ZK-SLD":8382.1,"ZK-SLQ":5464.5},"engineToRun":{"ZK-SLA":4120.7,"ZK-SLB":3080.3,"ZK-SLD":2121.6,"ZK-SLQ":35.9},"propLastOH":{"ZK-SLA":1780.6,"ZK-SLB":11895.5,"ZK-SLD":8382.1,"ZK-SLQ":5432.9},"propToRun":{"ZK-SLA":1901.3,"ZK-SLB":3525.4,"ZK-SLD":2321.6,"ZK-SLQ":204.3}};
-const MAINT_SEED_VERSION=4;
+const MAINT_SEED={"hist":[{"date":"2025-06-10","ZK-SLB":11901.0,"ZK-SLD":7975.7,"ZK-SLQ":7141.3},{"date":"2025-06-12","ZK-SLA":3365.0,"ZK-SLD":7976.9,"ZK-SDB":18312.1},{"date":"2025-06-13","ZK-SLD":7979.3},{"date":"2025-06-14","ZK-SLD":7980.5,"ZK-SLQ":7143.4,"ZK-SDB":18313.3},{"date":"2025-06-15","ZK-SLA":3366.1},{"date":"2025-06-17","ZK-SLA":3368.0,"ZK-SLD":7981.9,"ZK-SLQ":7149.2,"ZK-SDB":18315.5},{"date":"2025-06-18","ZK-SLA":3371.1,"ZK-SLQ":7151.0,"ZK-SDB":18316.5},{"date":"2025-06-21","ZK-SLA":3374.4,"ZK-SLQ":7155.7,"ZK-SDB":18317.6},{"date":"2025-06-23","ZK-SLA":3377.0,"ZK-SLQ":7158.7,"ZK-SDB":18320.6},{"date":"2025-06-24","ZK-SDB":18321.5},{"date":"2025-06-26","ZK-SLD":7982.2},{"date":"2025-06-27","ZK-SLB":11902.2,"ZK-SLD":7984.6,"ZK-SLQ":7160.0},{"date":"2025-06-29","ZK-SLB":11905.0,"ZK-SLD":7985.8,"ZK-SLQ":7162.4,"ZK-SDB":18323.0},{"date":"2025-06-30","ZK-SLA":3380.9,"ZK-SLB":11906.0,"ZK-SLD":7987.1,"ZK-SLQ":7164.3,"ZK-SDB":18324.0},{"date":"2025-07-01","ZK-SLA":3382.0,"ZK-SLB":11907.0,"ZK-SLQ":7167.0,"ZK-SDB":18325.2},{"date":"2025-07-02","ZK-SLA":3382.9,"ZK-SLB":11908.0,"ZK-SLD":7988.3,"ZK-SLQ":7169.0,"ZK-SDB":18326.3},{"date":"2025-07-04","ZK-SLA":3383.9,"ZK-SLB":11909.0,"ZK-SLD":7991.8,"ZK-SLQ":7172.6,"ZK-SDB":18327.4},{"date":"2025-07-05","ZK-SLA":3384.9,"ZK-SLB":11910.9,"ZK-SLD":7993.5,"ZK-SLQ":7174.9},{"date":"2025-07-06","ZK-SLD":7994.6},{"date":"2025-07-07","ZK-SLA":3386.9,"ZK-SLB":1191.3,"ZK-SLD":7996.2,"ZK-SDB":18329.4},{"date":"2025-07-08","ZK-SLA":3389.7,"ZK-SLB":11911.3,"ZK-SLD":7999.4,"ZK-SLQ":7175.9,"ZK-SDB":18330.4},{"date":"2025-07-10","ZK-SLD":8001.3},{"date":"2025-07-11","ZK-SLA":3390.8,"ZK-SLB":11913.8,"ZK-SLD":8002.5},{"date":"2025-07-14","ZK-SLA":3394.2,"ZK-SLB":11916.4,"ZK-SLD":8003.8},{"date":"2025-07-15","ZK-SLD":8005.7},{"date":"2025-07-16","ZK-SLA":3396.2,"ZK-SLB":11919.3,"ZK-SLD":8009.0,"ZK-SDB":18333.2},{"date":"2025-07-17","ZK-SLA":3398.1,"ZK-SLB":11921.3,"ZK-SLD":8010.7,"ZK-SDB":18334.3},{"date":"2025-07-18","ZK-SLD":8014.5},{"date":"2025-07-19","ZK-SLA":3399.3,"ZK-SLB":11923.2,"ZK-SLD":8015.6,"ZK-SDB":18336.5},{"date":"2025-07-20","ZK-SLA":3400.3,"ZK-SLB":11924.5,"ZK-SLD":8018.6,"ZK-SDB":18337.5},{"date":"2025-07-21","ZK-SLA":3401.3,"ZK-SLB":11925.6,"ZK-SLD":8020.4,"ZK-SDB":18338.4},{"date":"2025-07-22","ZK-SLA":3403.2,"ZK-SLB":11926.5,"ZK-SLD":8022.2},{"date":"2025-07-23","ZK-SLA":3404.2,"ZK-SLB":11928.6},{"date":"2025-07-24","ZK-SLA":3405.3,"ZK-SLB":11932.1,"ZK-SLD":8025.6,"ZK-SLQ":7177.2},{"date":"2025-07-25","ZK-SLA":3406.3,"ZK-SLB":11933.2,"ZK-SLD":8027.0,"ZK-SLQ":7178.6},{"date":"2025-07-27","ZK-SLA":3407.3,"ZK-SLD":8029.6,"ZK-SLQ":7180.1},{"date":"2025-07-28","ZK-SLA":3408.3,"ZK-SLB":11934.4,"ZK-SLD":8030.3,"ZK-SLQ":7180.4},{"date":"2025-07-29","ZK-SLB":11935.5},{"date":"2025-07-30","ZK-SLA":3410.3,"ZK-SLB":11936.5,"ZK-SLD":8032.4,"ZK-SDB":18339.3},{"date":"2025-07-31","ZK-SLA":3411.3,"ZK-SLB":11938.3,"ZK-SLD":8034.9,"ZK-SLQ":7180.7},{"date":"2025-08-01","ZK-SLA":3412.4,"ZK-SLB":11940.2,"ZK-SLD":8037.1,"ZK-SDB":18340.2},{"date":"2025-08-02","ZK-SLA":3413.6,"ZK-SLB":11941.4,"ZK-SLD":8038.2,"ZK-SLQ":7183.1,"ZK-SDB":18341.6},{"date":"2025-08-03","ZK-SLB":11944.5,"ZK-SLD":8040.7,"ZK-SLQ":7185.2,"ZK-SDB":18342.6},{"date":"2025-08-04","ZK-SLA":3416.5,"ZK-SLB":11946.4,"ZK-SDB":18343.7},{"date":"2025-08-05","ZK-SLA":3417.5,"ZK-SLB":11947.5,"ZK-SLD":8043.4,"ZK-SLQ":7186.4,"ZK-SDB":18344.7},{"date":"2025-08-06","ZK-SLD":8045.7},{"date":"2025-08-08","ZK-SLA":3419.0,"ZK-SLD":8048.0,"ZK-SLQ":7188.0},{"date":"2025-08-09","ZK-SLA":3420.2,"ZK-SLB":11950.0,"ZK-SLQ":7189.4},{"date":"2025-08-10","ZK-SLB":11952.0,"ZK-SLD":8050.2,"ZK-SLQ":7190.6},{"date":"2025-08-11","ZK-SLA":3423.4,"ZK-SDB":18345.9},{"date":"2025-08-12","ZK-SLA":3425.7,"ZK-SLD":8054.8,"ZK-SLQ":7195.4,"ZK-SDB":18346.9},{"date":"2025-08-13","ZK-SLA":3428.4,"ZK-SLB":11953.2,"ZK-SLD":8056.7,"ZK-SLQ":7196.7,"ZK-SDB":18347.9},{"date":"2025-08-14","ZK-SLB":11953.9,"ZK-SLD":8059.1},{"date":"2025-08-15","ZK-SLA":3430.1,"ZK-SLQ":7201.1},{"date":"2025-08-16","ZK-SLD":8060.8},{"date":"2025-08-17","ZK-SLD":8062.5},{"date":"2025-08-19","ZK-SLQ":7201.9},{"date":"2025-08-20","ZK-SLA":3433.0,"ZK-SLB":11956.7,"ZK-SLD":8064.7,"ZK-SLQ":7204.0},{"date":"2025-08-21","ZK-SLA":3435.7,"ZK-SLB":11959.6,"ZK-SLD":8067.1,"ZK-SLQ":7205.4},{"date":"2025-08-22","ZK-SLA":3438.4,"ZK-SLD":8070.1,"ZK-SLQ":7207.3},{"date":"2025-08-23","ZK-SLA":3440.4,"ZK-SLD":8072.4,"ZK-SLQ":7209.5},{"date":"2025-08-24","ZK-SLA":3443.2,"ZK-SLD":8073.7,"ZK-SLQ":7211.0},{"date":"2025-08-25","ZK-SLA":3444.3,"ZK-SLD":8075.8,"ZK-SLQ":7213.3},{"date":"2025-08-26","ZK-SLA":3446.2,"ZK-SLB":11961.7,"ZK-SLD":8077.1,"ZK-SLQ":7214.5},{"date":"2025-08-31","ZK-SLA":3447.2,"ZK-SLB":11962.6,"ZK-SLQ":7214.9,"ZK-SDB":18348.9},{"date":"2025-09-02","ZK-SLA":3448.4,"ZK-SLB":11963.8,"ZK-SLQ":7216.3,"ZK-SDB":18350.0},{"date":"2025-09-03","ZK-SLA":3449.5,"ZK-SLB":11964.8,"ZK-SLQ":7218.9,"ZK-SDB":18351.1},{"date":"2025-09-06","ZK-SLA":3450.6,"ZK-SLB":11966.0,"ZK-SLQ":7220.1,"ZK-SDB":18352.2},{"date":"2025-09-07","ZK-SLA":3451.9,"ZK-SLB":11967.1,"ZK-SLQ":7222.1},{"date":"2025-09-08","ZK-SLA":3454.8,"ZK-SLB":11970.0,"ZK-SLQ":7225.4,"ZK-SDB":18354.0},{"date":"2025-09-11","ZK-SLA":3456.8,"ZK-SLQ":7227.1,"ZK-SDB":8355.2},{"date":"2025-09-12","ZK-SLA":3458.7,"ZK-SLQ":7227.4},{"date":"2025-09-13","ZK-SLQ":7228.1},{"date":"2025-09-14","ZK-SLA":3460.0,"ZK-SLB":11973.6,"ZK-SLQ":7229.4,"ZK-SDB":18356.3},{"date":"2025-09-17","ZK-SLQ":7231.1},{"date":"2025-09-18","ZK-SLB":11974.3},{"date":"2025-09-19","ZK-SLA":3465.0,"ZK-SLB":11978.0,"ZK-SLQ":7235.6,"ZK-SDB":18359.1},{"date":"2025-09-23","ZK-SLA":3467.7,"ZK-SLB":11980.8,"ZK-SLQ":7236.6,"ZK-SDB":18361.9},{"date":"2025-09-24","ZK-SLA":3469.5,"ZK-SLD":8077.9,"ZK-SLQ":7236.9},{"date":"2025-09-25","ZK-SLA":3470.6,"ZK-SLD":8079.3,"ZK-SDB":18362.9},{"date":"2025-09-26","ZK-SLB":11982.9},{"date":"2025-09-29","ZK-SLA":3470.8,"ZK-SLD":8080.8},{"date":"2025-09-30","ZK-SLB":11983.4},{"date":"2025-10-01","ZK-SLB":11987.4,"ZK-SLD":8085.7,"ZK-SLQ":7239.5,"ZK-SDB":18367.0},{"date":"2025-10-02","ZK-SLB":11988.5,"ZK-SLD":8087.0},{"date":"2025-10-03","ZK-SLA":3473.1,"ZK-SLB":11992.3,"ZK-SLD":8090.2,"ZK-SLQ":7243.8,"ZK-SDB":18369.5},{"date":"2025-10-04","ZK-SLQ":7245.9},{"date":"2025-10-06","ZK-SLB":11994.4,"ZK-SLD":8092.7,"ZK-SDB":18372.3},{"date":"2025-10-10","ZK-SLA":3475.3,"ZK-SLB":11995.5,"ZK-SLD":8095.2,"ZK-SLQ":7247.6},{"date":"2025-10-14","ZK-SLA":3479.3,"ZK-SLB":11999.4,"ZK-SLD":8100.0,"ZK-SLQ":7250.4},{"date":"2025-10-28","ZK-SLB":12002.5,"ZK-SLD":8103.7,"ZK-SLQ":7252.7},{"date":"2025-10-29","ZK-SLA":3486.1,"ZK-SLB":12006.7,"ZK-SLD":8107.7,"ZK-SLQ":7254.9},{"date":"2025-11-01","ZK-SLD":8116.5},{"date":"2025-11-02","ZK-SLA":3494.3,"ZK-SLD":8118.1},{"date":"2025-11-03","ZK-SLA":3496.5,"ZK-SLB":12016.7,"ZK-SLQ":7262.0},{"date":"2025-11-04","ZK-SLB":12017.5},{"date":"2025-11-05","ZK-SLB":12021.1,"ZK-SLD":8126.9},{"date":"2025-11-07","ZK-SLA":3504.4,"ZK-SLB":12025.1,"ZK-SLD":8133.0,"ZK-SLQ":7267.4},{"date":"2025-11-09","ZK-SLA":3509.3,"ZK-SLQ":7272.9},{"date":"2025-11-11","ZK-SLA":3513.2,"ZK-SLB":12029.5,"ZK-SLD":8137.8,"ZK-SLQ":7275.8},{"date":"2025-11-12","ZK-SLB":12032.3,"ZK-SLD":8140.3,"ZK-SLQ":7276.1},{"date":"2025-11-13","ZK-SLA":3519.2,"ZK-SLB":12036.1,"ZK-SLD":8143.1},{"date":"2025-11-14","ZK-SLD":8143.6},{"date":"2025-11-15","ZK-SLA":3520.6,"ZK-SLB":12039.4,"ZK-SLD":8145.2,"ZK-SLQ":7277.7},{"date":"2025-11-16","ZK-SLA":3524.4,"ZK-SLB":12043.9,"ZK-SLD":8148.0,"ZK-SLQ":7280.0},{"date":"2025-11-19","ZK-SLA":3528.7,"ZK-SLB":12047.8,"ZK-SLD":8150.9,"ZK-SLQ":7282.8},{"date":"2025-11-20","ZK-SLA":3532.4,"ZK-SLB":12051.2,"ZK-SLD":8155.0,"ZK-SLQ":7284.7},{"date":"2025-11-22","ZK-SLA":3536.6,"ZK-SLB":12055.3,"ZK-SLD":8157.1,"ZK-SLQ":7287.1},{"date":"2025-11-23","ZK-SLA":3540.7,"ZK-SLB":12056.6,"ZK-SLD":8159.5,"ZK-SLQ":7292.2},{"date":"2025-11-24","ZK-SLA":3543.5,"ZK-SLD":8164.4},{"date":"2025-11-25","ZK-SLA":3547.9,"ZK-SLD":8170.0,"ZK-SLQ":7302.0},{"date":"2025-11-26","ZK-SLD":8170.6},{"date":"2025-11-28","ZK-SLA":3551.4,"ZK-SLD":8175.0,"ZK-SLQ":7303.1},{"date":"2025-12-02","ZK-SLA":3555.2,"ZK-SLD":8180.0,"ZK-SLQ":7307.7},{"date":"2025-12-03","ZK-SLA":3556.3,"ZK-SLD":8181.2,"ZK-SLQ":7309.9},{"date":"2025-12-04","ZK-SLA":3559.7,"ZK-SLQ":7312.3},{"date":"2025-12-06","ZK-SLQ":7317.6},{"date":"2025-12-08","ZK-SLA":3568.2,"ZK-SLB":12056.9,"ZK-SLD":8181.5,"ZK-SLQ":7320.4},{"date":"2025-12-09","ZK-SLA":3572.2,"ZK-SLQ":7324.2},{"date":"2025-12-10","ZK-SLB":12063.9,"ZK-SLD":8181.8,"ZK-SLQ":7326.4},{"date":"2025-12-11","ZK-SLB":12065.0,"ZK-SLD":8185.3,"ZK-SLQ":7328.9},{"date":"2025-12-12","ZK-SLB":12066.1,"ZK-SLD":8188.2,"ZK-SLQ":7331.7},{"date":"2025-12-13","ZK-SLA":3576.6,"ZK-SLB":12067.2,"ZK-SLD":8190.5,"ZK-SLQ":7332.9},{"date":"2025-12-14","ZK-SLA":3577.9,"ZK-SLD":8194.1,"ZK-SLQ":7335.9},{"date":"2025-12-16","ZK-SLB":12068.7},{"date":"2025-12-17","ZK-SLA":3581.9,"ZK-SLD":8199.0},{"date":"2025-12-18","ZK-SLA":3584.7,"ZK-SLB":12069.0,"ZK-SLD":8203.8,"ZK-SLQ":7343.9},{"date":"2025-12-20","ZK-SLB":12073.3,"ZK-SLD":8206.8,"ZK-SLQ":7347.0},{"date":"2025-12-21","ZK-SLA":3593.0,"ZK-SLB":12077.1,"ZK-SLD":8211.9,"ZK-SLQ":7351.6},{"date":"2025-12-22","ZK-SLA":3594.2,"ZK-SLB":12078.2,"ZK-SLD":8214.1,"ZK-SLQ":7352.8},{"date":"2025-12-23","ZK-SLA":3597.0,"ZK-SLB":12081.0,"ZK-SLD":8218.5,"ZK-SLQ":7355.5},{"date":"2025-12-27","ZK-SLA":3601.1,"ZK-SLB":12085.3,"ZK-SLD":8222.8,"ZK-SLQ":7360.4},{"date":"2025-12-28","ZK-SLA":3604.9,"ZK-SLB":12089.0,"ZK-SLD":8225.7,"ZK-SLQ":7365.9},{"date":"2025-12-29","ZK-SLA":3608.8,"ZK-SLB":12092.2,"ZK-SLD":8230.3,"ZK-SLQ":7370.4},{"date":"2025-12-30","ZK-SLA":3615.1},{"date":"2025-12-31","ZK-SLA":3619.7,"ZK-SLB":12095.6,"ZK-SLD":8235.8,"ZK-SLQ":7373.0},{"date":"2026-01-01","ZK-SLB":12099.4,"ZK-SLD":8240.3},{"date":"2026-01-02","ZK-SLA":3625.5,"ZK-SLD":8241.9},{"date":"2026-01-03","ZK-SLB":12103.3,"ZK-SLD":8246.9,"ZK-SLQ":7375.7},{"date":"2026-01-04","ZK-SLB":12104.3,"ZK-SLD":8249.5,"ZK-SLQ":7377.1},{"date":"2026-01-05","ZK-SLB":12107.1,"ZK-SLD":8254.2,"ZK-SLQ":7378.1},{"date":"2026-01-06","ZK-SLA":3643.2,"ZK-SLD":8257.7},{"date":"2026-01-07","ZK-SLB":12109.9,"ZK-SLD":8259.5,"ZK-SLQ":7381.5},{"date":"2026-01-08","ZK-SLA":3645.0},{"date":"2026-01-09","ZK-SLA":3649.4,"ZK-SLB":12114.2,"ZK-SLD":8263.6,"ZK-SLQ":7386.7},{"date":"2026-01-12","ZK-SLA":3654.1,"ZK-SLB":12118.9,"ZK-SLD":8269.1,"ZK-SLQ":7389.7},{"date":"2026-01-13","ZK-SLD":8272.6,"ZK-SLQ":7391.3},{"date":"2026-01-14","ZK-SLA":3657.8,"ZK-SLB":12123.8,"ZK-SLD":8276.0,"ZK-SLQ":7395.4},{"date":"2026-01-15","ZK-SLA":3661.6,"ZK-SLB":12127.7,"ZK-SLD":8277.3,"ZK-SLQ":7396.8},{"date":"2026-01-16","ZK-SLA":3663.6,"ZK-SLB":12129.6,"ZK-SLD":8278.7,"ZK-SLQ":7400.4},{"date":"2026-01-17","ZK-SLA":3664.6,"ZK-SLB":12131.6,"ZK-SLD":8280.0,"ZK-SLQ":7403.9},{"date":"2026-01-18","ZK-SLA":3666.5,"ZK-SLB":12135.4,"ZK-SLD":8281.2,"ZK-SLQ":7406.2},{"date":"2026-01-19","ZK-SLA":3670.0,"ZK-SLB":12139.4,"ZK-SLQ":7410.5},{"date":"2026-01-20","ZK-SLB":12143.3,"ZK-SLQ":7413.2},{"date":"2026-01-21","ZK-SLA":3674.5,"ZK-SLB":12146.5,"ZK-SLQ":7414.3},{"date":"2026-01-22","ZK-SLB":12149.6,"ZK-SLD":8285.1,"ZK-SLQ":7417.5},{"date":"2026-01-23","ZK-SLB":12151.0,"ZK-SLQ":7419.0},{"date":"2026-01-24","ZK-SLB":12152.2,"ZK-SLD":8289.9,"ZK-SLQ":7423.2},{"date":"2026-01-25","ZK-SLB":12153.3},{"date":"2026-01-26","ZK-SLB":12157.1},{"date":"2026-01-27","ZK-SLD":8302.6,"ZK-SLQ":7429.2},{"date":"2026-01-28","ZK-SLB":12165.6,"ZK-SLQ":7430.7},{"date":"2026-01-29","ZK-SLB":12166.0,"ZK-SLD":8309.7},{"date":"2026-01-30","ZK-SLA":3682.7,"ZK-SLB":12170.5,"ZK-SLD":8314.6,"ZK-SLQ":7433.0},{"date":"2026-01-31","ZK-SLA":3684.9,"ZK-SLB":12173.8,"ZK-SLD":8317.3,"ZK-SLQ":7435.1},{"date":"2026-02-01","ZK-SLQ":7436.8},{"date":"2026-02-02","ZK-SLD":8321.7},{"date":"2026-02-03","ZK-SLA":3685.5},{"date":"2026-02-04","ZK-SLA":3690.2,"ZK-SLB":12181.6,"ZK-SLD":8326.2,"ZK-SLQ":7440.2},{"date":"2026-02-05","ZK-SLA":3694.3,"ZK-SLB":12187.1,"ZK-SLD":8329.7,"ZK-SLQ":7443.3},{"date":"2026-02-06","ZK-SLB":12190.2,"ZK-SLD":8331.4,"ZK-SLQ":7447.5},{"date":"2026-02-07","ZK-SLD":8331.8},{"date":"2026-02-08","ZK-SLA":3701.9,"ZK-SLB":12195.3,"ZK-SLD":8336.6,"ZK-SLQ":7452.2},{"date":"2026-02-09","ZK-SLA":3708.2,"ZK-SLB":12200.7,"ZK-SLD":8341.6,"ZK-SLQ":7454.6,"ZK-SDB":18701.9},{"date":"2026-02-10","ZK-SDB":18706.8},{"date":"2026-02-11","ZK-SLB":12203.5,"ZK-SLD":8345.0,"ZK-SLQ":7457.0,"ZK-SDB":18707.7},{"date":"2026-02-12","ZK-SLA":3715.1,"ZK-SLB":12207.5,"ZK-SLD":8347.8,"ZK-SLQ":7461.9,"ZK-SDB":18709.9},{"date":"2026-02-13","ZK-SLA":3716.1,"ZK-SLB":12208.4,"ZK-SLD":8349.1,"ZK-SLQ":7464.4,"ZK-SDB":18710.8},{"date":"2026-02-14","ZK-SLB":12209.9},{"date":"2026-02-15","ZK-SLA":3719.8,"ZK-SLB":12213.5,"ZK-SLD":8351.4,"ZK-SLQ":7469.3,"ZK-SDB":18714.5},{"date":"2026-02-16","ZK-SLA":3722.0,"ZK-SLB":12216.7,"ZK-SLD":8353.8,"ZK-SDB":18715.3},{"date":"2026-02-17","ZK-SLB":12221.1,"ZK-SLD":8356.2,"ZK-SLQ":7472.0,"ZK-SDB":18718.1},{"date":"2026-02-18","ZK-SLA":3730.0,"ZK-SLD":8359.8,"ZK-SLQ":7472.4,"ZK-SDB":18722.3},{"date":"2026-02-19","ZK-SLA":3731.1,"ZK-SLB":12226.4},{"date":"2026-02-20","ZK-SLQ":7472.8},{"date":"2026-02-21","ZK-SLA":3732.2,"ZK-SLD":8363.1,"ZK-SLQ":7474.0},{"date":"2026-02-22","ZK-SLA":3736.7,"ZK-SLB":12235.3,"ZK-SLD":8368.9,"ZK-SLQ":7478.8,"ZK-SDB":18726.4},{"date":"2026-02-23","ZK-SLA":3739.8,"ZK-SLB":12238.3,"ZK-SLD":8372.6,"ZK-SLQ":7481.1,"ZK-SDB":18729.5},{"date":"2026-02-24","ZK-SLA":3743.7,"ZK-SLB":12242.4,"ZK-SLD":8377.2,"ZK-SLQ":7486.3,"ZK-SDB":18733.2},{"date":"2026-02-25","ZK-SLA":3747.9,"ZK-SLB":12246.4,"ZK-SLD":8381.8,"ZK-SLQ":7489.6,"ZK-SDB":18735.3},{"date":"2026-02-27","ZK-SLA":3751.9,"ZK-SLB":12250.5,"ZK-SLD":8382.1,"ZK-SLQ":7493.1,"ZK-SDB":18738.2},{"date":"2026-02-28","ZK-SLA":3755.8,"ZK-SLB":12254.5,"ZK-SLQ":7496.6,"ZK-SDB":18740.0},{"date":"2026-03-01","ZK-SLA":3758.3,"ZK-SLB":12259.1,"ZK-SLD":8382.1},{"date":"2026-03-02","ZK-SLA":3760.5,"ZK-SLB":12259.4,"ZK-SLQ":7504.7,"ZK-SDB":18741.2},{"date":"2026-03-03","ZK-SLA":3765.1,"ZK-SLQ":7509.0,"ZK-SDB":18744.9},{"date":"2026-03-04","ZK-SLA":3769.1,"ZK-SLQ":7513.5,"ZK-SDB":18749.0},{"date":"2026-03-05","ZK-SLA":3770.6,"ZK-SLQ":7516.5,"ZK-SDB":18753.6},{"date":"2026-03-09","ZK-SLB":12262.0,"ZK-SLQ":7519.4,"ZK-SDB":18755.8},{"date":"2026-03-10","ZK-SLB":12266.5,"ZK-SLQ":7523.7,"ZK-SDB":18760.3},{"date":"2026-03-11","ZK-SLA":3770.8,"ZK-SLQ":7525.2},{"date":"2026-03-12","ZK-SLB":12268.9,"ZK-SLQ":7525.5},{"date":"2026-03-13","ZK-SLA":3772.0,"ZK-SLB":12270.0,"ZK-SDB":18761.4},{"date":"2026-03-14","ZK-SLA":3773.1,"ZK-SLB":12271.9,"ZK-SDB":18762.4},{"date":"2026-03-15","ZK-SLA":3775.0},{"date":"2026-03-16","ZK-SLQ":7525.9},{"date":"2026-03-17","ZK-SLA":3777.1,"ZK-SLB":12274.6,"ZK-SLQ":7528.1},{"date":"2026-03-18","ZK-SLA":3780.8,"ZK-SLB":12278.3,"ZK-SLQ":7531.6,"ZK-SDB":18764.3},{"date":"2026-03-19","ZK-SLA":3784.5,"ZK-SLB":12281.8,"ZK-SLQ":7533.7,"ZK-SDB":18767.7},{"date":"2026-03-20","ZK-SLA":3788.2,"ZK-SLB":12285.6,"ZK-SLD":8383.7,"ZK-SLQ":7534.8,"ZK-SDB":18769.5},{"date":"2026-03-21","ZK-SLA":3791.6,"ZK-SLB":12289.0,"ZK-SLD":8385.6},{"date":"2026-03-22","ZK-SLA":3793.5,"ZK-SLB":12291.7,"ZK-SDB":18770.5},{"date":"2026-03-23","ZK-SLA":3798.4,"ZK-SLB":12295.8,"ZK-SLQ":7539.2,"ZK-SDB":18774.5},{"date":"2026-03-24","ZK-SLA":3802.0,"ZK-SLB":12300.2,"ZK-SLQ":7541.4,"ZK-SDB":18775.5},{"date":"2026-03-25","ZK-SLA":3805.6,"ZK-SLB":12303.6,"ZK-SLD":8389.9,"ZK-SLQ":7544.1,"ZK-SDB":18777.2},{"date":"2026-03-26","ZK-SLA":3807.4,"ZK-SLA_landings":8,"ZK-SLA_starts":8,"ZK-SLA_landTot":5292,"ZK-SLA_startTot":5173,"ZK-SLB":12259.4,"ZK-SLB_landings":8,"ZK-SLB_starts":8,"ZK-SLB_landTot":22010,"ZK-SLB_startTot":21956,"ZK-SLD":8391.7,"ZK-SLQ":7545.2},{"date":"2026-03-30","ZK-SLA":3808.4,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5294,"ZK-SLA_startTot":5181,"ZK-SLB":12305.7,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22012,"ZK-SLB_startTot":21958,"ZK-SDB":18779.1,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":2,"ZK-SDB_startTot":2,"ZK-SLD":8393.2},{"date":"2026-03-31","ZK-SLA":3812.3,"ZK-SLA_landings":8,"ZK-SLA_starts":8,"ZK-SLA_landTot":5302,"ZK-SLA_startTot":5183,"ZK-SLB":12309.3,"ZK-SLB_landings":8,"ZK-SLB_starts":8,"ZK-SLB_landTot":22020,"ZK-SLB_startTot":21966,"ZK-SDB":18782.7,"ZK-SDB_landings":8,"ZK-SDB_starts":8,"ZK-SDB_landTot":10,"ZK-SDB_startTot":10,"ZK-SLD":8397.1},{"date":"2026-04-01","ZK-SLA":3815.8,"ZK-SLA_landings":8,"ZK-SLA_starts":8,"ZK-SLA_landTot":5310,"ZK-SLA_startTot":5191,"ZK-SLB":12312.0,"ZK-SLB_landings":6,"ZK-SLB_starts":6,"ZK-SLB_landTot":22026,"ZK-SLB_startTot":21972,"ZK-SDB":18784.5,"ZK-SDB_landings":4,"ZK-SDB_starts":4,"ZK-SDB_landTot":14,"ZK-SDB_startTot":14,"ZK-SLD":8400.8},{"date":"2026-04-02","ZK-SLA":3818.6,"ZK-SLA_landings":6,"ZK-SLA_starts":6,"ZK-SLA_landTot":5316,"ZK-SLA_startTot":5199,"ZK-SLB":12313.8,"ZK-SLB_landings":4,"ZK-SLB_starts":4,"ZK-SLB_landTot":22030,"ZK-SLB_startTot":21976,"ZK-SDB":18786.3,"ZK-SDB_landings":4,"ZK-SDB_starts":4,"ZK-SDB_landTot":18,"ZK-SDB_startTot":18,"ZK-SLD":8404.7,"ZK-SLQ":7558.2},{"date":"2026-04-05","ZK-SLA":3821.5,"ZK-SLA_landings":4,"ZK-SLA_starts":4,"ZK-SLA_landTot":5320,"ZK-SLA_startTot":5205,"ZK-SLB_landTot":22030,"ZK-SLB_startTot":21976,"ZK-SDB_landTot":18,"ZK-SDB_startTot":18,"ZK-SLQ":7560.0},{"date":"2026-04-06","ZK-SLA":3824.4,"ZK-SLA_landings":6,"ZK-SLA_starts":6,"ZK-SLA_landTot":5326,"ZK-SLA_startTot":5209,"ZK-SLB":12316.5,"ZK-SLB_landings":6,"ZK-SLB_starts":6,"ZK-SLB_landTot":22036,"ZK-SLB_startTot":21982,"ZK-SDB":18789.0,"ZK-SDB_landings":6,"ZK-SDB_starts":7,"ZK-SDB_landTot":24,"ZK-SDB_startTot":25,"ZK-SLD":8406.4,"ZK-SLQ":7563.3},{"date":"2026-04-07","ZK-SLA_landTot":5326,"ZK-SLA_startTot":5215,"ZK-SLB_landTot":22036,"ZK-SLB_startTot":21982,"ZK-SDB_landTot":24,"ZK-SDB_startTot":25,"ZK-SLD":8407.2},{"date":"2026-04-08","ZK-SLA_landTot":5326,"ZK-SLA_startTot":5215,"ZK-SLB":12317.2,"ZK-SLB_landings":3,"ZK-SLB_starts":3,"ZK-SLB_landTot":22039,"ZK-SLB_startTot":21985,"ZK-SDB_landTot":24,"ZK-SDB_startTot":25},{"date":"2026-04-10","ZK-SLA":3827.9,"ZK-SLA_landings":7,"ZK-SLA_starts":7,"ZK-SLA_landTot":5333,"ZK-SLA_startTot":5215,"ZK-SLB":12320.7,"ZK-SLB_landings":7,"ZK-SLB_starts":7,"ZK-SLB_landTot":22046,"ZK-SLB_startTot":21992,"ZK-SDB":18791.7,"ZK-SDB_landings":6,"ZK-SDB_starts":6,"ZK-SDB_landTot":30,"ZK-SDB_startTot":31,"ZK-SLD":8412.1,"ZK-SLQ":7567.1},{"date":"2026-04-11","ZK-SLA":3832.0,"ZK-SLA_landings":8,"ZK-SLA_starts":8,"ZK-SLA_landTot":5341,"ZK-SLA_startTot":5222,"ZK-SLB":12324.9,"ZK-SLB_landings":8,"ZK-SLB_starts":8,"ZK-SLB_landTot":22054,"ZK-SLB_startTot":22000,"ZK-SDB":18793.8,"ZK-SDB_landings":4,"ZK-SDB_starts":5,"ZK-SDB_landTot":34,"ZK-SDB_startTot":36,"ZK-SLD":8416.0,"ZK-SLQ":7570.3},{"date":"2026-04-15","ZK-SLA":3833.0,"ZK-SLA_landings":1,"ZK-SLA_starts":1,"ZK-SLA_landTot":5342,"ZK-SLA_startTot":5230,"ZK-SLB":12325.8,"ZK-SLB_landings":1,"ZK-SLB_starts":1,"ZK-SLB_landTot":22055,"ZK-SLB_startTot":22001,"ZK-SDB_landTot":34,"ZK-SDB_startTot":36},{"date":"2026-04-19","ZK-SLA":3834.3,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5344,"ZK-SLA_startTot":5231,"ZK-SLB":12326.8,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22057,"ZK-SLB_startTot":22003,"ZK-SDB":18794.9,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":36,"ZK-SDB_startTot":38,"ZK-SLD":8417.3,"ZK-SLQ":7571.7},{"date":"2026-04-20","ZK-SLA":3835.3,"ZK-SLA_landings":1,"ZK-SLA_starts":1,"ZK-SLA_landTot":5345,"ZK-SLA_startTot":5233,"ZK-SLB_landTot":22057,"ZK-SLB_startTot":22003,"ZK-SDB_landTot":36,"ZK-SDB_startTot":38,"ZK-SLD":8418.5,"ZK-SLQ":7572.3},{"date":"2026-04-21","ZK-SLA":3836.4,"ZK-SLA_landings":1,"ZK-SLA_starts":1,"ZK-SLA_landTot":5346,"ZK-SLA_startTot":5234,"ZK-SLB":12327.9,"ZK-SLB_landings":1,"ZK-SLB_starts":1,"ZK-SLB_landTot":22058,"ZK-SLB_startTot":22004,"ZK-SDB_landTot":36,"ZK-SDB_startTot":38},{"date":"2026-04-22","ZK-SLA":3840.0,"ZK-SLA_landings":8,"ZK-SLA_starts":8,"ZK-SLA_landTot":5354,"ZK-SLA_startTot":5235,"ZK-SLB":12330.7,"ZK-SLB_landings":6,"ZK-SLB_starts":6,"ZK-SLB_landTot":22064,"ZK-SLB_startTot":22010,"ZK-SDB":18796.8,"ZK-SDB_landings":4,"ZK-SDB_starts":4,"ZK-SDB_landTot":40,"ZK-SDB_startTot":42,"ZK-SLD":8420.9},{"date":"2026-04-23","ZK-SLA":3840.9,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5356,"ZK-SLA_startTot":5243,"ZK-SLB":12332.5,"ZK-SLB_landings":4,"ZK-SLB_starts":4,"ZK-SLB_landTot":22068,"ZK-SLB_startTot":22014,"ZK-SDB_landTot":40,"ZK-SDB_startTot":42,"ZK-SLD":8424.2,"ZK-SLQ":7573.7},{"date":"2026-04-24","ZK-SLA":3843.7,"ZK-SLA_landings":6,"ZK-SLA_starts":6,"ZK-SLA_landTot":5362,"ZK-SLA_startTot":5245,"ZK-SLB":12334.2,"ZK-SLB_landings":4,"ZK-SLB_starts":4,"ZK-SLB_landTot":22072,"ZK-SLB_startTot":22018,"ZK-SDB":18797.7,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":42,"ZK-SDB_startTot":44,"ZK-SLQ":7577.0},{"date":"2026-04-25","ZK-SLA":3846.6,"ZK-SLA_landings":6,"ZK-SLA_starts":6,"ZK-SLA_landTot":5368,"ZK-SLA_startTot":5251,"ZK-SLB":12336.2,"ZK-SLB_landings":4,"ZK-SLB_starts":4,"ZK-SLB_landTot":22076,"ZK-SLB_startTot":22022,"ZK-SDB_landTot":42,"ZK-SDB_startTot":44,"ZK-SLD":8427.9,"ZK-SLQ":7580.1},{"date":"2026-04-27","ZK-SLA":3847.5,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5370,"ZK-SLA_startTot":5257,"ZK-SLB":12337.1,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22078,"ZK-SLB_startTot":22024,"ZK-SDB":18798.7,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":44,"ZK-SDB_startTot":46,"ZK-SLD":8431.0,"ZK-SLQ":7582.4},{"date":"2026-04-28","ZK-SLA_landTot":5370,"ZK-SLA_startTot":5259,"ZK-SLB_landTot":22078,"ZK-SLB_startTot":22024,"ZK-SDB_landTot":44,"ZK-SDB_startTot":46,"ZK-SLD":8431.6,"ZK-SLQ":7583.0},{"date":"2026-04-30","ZK-SLA":3850.3,"ZK-SLA_landings":6,"ZK-SLA_starts":6,"ZK-SLA_landTot":5376,"ZK-SLA_startTot":5259,"ZK-SLB":12339.7,"ZK-SLB_landings":6,"ZK-SLB_starts":6,"ZK-SLB_landTot":22084,"ZK-SLB_startTot":22030,"ZK-SDB":18800.7,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":46,"ZK-SDB_startTot":48,"ZK-SLD":3435.0,"ZK-SLQ":7585.9},{"date":"2026-05-01","ZK-SLA":3852.1,"ZK-SLA_landings":4,"ZK-SLA_starts":4,"ZK-SLA_landTot":5380,"ZK-SLA_startTot":5265,"ZK-SLB":12342.0,"ZK-SLB_landings":8,"ZK-SLB_starts":3,"ZK-SLB_landTot":22092,"ZK-SLB_startTot":22033,"ZK-SDB_landTot":46,"ZK-SDB_startTot":48,"ZK-SLD":8436.2,"ZK-SLQ":7587.1},{"date":"2026-05-02","ZK-SLA":3854.0,"ZK-SLA_landings":4,"ZK-SLA_starts":4,"ZK-SLA_landTot":5384,"ZK-SLA_startTot":5269,"ZK-SLB":12343.0,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22094,"ZK-SLB_startTot":22035,"ZK-SDB":18801.7,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":48,"ZK-SDB_startTot":50,"ZK-SLQ":7588.1},{"date":"2026-05-03","ZK-SLA":3855.1,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5386,"ZK-SLA_startTot":5273,"ZK-SLB":12343.9,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22096,"ZK-SLB_startTot":22037,"ZK-SDB_landTot":48,"ZK-SDB_startTot":50,"ZK-SLD":8438.4,"ZK-SLQ":7590.3},{"date":"2026-05-04","ZK-SLA":3855.9,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5388,"ZK-SLA_startTot":5275,"ZK-SLB":12345.2,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22098,"ZK-SLB_startTot":22039,"ZK-SDB":18802.6,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":50,"ZK-SDB_startTot":52,"ZK-SLD":8441.6,"ZK-SLQ":7592.9},{"date":"2026-05-05","ZK-SLA":3858.1,"ZK-SLA_landings":4,"ZK-SLA_starts":4,"ZK-SLA_landTot":5392,"ZK-SLA_startTot":5277,"ZK-SLB":12346.2,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22100,"ZK-SLB_startTot":22041,"ZK-SDB":18803.7,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":52,"ZK-SDB_startTot":54,"ZK-SLQ":7596.1},{"date":"2026-05-06","ZK-SLA_landTot":5392,"ZK-SLA_startTot":5281,"ZK-SLB_landTot":22100,"ZK-SLB_startTot":22041,"ZK-SDB":18803.9,"ZK-SDB_landings":1,"ZK-SDB_starts":1,"ZK-SDB_landTot":53,"ZK-SDB_startTot":55},{"date":"2026-05-07","ZK-SLA_landTot":5392,"ZK-SLA_startTot":5281,"ZK-SLB_landTot":22100,"ZK-SLB_startTot":22041,"ZK-SDB":18804.2,"ZK-SDB_landings":1,"ZK-SDB_starts":1,"ZK-SDB_landTot":54,"ZK-SDB_startTot":56},{"date":"2026-05-08","ZK-SLA":3859.1,"ZK-SLA_landings":1,"ZK-SLA_starts":1,"ZK-SLA_landTot":5393,"ZK-SLA_startTot":5281,"ZK-SLB_landTot":22100,"ZK-SLB_startTot":22041,"ZK-SDB_landTot":54,"ZK-SDB_startTot":56,"ZK-SLQ":7597.5},{"date":"2026-05-09","ZK-SLA":3860.2,"ZK-SLA_landings":1,"ZK-SLA_starts":1,"ZK-SLA_landTot":5394,"ZK-SLA_startTot":5282,"ZK-SLB":12347.2,"ZK-SLB_landings":1,"ZK-SLB_starts":1,"ZK-SLB_landTot":22101,"ZK-SLB_startTot":22042,"ZK-SDB_landTot":54,"ZK-SDB_startTot":56,"ZK-SLQ":7598.9},{"date":"2026-05-10","ZK-SLA_landTot":5394,"ZK-SLA_startTot":5283,"ZK-SLB_landTot":22101,"ZK-SLB_startTot":22042,"ZK-SDB_landTot":54,"ZK-SDB_startTot":56,"ZK-SLQ":7599.9},{"date":"2026-05-11","ZK-SLA":3862.9,"ZK-SLA_landings":6,"ZK-SLA_starts":6,"ZK-SLA_landTot":5400,"ZK-SLA_startTot":5283,"ZK-SLB":12349.1,"ZK-SLB_landings":4,"ZK-SLB_starts":4,"ZK-SLB_landTot":22105,"ZK-SLB_startTot":22046,"ZK-SDB":18805.2,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":56,"ZK-SDB_startTot":58,"ZK-SLD":8443.6,"ZK-SLQ":7602.1},{"date":"2026-05-12","ZK-SLA":3864.1,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5402,"ZK-SLA_startTot":5289,"ZK-SLB":12351.2,"ZK-SLB_landings":4,"ZK-SLB_starts":4,"ZK-SLB_landTot":22109,"ZK-SLB_startTot":22050,"ZK-SDB_landTot":56,"ZK-SDB_startTot":58,"ZK-SLQ":7605.3},{"date":"2026-05-13","ZK-SLA":3865.1,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5404,"ZK-SLA_startTot":5291,"ZK-SLB":12352.4,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22111,"ZK-SLB_startTot":22052,"ZK-SDB_landTot":56,"ZK-SDB_startTot":58},{"date":"2026-05-14","ZK-SLA":3866.0,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5406,"ZK-SLA_startTot":5293,"ZK-SLB":12353.4,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22113,"ZK-SLB_startTot":22054,"ZK-SDB_landTot":56,"ZK-SDB_startTot":58,"ZK-SLD":8444.0,"ZK-SLQ":7607.4},{"date":"2026-05-15","ZK-SLA":3866.9,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5408,"ZK-SLA_startTot":5295,"ZK-SLB":12354.3,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22115,"ZK-SLB_startTot":22056,"ZK-SDB_landTot":56,"ZK-SDB_startTot":58,"ZK-SLQ":7610.2},{"date":"2026-05-16","ZK-SLA":3867.9,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5410,"ZK-SLA_startTot":5297,"ZK-SLB":12355.4,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22117,"ZK-SLB_startTot":22058,"ZK-SDB_landTot":56,"ZK-SDB_startTot":58,"ZK-SLQ":7611.4},{"date":"2026-05-17","ZK-SLA":3869.8,"ZK-SLA_landings":3,"ZK-SLA_starts":3,"ZK-SLA_landTot":5413,"ZK-SLA_startTot":5299,"ZK-SLB_landTot":22117,"ZK-SLB_startTot":22058,"ZK-SDB_landTot":56,"ZK-SDB_startTot":58,"ZK-SLQ":7612.4},{"date":"2026-05-18","ZK-SLA":3870.8,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5415,"ZK-SLA_startTot":5302,"ZK-SLB":12356.3,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22119,"ZK-SLB_startTot":22060,"ZK-SDB":18807.0,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":58,"ZK-SDB_startTot":60},{"date":"2026-05-19","ZK-SLA":3871.0,"ZK-SLA_landings":1,"ZK-SLA_starts":1,"ZK-SLA_landTot":5416,"ZK-SLA_startTot":5304,"ZK-SLB":12357.3,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22121,"ZK-SLB_startTot":22062,"ZK-SDB_landTot":58,"ZK-SDB_startTot":60,"ZK-SLD":8445.0,"ZK-SLQ":7613.6},{"date":"2026-05-20","ZK-SLA_landTot":5416,"ZK-SLA_startTot":5305,"ZK-SLB_landTot":22121,"ZK-SLB_startTot":22062,"ZK-SDB_landTot":58,"ZK-SDB_startTot":60,"ZK-SLD":8447.0,"ZK-SLQ":7615.7},{"date":"2026-05-21","ZK-SLA_landTot":5416,"ZK-SLA_startTot":5305,"ZK-SLB":12358.4,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22123,"ZK-SLB_startTot":22064,"ZK-SDB_landTot":58,"ZK-SDB_startTot":60,"ZK-SLQ":7616.8},{"date":"2026-05-22","ZK-SLA_landTot":5416,"ZK-SLA_startTot":5305,"ZK-SLB":12359.4,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22125,"ZK-SLB_startTot":22066,"ZK-SDB":18808.0,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":60,"ZK-SDB_startTot":62,"ZK-SLD":8448.2,"ZK-SLQ":7618.0},{"date":"2026-05-23","ZK-SLA_landTot":5416,"ZK-SLA_startTot":5305,"ZK-SLB":12361.4,"ZK-SLB_landings":4,"ZK-SLB_starts":4,"ZK-SLB_landTot":22129,"ZK-SLB_startTot":22070,"ZK-SDB":18809.0,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":62,"ZK-SDB_startTot":64,"ZK-SLQ":7620.1},{"date":"2026-05-24","ZK-SLA_landTot":5416,"ZK-SLA_startTot":5305,"ZK-SLB":12362.2,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22131,"ZK-SLB_startTot":22072,"ZK-SDB":18809.9,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":64,"ZK-SDB_startTot":66,"ZK-SLD":8449.4,"ZK-SLQ":7621.3},{"date":"2026-05-27","ZK-SLA_landTot":5416,"ZK-SLA_startTot":5305,"ZK-SLB":12363.2,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22133,"ZK-SLB_startTot":22074,"ZK-SDB":18810.9,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":66,"ZK-SDB_startTot":68,"ZK-SLQ":7623.5},{"date":"2026-05-28","ZK-SLA":3872.2,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5418,"ZK-SLA_startTot":5305,"ZK-SLB":12364.2,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22135,"ZK-SLB_startTot":22076,"ZK-SDB":18811.7,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":68,"ZK-SDB_startTot":70,"ZK-SLD":8451.6},{"date":"2026-05-29","ZK-SLA":3873.1,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5420,"ZK-SLA_startTot":5307,"ZK-SLB":12365.1,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22137,"ZK-SLB_startTot":22078,"ZK-SDB_landTot":68,"ZK-SDB_startTot":70,"ZK-SLD":8452.7},{"date":"2026-05-30","ZK-SLA_landTot":5420,"ZK-SLA_startTot":5309,"ZK-SLB_landTot":22137,"ZK-SLB_startTot":22078,"ZK-SDB_landTot":68,"ZK-SDB_startTot":70,"ZK-SLD":8454.0,"ZK-SLQ":7624.9},{"date":"2026-06-02","ZK-SLA":3875.4,"ZK-SLA_landings":1,"ZK-SLA_starts":1,"ZK-SLA_landTot":5421,"ZK-SLA_startTot":5309,"ZK-SLB_landTot":22137,"ZK-SLB_startTot":22078,"ZK-SDB_landTot":68,"ZK-SDB_startTot":70,"ZK-SLQ":7625.1},{"date":"2026-06-03","ZK-SLA":3878.3,"ZK-SLA_landings":6,"ZK-SLA_starts":6,"ZK-SLA_landTot":5427,"ZK-SLA_startTot":5310,"ZK-SLB":12368.0,"ZK-SLB_landings":6,"ZK-SLB_starts":6,"ZK-SLB_landTot":22143,"ZK-SLB_startTot":22084,"ZK-SDB":18813.7,"ZK-SDB_landings":4,"ZK-SDB_starts":4,"ZK-SDB_landTot":72,"ZK-SDB_startTot":74,"ZK-SLD":8455.9,"ZK-SLQ":7628.6},{"date":"2026-06-06","ZK-SLA":3879.3,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5429,"ZK-SLA_startTot":5316,"ZK-SLB":12369.1,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22145,"ZK-SLB_startTot":22086,"ZK-SDB":18814.7,"ZK-SDB_landings":2,"ZK-SDB_starts":2,"ZK-SDB_landTot":74,"ZK-SDB_startTot":76,"ZK-SLD":8457.2},{"date":"2026-06-07","ZK-SLA_landTot":5429,"ZK-SLA_startTot":5318,"ZK-SLB_landTot":22145,"ZK-SLB_startTot":22086,"ZK-SDB_landTot":74,"ZK-SDB_startTot":76,"ZK-SLD":8459.2},{"date":"2026-06-09","ZK-SLA_landTot":5429,"ZK-SLA_startTot":5318,"ZK-SLB":12370.1,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22147,"ZK-SLB_startTot":22088,"ZK-SDB_landTot":74,"ZK-SDB_startTot":76,"ZK-SLD":8460.5,"ZK-SLQ":7627.8},{"date":"2026-06-10","ZK-SLA":3880.2,"ZK-SLA_landings":2,"ZK-SLA_starts":2,"ZK-SLA_landTot":5431,"ZK-SLA_startTot":5318,"ZK-SLB":12371.0,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLB_landTot":22149,"ZK-SLB_startTot":22090,"ZK-SDB_landTot":74,"ZK-SDB_startTot":76,"ZK-SLD":8462.7},{"date":"2026-06-11","ZK-SLA_landTot":5431,"ZK-SLA_startTot":5320,"ZK-SLB":12372.3,"ZK-SLB_landings":1,"ZK-SLB_starts":1,"ZK-SLB_landTot":22150,"ZK-SLB_startTot":22091,"ZK-SDB_landTot":74,"ZK-SDB_startTot":76,"ZK-SLD":8464.5}],"oil":[{"date":"2026-01-04","ZK-SLD":1.0,"ZK-SLQ":2.0},{"date":"2026-01-05","ZK-SLD":1.0},{"date":"2026-01-06","ZK-SLD":2.0},{"date":"2026-01-08","ZK-SLD":1.0},{"date":"2026-01-10","ZK-SLD":1.0},{"date":"2026-01-12","ZK-SLD":1.0},{"date":"2026-01-14","ZK-SLA":1.0},{"date":"2026-01-16","ZK-SLD":1.0,"ZK-SLQ":1.0},{"date":"2026-01-21","ZK-SLB":1.0,"ZK-SLQ":1.0},{"date":"2026-01-23","ZK-SLQ":1.0},{"date":"2026-01-26","ZK-SLQ":1.0},{"date":"2026-01-27","ZK-SLQ":1.0},{"date":"2026-01-30","ZK-SLD":2.0},{"date":"2026-01-31","ZK-SLD":2.0},{"date":"2026-02-04","ZK-SLA":1.0,"ZK-SLB":1.0},{"date":"2026-02-07","ZK-SLQ":1.0},{"date":"2026-02-11","ZK-SLD":1.0,"ZK-SLQ":1.0},{"date":"2026-02-15","ZK-SLQ":1.0},{"date":"2026-02-16","ZK-SLA":1.0},{"date":"2026-02-17","ZK-SLD":1.0},{"date":"2026-02-18","ZK-SLD":1.0},{"date":"2026-02-21","ZK-SLB":1.0},{"date":"2026-02-22","ZK-SLD":1.0,"ZK-SLQ":1.0},{"date":"2026-02-24","ZK-SLD":1.0},{"date":"2026-02-25","ZK-SLD":1.0},{"date":"2026-02-27","ZK-SLQ":1.0},{"date":"2026-03-04","ZK-SLQ":2.0},{"date":"2026-03-13","ZK-SLB":1.0},{"date":"2026-03-25","ZK-SLA":1.0},{"date":"2026-03-30","ZK-SLB":1.0},{"date":"2026-04-01","ZK-SLQ":1.0},{"date":"2026-04-06","ZK-SDB":1.0},{"date":"2026-04-10","ZK-SLA":1.0,"ZK-SLQ":1.0},{"date":"2026-04-11","ZK-SLQ":1.0},{"date":"2026-04-15","ZK-SLQ":1.0},{"date":"2026-05-03","ZK-SLQ":1.0},{"date":"2026-05-04","ZK-SLQ":1.0},{"date":"2026-05-06","ZK-SLQ":1.0},{"date":"2026-05-11","ZK-SLQ":1.0},{"date":"2026-05-16","ZK-SLQ":2.0},{"date":"2026-05-20","ZK-SLQ":2.0},{"date":"2026-05-28","ZK-SLA":1.0,"ZK-SLB":1.0},{"date":"2026-05-30","ZK-SLQ":1.0}],"nextCheck":{"ZK-SLA":3970,"ZK-SLB":12450.4,"ZK-SLD":8477.1,"ZK-SLQ":7672.4,"ZK-SDB":18878.8},"checkType":{"ZK-SLA":"100 Hour","ZK-SLB":"200 Hour","ZK-SLD":"100 Hour","ZK-SLQ":"100 Hour","ZK-SDB":"100 Hour"},"engineLastOH":{"ZK-SLA":0,"ZK-SLB":11850.4,"ZK-SLD":8382.1,"ZK-SLQ":5464.5},"engineToRun":{"ZK-SLA":4120.7,"ZK-SLB":3080.3,"ZK-SLD":2121.6,"ZK-SLQ":35.9},"propLastOH":{"ZK-SLA":1780.6,"ZK-SLB":11895.5,"ZK-SLD":8382.1,"ZK-SLQ":5432.9},"propToRun":{"ZK-SLA":1901.3,"ZK-SLB":3525.4,"ZK-SLD":2321.6,"ZK-SLQ":204.3}};
+const MAINT_SEED_VERSION=5;
 
 function initMaintenance(){
   // Load from localStorage or seed from spreadsheet data
@@ -4386,10 +4384,13 @@ function renderMaintSearch(){
   const data=type==='oil'?oil:hist;
   // For oil: generate every date in range so gaps show as —
   let filtered;
-  if(type==='oil'&&sf.from&&sf.to){
+  if(type==='oil'){
+    const today=new Date().toISOString().slice(0,10);
+    const rangeFrom=sf.from||(data.length?data[0].date:today);
+    const rangeTo=sf.to||today;
     const allDates=[];
-    const d=new Date(sf.from+'T00:00:00');
-    const end=new Date(sf.to+'T00:00:00');
+    const d=new Date(rangeFrom+'T00:00:00');
+    const end=new Date(rangeTo+'T00:00:00');
     while(d<=end){const ds=d.toISOString().slice(0,10);allDates.push(ds);d.setDate(d.getDate()+1);}
     const oilByDate={};
     data.forEach(function(e){oilByDate[e.date]=e;});
@@ -4398,7 +4399,6 @@ function renderMaintSearch(){
     filtered=data.filter(function(e){
       if(sf.from&&e.date<sf.from) return false;
       if(sf.to&&e.date>sf.to) return false;
-      if(sf.ac&&!e[sf.ac]) return false;
       return true;
     });
   }
