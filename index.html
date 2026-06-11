@@ -1460,7 +1460,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.5 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.6 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
@@ -2061,10 +2061,10 @@ function renderLoadsheet(){
       </div>
     </div>
     <div class="g4">
-      <div class="badge bok"><div class="blbl">Fuel Loaded</div><div class="bval">${(fuelKgVal/AVGAS).toFixed(0)}</div><div class="bsub">litres</div></div>
+      <div class="badge bok"><div class="blbl">Fuel Loaded</div><div class="bval">${a?.layout==='ga8'?(fuelKgVal/AVGAS).toFixed(0):(fuelKgVal/LB).toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?'litres':'lbs'}</div></div>
       <div class="badge" style="background:rgba(239,68,68,.08);border:1px solid #7f1d1d;color:#fca5a5"><div class="blbl">Gnd Burn</div><div class="bval">${a.gndBurn.toFixed(1)}</div><div class="bsub">kg taxi</div></div>
       <div class="badge bwarn"><div class="blbl">Flight Burn</div><div class="bval">${a?.layout==='ga8'?(burnKgVal/AVGAS).toFixed(0):burnKgVal.toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?'L':'kg'} · ${flightMin} min</div></div>
-      <div class="badge ${fuelRemKg>=0?'bok':'berr'}"><div class="blbl">Fuel @ Dest</div><div class="bval">${(fuelRemKg/AVGAS).toFixed(0)}</div><div class="bsub">litres remaining</div></div>
+      <div class="badge ${fuelRemKg>=0?'bok':'berr'}"><div class="blbl">Fuel @ Dest</div><div class="bval">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div><div class="bsub">${a?.layout==='ga8'?'litres':'lbs'} remaining</div></div>
     </div></div>`;
 
     if(r){
