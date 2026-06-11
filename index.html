@@ -1460,7 +1460,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.6 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.7 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
@@ -1896,6 +1896,7 @@ function renderStep2(){
       const sr=S.solverRes[id];
       const paxCount=paxSeatIdxs(id).filter(i=>(d.seatMap[id]||{})[i]).length;
       const paxTotal=paxSeatIdxs(id).length;
+      const _ok=sr?.towOk&&sr?.lwOk&&sr?.cogOk;const _warn=sr&&!_ok&&!sr?.towFatal&&!sr?.lwFatal;
       return`<div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
           <div style="width:10px;height:10px;border-radius:50%;background:${col}"></div>
@@ -1903,6 +1904,9 @@ function renderStep2(){
           ${sr?`<span class="pill ${sr.towOk?'pill-green':sr.towFatal?'pill-red':'pill-warn'}">${sr.tow?.toFixed(0)}/${sr.mtow}kg</span>
             <span class="pill ${cogPillClass(sr.cog,sr.cogMin,sr.cogMax)}">CoG ${sr.cog?.toFixed(2)}"</span>`:''}
           <span class="pill pill-blue">${paxCount}/${paxTotal} pax</span>
+          <button onclick="generateLoadsheet('${id}')" style="margin-left:auto;padding:5px 12px;border-radius:7px;border:none;background:${_ok?'linear-gradient(135deg,#7B9EC6,#4A6D96)':_warn?'#854d0e':'#7f1d1d'};color:#fff;font-size:12px;font-weight:700;cursor:pointer">
+            ${id.replace('ZK-','')} Loadsheet ${_ok?'✓':_warn?'⚠':'⛔'}
+          </button>
         </div>
         <div ondragover="event.preventDefault()" ondrop="dropOnPool(event,'${id}')">
           ${renderCabinSVG(id,true,null)}
@@ -1933,10 +1937,6 @@ function renderStep2(){
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
     <button class="btn btn-ghost" onclick="S.tab='manifest';window.scrollTo(0,0);render()">← Back</button>
     <button class="btn btn-ghost" onclick="autoAllocate()">↺ Re-Allocate</button>
-    ${acs.map(id=>{const sr=S.solverRes[id];const ok=sr?.towOk&&sr?.lwOk&&sr?.cogOk;const warn=sr&&!ok&&!sr.towFatal&&!sr.lwFatal;
-      return`<button style="flex:1;min-width:100px;padding:9px 12px;border-radius:8px;border:none;background:${ok?'linear-gradient(135deg,#7B9EC6,#4A6D96)':warn?'#854d0e':'#7f1d1d'};color:#fff;font-size:13px;font-weight:700;cursor:pointer" onclick="generateLoadsheet('${id}')">
-        ${id.replace('ZK-','')} Loadsheet ${ok?'✓':warn?'⚠':'⛔'}
-      </button>`;}).join('')}
   </div>`;
 }
 
