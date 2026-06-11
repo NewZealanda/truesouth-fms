@@ -228,7 +228,7 @@ const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id
 
 
 // ── Constants ──
-const AVGAS=0.72,LB=0.453592;
+const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const GRP_COLOURS=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];
 // Airport map: ICAO → full name
 const APTS={
@@ -306,10 +306,10 @@ const ap=k=>APS.map(x=>`<option value="${x}"${S[k]===x||''?' selected':''}>${x}<
 function paxById(id){return S.dispatch.pax.find(p=>p.id===id);}
 function groupColor(g,paxList){const gs=[...new Set((paxList||S.dispatch.pax).map(p=>p.group).filter(Boolean))];const i=gs.indexOf(g);return i>=0?GRP_COLOURS[i%GRP_COLOURS.length]:'#64748b';}
 function fuelUnit(acId){return S.aircraft[acId]?.layout==='ga8'?'L':'lbs';}
-function toKg(v,acId){const n=parseFloat(v)||0;return S.aircraft[acId]?.layout==='ga8'?n*AVGAS:n*LB;}
+function toKg(v,acId){const n=parseFloat(v)||0;const a=S.aircraft[acId];if(!a)return n;return a.layout==='ga8'?n*AVGAS:n*LB;}
 function fromKg(kg,acId){return S.aircraft[acId]?.layout==='ga8'?kg/AVGAS:kg/LB;}
 function fuelKgForSetup(acId){const a=S.aircraft[acId];if(!a)return 0;const s=S.dispatch.acSetup.find(x=>x.acId===acId);const raw=s?.fuelInput!=null?s.fuelInput:fromKg(a.fuelKg,acId);return toKg(raw,acId);}
-function burnToKg(v,acId){const a=S.aircraft[acId];if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*AVGAS;return val;}
+function burnToKg(v,acId){const a=S.aircraft[acId];if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*(a.layout==='ga8'?AVGAS:JETA);return val;}
 function seat1IsCoPilot(acId){return !!(S.dispatch.acSetup.find(s=>s.acId===acId)?.coPilot);}
 function paxSeatIdxs(acId){const a=S.aircraft[acId];if(!a||!a.seats)return[];const removed=a.removedSeats||[];return a.seats.map((_,i)=>i).filter(i=>i!==0&&!(i===1&&seat1IsCoPilot(acId))&&!removed.includes(i));}
 
@@ -1460,7 +1460,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.9 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.10 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
