@@ -937,7 +937,7 @@ function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch
 
 async function loadAll(){
   try{
-    // ── Crew ──
+    // ── Crew — Supabase is source of truth; localStorage is fast-load cache + offline fallback ──
     let crew=await sbF('ts_crew');
     if(crew&&crew.length){
       S.crew=crew.map(c=>({id:c.id,n:c.name,w:c.weight||0,
@@ -948,10 +948,12 @@ async function loadAll(){
         photo:lsGet('ts_crew_photo_'+c.id)||''}));
       lsSet('ts_crew_cache',S.crew);
     } else {
-      // Fall back to cache, then seed defaults
-      const cached=lsGet('ts_crew_cache');
-      if(cached&&cached.length){S.crew=cached;}
-      else{
+      // Supabase unavailable — fall back to localStorage cache
+      const _crewCache=lsGet('ts_crew_cache');
+      if(_crewCache&&_crewCache.length){
+        S.crew=_crewCache.map(c=>({...c,photo:lsGet('ts_crew_photo_'+(c.id||c.n))||c.photo||''}));
+      } else {
+        // First run — seed from defaults
         S.crew=CREW_DEF.map(c=>({id:c.id,n:c.name,w:c.weight}));
         await sbU('ts_crew',CREW_DEF);
         lsSet('ts_crew_cache',S.crew);
@@ -1460,7 +1462,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.12 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.14 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <span style="background:var(--border);padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2)">${S.user.name.split(' ')[0]} · ${S.user.role}</span>
             <button onclick="event.stopPropagation();S.showAccount=!S.showAccount;S.changePwMsg=null;render()" style="background:rgba(123,158,198,.15);border:1px solid rgba(123,158,198,.3);padding:3px 8px;border-radius:5px;font-size:10px;color:#A8C0D8;cursor:pointer">⚙ Account</button>
@@ -2565,7 +2567,7 @@ function renderAdminCrew(){
   function expiryCol(v){if(!v)return'var(--text3)';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'#ef4444':dy<30?'#f59e0b':'#22c55e';}
   function expiryBg(v){if(!v)return'transparent';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'rgba(239,68,68,.08)':dy<30?'rgba(245,158,11,.08)':'transparent';}
   function fmt(v){if(!v)return'—';const p=v.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:v;}
-  function daysLabel(v){if(!v)return'';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);if(dy<0)return' (expired)';if(dy<30)return' ('+dy+'d)';}
+  function daysLabel(v){if(!v)return'';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);if(dy<0)return' (expired)';if(dy<30)return' ('+dy+'d)';return'';}
 
   // ── Modal ──────────────────────────────────────────────────────
   const m=S.admin.crewModal;
@@ -3395,8 +3397,7 @@ window.deleteCrewMember=async function(id){
   S.admin.crewModal=null;
   lsSet('ts_crew_cache',S.crew);
   toast('Crew member deleted','ok');render();
-  // Remove from Supabase (soft delete via sbF would need different approach — just upsert won't delete)
-  // For now we rely on cache; a future migration can add a deleted_at flag
+  await sbDel('ts_crew',id);
 };
 // Legacy support
 window.saveCrew=async id=>{
@@ -3763,10 +3764,10 @@ function renderMaintOverview(){
         </div>
         <div style="font-size:10px;color:var(--text3);margin-top:2px"><span style="font-size:14px;font-weight:800;color:${statusCol}">${pct.toFixed(0)}%</span>&nbsp;<span style="font-size:10px;color:var(--text3)">(${hrsUsed.toFixed(1)}/${checkInterval} hrs used)</span></div>
       </div>`:''}
-      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;margin-top:4px">
+      ${S.aircraft[ac]?.layout!=='ga8'?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;margin-top:4px">
         ${duePill(cwDays,7,'Comp Wash','#06b6d4')}
         ${duePill(adasDays,7,'ADAS','#a78bfa')}
-      </div>
+      </div>`:''}
       ${bk.length?'<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">'+
         bk.map(b=>`<div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:5px">
           <span style="color:${b.confirmed?'#22c55e':'#f59e0b'};font-size:10px">${b.confirmed?'●':'○'}</span>
