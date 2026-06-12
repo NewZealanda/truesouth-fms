@@ -1598,7 +1598,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.26 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.27 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -2149,37 +2149,42 @@ function renderLoadsheet(){
       </div>
     </div>`;
     // Pax seat cards (2-column grid)
-    const seatCards=a.seats.slice(1).map(function(s,i){
-      const idx=i+1;
-      const nm=f.names[idx]||'';
-      const wt=f.seats[idx]||'';
-      const bg=f.bags[idx]||'';
-      // Infant: stored in infantNames or embedded in name as "Name + Baby"
-      const rawInfant=f.infantNames?.[idx]||'';
-      const nameHasInfant=nm.includes(' + ');
-      const displayNm=nameHasInfant?nm.split(' + ')[0]:nm;
-      const infantNm=rawInfant||(nameHasInfant?nm.split(' + ').slice(1).join(' + '):'');
-      const grp=S.dispatch.pax.find(p=>p.name===nm||p.name===displayNm)?.group||'';
-      const gc=grp?groupColor(grp):null;
-      const hasPerson=nm||parseFloat(wt);
-      return`<div style="background:var(--card2);border-radius:7px;padding:6px 8px;border-left:3px solid ${hasPerson?(gc||'var(--accent)'):'var(--border2)'}">
-        <div style="display:flex;align-items:center;gap:4px;margin-bottom:${infantNm?'2px':'4px'}">
-          <span style="font-size:9px;font-weight:700;color:var(--text3);width:18px">${s.lbl}</span>
-          <input class="fi" type="text" value="${displayNm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px" onblur="lsN(${idx},this.value)">
-        </div>
-        ${infantNm?`<div style="font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}</div>`:''}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
-          <div>
-            <div style="font-size:8px;color:var(--text3)">WT kg</div>
-            <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px" onblur="lsS(${idx},this.value)">
+    // Seat 1 is right-front (co-pilot side) — needs empty left-column spacer
+    // Then seats 2&3, 4&5... are left/right pairs down the cabin
+    const seatCards=(()=>{
+      const cards=a.seats.slice(1).map(function(s,i){
+        const idx=i+1;
+        const nm=f.names[idx]||'';
+        const wt=f.seats[idx]||'';
+        const bg=f.bags[idx]||'';
+        const rawInfant=f.infantNames?.[idx]||'';
+        const nameHasInfant=nm.includes(' + ');
+        const displayNm=nameHasInfant?nm.split(' + ')[0]:nm;
+        const infantNm=rawInfant||(nameHasInfant?nm.split(' + ').slice(1).join(' + '):'');
+        const grp=S.dispatch.pax.find(p=>p.name===nm||p.name===displayNm)?.group||'';
+        const gc=grp?groupColor(grp):null;
+        const hasPerson=nm||parseFloat(wt);
+        return`<div style="background:var(--card2);border-radius:7px;padding:6px 8px;border-left:3px solid ${hasPerson?(gc||'var(--accent)'):'var(--border2)'}">
+          <div style="display:flex;align-items:center;gap:4px;margin-bottom:${infantNm?'2px':'4px'}">
+            <span style="font-size:9px;font-weight:700;color:var(--text3);width:18px">${s.lbl}</span>
+            <input class="fi" type="text" value="${displayNm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px" onblur="lsN(${idx},this.value)">
           </div>
-          <div>
-            <div style="font-size:8px;color:var(--text3)">BAG kg</div>
-            <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px" onblur="lsB(${idx},this.value)">
+          ${infantNm?`<div style="font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}</div>`:''}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+            <div>
+              <div style="font-size:8px;color:var(--text3)">WT kg</div>
+              <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px" onblur="lsS(${idx},this.value)">
+            </div>
+            <div>
+              <div style="font-size:8px;color:var(--text3)">BAG kg</div>
+              <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px" onblur="lsB(${idx},this.value)">
+            </div>
           </div>
-        </div>
-      </div>`;
-    }).join('');
+        </div>`;
+      });
+      // Seat 1 sits in right column — insert blank spacer in left column first
+      return '<div style="background:transparent"></div>'+cards.join('');
+    })();
     const isPod=a.cargo.length>1&&a.cargo[0]?.lbl?.startsWith('Pod');
     const podColors=['rgba(59,130,246,.15)','rgba(16,185,129,.15)','rgba(245,158,11,.15)','rgba(168,85,247,.15)'];
     const podBorders=['rgba(59,130,246,.5)','rgba(16,185,129,.5)','rgba(245,158,11,.5)','rgba(168,85,247,.5)'];
