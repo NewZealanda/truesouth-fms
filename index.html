@@ -1019,6 +1019,15 @@ async function loadAll(){
     let acR=await sbF('ts_aircraft');
     if(acR&&acR.length){
       S.aircraft={};acR.forEach(r=>{S.aircraft[r.id]=r.data||r;});
+      // Migration: re-sync any aircraft whose seat count doesn't match AC_DEF
+      const acMigrate=[];
+      Object.keys(AC_DEF).forEach(function(id){
+        const def=AC_DEF[id];const loaded=S.aircraft[id];
+        if(loaded&&def&&(loaded.seats||[]).length!==(def.seats||[]).length){
+          S.aircraft[id]=dc(def);acMigrate.push({id:id,data:dc(def)});
+        }
+      });
+      if(acMigrate.length)await sbU('ts_aircraft',acMigrate);
       lsSet('ts_aircraft_cache',S.aircraft);
     } else {
       const cached=lsGet('ts_aircraft_cache');
@@ -1206,7 +1215,7 @@ function initRealtime(){
             else{delete S.rtPresence[p.userId];}
             const now=Date.now();
             Object.keys(S.rtPresence).forEach(function(k){if(now-(S.rtPresence[k].ts||0)>25000)delete S.rtPresence[k];});
-            safeRender();
+            updatePresBar(S._presSection||'manifest');
           }
         }
       }catch(err){}
@@ -1566,7 +1575,7 @@ function pilotCrewList(){
 // ── Presence ──
 const PRES_COLORS=['#f87171','#fb923c','#fbbf24','#34d399','#22d3ee','#60a5fa','#a78bfa','#f472b6'];
 function presColor(id){let h=0;for(let i=0;i<(id||'').length;i++)h=(h*31+id.charCodeAt(i))&0xfffffff;return PRES_COLORS[h%PRES_COLORS.length];}
-function presBarH(section){
+function presBarInner(section){
   if(!S.user)return'';
   const now=Date.now();
   const others=Object.values(S.rtPresence||{}).filter(function(p){return p.section===section&&now-p.ts<25000;});
@@ -1581,6 +1590,13 @@ function presBarH(section){
         +'</div>';
     }).join('<span style="color:var(--border2);font-size:10px;padding:0 2px">·</span>')
     +'</div>';
+}
+function presBarH(section){
+  return'<div id="pres-bar-'+section+'">'+presBarInner(section)+'</div>';
+}
+function updatePresBar(section){
+  var el=document.getElementById('pres-bar-'+section);
+  if(el)el.innerHTML=presBarInner(section);
 }
 
 // ── Layouts ──
@@ -1789,7 +1805,7 @@ function renderLoginInner(){
 ${S.resetStep===1?`<div style='margin-top:16px;padding:14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:10px'><div style='font-size:13px;color:#6ee7b7;margin-bottom:10px;font-weight:600'>📧 Reset email sent to ${S.resetEmail||'your email'}</div><div id='reset-err' style='display:none;color:#fca5a5;font-size:12px;margin-bottom:8px;background:rgba(239,68,68,.1);padding:6px 10px;border-radius:6px'></div><input id='li_reset_code' type='text' maxlength='6' placeholder='6-digit code' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:18px;text-align:center;letter-spacing:4px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_pw' type='password' placeholder='New password (min 6 chars)' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_conf' type='password' placeholder='Confirm new password' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:10px' onkeydown="if(event.key==='Enter')window.handleReset()"><div style='display:flex;gap:8px'><button onclick='window.handleReset()' style='flex:2;padding:10px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer'>Set New Password</button><button onclick='S.resetStep=0;S.resetCode=null;render()' style='flex:1;padding:10px;background:rgba(255,255,255,.08);border:none;border-radius:8px;color:rgba(255,255,255,.6);font-size:12px;cursor:pointer'>Cancel</button></div></div>`:''}
       </div>
       <div style="text-align:center;margin-top:20px;font-size:11px;color:rgba(255,255,255,.2)">True South Flights Ltd · Queenstown, New Zealand</div>
-      <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">v21.07</div>
+      <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">v21.12</div>
     </div>
   </div>`;
 }
@@ -2079,7 +2095,7 @@ function renderStep1(){
       ${['AC','TYPE','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
     </div></div>
     ${paxRows}
-    <div style="display:flex;gap:8px;margin-top:10px"><button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="addPax()">+ Add Passenger</button></div>
+    <div style="display:flex;gap:8px;margin-top:10px"><button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="addPax()">+ Add Passenger</button>${(S._paxUndo&&S._paxUndo.length)?`<button tabindex="-1" class="btn btn-ghost" style="font-size:13px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.undoPax()">&#x21A9; Undo Delete (${S._paxUndo.length})</button>`:""}</div>
   </div>
   <button tabindex="-1" class="btn-full ${canNext?'btn-primary':'btn-disabled'}" onclick="${canNext?'autoAllocate()':''}"
     ${!canNext?'disabled':''}>Auto-Allocate & Open Seat Map →</button>`;
@@ -3540,6 +3556,10 @@ window.setTab=function(t){
   } else {
     S.tab=t;
   }
+  // Re-fetch manifest live_draft from Supabase when switching to manifest/operations tab
+  if(t==='manifest'||t==='operations'){
+    reloadTable('ts_manifests').then(function(changed){if(changed)render();});
+  }
   // Re-fetch maintenance from cloud every time the tab is opened
   if(t==='maintenance'){
     S.maintenance={hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{},_loading:true};
@@ -3610,7 +3630,8 @@ window.paxNameBlur=function(i,val){
 window.rmInfant=function(i){S.dispatch.pax[i].infantName=null;if(S.dispatch.pax[i])S.dispatch.pax[i]._ts=Date.now();autoSaveDispatch();render();};
 window.lsRmInfant=function(idx){if(S.form.infantNames)delete S.form.infantNames[idx];// also clear from name field if encoded there
 var nm=S.form.names&&S.form.names[idx]||'';if(nm.includes(' + '))S.form.names[idx]=nm.split(' + ')[0].trim();render();};
-window.rmPax=i=>{S.dispatch.pax.splice(i,1);autoSaveDispatch();render();};
+window.rmPax=i=>{S._paxUndo=S._paxUndo||[];var removed=S.dispatch.pax.splice(i,1)[0];if(removed)S._paxUndo.push(removed);autoSaveDispatch();render();};
+window.undoPax=function(){if(!S._paxUndo||!S._paxUndo.length)return;var p=S._paxUndo.pop();p._ts=Date.now();S.dispatch.pax.push(p);autoSaveDispatch();render();};
 window.setPaxField=(i,k,v)=>{if(S.dispatch.pax[i]){S.dispatch.pax[i][k]=v;S.dispatch.pax[i]._ts=Date.now();autoSaveDispatch();}setTimeout(safeRender,50);};
 
 // ── Seat map handlers ──
@@ -4288,9 +4309,12 @@ window.toggleEndorse=function(type,checked){
   if(checked&&!S.admin.crewDraftEndorse.includes(type)) S.admin.crewDraftEndorse.push(type);
   else if(!checked) S.admin.crewDraftEndorse=S.admin.crewDraftEndorse.filter(e=>e!==type);
 };
-window.openPersonModal=function(crewId,userId){
+window.openPersonModal=async function(crewId,userId){
   crewId=(crewId&&crewId!=='null')?crewId:null;
   userId=(userId&&userId!=='null')?userId:null;
+  // Fetch fresh data from Supabase before populating modal
+  await reloadTable('ts_crew');
+  await reloadTable('ts_users');
   const cr=crewId?S.crew.find(function(x){return x.id===crewId;}):null;
   const u=userId?S.users.find(function(x){return x.id===userId;}):null;
   S.admin.personModal={
