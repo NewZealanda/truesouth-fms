@@ -86,8 +86,8 @@ label{font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bot
 
 /* ── Sync dot ── */
 .sync-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;}
-.dot-ok{background:#22c55e;}.dot-err{background:#ef4444;}.dot-spin{background:#f59e0b;animation:pulse .8s infinite;}.dot-live{background:#22c55e;box-shadow:0 0 6px #22c55e80;animation:livepulse 2s ease-in-out infinite;}.dot-connecting{background:#f59e0b;animation:pulse .8s infinite;}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}@keyframes livepulse{0%,100%{box-shadow:0 0 4px #22c55e60}50%{box-shadow:0 0 10px #22c55ea0}}
+.dot-ok{background:#22c55e;}.dot-err{background:#ef4444;}.dot-spin{background:#f59e0b;animation:pulse .8s infinite;}.dot-live{background:#22c55e;box-shadow:0 0 6px #22c55e80;animation:livepulse 2s ease-in-out infinite;}.dot-connecting{background:#f59e0b;animation:pulse .8s infinite;}.dot-live{background:#22c55e;box-shadow:0 0 6px #22c55e80;animation:livepulse 2s ease-in-out infinite;}.dot-connecting{background:#f59e0b;animation:pulse .8s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}@keyframes livepulse{0%,100%{box-shadow:0 0 4px #22c55e60}50%{box-shadow:0 0 10px #22c55ea0}}@keyframes livepulse{0%,100%{box-shadow:0 0 4px #22c55e60}50%{box-shadow:0 0 10px #22c55ea0}}
 
 /* ── AC Setup Cards ── */
 .ac-card{border-radius:10px;border:1px solid var(--border);padding:12px;margin-bottom:10px;background:var(--card2);cursor:pointer;transition:all .15s;}
@@ -308,7 +308,8 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.13';
+const APP_VER='v21.16';
+const APP_VER='v21.16';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -1049,6 +1050,13 @@ async function loadAll(){
       const cached=lsGet('ts_charter_rates_cache');
       S.charterRates=cached||dc(CHARTER_RATES_DEF);
     }
+    // Load charter wait rate from Supabase (falls back to localStorage)
+    try{
+      const _wr=await fetch(SB+'/rest/v1/ts_settings?key=eq.charter_wait_rate&select=value',{headers:SH});
+      if(_wr.ok){const _wd=await _wr.json();if(_wd[0]&&_wd[0].value){S.charterWaitRate=parseFloat(_wd[0].value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);}
+      else{S.charterWaitRate=lsGet('ts_charter_wait_rate')||150;}}
+      else{S.charterWaitRate=lsGet('ts_charter_wait_rate')||150;}
+    }catch(e){S.charterWaitRate=lsGet('ts_charter_wait_rate')||150;}
 
     // ── Loadsheets ──
     const ls=await sbF('ts_loadsheets');
@@ -1071,6 +1079,10 @@ async function loadAll(){
     if(ms){
       S.manifests=ms.filter(r=>r.id!=='live_draft').map(r=>({id:r.id,name:r.name,savedAt:r.saved_at,data:r.data}));
       lsSet('ts_manifests_cache',S.manifests);
+      const liveDraft=ms.find(r=>r.id==='live_draft');
+      if(liveDraft&&liveDraft.data&&typeof liveDraft.data==='object'){
+        S.dispatch={...bD(),...liveDraft.data,seatMap:{},step:1};
+      }
     } else {
       const cached=lsGet('ts_manifests_cache');
       if(cached)S.manifests=cached;
@@ -1211,6 +1223,13 @@ function initRealtime(){
             S.rtStatus='offline';render();
           }
         }
+        if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
+          if(msg.payload&&msg.payload.status==='ok'){
+            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);render();
+          } else if(msg.payload&&msg.payload.status==='error'){
+            S.rtStatus='offline';render();
+          }
+        }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='dispatch'){
           const dp=msg.payload.payload;
           if(dp&&S.tab==='manifest')mergeDispatch(dp);
@@ -1292,8 +1311,18 @@ async function reloadTable(table){
     if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,r.rates];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
-      const r=await fetch(SB+'/rest/v1/ts_settings?key=eq.role_perms&select=value',{headers:SH});
-      if(r.ok){const d=await r.json();if(d[0]&&d[0].value){S.rolePerms=JSON.parse(d[0].value);lsSet('ts_role_perms',S.rolePerms);return true;}}
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance)&select=key,value',{headers:SH});
+      if(r.ok){
+        const rows=await r.json();let changed=false;
+        rows.forEach(function(row){
+          if(row.key==='role_perms'&&row.value){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
+          if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
+          if(row.key==='maintenance'&&row.value){
+            try{const m=JSON.parse(row.value);if(m&&m.hist){S.maintenance=m;lsSet('ts_maintenance',m);changed=true;}}catch(e){}
+          }
+        });
+        return changed;
+      }
     }catch(e){}
   }
   return false;
@@ -1367,6 +1396,7 @@ function startPresenceBroadcast(section){
 
 // ── Collaborative manifest ──
 let _autoSaveTimer=null;
+let _autoNamedSaveTimer=null;
 function autoSaveDispatch(){
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer=setTimeout(async function(){
@@ -1377,12 +1407,33 @@ function autoSaveDispatch(){
       saved_at:new Date().toISOString(),data:S.dispatch}]);
     broadcastDispatch();
   },800);
+  clearTimeout(_autoNamedSaveTimer);
+  _autoNamedSaveTimer=setTimeout(function(){autoNamedSave();},180000);
+}
+async function autoNamedSave(){
+  const d=S.dispatch;
+  if(!S.user||!d||(!d.pax||d.pax.length===0)&&!d.dep&&!d.dest)return;
+  const name=d.name||(d.date?'Auto-save '+d.date:'Auto-save '+new Date().toLocaleDateString('en-NZ'));
+  const id='mn_'+Date.now();
+  const data={dep:d.dep,dest:d.dest,date:d.date,etd:d.etd,acSetup:d.acSetup,pax:d.pax,name};
+  S.manifests=S.manifests.filter(function(m){return m.name!==name;});
+  S.manifests.unshift({id,name,savedAt:new Date().toISOString(),data});
+  lsSet('ts_manifests_cache',S.manifests);
+  await sbU('ts_manifests',[{id,name,saved_at:new Date().toISOString(),data}]);
 }
 
 function mergeDispatch(remote){
   if(!remote||typeof remote!=='object')return;
   if(remote._updatedBy===S.user?.id)return; // ignore our own echo
   const local=S.dispatch;
+  if(remote._loadedAt&&(!local._loadedAt||remote._loadedAt>local._loadedAt)){
+    S.dispatch={...remote,seatMap:{},step:local.step||1};
+    S.solverRes={};
+    const who=(S.users||[]).find(function(u){return u.id===remote._updatedBy;});
+    const whoName=who?(who.name||who.email).split(' ')[0]:'Someone';
+    toast(whoName+' loaded manifest: '+(remote.name||'untitled'),'info');
+    safeRender();return;
+  }
 
   // Merge pax by id — higher _ts wins
   const paxMap={};
@@ -1839,6 +1890,7 @@ function renderAccountModal(){
         <button onclick="S.showAccount=false;S.changePwMsg=null;render()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">×</button>
       </div>
       ${changePwMsg?`<div style="padding:8px 12px;border-radius:7px;margin-bottom:12px;font-size:13px;font-weight:600;background:${changePwMsg.ok?'var(--ok-bg)':'var(--err-bg)'};color:${changePwMsg.ok?'var(--ok-text)':'var(--err-text)'};border:1px solid ${changePwMsg.ok?'var(--ok-border)':'var(--err-border)'}">${changePwMsg.text}</div>`:''}
+      <button onclick="window.goToMyProfile()" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px">&#x270F; Edit My Profile</button>
       <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Change Password</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         <input id="acc_cur" type="password" placeholder="Current password" autocomplete="current-password"
@@ -3584,6 +3636,23 @@ window.setTab=function(t){
       }catch(e){}
     })();
   }
+  // Re-fetch live_draft only when switching to manifest/operations tab
+  if(t==='manifest'||t==='operations'){
+    (async function(){
+      try{
+        const r=await fetch(SB+'/rest/v1/ts_manifests?id=eq.live_draft&select=*',{headers:SH});
+        if(r.ok){const rows=await r.json();
+          if(rows&&rows[0]&&rows[0].data&&rows[0].data._updatedBy!==S.user?.id){
+            mergeDispatch(rows[0].data);safeRender();
+          }
+        }
+      }catch(e){}
+    })();
+  }
+  // Re-fetch crew + users from Supabase every time admin/crew tab is opened
+  if(t==='admin'){
+    Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){render();});
+  }
   // Re-fetch maintenance from cloud every time the tab is opened
   if(t==='maintenance'){
     S.maintenance={hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{},_loading:true};
@@ -3786,9 +3855,17 @@ window.saveManifest=async()=>{
 };
 window.loadManifest=id=>{
   const m=S.manifests.find(x=>x.id===id);if(!m)return;
-  S.dispatch={...bD(),...m.data,seatMap:{},step:1};
+  const now=Date.now();
+  const data={...bD(),...m.data,seatMap:{},step:1};
+  (data.pax||[]).forEach(function(p){p._ts=now;});
+  (data.acSetup||[]).forEach(function(s){s._ts=now;});
+  data._updateTs=now;
+  data._loadedAt=now;
+  S.dispatch=data;
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
-  S.tab='manifest';window.scrollTo(0,0);render();
+  S.tab='manifest';window.scrollTo(0,0);
+  autoSaveDispatch();
+  render();
 };
 window.deleteManifest=async id=>{if(!confirm('Delete this manifest?'))return;S.manifests=S.manifests.filter(m=>m.id!==id);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_manifests',id);};
 window.toggleSavedSel=id=>{if(S.savedSel[id])delete S.savedSel[id];else S.savedSel[id]=true;render();};
@@ -4457,6 +4534,8 @@ window.savePerson=async function(){
 
   S.admin.personModal=null;S.admin.err='';S.admin.pwMsg=null;
   toast(finalName+' saved','ok');
+  // Reload crew + users from Supabase to confirm save and refresh all viewers
+  Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){render();});
   render();
 };
 
@@ -4481,6 +4560,8 @@ window.saveCharterRates=async()=>{
   lsSet('ts_charter_wait_rate',S.charterWaitRate);
   const rows=Object.entries(S.charterRates).map(([acId,rates])=>({id:acId,acId,rates}));
   await sbU('ts_charter_rates',rows);
+  // Also persist wait rate to Supabase so all devices stay in sync
+  await sbU('ts_settings',[{key:'charter_wait_rate',value:String(S.charterWaitRate||150)}]).catch(function(){});
 };
 
 // ── Pilot weight update ──
