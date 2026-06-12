@@ -1138,6 +1138,19 @@ async function loadAll(){
 }
 
 // ── Simple auth (hashed with btoa for demo — production would use Supabase Auth) ──
+// SHA-256 password hashing via Web Crypto (much stronger than btoa)
+async function hashPw(pw){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(pw));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+// Verify a password against a stored hash (supports legacy btoa hashes for migration)
+async function verifyPw(plain,stored){
+  if(!plain||!stored)return false;
+  // Legacy btoa hash
+  if(stored===btoa(plain))return true;
+  // SHA-256
+  return stored===await hashPw(plain);
+}
 window.handleForgot=async function(){
   S.loginErr=null;
   const raw=(document.getElementById('li_e')?.value||'').trim();
@@ -1191,7 +1204,7 @@ window.handleReset=async function(){
   if(newPw!==conf){showResetErr('Passwords do not match.');return;}
   const u=S.users.find(x=>x.resetToken===code&&x.resetExpires&&Date.now()<x.resetExpires);
   if(!u){showResetErr('Invalid or expired code. Request a new one.');return;}
-  u.passwordHash=btoa(newPw);delete u.resetToken;delete u.resetExpires;
+  u.passwordHash=await hashPw(newPw);delete u.resetToken;delete u.resetExpires;
   lsSet('ts_users_cache',S.users);
   try{
     await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,
@@ -1208,7 +1221,7 @@ window.handleReset=async function(){
   render();
 };
 
-function _doLogin(emailArg,passArg){
+async function _doLogin(emailArg,passArg){
   const _raw=(emailArg||document.getElementById('li_e')?.value||'').trim();
   const email=_raw.includes('@')?_raw:(_raw+'@truesouthflights.co.nz');
   const pass=passArg||document.getElementById('li_p')?.value||'';
@@ -1219,7 +1232,12 @@ function _doLogin(emailArg,passArg){
     else render();
   }
   if(!email||!pass){showErr('Please enter your email and password.');return;}
-  const u=S.users.find(x=>x.email.toLowerCase()===email.toLowerCase()&&x.passwordHash===btoa(pass));
+  // find user by email first, then verify password async
+  const uByEmail=S.users.find(x=>x.email.toLowerCase()===email.toLowerCase());
+  const pwOk=uByEmail?await verifyPw(pass,uByEmail.passwordHash):false;
+  const u=pwOk?uByEmail:null;
+  // auto-upgrade legacy btoa hash to SHA-256
+  if(u&&u.passwordHash===btoa(pass)){u.passwordHash=await hashPw(pass);lsSet('ts_users_cache',S.users);try{await sbU('ts_users',[{id:u.id,password_hash:u.passwordHash}]);}catch(e){}}
   if(!u){
     showErr('Invalid email or password. Check your details and try again.');
     // Audit failed attempt
@@ -1462,14 +1480,15 @@ window.changePasswordFromModal=async function(){
   const cur=curEl?curEl.value:'';
   const nw=newEl?newEl.value:'';
   const conf=confEl?confEl.value:'';
-  if(isOwnAccount&&btoa(cur)!==S.user.passwordHash){S.admin.pwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
+  if(isOwnAccount&&!await verifyPw(cur,S.user.passwordHash)){S.admin.pwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
   if(nw.length<6){S.admin.pwMsg={ok:false,text:'Min 6 characters.'};render();return;}
   if(nw!==conf){S.admin.pwMsg={ok:false,text:'Passwords do not match.'};render();return;}
   const user=S.users.find(function(x){return x.id===m.userId;});
-  if(user)user.passwordHash=btoa(nw);
-  if(isOwnAccount){S.user.passwordHash=btoa(nw);sessionStorage.setItem('ts_user',JSON.stringify(S.user));}
+  const nwHash=await hashPw(nw);
+  if(user)user.passwordHash=nwHash;
+  if(isOwnAccount){S.user.passwordHash=nwHash;sessionStorage.setItem('ts_user',JSON.stringify(S.user));}
   lsSet('ts_users_cache',S.users);
-  try{await sbU('ts_users',[{id:m.userId,password_hash:btoa(nw)}]);}catch(e){}
+  try{await sbU('ts_users',[{id:m.userId,password_hash:nwHash}]);}catch(e){}
   S.admin.pwMsg={ok:true,text:'Password updated.'};render();
 };
 
@@ -1490,18 +1509,19 @@ window.changeMyPassword=async function(){
   const nw=document.getElementById('acc_new')?.value||'';
   const conf=document.getElementById('acc_conf')?.value||'';
   const u=S.user;
-  if(btoa(cur)!==u.passwordHash){S.changePwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
+  if(!await verifyPw(cur,u.passwordHash)){S.changePwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
   if(nw.length<6){S.changePwMsg={ok:false,text:'New password must be at least 6 characters.'};render();return;}
   if(nw!==conf){S.changePwMsg={ok:false,text:'New passwords do not match.'};render();return;}
   // Update in S.users
   const stored=S.users.find(x=>x.id===u.id);
-  if(stored) stored.passwordHash=btoa(nw);
-  u.passwordHash=btoa(nw);
+  const nwHash2=await hashPw(nw);
+  if(stored) stored.passwordHash=nwHash2;
+  u.passwordHash=nwHash2;
   sessionStorage.setItem('ts_user',JSON.stringify(u));
   lsSet('ts_users_cache',S.users);
   try{
     await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,
-      linked_crew:u.linkedCrew||'',password_hash:btoa(nw),
+      linked_crew:u.linkedCrew||'',password_hash:nwHash2,
       reset_token:null,reset_expires:null}]);
   }catch(e){}
   auditLog('password_change','User changed their own password');
@@ -3041,7 +3061,7 @@ window.applyReset=async()=>{
   if(!code||!newPw){S.resetMsg={ok:false,text:'Enter both the code and new password.'};render();return;}
   const u=S.users.find(x=>x.resetToken===code&&x.resetExpires&&Date.now()<x.resetExpires);
   if(!u){S.resetMsg={ok:false,text:'Invalid or expired code.'};render();return;}
-  u.passwordHash=btoa(newPw);delete u.resetToken;delete u.resetExpires;
+  u.passwordHash=await hashPw(newPw);delete u.resetToken;delete u.resetExpires;
   lsSet('ts_users_cache',S.users);
   await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,linked_crew:u.linkedCrew,password_hash:u.passwordHash,reset_token:null,reset_expires:null}]);
   S.resetMsg={ok:true,text:'Password updated. You can now log in.'};
@@ -3653,7 +3673,7 @@ window.savePerson=async function(){
       const userRec=existing
         ?{...existing,name:finalName,email:d.email,role:isAdmin?(d.role||existing.role):existing.role,linkedCrew:finalName}
         :{id:userId,name:finalName,email:d.email,role:d.role||'desk',linkedCrew:finalName,passwordHash:''};
-      if(d.password) userRec.passwordHash=btoa(d.password);
+      if(d.password) userRec.passwordHash=await hashPw(d.password);
       else if(!existing&&!d.password){toast('Password required for new login account','warn');return;}
       const confPwEl=document.getElementById('pm_confpw');
       if(!existing&&confPwEl&&confPwEl.value&&confPwEl.value!==d.password){S.admin.err='Passwords do not match.';render();return;}
