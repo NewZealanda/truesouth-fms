@@ -1856,7 +1856,7 @@ function renderApp(){
             <span title="${S.rtStatus==='live'?'Live — real-time sync active':'Offline — reconnecting...'}" style="width:7px;height:7px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':'#6b7280'};flex-shrink:0;box-shadow:${S.rtStatus==='live'?'0 0 6px #22c55e80':'none'}"></span>
             <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
           </div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.55 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.56 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button tabindex="-1" onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button tabindex="-1" onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -1997,7 +1997,7 @@ function renderStep1(){
     <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="S.tab='saved';S.savedTab='manifests';render()">📂 Load</button>
     <button tabindex="-1" class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>
   </div>
-  <div class="card"><div class="st">Flight Details</div>
+  <div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}"><div class="st">Flight Details</div>
     <div class="g2">
       <div><label>Departure</label><select tabindex="-1" class="fi" onchange="S.dispatch.dep=this.value;autoSaveDispatch();render()">${aptOpts(d.dep)}</select></div>
       <div><label>Destination</label><select tabindex="-1" class="fi" onchange="S.dispatch.dest=this.value;autoSaveDispatch();render()">${aptOpts(d.dest)}</select></div>
@@ -2574,7 +2574,7 @@ function renderLoadsheet(){
             :`<div style="padding:2px 0;border-bottom:1px dashed var(--border)"><span style="font-size:11px;color:var(--text3)">${v}</span></div>`;
         }).join('');
 
-      calcH=`<div class="card"><div class="st">Weight & Balance</div>
+      calcH=`<div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}"><div class="st">Weight & Balance</div>
         <div style="margin-bottom:14px">${wbRows}</div>
         <div class="g3">
           <div class="badge ${r.towOk?'bok':'berr'}"><div class="blbl">Takeoff</div><div class="bval">${r.tow.toFixed(1)}</div><div class="bsub">max ${r.mtow}kg</div></div>
