@@ -1038,7 +1038,7 @@ async function loadAll(){
     // ── Users ──
     const us=await sbF('ts_users');
     if(us&&us.length){
-      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||false}));
+      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||false,isPilot:r.is_pilot||r.role==='pilot'||false}));
       lsSet('ts_users_cache',S.users);
     } else {
       const cached=lsGet('ts_users_cache');
@@ -1275,7 +1275,7 @@ function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.
 function pilotCrewList(){
   const list=[...S.crew];
   (S.users||[]).forEach(function(u){
-    if(u.role!=='pilot'&&u.role!=='admin')return;
+    if(u.role!=='pilot'&&!u.isPilot)return;
     const uName=(u.name||u.email||'').trim();
     if(!uName)return;
     const linked=(u.linkedCrew||'').trim().toLowerCase();
@@ -1694,11 +1694,14 @@ function renderStep1(){
   const ri=realPax.map((p,i)=>{
     // Find the original index in d.pax for setPaxField
     const oi=d.pax.indexOf(p);
-    return `<div style="display:grid;grid-template-columns:80px 1.5fr 1fr .75fr .65fr 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${p.pinAc?AC_COL[p.pinAc]+'15':''}">
+    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr .75fr .65fr 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${p.pinAc?AC_COL[p.pinAc]+'15':''}">
       <select class="fi" style="font-size:11px;padding:6px 4px;border-left:3px solid ${AC_COL[p.pinAc]||'var(--border)'};border-radius:6px" onchange="setPaxField(${oi},'pinAc',this.value)">
         <option value="">Any AC</option>
         ${d.acSetup.map(s=>`<option value="${s.acId}"${p.pinAc===s.acId?' selected':''}>${s.acId.replace('ZK-','')}</option>`).join('')}
       </select>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <button onclick="setPaxField(${oi},'type','adult')" style="padding:2px 5px;border-radius:4px 0 0 4px;border:1px solid rgba(59,130,246,.5);background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.3)':'transparent'};color:${(p.type||'adult')==='adult'?'#60a5fa':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.4">A</button><button onclick="setPaxField(${oi},'type','child')" style="padding:2px 5px;border-radius:0 4px 4px 0;border:1px solid rgba(16,185,129,.5);border-left:none;background:${p.type==='child'?'rgba(16,185,129,.3)':'transparent'};color:${p.type==='child'?'#34d399':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.4">C</button>
+      </div>
       <div style="display:flex;flex-direction:column;gap:2px">
         <input class="fi" type="text" placeholder="Name (+ Infant)" value="${p.name||''}" style="font-size:13px" onblur="window.paxNameBlur(${oi},this.value)">
         ${p.infantName?`<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#ec4899;font-weight:600;padding:0 4px">👶 ${p.infantName}<button onclick="window.rmInfant(${oi})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></span>`:''}
@@ -1742,8 +1745,8 @@ function renderStep1(){
       ${(()=>{const nonInf=d.pax.filter(p=>!p.infant).length;return nonInf>totalSeats&&totalSeats>0?`<span style="color:#ef4444;font-weight:700">⚠ ${nonInf-totalSeats} over capacity</span>`:'';})()} 
     </div>
   </div></div>
-    <div style="display:grid;grid-template-columns:1.8fr 1.1fr .8fr .7fr 28px;gap:5px;padding-bottom:6px;border-bottom:2px solid var(--border);margin-bottom:2px">
-      ${['AC','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
+    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr .75fr .65fr 28px;gap:5px;padding-bottom:6px;border-bottom:2px solid var(--border);margin-bottom:2px">
+      ${['AC','','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
     </div>
     ${paxRows}
     <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-ghost" style="flex:1;font-size:13px" onclick="addPax()">+ Add Passenger</button></div>
@@ -2948,6 +2951,13 @@ function renderAdminPeople(){
         +'<option value="maint"'+(d.role==='maint'?' selected':'')+'>Maintenance</option>'
         +'<option value="ground_staff"'+(d.role==='ground_staff'?' selected':'')+'>Ground Staff</option>'
         +'</select></div>':'')
+        +(isAdmin?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0">'
+        +'<label style="font-size:11px;color:var(--text3)">PIC ELIGIBLE (appears in pilot dropdowns)</label>'
+        +'<button onclick="S.admin.personModal.draft.isPilot=!S.admin.personModal.draft.isPilot;render()" '
+        +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
+        +'background:'+(d.isPilot?'rgba(59,130,246,.3)':'rgba(255,255,255,.06)')+';'
+        +'color:'+(d.isPilot?'#60a5fa':'var(--text3)')+'">✈ '+(d.isPilot?'Yes — PIC':'No')+'</button>'
+        +'</div>':'')
         +(m.userId?'<div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px">'
         +'<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em">CHANGE PASSWORD</div>'
         +(isOwnAccount?'<input class="fi" id="pm_curpw" type="password" placeholder="Current password" autocomplete="current-password" style="font-size:13px">':'')
@@ -3173,18 +3183,21 @@ window.toggleAcSetup=id=>{
   render();
 };
 window.setAcField=(id,field,val)=>{const s=S.dispatch.acSetup.find(x=>x.acId===id);if(s){s[field]=val;render();}};
-window.addPax=function(infant){S.dispatch.pax.push({id:'p_'+Date.now(),name:'',weight:infant?10:0,bag:0,group:'',pinAc:null,infant:!!infant});render();};
+window.addPax=function(infant){S.dispatch.pax.push({id:'p_'+Date.now(),name:'',weight:infant?10:0,bag:0,group:'',pinAc:null,infant:!!infant,type:'adult'});render();};
 window.addInfant=function(){addPax(true);};
 window.paxNameBlur=function(i,val){
   const plusIdx=val.indexOf(' + ');
-  if(plusIdx>0){
-    setPaxField(i,'name',val.slice(0,plusIdx).trim());
-    S.dispatch.pax[i].infantName=val.slice(plusIdx+3).trim()||null;
-  } else {
-    setPaxField(i,'name',val);
-    S.dispatch.pax[i].infantName=null;
+  if(S.dispatch.pax[i]){
+    if(plusIdx>0){
+      S.dispatch.pax[i].name=val.slice(0,plusIdx).trim();
+      S.dispatch.pax[i].infantName=val.slice(plusIdx+3).trim()||null;
+    } else {
+      S.dispatch.pax[i].name=val;
+      S.dispatch.pax[i].infantName=null;
+    }
   }
-  render();
+  // Defer render so any simultaneous button click registers first
+  setTimeout(render,50);
 };
 window.rmInfant=function(i){S.dispatch.pax[i].infantName=null;render();};
 window.rmPax=i=>{S.dispatch.pax.splice(i,1);render();};
@@ -3698,6 +3711,7 @@ window.openPersonModal=function(crewId,userId){
       photo:cr?cr.photo||'':'',
       email:u?u.email||'':'',
       role:u?u.role||'desk':'desk',
+      isPilot:u?!!u.isPilot:false,
       password:'',
     }
   };
@@ -3764,8 +3778,8 @@ window.savePerson=async function(){
       userId=userId||('u_'+Date.now());
       const existing=S.users.find(function(x){return x.id===userId;});
       const userRec=existing
-        ?{...existing,name:finalName,email:d.email,role:isAdmin?(d.role||existing.role):existing.role,linkedCrew:finalName,weight:parseFloat(d.w)||existing?.weight||0}
-        :{id:userId,name:finalName,email:d.email,role:d.role||'desk',linkedCrew:finalName,passwordHash:'',weight:parseFloat(d.w)||0};
+        ?{...existing,name:finalName,email:d.email,role:isAdmin?(d.role||existing.role):existing.role,isPilot:isAdmin?!!d.isPilot:existing?.isPilot||false,linkedCrew:finalName,weight:parseFloat(d.w)||existing?.weight||0}
+        :{id:userId,name:finalName,email:d.email,role:d.role||'desk',isPilot:!!d.isPilot,linkedCrew:finalName,passwordHash:'',weight:parseFloat(d.w)||0};
       if(d.password) userRec.passwordHash=await hashPw(d.password);
       else if(!existing&&!d.password){toast('Password required for new login account','warn');return;}
       const confPwEl=document.getElementById('pm_confpw');
@@ -3774,7 +3788,7 @@ window.savePerson=async function(){
       const uIdx=S.users.findIndex(function(x){return x.id===userId;});
       if(uIdx>=0) S.users[uIdx]=userRec;else S.users.push(userRec);
       lsSet('ts_users_cache',S.users);
-      await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,role:userRec.role,linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash,weight:userRec.weight||0}]);
+      await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,role:userRec.role,linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash,weight:userRec.weight||0,is_pilot:!!userRec.isPilot}]);
     }
   }
 
