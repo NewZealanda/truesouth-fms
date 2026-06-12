@@ -1175,7 +1175,7 @@ function initRealtime(){
             else{delete S.rtPresence[p.userId];}
             const now=Date.now();
             Object.keys(S.rtPresence).forEach(function(k){if(now-(S.rtPresence[k].ts||0)>25000)delete S.rtPresence[k];});
-            render();
+            safeRender();
           }
         }
       }catch(err){}
@@ -1267,10 +1267,12 @@ function broadcastDispatch(){
 // ── Manifest pax tab-key navigation ──
 document.addEventListener('keydown',function(e){
   if(e.key!=='Tab')return;
+  // On the manifest page, block ALL tab navigation except within pax rows
+  if(S.tab==='manifest') e.preventDefault();
   const el=e.target;
   const pf=el.dataset&&el.dataset.field;
   const pr=el.dataset&&el.dataset.row;
-  if(pf===undefined||pr===undefined)return; // not a pax nav input, let browser handle
+  if(pf===undefined||pr===undefined)return; // not a pax input — tab blocked on manifest, ignored elsewhere
   e.preventDefault();
   const rowIdx=parseInt(pr);
   const fields=['name','group','weight','bag'];
@@ -1282,10 +1284,18 @@ document.addEventListener('keydown',function(e){
   }else{
     if(fi>0){targetRow=rowIdx;targetField=fields[fi-1];}
     else if(rowIdx>0){targetRow=rowIdx-1;targetField='bag';}
-    else return; // first cell of first row — stay put, don't escape to nav
+    else return;
   }
   const next=document.querySelector('[data-row="'+targetRow+'"][data-field="'+targetField+'"]');
   if(next){next.focus();if(next.select)next.select();}
+  else if(!e.shiftKey&&targetField==='name'){
+    // Past last row — create new passenger and focus its name field
+    addPax();
+    setTimeout(function(){
+      const n=document.querySelector('[data-row="'+targetRow+'"][data-field="name"]');
+      if(n){n.focus();if(n.select)n.select();}
+    },30);
+  }
 });
 function startPresenceBroadcast(section){
   if(S._presSection===section)return;
@@ -1347,7 +1357,7 @@ function mergeDispatch(remote){
   const who=(S.users||[]).find(function(u){return u.id===remote._updatedBy;});
   const whoName=who?(who.name||who.email).split(' ')[0]:'Someone';
   toast(whoName+' updated the manifest','info');
-  render();
+  safeRender();
 }
 
 // ── Simple auth (hashed with btoa for demo — production would use Supabase Auth) ──
@@ -1549,9 +1559,19 @@ function renderIOSBanner(){
   </div>`;
 }
 
+// safeRender: render() now handles focus restoration internally
+function safeRender(){render();}
+
 function render(){
   const r=document.getElementById('root');
   if(!r)return;
+  // ── Preserve focused input across re-renders ──
+  const _ae=document.activeElement;
+  const _aeId=_ae?.id||null;
+  const _aeRow=_ae?.dataset?.row;
+  const _aeField=_ae?.dataset?.field;
+  const _aeSS=_ae?.selectionStart??null;
+  const _aeSE=_ae?.selectionEnd??null;
   if(!S.user){
     // Show login overlay, hide app
     let lo=document.getElementById('login-overlay');
@@ -1574,6 +1594,14 @@ function render(){
   if(S.user?.role==='maint'&&S.tab!=='maintenance') S.tab='maintenance';
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
   if(S.tab==='loadsheet'){setupSig();var lf=S.form;if(lf.dep&&lf.dest)setTimeout(function(){renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);},150);}
+  // ── Restore focus after re-render ──
+  if(_aeRow!==undefined&&_aeField){
+    const _re=document.querySelector('[data-row="'+_aeRow+'"][data-field="'+_aeField+'"]');
+    if(_re){_re.focus();try{_re.setSelectionRange(_aeSS,_aeSE);}catch{}}
+  } else if(_aeId){
+    const _re=document.getElementById(_aeId);
+    if(_re){_re.focus();try{_re.setSelectionRange(_aeSS,_aeSE);}catch{}}
+  }
 }
 
 // ── Login ──
@@ -1711,11 +1739,11 @@ function renderAccountModal(){
       <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Change Password</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         <input id="acc_cur" type="password" placeholder="Current password" autocomplete="current-password"
-          style="padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text1);font-size:13px;outline:none">
+          style="padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none">
         <input id="acc_new" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password"
-          style="padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text1);font-size:13px;outline:none">
+          style="padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none">
         <input id="acc_conf" type="password" placeholder="Confirm new password" autocomplete="new-password"
-          style="padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text1);font-size:13px;outline:none"
+          style="padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none"
           onkeydown="if(event.key==='Enter')window.changeMyPassword()">
         <button onclick="window.changeMyPassword()" style="padding:11px;background:var(--acc);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-top:4px">
           Update Password
@@ -1816,7 +1844,7 @@ function renderApp(){
             <span title="${S.rtStatus==='live'?'Live — real-time sync active':'Offline — reconnecting...'}" style="width:7px;height:7px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':'#6b7280'};flex-shrink:0;box-shadow:${S.rtStatus==='live'?'0 0 6px #22c55e80':'none'}"></span>
             <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
           </div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.42 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.48 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button tabindex="-1" onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button tabindex="-1" onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -1927,10 +1955,12 @@ function renderStep1(){
       const id=s.acId,lbl=id.replace('ZK-',''),col=AC_COL[id]||'#64748b',sel=p.pinAc===id;
       return`<button tabindex="-1" onclick="setPaxField(${oi},'pinAc','${id}')" style="padding:2px 8px;border-radius:20px;border:1px solid ${col}${sel?'cc':'33'};background:${sel?col+'28':'transparent'};color:${sel?col:'var(--text3)'};font-size:10px;font-weight:800;cursor:pointer;line-height:1.6;white-space:nowrap">${lbl}</button>`;
     }).join(''):'';
-    return `<div style="display:grid;grid-template-columns:auto 1.5fr 1fr 65px 65px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${p.pinAc?AC_COL[p.pinAc]+'15':''}">
-      <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center">
-        <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 8px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6;white-space:nowrap">Adult</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 8px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6;white-space:nowrap">Child</button>
+    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 65px 65px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${p.pinAc?AC_COL[p.pinAc]+'15':''}">
+      <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-width:0">
         ${acBtns}
+      </div>
+      <div style="display:flex;gap:2px;align-items:center;min-width:0">
+        <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:2px">
         <input class="fi" type="text" placeholder="Name (+ Infant)" value="${p.name||''}" style="font-size:13px" data-row="${i}" data-field="name" onblur="window.paxNameBlur(${oi},this.value)">
@@ -1975,8 +2005,8 @@ function renderStep1(){
       ${(()=>{const nonInf=d.pax.filter(p=>!p.infant).length;return nonInf>totalSeats&&totalSeats>0?`<span style="color:#ef4444;font-weight:700">⚠ ${nonInf-totalSeats} over capacity</span>`:'';})()} 
     </div>
   </div></div>
-    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr .75fr .65fr 28px;gap:5px;padding-bottom:6px;border-bottom:2px solid var(--border);margin-bottom:2px">
-      ${['AC','','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
+    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 65px 65px 28px;gap:5px;padding-bottom:6px;border-bottom:2px solid var(--border);margin-bottom:2px">
+      ${['AC','TYPE','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
     </div>
     ${paxRows}
     <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-ghost" style="flex:1;font-size:13px" onclick="addPax()">+ Add Passenger</button></div>
@@ -2088,7 +2118,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
         if(!w) return "";
         return`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:rgba(0,0,0,.1);border-radius:4px;margin-bottom:2px">
           <span style="font-size:10px;color:${cabinBg}">${c.lbl}</span>
-          <span style="font-size:11px;font-weight:700;color:var(--text1)">${w}kg</span>
+          <span style="font-size:11px;font-weight:700;color:var(--text)">${w}kg</span>
         </div>`;
       }).join("");
       if(!rows) return "";
@@ -2892,11 +2922,11 @@ function renderAdminAudit(){
 
   const paginationHTML=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px">
     <button onclick="S.auditPage=Math.max(0,(S.auditPage||0)-1);render()"
-      style="padding:5px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;color:var(--text1);${page===0?'opacity:.3;pointer-events:none':''}">‹ Prev</button>
+      style="padding:5px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;color:var(--text);${page===0?'opacity:.3;pointer-events:none':''}">‹ Prev</button>
     <span style="font-size:12px;color:var(--text3)">Page ${page+1} of ${Math.max(1,Math.ceil(totalFiltered/pageSize))} · ${totalFiltered} events</span>
     <button onclick="S.auditPage=(S.auditPage||0)+1;render()"
-      style="padding:5px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;color:var(--text1);${(page+1)*pageSize>=totalFiltered?'opacity:.3;pointer-events:none':''}">Next ›</button>
-    <button onclick="window.loadMoreAudit()" style="padding:5px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;color:var(--text1);margin-left:4px">↓ Load more from DB</button>
+      style="padding:5px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;color:var(--text);${(page+1)*pageSize>=totalFiltered?'opacity:.3;pointer-events:none':''}">Next ›</button>
+    <button onclick="window.loadMoreAudit()" style="padding:5px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;color:var(--text);margin-left:4px">↓ Load more from DB</button>
   </div>`;
 
   return`<div class="card" style="overflow-x:auto">
@@ -2904,12 +2934,12 @@ function renderAdminAudit(){
       <span>Audit Log <span style="font-size:11px;font-weight:400;color:var(--text3)">${totalFiltered} of ${(S.auditLog||[]).length} events shown</span></span>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
-      <select style="font-size:11px;padding:4px 8px;background:var(--card2);border:1px solid var(--border);border-radius:6px;color:var(--text1)"
+      <select style="font-size:11px;padding:4px 8px;background:var(--card2);border:1px solid var(--border);border-radius:6px;color:var(--text)"
         onchange="S.auditFilter=this.value;S.auditPage=0;render()">
         <option value="">All Actions</option>
         ${actionTypes.map(a=>`<option value="${a}"${filterAct===a?' selected':''}>${actLbl(a)}</option>`).join('')}
       </select>
-      <select style="font-size:11px;padding:4px 8px;background:var(--card2);border:1px solid var(--border);border-radius:6px;color:var(--text1)"
+      <select style="font-size:11px;padding:4px 8px;background:var(--card2);border:1px solid var(--border);border-radius:6px;color:var(--text)"
         onchange="S.auditFilterUser=this.value;S.auditPage=0;render()">
         <option value="">All Users</option>
         ${allUsers.map(u=>`<option value="${u}"${filterUser===u?' selected':''}>${u}</option>`).join('')}
@@ -3097,7 +3127,7 @@ function renderAdminGDrive(){
     </div>
     <div style="margin-top:12px;padding:12px 14px;background:var(--card2);border-radius:8px;border:1px solid var(--border)">
       <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text2)">Scheduled &amp; Manual Upload</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">Signed loadsheets upload automatically at <strong style="color:var(--text1)">11:59 PM</strong> daily. Only loadsheets not yet uploaded are sent.</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">Signed loadsheets upload automatically at <strong style="color:var(--text)">11:59 PM</strong> daily. Only loadsheets not yet uploaded are sent.</div>
       <div style="display:flex;gap:8px;align-items:center">
         <button onclick="window.forceUploadAll()" style="padding:8px 16px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">⬆ Force Upload Now</button>
         <span style="font-size:11px;color:var(--text3)">${S.driveLastUpload?'Last: '+S.driveLastUpload:S.driveQueue&&S.driveQueue.length?S.driveQueue.length+' queued':''}</span>
@@ -3235,7 +3265,7 @@ function renderAdminPeople(){
     const _dc=m.crewId?("'"+m.crewId+"'"):'null';const _du=m.userId?("'"+m.userId+"'"):'null';
     const delBtn=canDelete?'<button onclick="window.deletePerson('+_dc+','+_du+')" style="padding:11px 14px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#ef4444;font-size:13px;cursor:pointer">🗑</button>':'';
 
-    modalHtml='<div style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 12px">'
+    modalHtml='<div id="person-modal" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 12px">'
       +'<div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:440px;padding:0 0 24px">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;border-bottom:1px solid var(--border)">'
       +'<span style="font-size:16px;font-weight:700">'+(m.crewId||m.userId?'Edit Person':'New Person')+'</span>'
@@ -4317,7 +4347,7 @@ window.calcHoursUsed=function(){
   if(ttis&&ttis>0&&prev&&prev>0){
     const used=Math.round((ttis-prev)*10)/10;
     el.value=used>0?used:'';
-    el.style.color=used>0?'var(--text1)':'#ef4444';
+    el.style.color=used>0?'var(--text)':'#ef4444';
   } else {
     el.value='';
   }
@@ -4426,7 +4456,7 @@ function renderMaintOverview(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
         <div>
           <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Current Hours</div>
-          <div style="font-size:20px;font-weight:800;color:var(--text1)">${latest!=null?latest.toFixed(1):'—'}</div>
+          <div style="font-size:20px;font-weight:800;color:var(--text)">${latest!=null?latest.toFixed(1):'—'}</div>
         </div>
         <div>
           <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Hours to Run</div>
@@ -4452,7 +4482,7 @@ function renderMaintOverview(){
         ${duePill(adasDays,7,'ADAS','#a78bfa')}
       </div>`:''}
       ${bk.length?'<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">'+
-        bk.map(b=>`<div style="font-size:12px;color:var(--text1);display:flex;align-items:center;gap:6px;padding:3px 0">
+        bk.map(b=>`<div style="font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px;padding:3px 0">
           <span style="color:${b.confirmed?'#22c55e':'#f59e0b'};font-size:13px">${b.confirmed?'●':'◑'}</span>
           <span style="font-weight:600">${fmtMaintDate(b.date)}</span>
           <span style="color:var(--text2)">— ${b.notes||'Maintenance'}</span>
@@ -4644,20 +4674,20 @@ function renderMaintLog(){
     if(!hasFlightData){
       return `<tr style="opacity:.35;border-bottom:1px solid rgba(255,255,255,.02)${isWe?';background:rgba(255,255,255,.01)':''}">
         <td style="padding:3px 6px;font-size:10px;color:var(--text3);white-space:nowrap">${fmtMaintDate(ds)}</td>
-        <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','ttis',this.value)" style="width:58px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text1);font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)';this.closest('tr').style.opacity='1'" onblur2="this.style.borderBottomColor='transparent'"></td>
+        <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','ttis',this.value)" style="width:58px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)';this.closest('tr').style.opacity='1'" onblur2="this.style.borderBottomColor='transparent'"></td>
         <td style="padding:5px 6px;text-align:right;font-size:12px;color:var(--border)">—</td>
-        ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text1);font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)';this.closest('tr').style.opacity='1'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text1);font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)';this.closest('tr').style.opacity='1'"></td>`:''}
-        <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','oil',this.value)" style="width:44px;background:transparent;border:none;border-bottom:1px solid transparent;color:#f59e0b;font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)';this.closest('tr').style.opacity='1'"></td>
+        ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)';this.closest('tr').style.opacity='1'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)';this.closest('tr').style.opacity='1'"></td>`:''}
+        <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','oil',this.value)" style="width:44px;background:transparent;border:none;border-bottom:1px solid transparent;color:#f59e0b;font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)';this.closest('tr').style.opacity='1'"></td>
         ${cwTd}${adasTd}
         <td style="padding:2px 4px"><input type="text" value="" placeholder="notes…" onblur="window.saveMaintField('${ds}','${ac}','comment',this.value)" style="width:100%;min-width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-size:11px;font-style:italic;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)';this.closest('tr').style.opacity='1'"></td>
         <td></td></tr>`;
     }
     return `<tr style="border-bottom:1px solid rgba(255,255,255,.05)${isWe?';background:rgba(255,255,255,.01)':''}">
       <td style="padding:5px 6px;font-size:11px;color:var(--text3);white-space:nowrap">${fmtMaintDate(ds)}</td>
-      <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="${ttis||''}" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','ttis',this.value)" style="width:58px;background:transparent;border:none;border-bottom:1px solid transparent;color:${ttis?'var(--text1)':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'" onblur2="this.style.borderBottomColor='transparent'"></td>
+      <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="${ttis||''}" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','ttis',this.value)" style="width:58px;background:transparent;border:none;border-bottom:1px solid transparent;color:${ttis?'var(--text)':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'" onblur2="this.style.borderBottomColor='transparent'"></td>
       <td style="padding:5px 6px;text-align:right;font-size:12px">${hrsUsedToday!=null?`<span style="color:${col2}">+${hrsUsedToday}</span>`:'<span style="color:var(--border)">—</span>'}</td>
-      ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${starts||''}" placeholder="—" title="${cumStarts>0?'Total starts: '+cumStarts:''}" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:${starts!=null?'var(--text1)':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${landings||''}" placeholder="—" title="${cumLandings>0?'Total landings: '+cumLandings:''}" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:${landings!=null?'var(--text1)':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>`:''}
-      <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="${oil||''}" placeholder="—" onblur="window.saveMaintField('${ds}','${ac}','oil',this.value)" style="width:44px;background:transparent;border:none;border-bottom:1px solid transparent;color:${oil!=null?'#f59e0b':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
+      ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${starts||''}" placeholder="—" title="${cumStarts>0?'Total starts: '+cumStarts:''}" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:${starts!=null?'var(--text)':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${landings||''}" placeholder="—" title="${cumLandings>0?'Total landings: '+cumLandings:''}" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid transparent;color:${landings!=null?'var(--text)':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>`:''}
+      <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="${oil||''}" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','oil',this.value)" style="width:44px;background:transparent;border:none;border-bottom:1px solid transparent;color:${oil!=null?'#f59e0b':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
       ${cwTd}${adasTd}
       <td style="padding:2px 4px"><input type="text" value="${e.comment||''}" placeholder="notes…" onblur="window.saveMaintField('${ds}','${ac}','comment',this.value)" style="width:100%;min-width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-size:11px;font-style:italic;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
       <td style="padding:5px 6px;white-space:nowrap">${delBtn}</td>
@@ -4711,13 +4741,13 @@ function renderMaintOil(){
     // Find last check date (when hours jumped significantly or manually set)
     const totalQts=oil.reduce(function(s,e){return s+(e[ac]||0);},0);
     return'<div style="text-align:center"><div style="font-size:11px;color:var(--text3);margin-bottom:2px">'+ac.replace('ZK-','')+'</div>'+
-      '<div style="font-size:18px;font-weight:800;color:var(--text1)">'+totalQts.toFixed(1)+'</div>'+
+      '<div style="font-size:18px;font-weight:800;color:var(--text)">'+totalQts.toFixed(1)+'</div>'+
       '<div style="font-size:10px;color:var(--text3)">qts total</div></div>';
   }).join('');
 
   const rows=oil.slice(0,60).map(function(e){
     const cols=acs.map(function(ac){
-      return'<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(e[ac]?'var(--text1)':'var(--text3)')+'">'+
+      return'<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(e[ac]?'var(--text)':'var(--text3)')+'">'+
         (e[ac]!=null?e[ac].toFixed(1)+'qt':'—')+'</td>';
     }).join('');
     return'<tr><td style="padding:5px 8px;font-size:12px;color:var(--text3)">'+fmtMaintDate(e.date)+'</td>'+cols+'</tr>';
@@ -4877,6 +4907,8 @@ function renderMaintSearch(){
         <select class="fi" onchange="S.maintSearch=S.maintSearch||{};S.maintSearch.type=this.value;render()" style="font-size:12px">
           <option value="hours" ${sf.type==='hours'?'selected':''}>Flight Hours</option>
           <option value="oil" ${sf.type==='oil'?'selected':''}>Oil Usage</option>
+          <option value="starts" ${sf.type==='starts'?'selected':''}>Engine Starts</option>
+          <option value="landings" ${sf.type==='landings'?'selected':''}>Landings</option>
         </select></div>
     </div>
   </div>`;
@@ -4902,23 +4934,43 @@ function renderMaintSearch(){
       if(sf.to&&e.date>sf.to) return false;
       return true;
     });
+    // For starts/landings, only show rows that have at least one value
+    if(type==='starts'||type==='landings'){
+      const key=type==='starts'?'_starts':'_landings';
+      const acCols2=sf.ac?[sf.ac]:acs;
+      filtered=filtered.filter(function(e){return acCols2.some(function(ac){return e[ac+key]!=null;});});
+    }
   }
 
   const acCols=sf.ac?[sf.ac]:acs;
 
   if(!filtered.length) return form+'<div class="card" style="color:var(--text3);font-size:12px">No results for the selected filters.</div>';
 
-  // Summary: total hours used in period
+  // Summary
   const summary=acCols.map(function(ac){
-    const acData=filtered.filter(function(e){return e[ac]!=null;});
     if(type==='oil'){
+      const acData=filtered.filter(function(e){return e[ac]!=null;});
       if(acData.length<1) return null;
-      const oilTotal=acData.reduce(function(s,e){return s+(e[ac]||0);},0);
-      return{ac,total:Math.round(oilTotal*10)/10,oilTotal:Math.round(oilTotal*10)/10};
+      const total=acData.reduce(function(s,e){return s+(e[ac]||0);},0);
+      return{ac,total:Math.round(total*10)/10,unit:'quarts added'};
     }
+    if(type==='starts'){
+      const acData=filtered.filter(function(e){return e[ac+'_starts']!=null;});
+      if(acData.length<1) return null;
+      const total=acData.reduce(function(s,e){return s+(e[ac+'_starts']||0);},0);
+      return{ac,total,unit:'starts'};
+    }
+    if(type==='landings'){
+      const acData=filtered.filter(function(e){return e[ac+'_landings']!=null;});
+      if(acData.length<1) return null;
+      const total=acData.reduce(function(s,e){return s+(e[ac+'_landings']||0);},0);
+      return{ac,total,unit:'landings'};
+    }
+    // hours
+    const acData=filtered.filter(function(e){return e[ac]!=null;});
     if(acData.length<2) return null;
     const total=acData[acData.length-1][ac]-acData[0][ac];
-    return{ac,total:Math.round(total*10)/10,oilTotal:null};
+    return{ac,total:Math.round(total*10)/10,unit:'hours flown'};
   }).filter(Boolean);
 
   const summaryHtml=summary.length?`<div class="card" style="margin-bottom:12px">
@@ -4926,16 +4978,20 @@ function renderMaintSearch(){
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;padding:4px 0">
       ${summary.map(function(s){return`<div style="text-align:center;padding:8px;background:var(--card2);border-radius:8px;border:1px solid ${AC_COL[s.ac]||'#888'}">
         <div style="font-size:11px;font-weight:700;color:${AC_COL[s.ac]||'#888'}">${s.ac}</div>
-        <div style="font-size:20px;font-weight:800;color:var(--text1)">${s.total}</div>
-        <div style="font-size:10px;color:var(--text3)">${type==='oil'?'quarts added':'hours flown'}</div>
+        <div style="font-size:20px;font-weight:800;color:var(--text)">${s.total}</div>
+        <div style="font-size:10px;color:var(--text3)">${s.unit}</div>
       </div>`;}).join('')}
     </div>
   </div>`:'' ;
 
   const rows=filtered.slice().reverse().slice(0,100).map(function(e){
     const cols=acCols.map(function(ac){
-      return'<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(e[ac]!=null?'var(--text1)':'var(--text3)')+'">'+
-        (e[ac]!=null?e[ac].toFixed(1)+(type==='oil'?' qt':''):'—')+'</td>';
+      let val,display;
+      if(type==='starts'){val=e[ac+'_starts'];display=val!=null?String(val):'—';}
+      else if(type==='landings'){val=e[ac+'_landings'];display=val!=null?String(val):'—';}
+      else if(type==='oil'){val=e[ac];display=val!=null?val.toFixed(1)+' qt':'—';}
+      else{val=e[ac];display=val!=null?val.toFixed(1):'—';}
+      return'<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(val!=null?'var(--text)':'var(--text3)')+'">'+display+'</td>';
     }).join('');
     return'<tr><td style="padding:5px 8px;font-size:12px;color:var(--text3)">'+fmtMaintDate(e.date)+'</td>'+cols+
       (e.comment?'<td style="padding:5px 8px;font-size:11px;color:var(--text3);font-style:italic">'+e.comment+'</td>':'<td></td>')+'</tr>';
