@@ -165,7 +165,7 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 }
 /* ── Responsive ── */
 @media(max-width:480px){
-  input[type=date]{max-width:100%;box-sizing:border-box;}
+  input[type=date]{max-width:100%;box-sizing:border-box;min-width:0;width:100%;}
   /* Layout */
   .g2{grid-template-columns:1fr;}
   .g3{grid-template-columns:1fr 1fr;}
@@ -2415,18 +2415,15 @@ function renderLoadsheet(){
       </div>
     </div>`:'';
     // PIC card
-    const picCard=`<div style="display:grid;grid-template-columns:1fr auto auto;gap:4px;align-items:center;padding:6px 8px;background:var(--card2);border-radius:7px;border-left:3px solid #7B9EC6">
+    const _picCol=AC_COL[f.ac]||'#7B9EC6';
+    const picCard=`<div style="display:grid;grid-template-columns:1fr auto;gap:4px;align-items:center;padding:6px 8px;background:var(--card2);border-radius:7px;border-left:3px solid ${_picCol}">
       <div>
-        <div style="font-size:9px;font-weight:700;color:#7B9EC6;text-transform:uppercase;letter-spacing:.04em">PIC</div>
+        <div style="font-size:9px;font-weight:700;color:${_picCol};text-transform:uppercase;letter-spacing:.04em">PIC</div>
         <input class="fi" type="text" value="${f.names[0]||f.pic||''}" ${picCrew?'readonly':''} style="font-size:12px;padding:2px 4px;${picCrew?'opacity:.65':''}" onblur="lsN(0,this.value)">
       </div>
       <div style="text-align:center">
-        <div style="font-size:9px;color:var(--text3)">WT</div>
+        <div style="font-size:9px;color:var(--text3)">WT kg</div>
         <input class="fi" type="number" value="${cW||''}" ${picCrew?'readonly':''} style="font-size:12px;width:52px;padding:2px 4px;${picCrew?'opacity:.65':''}" onblur="lsS(0,this.value)">
-      </div>
-      <div style="text-align:right;padding-right:2px">
-        <div style="font-size:9px;color:var(--text3)">MOM</div>
-        <div style="font-size:11px;color:var(--text3)">${picMom}</div>
       </div>
     </div>`;
     // Pax seat cards (2-column grid)
@@ -4297,9 +4294,8 @@ function initMaintenance(){
     loadMaintenanceFromCloud().then(function(cloud){
       if(cloud&&cloud.hist&&cloud.hist.length>0){
         const local=S.maintenance;
-        // Only merge if cloud has more entries (avoids overwriting fresh local edits)
-        if(cloud.hist.length>(local&&local.hist&&local.hist.length||0)){
-          // Merge by date: local entries override cloud for same date (local is fresher)
+        // Always merge cloud with local — local entries override for same date (fresher)
+        {
           const byDate={};
           cloud.hist.forEach(function(e){byDate[e.date]=e;});
           (local&&local.hist||[]).forEach(function(e){
@@ -5301,6 +5297,20 @@ window.onload=()=>{
       setTimeout(function(){window.location.reload();},400);
     } else {indicator.style.height='0';}
   },{passive:true});
+})();
+</script>
+<script>
+(function(){
+  var wl=null;
+  function reqWake(){
+    if(navigator.wakeLock){
+      navigator.wakeLock.request('screen').then(function(l){wl=l;}).catch(function(){});
+    }
+  }
+  reqWake();
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='visible') reqWake();
+  });
 })();
 </script>
 </body>
