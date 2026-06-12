@@ -86,8 +86,8 @@ label{font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bot
 
 /* ── Sync dot ── */
 .sync-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;}
-.dot-ok{background:#22c55e;}.dot-err{background:#ef4444;}.dot-spin{background:#f59e0b;animation:pulse .8s infinite;}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.dot-ok{background:#22c55e;}.dot-err{background:#ef4444;}.dot-spin{background:#f59e0b;animation:pulse .8s infinite;}.dot-live{background:#22c55e;box-shadow:0 0 6px #22c55e80;animation:livepulse 2s ease-in-out infinite;}.dot-connecting{background:#f59e0b;animation:pulse .8s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}@keyframes livepulse{0%,100%{box-shadow:0 0 4px #22c55e60}50%{box-shadow:0 0 10px #22c55ea0}}
 
 /* ── AC Setup Cards ── */
 .ac-card{border-radius:10px;border:1px solid var(--border);padding:12px;margin-bottom:10px;background:var(--card2);cursor:pointer;transition:all .15s;}
@@ -308,6 +308,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
+const APP_VER='v21.13';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -1194,7 +1195,7 @@ function initRealtime(){
       _rtHb=setInterval(function(){
         if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(_rtRef)}));}
       },29000);
-      S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);render();
+      S.rtStatus='connecting';render();
     };
     _rtWs.onmessage=function(e){
       try{
@@ -1202,6 +1203,13 @@ function initRealtime(){
         if(msg.event==='postgres_changes'){
           const tbl=msg.payload&&msg.payload.data&&msg.payload.data.table;
           if(tbl){_rtPending.add(tbl);clearTimeout(_rtFlush);_rtFlush=setTimeout(flushRtUpdates,500);}
+        }
+        if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
+          if(msg.payload&&msg.payload.status==='ok'){
+            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);render();
+          } else if(msg.payload&&msg.payload.status==='error'){
+            S.rtStatus='offline';render();
+          }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='dispatch'){
           const dp=msg.payload.payload;
@@ -1625,11 +1633,17 @@ function renderIOSBanner(){
 
 // safeRender: defers render if an input/select/textarea is currently focused
 let _rtRenderPending=false;
+let _rtRenderMaxWait=null;
 function safeRender(){
   const ae=document.activeElement;
   const tag=ae&&ae.tagName;
-  if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){_rtRenderPending=true;}
-  else{render();}
+  if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){
+    _rtRenderPending=true;
+    // Safety net: force render after 3s even if input stays focused
+    if(!_rtRenderMaxWait)_rtRenderMaxWait=setTimeout(function(){
+      _rtRenderPending=false;_rtRenderMaxWait=null;render();
+    },3000);
+  } else {render();}
 }
 // Fire deferred render when focus fully leaves all inputs
 document.addEventListener('focusout',function(e){
@@ -1638,6 +1652,7 @@ document.addEventListener('focusout',function(e){
   const nt=next&&next.tagName;
   if(nt!=='INPUT'&&nt!=='SELECT'&&nt!=='TEXTAREA'){
     _rtRenderPending=false;
+    clearTimeout(_rtRenderMaxWait);_rtRenderMaxWait=null;
     render();
   }
 });
@@ -1805,7 +1820,7 @@ function renderLoginInner(){
 ${S.resetStep===1?`<div style='margin-top:16px;padding:14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:10px'><div style='font-size:13px;color:#6ee7b7;margin-bottom:10px;font-weight:600'>📧 Reset email sent to ${S.resetEmail||'your email'}</div><div id='reset-err' style='display:none;color:#fca5a5;font-size:12px;margin-bottom:8px;background:rgba(239,68,68,.1);padding:6px 10px;border-radius:6px'></div><input id='li_reset_code' type='text' maxlength='6' placeholder='6-digit code' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:18px;text-align:center;letter-spacing:4px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_pw' type='password' placeholder='New password (min 6 chars)' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_conf' type='password' placeholder='Confirm new password' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:10px' onkeydown="if(event.key==='Enter')window.handleReset()"><div style='display:flex;gap:8px'><button onclick='window.handleReset()' style='flex:2;padding:10px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer'>Set New Password</button><button onclick='S.resetStep=0;S.resetCode=null;render()' style='flex:1;padding:10px;background:rgba(255,255,255,.08);border:none;border-radius:8px;color:rgba(255,255,255,.6);font-size:12px;cursor:pointer'>Cancel</button></div></div>`:''}
       </div>
       <div style="text-align:center;margin-top:20px;font-size:11px;color:rgba(255,255,255,.2)">True South Flights Ltd · Queenstown, New Zealand</div>
-      <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">v21.12</div>
+      <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">${APP_VER}</div>
     </div>
   </div>`;
 }
@@ -1928,8 +1943,8 @@ function renderApp(){
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
-          <span title="${S.rtStatus==='live'?'Live — real-time sync active':'Offline — reconnecting...'}" style="width:8px;height:8px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':'#6b7280'};flex-shrink:0;box-shadow:${S.rtStatus==='live'?'0 0 6px #22c55e80':'none'}"></span>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v21.06 · 13 Jun</div>
+          <span title="${S.rtStatus==='live'?'Live — real-time sync active':S.rtStatus==='connecting'?'Connecting to live sync...':'Offline — reconnecting...'}" class="sync-dot ${S.rtStatus==='live'?'dot-live':S.rtStatus==='connecting'?'dot-connecting':''}" style="width:8px;height:8px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'};flex-shrink:0"></span>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">${APP_VER}</div>
           <button tabindex="-1" title="${S.wideMode?'Switch to compact width':'Switch to full width'}" onclick="event.stopPropagation();S.wideMode=!S.wideMode;lsSet('ts_wide_mode',S.wideMode);render()" style="background:var(--border);border:none;padding:3px 7px;border-radius:5px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1" title="Toggle width">${S.wideMode?'⇤⇥':'↔'}</button>
           <div style="display:flex;align-items:center;gap:4px">
             <button tabindex="-1" onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
@@ -3556,9 +3571,18 @@ window.setTab=function(t){
   } else {
     S.tab=t;
   }
-  // Re-fetch manifest live_draft from Supabase when switching to manifest/operations tab
+  // Re-fetch live_draft only when switching to manifest/operations tab
   if(t==='manifest'||t==='operations'){
-    reloadTable('ts_manifests').then(function(changed){if(changed)render();});
+    (async function(){
+      try{
+        const r=await fetch(SB+'/rest/v1/ts_manifests?id=eq.live_draft&select=*',{headers:SH});
+        if(r.ok){const rows=await r.json();
+          if(rows&&rows[0]&&rows[0].data&&rows[0].data._updatedBy!==S.user?.id){
+            mergeDispatch(rows[0].data);safeRender();
+          }
+        }
+      }catch(e){}
+    })();
   }
   // Re-fetch maintenance from cloud every time the tab is opened
   if(t==='maintenance'){
