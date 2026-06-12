@@ -154,6 +154,8 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 
 /* ── Scrollable content ── */
 .page{max-width:760px;margin:0 auto;padding:14px 12px 80px;}
+@media(min-width:900px){.page{max-width:100%;padding:16px 28px 80px;}}
+@media(min-width:1400px){.page{padding:16px 40px 80px;}}
 
 .route-map{height:260px;border-radius:10px;border:1px solid var(--border);overflow:hidden;margin-top:10px;}
 #login-overlay{
@@ -1752,7 +1754,7 @@ function renderLoginInner(){
 ${S.resetStep===1?`<div style='margin-top:16px;padding:14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:10px'><div style='font-size:13px;color:#6ee7b7;margin-bottom:10px;font-weight:600'>📧 Reset email sent to ${S.resetEmail||'your email'}</div><div id='reset-err' style='display:none;color:#fca5a5;font-size:12px;margin-bottom:8px;background:rgba(239,68,68,.1);padding:6px 10px;border-radius:6px'></div><input id='li_reset_code' type='text' maxlength='6' placeholder='6-digit code' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:18px;text-align:center;letter-spacing:4px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_pw' type='password' placeholder='New password (min 6 chars)' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_conf' type='password' placeholder='Confirm new password' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:10px' onkeydown="if(event.key==='Enter')window.handleReset()"><div style='display:flex;gap:8px'><button onclick='window.handleReset()' style='flex:2;padding:10px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer'>Set New Password</button><button onclick='S.resetStep=0;S.resetCode=null;render()' style='flex:1;padding:10px;background:rgba(255,255,255,.08);border:none;border-radius:8px;color:rgba(255,255,255,.6);font-size:12px;cursor:pointer'>Cancel</button></div></div>`:''}
       </div>
       <div style="text-align:center;margin-top:20px;font-size:11px;color:rgba(255,255,255,.2)">True South Flights Ltd · Queenstown, New Zealand</div>
-      <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">v20.78</div>
+      <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">v20.80</div>
     </div>
   </div>`;
 }
@@ -1879,7 +1881,7 @@ function renderApp(){
             <span title="${S.rtStatus==='live'?'Live — real-time sync active':'Offline — reconnecting...'}" style="width:7px;height:7px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':'#6b7280'};flex-shrink:0;box-shadow:${S.rtStatus==='live'?'0 0 6px #22c55e80':'none'}"></span>
             <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
           </div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.78 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.80 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button tabindex="-1" onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button tabindex="-1" onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -2672,9 +2674,11 @@ function renderSaved(){
 
   const driveStatusHTML=''; // handled by appMsg banner
   const _selCount=Object.keys(S.savedSel).length;
+  const _selSignedCount=Object.keys(S.savedSel).filter(id=>{const s=S.saved.find(x=>x.id===id);return s&&s.status==='complete';}).length;
   const _bulkBar=_selCount>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
     <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_selCount} item(s) selected</span>
     <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
+    ${_selSignedCount>0?`<button onclick="window.bulkUploadSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:var(--acc);color:#fff;font-size:12px;font-weight:700;cursor:pointer">☁ Upload ${_selSignedCount}</button>`:''}
     <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Delete ${_selCount}</button>
   </div>`:'';
   const tabBar=`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
@@ -2791,6 +2795,7 @@ function renderSaved(){
         </div>
         <div style="display:flex;gap:5px;flex-shrink:0">
           <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>
+          ${isSigned?`<button class="btn" style="font-size:12px;padding:6px 10px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${s.id}')">${s.driveUploaded?'☁ Re-upload':'☁ Upload'}</button>`:''}
           <button class="btn btn-red" style="font-size:12px;padding:6px 10px" onclick="delSaved('${s.id}')">Delete</button>
         </div></div>`;
     }).join('')}`;
@@ -3685,6 +3690,39 @@ window.bulkDeleteSaved=async()=>{
   S.savedSel={};render();
   for(const id of ids){await sbDel('ts_loadsheets',id).catch(()=>{});await sbDel('ts_manifests',id).catch(()=>{});}
 };
+window.bulkUploadSaved=async function(){
+  const ids=Object.keys(S.savedSel);
+  const signed=ids.filter(function(id){const s=S.saved.find(function(x){return x.id===id;});return s&&s.status==='complete';});
+  if(!signed.length){toast('No signed loadsheets selected.','warn');return;}
+  const cfg=S.driveConfig||{};
+  if(!cfg.enabled){toast('Drive upload not enabled — check Admin settings.','warn');return;}
+  var token=null;
+  if(cfg.refreshToken){
+    try{
+      var tr=await fetch(SB+'/functions/v1/drive-token',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},SH),body:JSON.stringify({refresh_token:cfg.refreshToken})});
+      var tj=await tr.json();token=tj.access_token;
+    }catch(e){toast('Could not get Drive token.','err');return;}
+  }
+  if(!token){toast('No Drive token available.','err');return;}
+  toast('Uploading '+signed.length+' sheet(s)…','info');
+  var ok=0,fail=0;
+  for(var i=0;i<signed.length;i++){
+    var sheet=S.saved.find(function(s){return s.id===signed[i];});
+    if(!sheet)continue;
+    try{
+      await uploadToDrive(sheet,token);
+      sheet.driveUploaded=true;
+      var stored=lsGet('ts_drive_uploaded_ids')||[];
+      if(!stored.includes(sheet.id)){stored.push(sheet.id);lsSet('ts_drive_uploaded_ids',stored);}
+      sbU('ts_settings',[{key:'drive_uploaded_ids',value:JSON.stringify(stored)}]).catch(function(){});
+      ok++;
+    }catch(e){fail++;}
+  }
+  S.savedSel={};
+  toast('Drive upload: '+ok+' uploaded'+(fail?' ('+fail+' failed)':''),'ok');
+  render();
+};
+
 window.clearManifest=()=>{if(!confirm('Clear all passengers and aircraft?'))return;S.dispatch=bD();sbDel('ts_manifests','live_draft');S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};render();};
 
 // ── Generate loadsheet from manifest ──
@@ -3712,35 +3750,30 @@ window.lsAc=v=>{
   const newType=(S.aircraft[v]||{}).type;
   const sameType=!!(oldType&&oldType===newType);
   const newA=S.aircraft[v];
-  // Count excess passengers BEFORE switching (deduplicated by seat index)
-  if(newA){
-    const maxIdx=newA.seats.length;
-    const excessIdxs=new Set();
-    Object.keys(kS).forEach(i=>{if(parseInt(i)>=maxIdx&&parseFloat(kS[i])>0)excessIdxs.add(i);});
-    Object.keys(kN).forEach(i=>{if(parseInt(i)>=maxIdx&&kN[i])excessIdxs.add(i);});
-    const excess=excessIdxs.size;
-    if(excess>0){
-      if(!confirm('\u26A0 '+acDisp(v)+' only has '+(maxIdx-1)+' pax seats.\n\n'+excess+' passenger(s) will be removed as they exceed capacity.\n\nSwitch aircraft anyway?'))return;
-    }
-  }
-  // Commit switch
+  // Commit switch immediately (avoid confirm() which is unreliable on iOS PWA)
   S.form.ac=v;
   S.form.names=kN;S.form.seats=kS;S.form.bags=kB;S.form.infantNames=kI;
   if(!sameType){S.form.cargo={};S.form.fuel='';S.form.burnOff='';}
   S.form.sig=null;
-  // Trim passengers beyond new seat count
+  // Trim & warn about excess passengers
   if(newA){
     const maxIdx=newA.seats.length;
+    const excessIdxs=new Set();
+    Object.keys(kN).forEach(i=>{if(parseInt(i)>=maxIdx&&kN[i])excessIdxs.add(i);});
+    Object.keys(kS).forEach(i=>{if(parseInt(i)>=maxIdx&&parseFloat(kS[i])>0)excessIdxs.add(i);});
     [S.form.seats,S.form.bags,S.form.names,S.form.infantNames].forEach(obj=>{
       Object.keys(obj).forEach(i=>{if(parseInt(i)>=maxIdx)delete obj[i];});
     });
+    if(excessIdxs.size>0){
+      toast('⚠ '+excessIdxs.size+' passenger(s) removed — '+acDisp(v)+' only has '+(maxIdx-1)+' pax seats.','warn');
+    }
   }
-  // W&B overload check after switch
+  // W&B overload check
   const wb=calcFormWB(S.form);
   if(wb){
-    if(!wb.towOk)toast('\u26A0 '+acDisp(v)+' TOW '+wb.tow.toFixed(0)+'kg exceeds MTOW '+newA.mtow+'kg — reduce load.','warn');
-    else if(!wb.lwOk)toast('\u26A0 '+acDisp(v)+' landing weight '+wb.lw.toFixed(0)+'kg exceeds MLW '+newA.mlw+'kg.','warn');
-    else if(!wb.cogOk)toast('\u26A0 '+acDisp(v)+' C of G out of range.','warn');
+    if(!wb.towOk)toast('⚠ '+acDisp(v)+' TOW '+wb.tow.toFixed(0)+'kg exceeds MTOW '+newA.mtow+'kg — reduce load.','warn');
+    else if(!wb.lwOk)toast('⚠ '+acDisp(v)+' landing weight '+wb.lw.toFixed(0)+'kg exceeds MLW '+newA.mlw+'kg.','warn');
+    else if(!wb.cogOk)toast('⚠ '+acDisp(v)+' C of G out of range.','warn');
   }
   render();
 };
@@ -4006,50 +4039,9 @@ function generatePrintHTML(sheet){
   var a=S.aircraft[f.ac]||{seats:[],cargo:[],doc:'',type:'',burnDef:'',burnDefUnit:'kg',gndBurn:0,fuelArm:0,ew:0,em:0,cogMin:0,cogMax:0,mtow:0,mlw:0};
   var r=calcFormWB(f);
   var acCol=AC_COL[f.ac]||'#1e6b8c';
-  // hex → rgba helper
-  function hexRgba(h,a){var x=parseInt(h.slice(1),16);return 'rgba('+((x>>16)&255)+','+((x>>8)&255)+','+(x&255)+','+a+')';}
-  var acFaint=hexRgba(acCol,0.08);
+  function hexRgba(h,op){var x=parseInt(h.slice(1),16);return 'rgba('+((x>>16)&255)+','+((x>>8)&255)+','+(x&255)+','+op+')';}
+  var acFaint=hexRgba(acCol,0.09);
   var acLight=hexRgba(acCol,0.18);
-  var acMid=hexRgba(acCol,0.55);
-
-  // Build seat rows
-  var seatRows='';
-  a.seats.forEach(function(s,i){
-    var n=(f.names&&f.names[i])||'';var w=(f.seats&&f.seats[i])||'';var b=(f.bags&&f.bags[i])||'';
-    if(n||parseFloat(w)){
-      var m=((parseFloat(w)||0)+(parseFloat(b)||0))*s.arm;
-      var _inf=(f.infantNames&&f.infantNames[i])||'';
-      var _dispN=n+(_inf?' + '+_inf:'');
-      var isPIC=(i===0);
-      seatRows+='<tr'+(isPIC?' style="background:'+acFaint+'"':'')+'>'
-        +'<td style="font-weight:'+(isPIC?'700':'400')+';color:'+(isPIC?acCol:'inherit')+'">'+s.lbl+'</td>'
-        +'<td>'+_dispN+'</td><td>'+( w||'—')+'</td><td>'+(b||'—')+'</td><td>'+m.toFixed(0)+'</td></tr>';
-    }
-  });
-
-  // W&B rows with subtotals highlighted
-  var wbRows='';
-  if(r){
-    var items=[
-      ['Empty Weight',a.ew,false],
-      ['Crew',r.crewW,false],
-      ['Passengers',r.paxW,false],
-      ['Cargo / Baggage',r.cargoW,false],
-      ['Zero Fuel Weight',r.zfw,true],
-      ['+ Fuel',r.fuelW,false],
-      ['Ramp Weight',r.rampW,true],
-      ['− Ground Burn',a.gndBurn,false],
-      ['Takeoff Weight',r.tow,true],
-      ['− Flight Burn',r.burnKg,false],
-      ['Landing Weight',r.lw,true]
-    ];
-    items.forEach(function(it){
-      var isTotal=it[2];
-      wbRows+='<tr style="background:'+(isTotal?acFaint:'transparent')+';font-weight:'+(isTotal?'700':'400')+'">'
-        +'<td style="'+(isTotal?'border-left:3px solid '+acCol+';':'')+'">'+(isTotal?'<strong>'+it[0]+'</strong>':it[0])+'</td>'
-        +'<td style="text-align:right">'+it[1].toFixed(1)+' kg</td></tr>';
-    });
-  }
 
   var towOk=r&&r.towOk,lwOk=r&&r.lwOk,cogOk=r&&r.cogOk;
   var allOk=towOk&&lwOk&&cogOk;
@@ -4058,115 +4050,158 @@ function generatePrintHTML(sheet){
   var statusColor=allOk?'#15803d':'#b91c1c';
   var status=allOk?'✓  ALL LIMITS WITHIN RANGE':'⚠  ONE OR MORE LIMITS EXCEEDED';
 
-  // Cargo rows
-  var cargoRows='';
-  if(a.cargo&&a.cargo.length){
-    a.cargo.forEach(function(zn,i){
-      var w=(f.cargo&&f.cargo[i])||'';
-      var m=((parseFloat(w)||0)*zn.arm).toFixed(0);
-      if(w) cargoRows+='<tr><td>'+zn.lbl+'</td><td>'+w+' kg</td><td>'+m+'</td></tr>';
-    });
-  }
-
-  // Fuel calc
+  // Fuel calcs
   var fuelKgV=parseFloat(f.fuel)||0;
   var burnKgV=r?r.burnKg:0;
   var remKg=fuelKgV-a.gndBurn-burnKgV;
   var fuelU=fuelUnit(f.ac);
   var fuelDisplay=f.ac?fromKg(fuelKgV,f.ac).toFixed(1):fuelKgV;
 
-  function sec(title){
-    return '<tr><th colspan="2" style="background:'+acCol+';color:#fff;font-size:11px;letter-spacing:.06em;padding:5px 8px;text-align:left">'+title.toUpperCase()+'</th></tr>';
+  // Shared inline styles
+  var TD='border:1px solid #e2e8f0;padding:5px 8px;font-family:Arial,sans-serif;font-size:11px;vertical-align:top;';
+  var TH='border:1px solid '+acCol+';padding:5px 8px;font-family:Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.05em;text-align:left;background:'+acCol+';color:#fff;';
+  var THSPAN='border:1px solid '+acCol+';padding:5px 8px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.05em;text-align:left;background:'+acCol+';color:#fff;';
+
+  function thRow(label,span){return '<tr><th colspan="'+(span||2)+'" style="'+THSPAN+'">'+label.toUpperCase()+'</th></tr>';}
+
+  // Seat rows
+  var seatRows='';
+  a.seats.forEach(function(s,i){
+    var n=(f.names&&f.names[i])||'';
+    var w=(f.seats&&f.seats[i])||'';
+    var b=(f.bags&&f.bags[i])||'';
+    if(n||parseFloat(w)){
+      var m=((parseFloat(w)||0)+(parseFloat(b)||0))*s.arm;
+      var _inf=(f.infantNames&&f.infantNames[i])||'';
+      var _dispN=n+(_inf?' + '+_inf:'');
+      var isPIC=(i===0);
+      var rowBg=isPIC?acFaint:'transparent';
+      seatRows+='<tr style="background:'+rowBg+'">'
+        +'<td style="'+TD+'font-weight:'+(isPIC?'700':'400')+';color:'+(isPIC?acCol:'#1a1a1a')+'">'+s.lbl+'</td>'
+        +'<td style="'+TD+'">'+_dispN+'</td>'
+        +'<td style="'+TD+'text-align:right">'+( w||'—')+'</td>'
+        +'<td style="'+TD+'text-align:right">'+(b||'—')+'</td>'
+        +'<td style="'+TD+'text-align:right">'+m.toFixed(0)+'</td>'
+        +'</tr>';
+    }
+  });
+
+  // W&B rows
+  var wbRows='';
+  if(r){
+    var items=[
+      ['Empty Weight',a.ew,false],['Crew',r.crewW,false],['Passengers',r.paxW,false],
+      ['Cargo / Baggage',r.cargoW,false],['Zero Fuel Weight',r.zfw,true],
+      ['+ Fuel',r.fuelW,false],['Ramp Weight',r.rampW,true],
+      ['− Ground Burn',a.gndBurn,false],['Takeoff Weight',r.tow,true],
+      ['− Flight Burn',r.burnKg,false],['Landing Weight',r.lw,true]
+    ];
+    items.forEach(function(it){
+      var isTotal=it[2];
+      var bg=isTotal?acFaint:'transparent';
+      var fw=isTotal?'700':'400';
+      var bl=isTotal?'border-left:3px solid '+acCol+';':'';
+      wbRows+='<tr style="background:'+bg+'">'
+        +'<td style="'+TD+bl+'font-weight:'+fw+'">'+it[0]+'</td>'
+        +'<td style="'+TD+'text-align:right;font-weight:'+fw+'">'+it[1].toFixed(1)+' kg</td>'
+        +'</tr>';
+    });
   }
 
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    +'<title>True South Flights — Loadsheet</title>'
-    +'<style>'
-    +'*{box-sizing:border-box}'
-    +'body{font-family:-apple-system,Arial,sans-serif;font-size:11px;color:#1a1a1a;margin:0;padding:20px;background:#fff}'
-    +'.header{border-left:5px solid '+acCol+';padding:6px 12px;margin-bottom:14px}'
-    +'.header h1{margin:0;font-size:17px;font-weight:800;letter-spacing:.03em;color:#111}'
-    +'.header .sub{font-size:10px;color:#666;margin-top:2px}'
-    +'.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}'
-    +'table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:11px}'
-    +'td,th{border:1px solid #e2e8f0;padding:4px 7px;vertical-align:top}'
-    +'th{background:'+acCol+';color:#fff;font-weight:700;font-size:10px;letter-spacing:.05em;text-align:left}'
-    +'.limits{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}'
-    +'.lbox{border:2px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center}'
-    +'.lbox .val{font-size:18px;font-weight:800;line-height:1.2}'
-    +'.lbox .lbl{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.05em}'
-    +'.lbox .sub{font-size:9px;color:#888;margin-top:2px}'
-    +'.status{padding:10px 14px;border-radius:6px;border:2px solid '+statusBorder+';background:'+statusBg+';color:'+statusColor+';font-weight:800;font-size:13px;margin-bottom:14px;letter-spacing:.03em}'
-    +'.sig-block{margin-top:8px}'
-    +'.sig-block img{max-height:60px;border:1px solid #ccc;border-radius:4px;display:block;margin:6px 0}'
-    +'.cert{font-size:10px;color:#444;font-style:italic;margin:4px 0}'
-    +'tr:nth-child(even) td{background:#f8fafc}'
-    +'@media print{body{padding:10px}}'
-    +'</style></head><body>'
+  // Cargo rows
+  var cargoRows='';
+  if(a.cargo&&a.cargo.length){
+    a.cargo.forEach(function(zn,i){
+      var w=(f.cargo&&f.cargo[i])||'';
+      var m=((parseFloat(w)||0)*zn.arm).toFixed(0);
+      if(w)cargoRows+='<tr><td style="'+TD+'">'+zn.lbl+'</td><td style="'+TD+'text-align:right">'+w+' kg</td><td style="'+TD+'text-align:right">'+m+'</td></tr>';
+    });
+  }
+
+  // Limit boxes
+  function limitBox(lbl,val,unit,ok,maxVal){
+    var bc=ok?'#16a34a':'#dc2626';var vc=ok?'#15803d':'#b91c1c';
+    return '<td style="border:2px solid '+bc+';border-radius:6px;padding:10px;text-align:center;width:33%;font-family:Arial,sans-serif">'
+      +'<div style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">'+lbl+'</div>'
+      +'<div style="font-size:20px;font-weight:800;color:'+vc+'">'+val+'</div>'
+      +'<div style="font-size:9px;color:#888;margin-top:2px">'+unit+'</div>'
+      +'</td>';
+  }
+
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>True South Flights — Loadsheet</title></head><body style="font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;margin:0;padding:20px;background:#fff">'
 
     // Header
-    +'<div class="header">'
-    +'<h1>TRUE SOUTH FLIGHTS — LOADSHEET</h1>'
-    +'<div class="sub">'+a.doc+' &nbsp;|&nbsp; Generated '+new Date().toLocaleString('en-NZ')+'</div>'
+    +'<div style="border-left:5px solid '+acCol+';padding:6px 14px;margin-bottom:14px">'
+    +'<h1 style="margin:0;font-size:17px;font-weight:800;color:#111;font-family:Arial,sans-serif">TRUE SOUTH FLIGHTS — LOADSHEET</h1>'
+    +'<div style="font-size:10px;color:#666;margin-top:3px;font-family:Arial,sans-serif">'+a.doc+' &nbsp;|&nbsp; Generated '+new Date().toLocaleString('en-NZ')+'</div>'
     +'</div>'
 
-    // Status bar
-    +'<div class="status">'+status+'</div>'
+    // Status
+    +'<div style="padding:10px 14px;border:2px solid '+statusBorder+';border-radius:6px;background:'+statusBg+';color:'+statusColor+';font-weight:800;font-size:13px;margin-bottom:14px;font-family:Arial,sans-serif;letter-spacing:.03em">'+status+'</div>'
 
-    // Limits row
-    +'<div class="limits">'
-    +(r?'<div class="lbox" style="border-color:'+(towOk?'#16a34a':'#dc2626')+'"><div class="lbl">Takeoff Weight</div><div class="val" style="color:'+(towOk?'#15803d':'#b91c1c')+'">'+r.tow.toFixed(1)+' kg</div><div class="sub">max '+a.mtow+' kg</div></div>':'')
-    +(r?'<div class="lbox" style="border-color:'+(lwOk?'#16a34a':'#dc2626')+'"><div class="lbl">Landing Weight</div><div class="val" style="color:'+(lwOk?'#15803d':'#b91c1c')+'">'+r.lw.toFixed(1)+' kg</div><div class="sub">max '+a.mlw+' kg</div></div>':'')
-    +(r?'<div class="lbox" style="border-color:'+(cogOk?'#16a34a':'#dc2626')+'"><div class="lbl">Centre of Gravity</div><div class="val" style="color:'+(cogOk?'#15803d':'#b91c1c')+'">'+r.towCog.toFixed(2)+'"</div><div class="sub">'+a.cogMin+'–'+a.cogMax+'"</div></div>':'')
-    +'</div>'
+    // Limit boxes
+    +(r?'<table style="width:100%;border-collapse:separate;border-spacing:8px;margin-bottom:14px"><tr>'
+      +limitBox('Takeoff Weight',r.tow.toFixed(1)+' kg','max '+a.mtow+' kg',towOk)
+      +limitBox('Landing Weight',r.lw.toFixed(1)+' kg','max '+a.mlw+' kg',lwOk)
+      +limitBox('Centre of Gravity',r.towCog.toFixed(2)+'"',a.cogMin+'–'+a.cogMax+'"',cogOk)
+      +'</tr></table>':'')
 
-    // Two-column: Flight Details + W&B
-    +'<div class="grid2">'
-    +'<table>'
-    +'<tr><th colspan="2">Flight Details</th></tr>'
-    +'<tr><td style="color:#666;width:40%">Aircraft</td><td><strong style="color:'+acCol+'">'+f.ac.replace('ZK-','')+'</strong> — '+a.type+'</td></tr>'
-    +'<tr><td style="color:#666">PIC</td><td>'+f.pic+'</td></tr>'
-    +'<tr><td style="color:#666">Co-Pilot</td><td>'+(f.coPilot||'—')+'</td></tr>'
-    +'<tr><td style="color:#666">Date</td><td>'+f.date+'</td></tr>'
-    +'<tr><td style="color:#666">ETD</td><td>'+(f.etd||'—')+'</td></tr>'
-    +'<tr><td style="color:#666">From</td><td>'+(APTS[f.dep]||f.dep)+' ('+f.dep+')</td></tr>'
-    +'<tr><td style="color:#666">To</td><td>'+(APTS[f.dest]||f.dest)+' ('+f.dest+')</td></tr>'
-    +'</table>'
-    +'<table>'
-    +'<tr><th colspan="2">Weight &amp; Balance</th></tr>'
+    // Two-col: Flight Details + W&B
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:14px"><tr style="vertical-align:top">'
+    +'<td style="width:50%;padding-right:8px;border:none">'
+    +'<table style="width:100%;border-collapse:collapse">'
+    +thRow('Flight Details',2)
+    +'<tr><td style="'+TD+'color:#666;width:40%">Aircraft</td><td style="'+TD+'"><strong style="color:'+acCol+'">'+f.ac.replace('ZK-','')+' </strong>— '+a.type+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">PIC</td><td style="'+TD+'">'+f.pic+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Co-Pilot</td><td style="'+TD+'">'+(f.coPilot||'—')+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Date</td><td style="'+TD+'">'+f.date+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">ETD</td><td style="'+TD+'">'+(f.etd||'—')+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">From</td><td style="'+TD+'">'+(APTS[f.dep]||f.dep)+' ('+f.dep+')</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">To</td><td style="'+TD+'">'+(APTS[f.dest]||f.dest)+' ('+f.dest+')</td></tr>'
+    +'</table></td>'
+    +'<td style="width:50%;padding-left:8px;border:none">'
+    +'<table style="width:100%;border-collapse:collapse">'
+    +thRow('Weight & Balance',2)
     +wbRows
-    +'</table>'
-    +'</div>'
+    +'</table></td></tr></table>'
 
     // Occupants
-    +'<table>'
-    +'<tr><th>Seat</th><th>Passenger</th><th>Weight (kg)</th><th>Bag (kg)</th><th>Moment</th></tr>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:14px">'
+    +thRow('Occupants',5)
+    +'<tr>'
+    +'<th style="'+TH+'">Seat</th><th style="'+TH+'">Passenger</th>'
+    +'<th style="'+TH+'text-align:right">Weight (kg)</th>'
+    +'<th style="'+TH+'text-align:right">Bag (kg)</th>'
+    +'<th style="'+TH+'text-align:right">Moment</th>'
+    +'</tr>'
     +seatRows
     +'</table>'
 
-    // Cargo (if any)
-    +(cargoRows?'<table><tr><th>Cargo / Zone</th><th>Weight (kg)</th><th>Moment</th></tr>'+cargoRows+'</table>':'')
+    // Cargo
+    +(cargoRows?'<table style="width:100%;border-collapse:collapse;margin-bottom:14px">'+thRow('Cargo',3)
+      +'<tr><th style="'+TH+'">Zone</th><th style="'+TH+'text-align:right">Weight (kg)</th><th style="'+TH+'text-align:right">Moment</th></tr>'
+      +cargoRows+'</table>':'')
 
     // Fuel
-    +'<table>'
-    +'<tr><th colspan="2">Fuel</th></tr>'
-    +'<tr><td style="color:#666">Fuel at departure</td><td>'+fuelKgV.toFixed(1)+' kg ('+fuelDisplay+' '+fuelU+')</td></tr>'
-    +'<tr><td style="color:#666">Ground burn</td><td>'+a.gndBurn+' kg</td></tr>'
-    +'<tr><td style="color:#666">Flight burn</td><td>'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr>'
-    +'<tr style="background:'+acFaint+'"><td style="font-weight:700;border-left:3px solid '+acCol+'"><strong>Fuel at destination</strong></td><td style="font-weight:700">'+remKg.toFixed(1)+' kg</td></tr>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:14px">'
+    +thRow('Fuel',2)
+    +'<tr><td style="'+TD+'color:#666">Fuel at departure</td><td style="'+TD+'text-align:right">'+fuelKgV.toFixed(1)+' kg ('+fuelDisplay+' '+fuelU+')</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Ground burn</td><td style="'+TD+'text-align:right">'+a.gndBurn+' kg</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Flight burn</td><td style="'+TD+'text-align:right">'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr>'
+    +'<tr style="background:'+acFaint+'"><td style="'+TD+'border-left:3px solid '+acCol+';font-weight:700">Fuel at destination</td><td style="'+TD+'text-align:right;font-weight:700">'+remKg.toFixed(1)+' kg</td></tr>'
     +'</table>'
 
     // Certification
-    +'<div class="sig-block">'
-    +'<table><tr><th colspan="2">PIC Certification</th></tr>'
-    +'<tr><td colspan="2"><span class="cert">I hereby certify that the particulars recorded on the above load sheet are correct'+(a.type&&a.type.includes('208')?' and Part 125 security measures have been followed':'')+'.</span></td></tr>'
-    +(f.sig?'<tr><td style="color:#666;width:30%">Signature</td><td><img src="'+f.sig+'" style="max-height:55px;border:1px solid #ccc;border-radius:3px;display:block;margin:4px 0"></td></tr>':'<tr><td style="color:#666">Signature</td><td style="padding:20px 0">___________________________</td></tr>')
-    +'<tr><td style="color:#666">Name</td><td>'+f.pic+'</td></tr>'
-    +'<tr><td style="color:#666">Date</td><td>'+f.date+'</td></tr>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:8px">'
+    +thRow('PIC Certification',2)
+    +'<tr><td colspan="2" style="'+TD+'font-style:italic;color:#444">I hereby certify that the particulars recorded on the above load sheet are correct'+(a.type&&a.type.includes('208')?' and Part 125 security measures have been followed':'')+'.</td></tr>'
+    +(f.sig?'<tr><td style="'+TD+'color:#666;width:30%">Signature</td><td style="'+TD+'"><img src="'+f.sig+'" style="max-height:55px;border:1px solid #ccc;border-radius:3px;display:block;margin:4px 0"></td></tr>':'<tr><td style="'+TD+'color:#666">Signature</td><td style="'+TD+'padding:22px 8px">___________________________</td></tr>')
+    +'<tr><td style="'+TD+'color:#666">Name</td><td style="'+TD+'">'+f.pic+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Date</td><td style="'+TD+'">'+f.date+'</td></tr>'
     +'</table>'
-    +'</div>'
     +'</body></html>';
 }
+
 function setupSig(){
   const c=document.getElementById('sigCanvas');if(!c)return;
   if(S.form.sig){const img=new Image();img.onload=()=>c.getContext('2d').drawImage(img,0,0,c.width,c.height);img.src=S.form.sig;}
@@ -4421,17 +4456,17 @@ function initMaintenance(){
     loadMaintenanceFromCloud().then(function(cloud){
       if(cloud&&cloud.hist&&cloud.hist.length>0){
         const local=S.maintenance;
-        // Always merge cloud with local — local entries override for same date (fresher)
+        // Cloud is authoritative — use it directly, only keep local dates not yet in cloud
         {
           const byDate={};
           cloud.hist.forEach(function(e){byDate[e.date]=e;});
-          (local&&local.hist||[]).forEach(function(e){
-            byDate[e.date]=Object.assign({},byDate[e.date]||{},e);
-          });
+          // Only add local entries for dates the cloud doesn't have (pending local changes not yet synced)
+          (local&&local.hist||[]).forEach(function(e){if(!byDate[e.date])byDate[e.date]=e;});
           const merged=Object.assign({},cloud);
           merged.hist=Object.values(byDate).sort(function(a,b){return a.date.localeCompare(b.date);});
+          // Preserve local-only fields only if cloud has none (first-time setup)
           if(local){['compwash','adas','bookings','priority'].forEach(function(k){
-            if(local[k]&&Object.keys(local[k]).length>0)merged[k]=local[k];
+            if((!cloud[k]||Object.keys(cloud[k]||{}).length===0)&&local[k]&&Object.keys(local[k]).length>0)merged[k]=local[k];
           });}
           S.maintenance=merged;
           saveMaintenance();
@@ -4498,6 +4533,32 @@ function fmtMaintDate(d){
   const yr=String(dt.getFullYear()).slice(2);
   return day+'-'+mon+'-'+yr;
 }
+
+window.uploadSingleSheet=async function(id){
+  const sheet=S.saved.find(function(s){return s.id===id;});
+  if(!sheet){return;}
+  const cfg=S.driveConfig||{};
+  if(!cfg.enabled){toast('Drive upload not enabled — check Admin settings.','warn');return;}
+  var token=null;
+  if(cfg.refreshToken){
+    try{
+      var tr=await fetch(SB+'/functions/v1/drive-token',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},SH),body:JSON.stringify({refresh_token:cfg.refreshToken})});
+      var tj=await tr.json();token=tj.access_token;
+    }catch(e){toast('Could not get Drive token.','err');return;}
+  }
+  if(!token){toast('No Drive token available.','err');return;}
+  toast('Uploading to Drive…','info');
+  try{
+    await uploadToDrive(sheet,token);
+    sheet.driveUploaded=true;
+    var ids=lsGet('ts_drive_uploaded_ids')||[];
+    if(!ids.includes(id)){ids.push(id);lsSet('ts_drive_uploaded_ids',ids);}
+    sbU('ts_settings',[{key:'drive_uploaded_ids',value:JSON.stringify(ids)}]).catch(function(){});
+    toast('Uploaded to Drive ✓','ok');render();
+  }catch(e){
+    toast('Upload failed: '+(e&&e.message||e),'err');
+  }
+};
 
 window.editMaintCell=function(cell,date,ac){
   initMaintenance();
