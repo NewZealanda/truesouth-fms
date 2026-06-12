@@ -1020,8 +1020,14 @@ async function loadAll(){
 
     // ── Loadsheets ──
     const ls=await sbF('ts_loadsheets');
+    // Load uploaded sheet IDs from Supabase settings
+    let _uploadedIds=new Set(lsGet('ts_drive_uploaded_ids')||[]);
+    try{
+      const _ur=await fetch(SB+'/rest/v1/ts_settings?key=eq.drive_uploaded_ids&select=value',{headers:SH});
+      if(_ur.ok){const _urows=await _ur.json();if(_urows&&_urows.length){const _uval=typeof _urows[0].value==='string'?JSON.parse(_urows[0].value):_urows[0].value;if(Array.isArray(_uval)){_uploadedIds=new Set(_uval);lsSet('ts_drive_uploaded_ids',_uval);}}}
+    }catch(_){}
     if(ls){
-      S.saved=ls.map(r=>({id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'}));
+      S.saved=ls.map(r=>({id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete',driveUploaded:_uploadedIds.has(r.id)}));
       lsSet('ts_loadsheets_cache',S.saved);
     } else {
       const cached=lsGet('ts_loadsheets_cache');
@@ -2474,7 +2480,7 @@ function renderLoadsheet(){
       const boxes=a.cargo.map((zn,zi)=>{
         const w=f.cargo[zi]||'';
         return`<div style="background:${podColors[zi%4]};border:1px solid ${podBorders[zi%4]};border-radius:8px;padding:7px 9px">
-          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:${podTextColors[zi%4]};text-transform:uppercase;margin-bottom:4px">${zn.lbl.replace('Pod ','Z')}${zn.maxKg?' · max '+zn.maxKg+'kg':''}</div>
+          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:${podTextColors[zi%4]};text-transform:uppercase;margin-bottom:4px">${zn.lbl.replace('Pod Zone ','Zone ')}${zn.maxKg?' · max '+zn.maxKg+'kg':''}</div>
           <div style="display:flex;align-items:baseline;gap:4px">
             <input class="fi ls-no-spin" type="number" placeholder="0" value="${w}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
             <span style="font-size:11px;color:${podTextColors[zi%4]}">kg</span>
@@ -2512,7 +2518,7 @@ function renderLoadsheet(){
         const x=zi*zoneW;const w=zi===nz-1?100-x:zoneW;
         const col=podBorders[zi%4];
         return`<rect x="${x}%" y="30%" width="${w}%" height="40%" fill="${podColors[zi%4]}" stroke="${col}" stroke-width="1.5" rx="3"/>
-               <text x="${x+w/2}%" y="53%" text-anchor="middle" font-size="9" fill="${podTextColors[zi%4]}" font-weight="700">${zn.lbl.replace('Pod ','Z')}</text>`;
+               <text x="${x+w/2}%" y="53%" text-anchor="middle" font-size="9" fill="${podTextColors[zi%4]}" font-weight="700">${zn.lbl.replace('Pod Zone ','Zone ')}</text>`;
       }).join('');
       const fusSVG=`<svg viewBox="0 0 300 60" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:360px;height:60px;margin-bottom:10px">
         <!-- fuselage -->
@@ -3700,20 +3706,41 @@ function generateLoadsheet(acId){
 
 // ── Loadsheet form handlers ──
 window.lsAc=v=>{
+  const oldAc=S.form.ac;
   const kN=S.form.names||{},kS=S.form.seats||{},kB=S.form.bags||{},kI=S.form.infantNames||{};
-  const oldType=(S.aircraft[S.form.ac]||{}).type;
+  const oldType=(S.aircraft[oldAc]||{}).type;
   const newType=(S.aircraft[v]||{}).type;
   const sameType=!!(oldType&&oldType===newType);
+  const newA=S.aircraft[v];
+  // Count excess passengers BEFORE switching (deduplicated by seat index)
+  if(newA){
+    const maxIdx=newA.seats.length;
+    const excessIdxs=new Set();
+    Object.keys(kS).forEach(i=>{if(parseInt(i)>=maxIdx&&parseFloat(kS[i])>0)excessIdxs.add(i);});
+    Object.keys(kN).forEach(i=>{if(parseInt(i)>=maxIdx&&kN[i])excessIdxs.add(i);});
+    const excess=excessIdxs.size;
+    if(excess>0){
+      if(!confirm('\u26A0 '+acDisp(v)+' only has '+(maxIdx-1)+' pax seats.\n\n'+excess+' passenger(s) will be removed as they exceed capacity.\n\nSwitch aircraft anyway?'))return;
+    }
+  }
+  // Commit switch
   S.form.ac=v;
   S.form.names=kN;S.form.seats=kS;S.form.bags=kB;S.form.infantNames=kI;
   if(!sameType){S.form.cargo={};S.form.fuel='';S.form.burnOff='';}
   S.form.sig=null;
-  // Warn if new aircraft has fewer seats than currently loaded pax
-  const newA=S.aircraft[v];
+  // Trim passengers beyond new seat count
   if(newA){
-    const excess=Object.keys(kS).filter(i=>parseInt(i)>=newA.seats.length&&parseFloat(kS[i])>0).length
-              +Object.keys(kN).filter(i=>parseInt(i)>=newA.seats.length&&kN[i]).length;
-    if(excess>0){if(!confirm('⚠ '+acDisp(v)+' only has '+(newA.seats.length-1)+' pax seats.\n\n'+excess+' passenger(s) exceed capacity and will not be included in W&B calculations.\n\nSwitch aircraft anyway?')){S.form.ac=S.form.ac;return;}toast('⚠ '+excess+' pax exceed '+acDisp(v)+' capacity — excluded from W&B.','warn');}
+    const maxIdx=newA.seats.length;
+    [S.form.seats,S.form.bags,S.form.names,S.form.infantNames].forEach(obj=>{
+      Object.keys(obj).forEach(i=>{if(parseInt(i)>=maxIdx)delete obj[i];});
+    });
+  }
+  // W&B overload check after switch
+  const wb=calcFormWB(S.form);
+  if(wb){
+    if(!wb.towOk)toast('\u26A0 '+acDisp(v)+' TOW '+wb.tow.toFixed(0)+'kg exceeds MTOW '+newA.mtow+'kg — reduce load.','warn');
+    else if(!wb.lwOk)toast('\u26A0 '+acDisp(v)+' landing weight '+wb.lw.toFixed(0)+'kg exceeds MLW '+newA.mlw+'kg.','warn');
+    else if(!wb.cogOk)toast('\u26A0 '+acDisp(v)+' C of G out of range.','warn');
   }
   render();
 };
@@ -3978,72 +4005,166 @@ function generatePrintHTML(sheet){
   var f=sheet.form;
   var a=S.aircraft[f.ac]||{seats:[],cargo:[],doc:'',type:'',burnDef:'',burnDefUnit:'kg',gndBurn:0,fuelArm:0,ew:0,em:0,cogMin:0,cogMax:0,mtow:0,mlw:0};
   var r=calcFormWB(f);
+  var acCol=AC_COL[f.ac]||'#1e6b8c';
+  // hex → rgba helper
+  function hexRgba(h,a){var x=parseInt(h.slice(1),16);return 'rgba('+((x>>16)&255)+','+((x>>8)&255)+','+(x&255)+','+a+')';}
+  var acFaint=hexRgba(acCol,0.08);
+  var acLight=hexRgba(acCol,0.18);
+  var acMid=hexRgba(acCol,0.55);
+
   // Build seat rows
   var seatRows='';
   a.seats.forEach(function(s,i){
     var n=(f.names&&f.names[i])||'';var w=(f.seats&&f.seats[i])||'';var b=(f.bags&&f.bags[i])||'';
-    if(n||parseFloat(w)){var m=((parseFloat(w)||0)+(parseFloat(b)||0))*s.arm;
+    if(n||parseFloat(w)){
+      var m=((parseFloat(w)||0)+(parseFloat(b)||0))*s.arm;
       var _inf=(f.infantNames&&f.infantNames[i])||'';
       var _dispN=n+(_inf?' + '+_inf:'');
-      seatRows+='<tr><td>'+s.lbl+'</td><td>'+_dispN+'</td><td>'+(w||'—')+'</td><td>'+(b||'—')+'</td><td>'+m.toFixed(0)+'</td></tr>';}
+      var isPIC=(i===0);
+      seatRows+='<tr'+(isPIC?' style="background:'+acFaint+'"':'')+'>'
+        +'<td style="font-weight:'+(isPIC?'700':'400')+';color:'+(isPIC?acCol:'inherit')+'">'+s.lbl+'</td>'
+        +'<td>'+_dispN+'</td><td>'+( w||'—')+'</td><td>'+(b||'—')+'</td><td>'+m.toFixed(0)+'</td></tr>';
+    }
   });
+
+  // W&B rows with subtotals highlighted
   var wbRows='';
   if(r){
-    var items=[['Empty Weight',a.ew],['Crew',r.crewW],['Passengers',r.paxW],['Cargo',r.cargoW],['Zero Fuel Weight',r.zfw],['+ Fuel',r.fuelW],['Ramp Weight',r.rampW],['− Ground Burn',a.gndBurn],['Takeoff Weight',r.tow],['− Flight Burn',r.burnKg],['Landing Weight',r.lw]];
-    items.forEach(function(it){wbRows+='<tr><td>'+it[0]+'</td><td>'+it[1].toFixed(1)+' kg</td></tr>';});
+    var items=[
+      ['Empty Weight',a.ew,false],
+      ['Crew',r.crewW,false],
+      ['Passengers',r.paxW,false],
+      ['Cargo / Baggage',r.cargoW,false],
+      ['Zero Fuel Weight',r.zfw,true],
+      ['+ Fuel',r.fuelW,false],
+      ['Ramp Weight',r.rampW,true],
+      ['− Ground Burn',a.gndBurn,false],
+      ['Takeoff Weight',r.tow,true],
+      ['− Flight Burn',r.burnKg,false],
+      ['Landing Weight',r.lw,true]
+    ];
+    items.forEach(function(it){
+      var isTotal=it[2];
+      wbRows+='<tr style="background:'+(isTotal?acFaint:'transparent')+';font-weight:'+(isTotal?'700':'400')+'">'
+        +'<td style="'+(isTotal?'border-left:3px solid '+acCol+';':'')+'">'+(isTotal?'<strong>'+it[0]+'</strong>':it[0])+'</td>'
+        +'<td style="text-align:right">'+it[1].toFixed(1)+' kg</td></tr>';
+    });
   }
+
   var towOk=r&&r.towOk,lwOk=r&&r.lwOk,cogOk=r&&r.cogOk;
-  var statusColour=towOk&&lwOk&&cogOk?'#166534':'#991b1b';
-  var status=towOk&&lwOk&&cogOk?'✓ ALL LIMITS WITHIN RANGE':'⚠ ONE OR MORE LIMITS EXCEEDED';
+  var allOk=towOk&&lwOk&&cogOk;
+  var statusBg=allOk?'#f0fdf4':'#fef2f2';
+  var statusBorder=allOk?'#16a34a':'#dc2626';
+  var statusColor=allOk?'#15803d':'#b91c1c';
+  var status=allOk?'✓  ALL LIMITS WITHIN RANGE':'⚠  ONE OR MORE LIMITS EXCEEDED';
+
+  // Cargo rows
+  var cargoRows='';
+  if(a.cargo&&a.cargo.length){
+    a.cargo.forEach(function(zn,i){
+      var w=(f.cargo&&f.cargo[i])||'';
+      var m=((parseFloat(w)||0)*zn.arm).toFixed(0);
+      if(w) cargoRows+='<tr><td>'+zn.lbl+'</td><td>'+w+' kg</td><td>'+m+'</td></tr>';
+    });
+  }
+
+  // Fuel calc
+  var fuelKgV=parseFloat(f.fuel)||0;
+  var burnKgV=r?r.burnKg:0;
+  var remKg=fuelKgV-a.gndBurn-burnKgV;
+  var fuelU=fuelUnit(f.ac);
+  var fuelDisplay=f.ac?fromKg(fuelKgV,f.ac).toFixed(1):fuelKgV;
+
+  function sec(title){
+    return '<tr><th colspan="2" style="background:'+acCol+';color:#fff;font-size:11px;letter-spacing:.06em;padding:5px 8px;text-align:left">'+title.toUpperCase()+'</th></tr>';
+  }
+
   return '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    +'<title>True South FMS</title>'
+    +'<title>True South Flights — Loadsheet</title>'
     +'<style>'
-    +'body{font-family:Arial,sans-serif;font-size:11px;color:#000;margin:20px}'
-    +'h2{margin:0 0 4px;font-size:16px}h3{margin:10px 0 4px;font-size:12px;border-bottom:1px solid #ccc}'
-    +'table{width:100%;border-collapse:collapse;margin-bottom:8px}'
-    +'td,th{border:1px solid #ccc;padding:4px 6px}th{background:#f0f0f0;font-weight:bold}'
-    +'.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}'
-    +'.status{padding:8px 12px;border:2px solid '+statusColour+';color:'+statusColour+';font-weight:bold;font-size:13px;margin:10px 0}'
-    +'.limits{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px}'
-    +'.limit-box{border:1px solid #ccc;padding:6px;text-align:center}'
-    +'.limit-box .val{font-size:16px;font-weight:bold}'
-    +'.limit-box .lbl{font-size:9px;color:#555}'
-    +'.sig img{max-height:60px;border:1px solid #ccc;display:block;margin:6px 0}'
-    +'@media print{body{margin:10px}}'
+    +'*{box-sizing:border-box}'
+    +'body{font-family:-apple-system,Arial,sans-serif;font-size:11px;color:#1a1a1a;margin:0;padding:20px;background:#fff}'
+    +'.header{border-left:5px solid '+acCol+';padding:6px 12px;margin-bottom:14px}'
+    +'.header h1{margin:0;font-size:17px;font-weight:800;letter-spacing:.03em;color:#111}'
+    +'.header .sub{font-size:10px;color:#666;margin-top:2px}'
+    +'.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}'
+    +'table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:11px}'
+    +'td,th{border:1px solid #e2e8f0;padding:4px 7px;vertical-align:top}'
+    +'th{background:'+acCol+';color:#fff;font-weight:700;font-size:10px;letter-spacing:.05em;text-align:left}'
+    +'.limits{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}'
+    +'.lbox{border:2px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center}'
+    +'.lbox .val{font-size:18px;font-weight:800;line-height:1.2}'
+    +'.lbox .lbl{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.05em}'
+    +'.lbox .sub{font-size:9px;color:#888;margin-top:2px}'
+    +'.status{padding:10px 14px;border-radius:6px;border:2px solid '+statusBorder+';background:'+statusBg+';color:'+statusColor+';font-weight:800;font-size:13px;margin-bottom:14px;letter-spacing:.03em}'
+    +'.sig-block{margin-top:8px}'
+    +'.sig-block img{max-height:60px;border:1px solid #ccc;border-radius:4px;display:block;margin:6px 0}'
+    +'.cert{font-size:10px;color:#444;font-style:italic;margin:4px 0}'
+    +'tr:nth-child(even) td{background:#f8fafc}'
+    +'@media print{body{padding:10px}}'
     +'</style></head><body>'
-    +'<h2>TRUE SOUTH FLIGHTS — LOADSHEET</h2>'
-    +'<p style="margin:0 0 8px;font-size:10px;color:#555">'+a.doc+'</p>'
-    +'<div class="grid">'
-    +'<table><tr><th colspan="2">Flight Details</th></tr>'
-    +'<tr><td>Aircraft</td><td>'+f.ac+' — '+a.type+'</td></tr>'
-    +'<tr><td>PIC</td><td>'+f.pic+'</td></tr>'
-    +'<tr><td>Co-Pilot</td><td>'+(f.coPilot||'—')+'</td></tr>'
-    +'<tr><td>Date</td><td>'+f.date+'</td></tr>'
-    +'<tr><td>ETD</td><td>'+(f.etd||'—')+'</td></tr>'
-    +'<tr><td>Departure</td><td>'+(APTS[f.dep]||f.dep)+' ('+f.dep+')</td></tr>'
-    +'<tr><td>Destination</td><td>'+(APTS[f.dest]||f.dest)+' ('+f.dest+')</td></tr>'
+
+    // Header
+    +'<div class="header">'
+    +'<h1>TRUE SOUTH FLIGHTS — LOADSHEET</h1>'
+    +'<div class="sub">'+a.doc+' &nbsp;|&nbsp; Generated '+new Date().toLocaleString('en-NZ')+'</div>'
+    +'</div>'
+
+    // Status bar
+    +'<div class="status">'+status+'</div>'
+
+    // Limits row
+    +'<div class="limits">'
+    +(r?'<div class="lbox" style="border-color:'+(towOk?'#16a34a':'#dc2626')+'"><div class="lbl">Takeoff Weight</div><div class="val" style="color:'+(towOk?'#15803d':'#b91c1c')+'">'+r.tow.toFixed(1)+' kg</div><div class="sub">max '+a.mtow+' kg</div></div>':'')
+    +(r?'<div class="lbox" style="border-color:'+(lwOk?'#16a34a':'#dc2626')+'"><div class="lbl">Landing Weight</div><div class="val" style="color:'+(lwOk?'#15803d':'#b91c1c')+'">'+r.lw.toFixed(1)+' kg</div><div class="sub">max '+a.mlw+' kg</div></div>':'')
+    +(r?'<div class="lbox" style="border-color:'+(cogOk?'#16a34a':'#dc2626')+'"><div class="lbl">Centre of Gravity</div><div class="val" style="color:'+(cogOk?'#15803d':'#b91c1c')+'">'+r.towCog.toFixed(2)+'"</div><div class="sub">'+a.cogMin+'–'+a.cogMax+'"</div></div>':'')
+    +'</div>'
+
+    // Two-column: Flight Details + W&B
+    +'<div class="grid2">'
+    +'<table>'
+    +'<tr><th colspan="2">Flight Details</th></tr>'
+    +'<tr><td style="color:#666;width:40%">Aircraft</td><td><strong style="color:'+acCol+'">'+f.ac.replace('ZK-','')+'</strong> — '+a.type+'</td></tr>'
+    +'<tr><td style="color:#666">PIC</td><td>'+f.pic+'</td></tr>'
+    +'<tr><td style="color:#666">Co-Pilot</td><td>'+(f.coPilot||'—')+'</td></tr>'
+    +'<tr><td style="color:#666">Date</td><td>'+f.date+'</td></tr>'
+    +'<tr><td style="color:#666">ETD</td><td>'+(f.etd||'—')+'</td></tr>'
+    +'<tr><td style="color:#666">From</td><td>'+(APTS[f.dep]||f.dep)+' ('+f.dep+')</td></tr>'
+    +'<tr><td style="color:#666">To</td><td>'+(APTS[f.dest]||f.dest)+' ('+f.dest+')</td></tr>'
     +'</table>'
-    +'<table><tr><th colspan="2">Weight &amp; Balance</th></tr>'
+    +'<table>'
+    +'<tr><th colspan="2">Weight &amp; Balance</th></tr>'
     +wbRows
     +'</table>'
     +'</div>'
-    +'<div class="limits">'
-    +(r?'<div class="limit-box"><div class="lbl">TAKEOFF WEIGHT</div><div class="val" style="color:'+(towOk?'#166534':'#991b1b')+'">'+r.tow.toFixed(1)+'</div><div class="lbl">max '+a.mtow+' kg</div></div>':'')
-    +(r?'<div class="limit-box"><div class="lbl">LANDING WEIGHT</div><div class="val" style="color:'+(lwOk?'#166534':'#991b1b')+'">'+r.lw.toFixed(1)+'</div><div class="lbl">max '+a.mlw+' kg</div></div>':'')
-    +(r?'<div class="limit-box"><div class="lbl">CENTRE OF GRAVITY</div><div class="val" style="color:'+(cogOk?'#166534':'#991b1b')+'">'+r.towCog.toFixed(2)+'"</div><div class="lbl">'+a.cogMin+'–'+a.cogMax+'"</div></div>':'')
+
+    // Occupants
+    +'<table>'
+    +'<tr><th>Seat</th><th>Passenger</th><th>Weight (kg)</th><th>Bag (kg)</th><th>Moment</th></tr>'
+    +seatRows
+    +'</table>'
+
+    // Cargo (if any)
+    +(cargoRows?'<table><tr><th>Cargo / Zone</th><th>Weight (kg)</th><th>Moment</th></tr>'+cargoRows+'</table>':'')
+
+    // Fuel
+    +'<table>'
+    +'<tr><th colspan="2">Fuel</th></tr>'
+    +'<tr><td style="color:#666">Fuel at departure</td><td>'+fuelKgV.toFixed(1)+' kg ('+fuelDisplay+' '+fuelU+')</td></tr>'
+    +'<tr><td style="color:#666">Ground burn</td><td>'+a.gndBurn+' kg</td></tr>'
+    +'<tr><td style="color:#666">Flight burn</td><td>'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr>'
+    +'<tr style="background:'+acFaint+'"><td style="font-weight:700;border-left:3px solid '+acCol+'"><strong>Fuel at destination</strong></td><td style="font-weight:700">'+remKg.toFixed(1)+' kg</td></tr>'
+    +'</table>'
+
+    // Certification
+    +'<div class="sig-block">'
+    +'<table><tr><th colspan="2">PIC Certification</th></tr>'
+    +'<tr><td colspan="2"><span class="cert">I hereby certify that the particulars recorded on the above load sheet are correct'+(a.type&&a.type.includes('208')?' and Part 125 security measures have been followed':'')+'.</span></td></tr>'
+    +(f.sig?'<tr><td style="color:#666;width:30%">Signature</td><td><img src="'+f.sig+'" style="max-height:55px;border:1px solid #ccc;border-radius:3px;display:block;margin:4px 0"></td></tr>':'<tr><td style="color:#666">Signature</td><td style="padding:20px 0">___________________________</td></tr>')
+    +'<tr><td style="color:#666">Name</td><td>'+f.pic+'</td></tr>'
+    +'<tr><td style="color:#666">Date</td><td>'+f.date+'</td></tr>'
+    +'</table>'
     +'</div>'
-    +'<div class="status">'+status+'</div>'
-    +'<h3>Occupants</h3>'
-    +'<table><tr><th>Seat</th><th>Passenger</th><th>Weight (kg)</th><th>Bag (kg)</th><th>Moment</th></tr>'+seatRows+'</table>'
-    +(a.cargo&&a.cargo.length?'<h3>Cargo / Baggage</h3><table><tr><th>Zone</th><th>Weight (kg)</th><th>Moment</th></tr>'+a.cargo.map(function(c,i){var w=(f.cargo&&f.cargo[i])||'';var m=((parseFloat(w)||0)*c.arm).toFixed(0);return w?'<tr><td>'+c.lbl+'</td><td>'+w+'</td><td>'+m+'</td></tr>':''}).join('')+'</table>':'')
-    +'<h3>Fuel</h3>'
-    +'<table><tr><td>Fuel at departure</td><td>'+f.fuel+' kg ('+(f.ac?fromKg(parseFloat(f.fuel),f.ac).toFixed(1):f.fuel)+' '+fuelUnit(f.ac)+')</td></tr>'
-    +'<tr><td>Ground burn</td><td>'+a.gndBurn+' kg</td></tr>'
-    +'<tr><td>Burn off</td><td>'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr></table>'
-    +'<h3>PIC Certification</h3>'
-    +'<p>I hereby certify that the particulars recorded on the above load sheet are correct'+(a.type&&a.type.includes('208')?' and Part 125 security measures have been followed':'')+'.</p>'
-    +(f.sig?'<div class="sig"><img src="'+f.sig+'"></div>':'<p>Signed: ___________________________</p>')
-    +'<p>'+f.pic+' — '+f.date+'</p>'
     +'</body></html>';
 }
 function setupSig(){
@@ -4247,6 +4368,12 @@ window.forceUploadAll=async function(){
     try{
       await uploadToDrive(_sheet,sharedToken);
       _sheet.driveUploaded=true;ok++;
+      // Persist uploaded ID to Supabase + localStorage so it survives reloads
+      (function(sid){
+        var ids=lsGet('ts_drive_uploaded_ids')||[];
+        if(!ids.includes(sid)){ids.push(sid);lsSet('ts_drive_uploaded_ids',ids);}
+        sbU('ts_settings',[{key:'drive_uploaded_ids',value:JSON.stringify(ids)}]).catch(function(){});
+      })(_sheet.id);
       S.uploadProgress='Uploaded '+ok+'/'+pending.length+'…';render();
     }catch(_e){fail++;console.error('Upload failed:',_sheet.id,_e);}
   }
