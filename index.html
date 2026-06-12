@@ -713,7 +713,7 @@ function autoAllocate(){
   } else {
     toast('Seats allocated. Check W&B above.','ok');
   }
-  render();
+  autoSaveDispatch();render();
 }
 
 // ── Seat assignment within one aircraft ──
@@ -1028,7 +1028,7 @@ async function loadAll(){
     // ── Manifests ──
     const ms=await sbF('ts_manifests');
     if(ms){
-      S.manifests=ms.map(r=>({id:r.id,name:r.name,savedAt:r.saved_at,data:r.data}));
+      S.manifests=ms.filter(r=>r.id!=='live_draft').map(r=>({id:r.id,name:r.name,savedAt:r.saved_at,data:r.data}));
       lsSet('ts_manifests_cache',S.manifests);
     } else {
       const cached=lsGet('ts_manifests_cache');
@@ -1198,7 +1198,12 @@ async function reloadTable(table){
     if(ls){S.saved=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});lsSet('ts_loadsheets_cache',S.saved);return true;}
   } else if(table==='ts_manifests'){
     const ms=await sbF('ts_manifests');
-    if(ms){S.manifests=ms.map(function(r){return{id:r.id,name:r.name,savedAt:r.saved_at,data:r.data};});lsSet('ts_manifests_cache',S.manifests);return true;}
+    if(ms){
+      const live=ms.find(function(r){return r.id==='live_draft';});
+      if(live&&live.data)mergeDispatch(live.data);
+      S.manifests=ms.filter(function(r){return r.id!=='live_draft';}).map(function(r){return{id:r.id,name:r.name,savedAt:r.saved_at,data:r.data};});
+      lsSet('ts_manifests_cache',S.manifests);return true;
+    }
   } else if(table==='ts_crew'){
     const crew=await sbF('ts_crew');
     if(crew&&crew.length){
@@ -1252,7 +1257,62 @@ function startPresenceBroadcast(section){
   if(S._presSection===section)return;
   clearInterval(_presInterval);
   broadcastPresence(section);
-  _presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},4000);
+  _presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},12000);
+}
+
+// ── Collaborative manifest ──
+let _autoSaveTimer=null;
+function autoSaveDispatch(){
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer=setTimeout(async function(){
+    if(!S.user)return;
+    S.dispatch._updateTs=Date.now();
+    S.dispatch._updatedBy=S.user.id;
+    await sbU('ts_manifests',[{id:'live_draft',name:'__live__',
+      saved_at:new Date().toISOString(),data:S.dispatch}]);
+  },800);
+}
+
+function mergeDispatch(remote){
+  if(!remote||typeof remote!=='object')return;
+  if(remote._updatedBy===S.user?.id)return; // ignore our own echo
+  const local=S.dispatch;
+
+  // Merge pax by id — higher _ts wins
+  const paxMap={};
+  (local.pax||[]).forEach(function(p){paxMap[p.id]=p;});
+  (remote.pax||[]).forEach(function(p){
+    if(!paxMap[p.id]||(p._ts||0)>(paxMap[p.id]._ts||0)){paxMap[p.id]=p;}
+  });
+  // Remove pax deleted by the other user (not in remote, and remote is more recent overall)
+  if((remote._updateTs||0)>(local._updateTs||0)){
+    const remIds=new Set((remote.pax||[]).map(function(p){return p.id;}));
+    Object.keys(paxMap).forEach(function(id){
+      if(!remIds.has(id)&&(paxMap[id]._ts||0)<(remote._updateTs||0)){delete paxMap[id];}
+    });
+  }
+  S.dispatch.pax=Object.values(paxMap);
+
+  // Merge acSetup by acId — higher _ts wins
+  const acMap={};
+  (local.acSetup||[]).forEach(function(s){acMap[s.acId]=s;});
+  (remote.acSetup||[]).forEach(function(s){
+    if(!acMap[s.acId]||(s._ts||0)>(acMap[s.acId]._ts||0)){acMap[s.acId]=s;}
+  });
+  S.dispatch.acSetup=Object.values(acMap);
+
+  // Top-level flight fields + seatMap: take from remote if it's more recent
+  if((remote._updateTs||0)>(local._updateTs||0)){
+    ['dep','dest','date','etd','etdCustom','name','seatMap','origAcMap'].forEach(function(k){
+      if(remote[k]!==undefined)S.dispatch[k]=remote[k];
+    });
+    S.dispatch._updateTs=remote._updateTs;
+  }
+
+  const who=(S.users||[]).find(function(u){return u.id===remote._updatedBy;});
+  const whoName=who?(who.name||who.email).split(' ')[0]:'Someone';
+  toast(whoName+' updated the manifest','info');
+  render();
 }
 
 // ── Simple auth (hashed with btoa for demo — production would use Supabase Auth) ──
@@ -1721,7 +1781,7 @@ function renderApp(){
             <span title="${S.rtStatus==='live'?'Live — real-time sync active':'Offline — reconnecting...'}" style="width:7px;height:7px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':'#6b7280'};flex-shrink:0;box-shadow:${S.rtStatus==='live'?'0 0 6px #22c55e80':'none'}"></span>
             <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
           </div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.37 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.38 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -1855,16 +1915,16 @@ function renderStep1(){
 
   return`
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-    <input class="fi" type="text" placeholder="Manifest name (e.g. NZQN-NZMF 9 Jun)" value="${d.name||''}" style="flex:1;font-size:13px" onblur="S.dispatch.name=this.value">
+    <input class="fi" type="text" placeholder="Manifest name (e.g. NZQN-NZMF 9 Jun)" value="${d.name||''}" style="flex:1;font-size:13px" onblur="S.dispatch.name=this.value;autoSaveDispatch()">
     <button class="btn btn-ghost" style="font-size:12px" onclick="saveManifest()">💾 Save</button>
     <button class="btn btn-ghost" style="font-size:12px" onclick="S.tab='saved';S.savedTab='manifests';render()">📂 Load</button>
     <button class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>
   </div>
   <div class="card"><div class="st">Flight Details</div>
     <div class="g2">
-      <div><label>Departure</label><select class="fi" onchange="S.dispatch.dep=this.value;render()">${aptOpts(d.dep)}</select></div>
-      <div><label>Destination</label><select class="fi" onchange="S.dispatch.dest=this.value;render()">${aptOpts(d.dest)}</select></div>
-      <div><label>Date</label><input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value"></div>
+      <div><label>Departure</label><select class="fi" onchange="S.dispatch.dep=this.value;autoSaveDispatch();render()">${aptOpts(d.dep)}</select></div>
+      <div><label>Destination</label><select class="fi" onchange="S.dispatch.dest=this.value;autoSaveDispatch();render()">${aptOpts(d.dest)}</select></div>
+      <div><label>Date</label><input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch()"></div>
       <div><label>ETD</label>${etdSelect(d.etd,d.date,"dispatch")}</div>
     </div></div>
   <div class="card"><div class="st">Select Aircraft, PICs & Fuel</div>
@@ -3338,11 +3398,11 @@ window.setTab=function(t){
 window.toggleAcSetup=id=>{
   const i=S.dispatch.acSetup.findIndex(s=>s.acId===id);
   if(i>=0)S.dispatch.acSetup.splice(i,1);
-  else{const a=S.aircraft[id];S.dispatch.acSetup.push({acId:id,pic:'',coPilot:'',fuelInput:a?Math.round(fromKg(a.fuelKg,id)):null});}
+  else{const a=S.aircraft[id];S.dispatch.acSetup.push({acId:id,pic:'',coPilot:'',fuelInput:a?Math.round(fromKg(a.fuelKg,id)):null,_ts:Date.now()}));}
   render();
 };
-window.setAcField=(id,field,val)=>{const s=S.dispatch.acSetup.find(x=>x.acId===id);if(s){s[field]=val;render();}};
-window.addPax=function(infant){S.dispatch.pax.push({id:'p_'+Date.now(),name:'',weight:infant?10:0,bag:0,group:'',pinAc:null,infant:!!infant,type:'adult'});render();};
+window.setAcField=(id,field,val)=>{const s=S.dispatch.acSetup.find(x=>x.acId===id);if(s){s[field]=val;s._ts=Date.now();autoSaveDispatch();render();}};
+window.addPax=function(infant){S.dispatch.pax.push({id:'p_'+Date.now(),name:'',weight:infant?10:0,bag:0,group:'',pinAc:null,_ts:Date.now(),infant:!!infant,type:'adult'});autoSaveDispatch();render();};
 window.addInfant=function(){addPax(true);};
 window.paxNameBlur=function(i,val){
   const plusIdx=val.indexOf(' + ');
@@ -3355,14 +3415,16 @@ window.paxNameBlur=function(i,val){
       S.dispatch.pax[i].infantName=null;
     }
   }
+  if(S.dispatch.pax[i])S.dispatch.pax[i]._ts=Date.now();
+  autoSaveDispatch();
   // Defer render so any simultaneous button click registers first
   setTimeout(render,50);
 };
-window.rmInfant=function(i){S.dispatch.pax[i].infantName=null;render();};
+window.rmInfant=function(i){S.dispatch.pax[i].infantName=null;if(S.dispatch.pax[i])S.dispatch.pax[i]._ts=Date.now();autoSaveDispatch();render();};
 window.lsRmInfant=function(idx){if(S.form.infantNames)delete S.form.infantNames[idx];// also clear from name field if encoded there
 var nm=S.form.names&&S.form.names[idx]||'';if(nm.includes(' + '))S.form.names[idx]=nm.split(' + ')[0].trim();render();};
-window.rmPax=i=>{S.dispatch.pax.splice(i,1);render();};
-window.setPaxField=(i,k,v)=>{if(S.dispatch.pax[i])S.dispatch.pax[i][k]=v;render();};
+window.rmPax=i=>{S.dispatch.pax.splice(i,1);autoSaveDispatch();render();};
+window.setPaxField=(i,k,v)=>{if(S.dispatch.pax[i]){S.dispatch.pax[i][k]=v;S.dispatch.pax[i]._ts=Date.now();autoSaveDispatch();}render();};
 
 // ── Seat map handlers ──
 window.tapPax=pid=>{S.selectedPax=S.selectedPax===pid?null:pid;render();};
@@ -3393,7 +3455,7 @@ window.tapSeat=(toIdx,toAc)=>{
     S.selectedPax=displaced;
   }
   S.solverAutoApply=false;runSolver();S.solverAutoApply=true;
-  render();
+  autoSaveDispatch();render();
 };
 window.toggleViewAc=id=>{
   if(!S.viewAcs)S.viewAcs=[];
@@ -3444,13 +3506,13 @@ window.dropOnSeat=function(ev,toIdx,toAc){
   const movedPax=S.dispatch.pax.find(function(p){return p.id===pid;});
   if(movedPax&&movedPax.infant){toast('🔁 Infant moved — please reweigh passengers to confirm actual weights.','warn');}
   S.solverAutoApply=false;runSolver();S.solverAutoApply=true;
-  render();
+  autoSaveDispatch();render();
 };
 window.dropOnPool=(ev,forceAc)=>{
   ev.preventDefault();if(!S.dragState)return;
   const{fromAc,fromSeat}=S.dragState;
   if(fromAc&&fromAc!=='pool'&&fromSeat!=null){const sm=S.dispatch.seatMap;if(sm[fromAc])delete sm[fromAc][fromSeat];}
-  S.dragState=null;S.selectedPax=null;runSolver();render();
+  S.dragState=null;S.selectedPax=null;runSolver();autoSaveDispatch();render();
 };
 
 // Loadsheet form seat map drag
@@ -3497,7 +3559,7 @@ window.loadManifest=id=>{
   S.tab='manifest';window.scrollTo(0,0);render();
 };
 window.deleteManifest=async id=>{if(!confirm('Delete this manifest?'))return;S.manifests=S.manifests.filter(m=>m.id!==id);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_manifests',id);};
-window.clearManifest=()=>{if(!confirm('Clear all passengers and aircraft?'))return;S.dispatch=bD();S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};render();};
+window.clearManifest=()=>{if(!confirm('Clear all passengers and aircraft?'))return;S.dispatch=bD();sbDel('ts_manifests','live_draft');S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};render();};
 
 // ── Generate loadsheet from manifest ──
 function generateLoadsheet(acId){
@@ -3643,15 +3705,15 @@ window.handleEtdSel=function(sel,key){
   const obj=key==='dispatch'?S.dispatch:(key==='form'?S.form:null);
   if(v==='custom'){
     if(obj){obj.etdCustom=true;obj.etd='';}
-    render();
+    if(key==='dispatch')autoSaveDispatch();render();
   } else {
     if(obj){obj.etd=v;obj.etdCustom=false;}
-    render();
+    if(key==='dispatch')autoSaveDispatch();render();
   }
 };
 window.handleEtdCustom=function(inp,key){
   const obj=key==='dispatch'?S.dispatch:(key==='form'?S.form:null);
-  if(obj){obj.etd=inp.value;}
+  if(obj){obj.etd=inp.value;if(key==='dispatch')autoSaveDispatch();}
 };
 
 // ── Route Map (Leaflet) ──
