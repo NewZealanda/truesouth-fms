@@ -1664,7 +1664,7 @@ function renderStep1(){
     const paxOnAc=d.pax.filter(p=>p.pinAc===a.id&&!p.infant).length;
     const capOnAc=paxSeatIdxs(a.id).length;
     const overBy=sel&&paxOnAc>capOnAc?paxOnAc-capOnAc:0;
-    return`<div class="ac-card ${sel?'selected':''}" style="position:relative;${sel?`border-color:${col}`:''}" onclick="toggleAcSetup('${a.id}')">
+    return`<div class="ac-card ${sel?'selected':''}" style="position:relative;${sel?`border-color:${col};background:${col}1a;box-shadow:0 0 0 1px ${col}55`:''}" onclick="toggleAcSetup('${a.id}')">
       ${overBy>0?`<div style="position:absolute;top:-8px;right:-8px;background:#ef4444;color:#fff;font-size:10px;font-weight:800;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--bg);z-index:10;pointer-events:none">+${overBy}</div>`:''}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${sel?'10px':'0'}">
         <div style="display:flex;align-items:center;gap:10px">
@@ -2180,10 +2180,36 @@ function renderLoadsheet(){
         </div>
       </div>`;
     }).join('');
+    const isPod=a.cargo.length>1&&a.cargo[0]?.lbl?.startsWith('Pod');
+    const podColors=['rgba(59,130,246,.15)','rgba(16,185,129,.15)','rgba(245,158,11,.15)','rgba(168,85,247,.15)'];
+    const podBorders=['rgba(59,130,246,.5)','rgba(16,185,129,.5)','rgba(245,158,11,.5)','rgba(168,85,247,.5)'];
+    const podTextColors=['#60a5fa','#34d399','#fbbf24','#c084fc'];
+    // ── Pod zone inline inputs (injected into left column of seatsH) ──
+    const podZonesInlineH=(()=>{
+      if(!isPod) return '';
+      const boxes=a.cargo.map((zn,zi)=>{
+        const w=f.cargo[zi]||'';
+        return`<div style="background:${podColors[zi%4]};border:1px solid ${podBorders[zi%4]};border-radius:8px;padding:7px 9px">
+          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:${podTextColors[zi%4]};text-transform:uppercase;margin-bottom:4px">${zn.lbl.replace('Pod ','Z')}${zn.maxKg?' · max '+zn.maxKg+'kg':''}</div>
+          <div style="display:flex;align-items:baseline;gap:4px">
+            <input class="fi" type="number" placeholder="0" value="${w}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
+            <span style="font-size:11px;color:${podTextColors[zi%4]}">kg</span>
+          </div>
+          ${w?`<div style="font-size:10px;color:${podTextColors[zi%4]};margin-top:2px">mom ${((parseFloat(w)||0)*zn.arm).toFixed(0)}</div>`:''}
+        </div>`;
+      }).join('');
+      return`<div style="margin-top:8px">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:5px">Pod Cargo</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">${boxes}</div>
+      </div>`;
+    })();
     seatsH=`<div class="card"><div class="st">Seats &amp; Passengers</div>
       ${wbSummary}
       <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-        <div style="flex-shrink:0">${renderCabinSVG(f.ac,false,f,window.innerWidth<=520?46:60,window.innerWidth<=520?40:50)}</div>
+        <div style="flex-shrink:0">
+          ${renderCabinSVG(f.ac,false,f,window.innerWidth<=520?46:60,window.innerWidth<=520?40:50)}
+          ${podZonesInlineH}
+        </div>
         <div style="flex:1;min-width:200px">
           ${picCard}
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${seatCards}</div>
@@ -2195,10 +2221,6 @@ function renderLoadsheet(){
       </div>
     </div>`;
 
-    const isPod=a.cargo.length>1&&a.cargo[0]?.lbl?.startsWith('Pod');
-    const podColors=['rgba(59,130,246,.15)','rgba(16,185,129,.15)','rgba(245,158,11,.15)','rgba(168,85,247,.15)'];
-    const podBorders=['rgba(59,130,246,.5)','rgba(16,185,129,.5)','rgba(245,158,11,.5)','rgba(168,85,247,.5)'];
-    const podTextColors=['#60a5fa','#34d399','#fbbf24','#c084fc'];
     if(isPod){
       // Aircraft silhouette SVG with coloured zone overlays
       const nz=a.cargo.length;
@@ -2232,7 +2254,7 @@ function renderLoadsheet(){
           <div style="font-size:11px;color:${podTextColors[zi%4]};margin-top:4px">${w?'mom '+(((parseFloat(w)||0)*zn.arm).toFixed(0)):''}</div>
         </div>`;
       }).join('');
-      cargoH=`<div class="card"><div class="st">Pod Cargo</div>${fusSVG}<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${zoneBoxes}</div></div>`;
+      cargoH=''; // pod zones moved into seatmap left column
     } else {
       cargoH=`<div class="card"><div class="st">Cargo / Baggage</div>
         ${a.cargo.map((zn,i)=>{const w=f.cargo[i]||'';
@@ -3366,7 +3388,15 @@ function generateLoadsheet(acId){
 };
 
 // ── Loadsheet form handlers ──
-window.lsAc=v=>{S.form.ac=v;S.form.seats={};S.form.bags={};S.form.names={};S.form.cargo={};S.form.fuel='';S.form.burnOff='';S.form.sig=null;render();};
+window.lsAc=v=>{
+  // Preserve passenger names/weights/bags when switching aircraft
+  const kN=S.form.names||{},kS=S.form.seats||{},kB=S.form.bags||{},kI=S.form.infantNames||{};
+  S.form.ac=v;
+  S.form.names=kN;S.form.seats=kS;S.form.bags=kB;S.form.infantNames=kI;
+  // Reset aircraft-specific fields only
+  S.form.cargo={};S.form.fuel='';S.form.burnOff='';S.form.sig=null;
+  render();
+};
 window.lsPIC=v=>{S.form.pic=v;const c=pilotCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[0]=String(c.w);S.form.names[0]=v;}else{S.form.names[0]=v;}render();};
 window.lsCoPilot=v=>{S.form.coPilot=v;const c=pilotCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[1]=String(c.w);S.form.names[1]=v;}else{delete S.form.seats[1];delete S.form.names[1];}render();};
 window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;render();};window.lsB=(i,v)=>{S.form.bags[i]=v;render();};window.lsC=(i,v)=>{S.form.cargo[i]=v;render();};
