@@ -1757,7 +1757,7 @@ function renderLoginInner(){
 ${S.resetStep===1?`<div style='margin-top:16px;padding:14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:10px'><div style='font-size:13px;color:#6ee7b7;margin-bottom:10px;font-weight:600'>📧 Reset email sent to ${S.resetEmail||'your email'}</div><div id='reset-err' style='display:none;color:#fca5a5;font-size:12px;margin-bottom:8px;background:rgba(239,68,68,.1);padding:6px 10px;border-radius:6px'></div><input id='li_reset_code' type='text' maxlength='6' placeholder='6-digit code' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:18px;text-align:center;letter-spacing:4px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_pw' type='password' placeholder='New password (min 6 chars)' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_conf' type='password' placeholder='Confirm new password' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:10px' onkeydown="if(event.key==='Enter')window.handleReset()"><div style='display:flex;gap:8px'><button onclick='window.handleReset()' style='flex:2;padding:10px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer'>Set New Password</button><button onclick='S.resetStep=0;S.resetCode=null;render()' style='flex:1;padding:10px;background:rgba(255,255,255,.08);border:none;border-radius:8px;color:rgba(255,255,255,.6);font-size:12px;cursor:pointer'>Cancel</button></div></div>`:''}
       </div>
       <div style="text-align:center;margin-top:20px;font-size:11px;color:rgba(255,255,255,.2)">True South Flights Ltd · Queenstown, New Zealand</div>
-      <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">v20.86</div>
+      <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">v20.87</div>
     </div>
   </div>`;
 }
@@ -1881,7 +1881,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <span title="${S.rtStatus==='live'?'Live — real-time sync active':'Offline — reconnecting...'}" style="width:8px;height:8px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':'#6b7280'};flex-shrink:0;box-shadow:${S.rtStatus==='live'?'0 0 6px #22c55e80':'none'}"></span>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.86 · 13 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.87 · 13 Jun</div>
           <button tabindex="-1" title="${S.wideMode?'Switch to compact width':'Switch to full width'}" onclick="event.stopPropagation();S.wideMode=!S.wideMode;lsSet('ts_wide_mode',S.wideMode);render()" style="background:var(--border);border:none;padding:3px 7px;border-radius:5px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1" title="Toggle width">${S.wideMode?'⇤⇥':'↔'}</button>
           <div style="display:flex;align-items:center;gap:4px">
             <button tabindex="-1" onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
@@ -3513,15 +3513,36 @@ window.setTab=function(t){
     S.maintenance={hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{},_loading:true};
     loadMaintenanceFromCloud().then(function(cloud){
       if(cloud&&cloud.hist){
+        // Cloud has data — use it
         S.maintenance=cloud;
+        render();
+      } else {
+        // Cloud empty — check if localStorage has data to migrate up
+        var local=lsGet('ts_maintenance');
+        if(local&&local.hist&&local.hist.length>0){
+          S.maintenance=local;
+          // Push localStorage data to Supabase (one-time migration)
+          sbU('ts_settings',[{key:'maintenance',value:JSON.stringify(local)}]).then(function(){
+            toast('Maintenance data synced to cloud ✓','ok');
+          }).catch(function(){
+            toast('Could not sync maintenance to cloud.','warn');
+          });
+          render();
+        } else {
+          S.maintenance._loading=false;
+          S.maintenance._loadFailed=true;
+          render();
+        }
+      }
+    }).catch(function(){
+      // Network error — fall back to localStorage silently
+      var local=lsGet('ts_maintenance');
+      if(local&&local.hist&&local.hist.length>0){
+        S.maintenance=local;
       } else {
         S.maintenance._loading=false;
         S.maintenance._loadFailed=true;
       }
-      render();
-    }).catch(function(){
-      S.maintenance._loading=false;
-      S.maintenance._loadFailed=true;
       render();
     });
   }
