@@ -1038,7 +1038,7 @@ async function loadAll(){
     // ── Users ──
     const us=await sbF('ts_users');
     if(us&&us.length){
-      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||''}));
+      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||false}));
       lsSet('ts_users_cache',S.users);
     } else {
       const cached=lsGet('ts_users_cache');
@@ -1279,12 +1279,22 @@ function pilotCrewList(){
     const uName=(u.name||u.email||'').trim();
     if(!uName)return;
     const linked=(u.linkedCrew||'').trim().toLowerCase();
-    // Already in list via crew record?
+    const uNameLower=uName.toLowerCase();
+    // Already in list? Match by linkedCrew name OR user display name
     const already=list.find(function(cr){
-      return (cr.n||'').trim().toLowerCase()===(linked||uName.toLowerCase());
+      const crn=(cr.n||'').trim().toLowerCase();
+      return crn===(linked||uNameLower)||crn===uNameLower||(linked&&crn===linked);
     });
     if(!already){
-      list.push({id:'_u_'+u.id,n:uName,w:0,endorse:[]});
+      // Try to find crew record by any name fragment
+      const crewMatch=S.crew.find(function(cr){
+        const crn=(cr.n||'').trim().toLowerCase();
+        return crn.includes(uNameLower)||uNameLower.includes(crn)||
+               (linked&&(crn.includes(linked)||linked.includes(crn)));
+      });
+      const w=crewMatch?crewMatch.w:(u.weight||0);
+      const endorse=crewMatch?crewMatch.endorse||[]:[];
+      list.push({id:'_u_'+u.id,n:uName,w:w,endorse:endorse});
     }
   });
   return list;
@@ -3436,9 +3446,9 @@ function etdSelect(val,dateStr,dispatchKey){
   opts.forEach(function(t){h+='<option value="'+t+'"'+(val===t?' selected':'')+'>'+t+'</option>';});
   h+='<option value="custom"'+(isCustom?' selected':'')+'>Other…</option>';
   h+='</select>';
-  h+='<input type="time" class="fi" id="etd_'+dispatchKey+'" ';
+  h+='<input type="text" class="fi" id="etd_'+dispatchKey+'" placeholder="e.g. 15:30" ';
   h+='style="flex:1;display:'+(isCustom?'block':'none')+'" ';
-  h+='value="'+(isCustom?val:'')+'" onchange="'+oc2+'">';
+  h+='value="'+(isCustom?val:'')+'" oninput="'+oc2+'">';
   h+='</div>';
   return h;
 }
@@ -3455,7 +3465,7 @@ window.handleEtdSel=function(sel,key){
 };
 window.handleEtdCustom=function(inp,key){
   const obj=key==='dispatch'?S.dispatch:(key==='form'?S.form:null);
-  if(obj){obj.etd=inp.value;if(inp.value)obj.etdCustom=false;}
+  if(obj){obj.etd=inp.value;}
 };
 
 // ── Route Map (Leaflet) ──
@@ -3754,8 +3764,8 @@ window.savePerson=async function(){
       userId=userId||('u_'+Date.now());
       const existing=S.users.find(function(x){return x.id===userId;});
       const userRec=existing
-        ?{...existing,name:finalName,email:d.email,role:isAdmin?(d.role||existing.role):existing.role,linkedCrew:finalName}
-        :{id:userId,name:finalName,email:d.email,role:d.role||'desk',linkedCrew:finalName,passwordHash:''};
+        ?{...existing,name:finalName,email:d.email,role:isAdmin?(d.role||existing.role):existing.role,linkedCrew:finalName,weight:parseFloat(d.w)||existing?.weight||0}
+        :{id:userId,name:finalName,email:d.email,role:d.role||'desk',linkedCrew:finalName,passwordHash:'',weight:parseFloat(d.w)||0};
       if(d.password) userRec.passwordHash=await hashPw(d.password);
       else if(!existing&&!d.password){toast('Password required for new login account','warn');return;}
       const confPwEl=document.getElementById('pm_confpw');
@@ -3764,7 +3774,7 @@ window.savePerson=async function(){
       const uIdx=S.users.findIndex(function(x){return x.id===userId;});
       if(uIdx>=0) S.users[uIdx]=userRec;else S.users.push(userRec);
       lsSet('ts_users_cache',S.users);
-      await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,role:userRec.role,linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash}]);
+      await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,role:userRec.role,linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash,weight:userRec.weight||0}]);
     }
   }
 
