@@ -205,18 +205,13 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
   .nav-bar{padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(4px,env(safe-area-inset-bottom));}
 }
 
-/* Bigger oil/number input spinner arrows */
+/* Hide all number input spinners */
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button {
-  -webkit-appearance: auto;
-  opacity: 0.7;
-  width: 18px;
-  cursor: pointer;
+  -webkit-appearance: none;
+  margin: 0;
 }
-input[type=number]:hover::-webkit-inner-spin-button,
-input[type=number]:hover::-webkit-outer-spin-button {
-  opacity: 1;
-}
+input[type=number] { -moz-appearance: textfield; }
 </style>
 </head>
 <body>
@@ -1733,7 +1728,7 @@ function renderLoginInner(){
         <div style="margin-bottom:24px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <label style="font-size:11px;font-weight:600;color:rgba(255,255,255,.45);letter-spacing:.5px;text-transform:uppercase">Password</label>
-            <button onclick="window.handleForgot()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:11px;cursor:pointer;padding:0">Forgot password?</button>
+            <button tabindex="-1" onclick="window.handleForgot()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:11px;cursor:pointer;padding:0">Forgot password?</button>
           </div>
           <input id="li_p" type="password" autocomplete="current-password" placeholder="••••••••"
             style="width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box"
@@ -1743,6 +1738,7 @@ function renderLoginInner(){
 ${S.resetStep===1?`<div style='margin-top:16px;padding:14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:10px'><div style='font-size:13px;color:#6ee7b7;margin-bottom:10px;font-weight:600'>📧 Reset email sent to ${S.resetEmail||'your email'}</div><div id='reset-err' style='display:none;color:#fca5a5;font-size:12px;margin-bottom:8px;background:rgba(239,68,68,.1);padding:6px 10px;border-radius:6px'></div><input id='li_reset_code' type='text' maxlength='6' placeholder='6-digit code' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:18px;text-align:center;letter-spacing:4px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_pw' type='password' placeholder='New password (min 6 chars)' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_conf' type='password' placeholder='Confirm new password' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:10px' onkeydown="if(event.key==='Enter')window.handleReset()"><div style='display:flex;gap:8px'><button onclick='window.handleReset()' style='flex:2;padding:10px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer'>Set New Password</button><button onclick='S.resetStep=0;S.resetCode=null;render()' style='flex:1;padding:10px;background:rgba(255,255,255,.08);border:none;border-radius:8px;color:rgba(255,255,255,.6);font-size:12px;cursor:pointer'>Cancel</button></div></div>`:''}
       </div>
       <div style="text-align:center;margin-top:20px;font-size:11px;color:rgba(255,255,255,.2)">True South Flights Ltd · Queenstown, New Zealand</div>
+      <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">v20.65</div>
     </div>
   </div>`;
 }
@@ -1869,7 +1865,7 @@ function renderApp(){
             <span title="${S.rtStatus==='live'?'Live — real-time sync active':'Offline — reconnecting...'}" style="width:7px;height:7px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':'#6b7280'};flex-shrink:0;box-shadow:${S.rtStatus==='live'?'0 0 6px #22c55e80':'none'}"></span>
             <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
           </div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.63 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.64 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button tabindex="-1" onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button tabindex="-1" onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -2442,7 +2438,7 @@ function renderLoadsheet(){
         const gc=grp?groupColor(grp):null;
         const hasPerson=nm||parseFloat(wt);
         return`<div style="position:relative;background:var(--card2);border-radius:7px;padding:6px 8px;border-left:3px solid ${hasPerson?(gc||'var(--accent)'):'var(--border2)'}">
-          ${hasPerson?`<button onclick="window.lsDelPax(${idx})" title="Remove passenger" style="position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:10px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;z-index:1">×</button>`:''}
+          ${hasPerson?`<button onclick="window.lsDelPax(${idx})" title="Remove passenger" style="position:absolute;top:3px;right:3px;width:12px;height:12px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:8px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;z-index:1;opacity:0.45" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.45'">×</button>`:''}
           <div style="display:flex;align-items:center;gap:4px;margin-bottom:${infantNm?'2px':'4px'}">
             <span style="font-size:9px;font-weight:700;color:var(--text3);width:18px">${s.lbl}</span>
             <input class="fi" type="text" value="${displayNm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px" onblur="lsN(${idx},this.value)">
@@ -2475,7 +2471,7 @@ function renderLoadsheet(){
         return`<div style="background:${podColors[zi%4]};border:1px solid ${podBorders[zi%4]};border-radius:8px;padding:7px 9px">
           <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:${podTextColors[zi%4]};text-transform:uppercase;margin-bottom:4px">${zn.lbl.replace('Pod ','Z')}${zn.maxKg?' · max '+zn.maxKg+'kg':''}</div>
           <div style="display:flex;align-items:baseline;gap:4px">
-            <input class="fi" type="number" placeholder="0" value="${w}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
+            <input class="fi ls-no-spin" type="number" placeholder="0" value="${w}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
             <span style="font-size:11px;color:${podTextColors[zi%4]}">kg</span>
           </div>
           ${w?`<div style="font-size:10px;color:${podTextColors[zi%4]};margin-top:2px">mom ${((parseFloat(w)||0)*zn.arm).toFixed(0)}</div>`:''}
@@ -2531,7 +2527,7 @@ function renderLoadsheet(){
         return`<div style="background:${podColors[zi%4]};border:1px solid ${podBorders[zi%4]};border-radius:10px;padding:10px 12px">
           <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:${podTextColors[zi%4]};text-transform:uppercase;margin-bottom:6px">${zn.lbl}${zn.maxKg?' · max '+zn.maxKg+'kg':''}</div>
           <div style="display:flex;align-items:baseline;gap:5px">
-            <input class="fi" type="number" placeholder="0" value="${w}" style="font-size:20px;font-weight:800;width:70px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
+            <input class="fi ls-no-spin" type="number" placeholder="0" value="${w}" style="font-size:20px;font-weight:800;width:70px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
             <span style="font-size:12px;color:${podTextColors[zi%4]}">kg</span>
           </div>
           <div style="font-size:11px;color:${podTextColors[zi%4]};margin-top:4px">${w?'mom '+(((parseFloat(w)||0)*zn.arm).toFixed(0)):''}</div>
@@ -2552,7 +2548,7 @@ function renderLoadsheet(){
       <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:6px">Fuel Loaded</div>
         <div style="display:flex;align-items:baseline;gap:5px">
-          <input class="fi" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:20px;font-weight:800;width:80px;padding:0;background:transparent;border:none;border-bottom:1px solid rgba(59,130,246,.4);color:var(--text)" onblur="lsFuel(this.value,'${f.ac}')">
+          <input class="fi ls-no-spin" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:20px;font-weight:800;width:80px;padding:0;background:transparent;border:none;border-bottom:1px solid rgba(59,130,246,.4);color:var(--text)" onblur="lsFuel(this.value,'${f.ac}')">
           <span style="font-size:12px;color:#60a5fa">${fuelUnit_}</span>
         </div>
         <div style="font-size:11px;color:#60a5fa;margin-top:4px">= ${fuelKgVal.toFixed(1)} kg</div>
@@ -2565,7 +2561,7 @@ function renderLoadsheet(){
       <div style="background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.30);border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#f87171;text-transform:uppercase;margin-bottom:6px">Flight Burn</div>
         <div style="display:flex;align-items:baseline;gap:5px">
-          <input class="fi" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:20px;font-weight:800;width:80px;padding:0;background:transparent;border:none;border-bottom:1px solid rgba(239,68,68,.4);color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
+          <input class="fi ls-no-spin" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:20px;font-weight:800;width:80px;padding:0;background:transparent;border:none;border-bottom:1px solid rgba(239,68,68,.4);color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
           <span style="font-size:12px;color:#f87171">${a?.layout==='ga8'?'L':burnUnit_}</span>
         </div>
         <div style="font-size:11px;color:#f87171;margin-top:4px">= ${burnKgVal.toFixed(1)} kg · ≈ ${flightMin} min</div>
@@ -3713,7 +3709,7 @@ window.lsAc=v=>{
   if(newA){
     const excess=Object.keys(kS).filter(i=>parseInt(i)>=newA.seats.length&&parseFloat(kS[i])>0).length
               +Object.keys(kN).filter(i=>parseInt(i)>=newA.seats.length&&kN[i]).length;
-    if(excess>0)toast('⚠ '+acDisp(v)+' only has '+(newA.seats.length-1)+' pax seats — '+excess+' passenger(s) exceed capacity and will be excluded from W&B.','warn');
+    if(excess>0){if(!confirm('⚠ '+acDisp(v)+' only has '+(newA.seats.length-1)+' pax seats.\n\n'+excess+' passenger(s) exceed capacity and will not be included in W&B calculations.\n\nSwitch aircraft anyway?')){S.form.ac=S.form.ac;return;}toast('⚠ '+excess+' pax exceed '+acDisp(v)+''s capacity — excluded from W&B.','warn');}
   }
   render();
 };
@@ -4677,19 +4673,17 @@ function renderMaintLog(){
       <div><label style="font-size:11px;color:var(--text3)">Date</label>
         <input type="date" class="fi" id="ml_date" value="${editDate||today}" style="font-size:12px"></div>
       <div><label style="font-size:11px;color:${AC_COL[selAc]||'#888'}">TTIS Hours (day-end)</label>
-        <input type="number" class="fi" id="ml_hours" step="0.1" value="${editDate&&editEntry[selAc]!=null?editEntry[selAc]:''}" placeholder="${prevHrs?'Prev: '+prevHrs.toFixed(1)+' hrs':'e.g. 8460.5'}" style="font-size:12px" oninput="window.calcHoursUsed()"></div>
+        <input type="number" class="fi ls-no-spin" id="ml_hours" step="0.1" class="fi ls-no-spin" value="${editDate&&editEntry[selAc]!=null?editEntry[selAc]:''}" placeholder="${prevHrs?'Prev: '+prevHrs.toFixed(1)+' hrs':'e.g. 8460.5'}" style="font-size:12px" oninput="window.calcHoursUsed()"></div>
       <div><label style="font-size:11px;color:var(--text3)">Hours Used</label>
-        <input type="number" class="fi" id="ml_used" step="0.1" placeholder="${prevHrs?'From '+prevHrs.toFixed(1):'—'}" style="font-size:12px" oninput="window.calcTTIS()"></div>
+        <input type="number" class="fi ls-no-spin" id="ml_used" step="0.1" class="fi ls-no-spin" placeholder="${prevHrs?'From '+prevHrs.toFixed(1):'—'}" style="font-size:12px" oninput="window.calcTTIS()"></div>
       <div><label style="font-size:11px;color:var(--text3)">Starts</label>
-        <input type="number" class="fi" id="ml_starts" step="1" min="0" placeholder="0" style="font-size:12px"></div>
+        <input type="number" class="fi ls-no-spin" id="ml_starts" step="1" min="0" class="fi ls-no-spin" placeholder="0" style="font-size:12px"></div>
       <div><label style="font-size:11px;color:var(--text3)">Landings</label>
-        <input type="number" class="fi" id="ml_landings" step="1" min="0" placeholder="0" style="font-size:12px"></div>
+        <input type="number" class="fi ls-no-spin" id="ml_landings" step="1" min="0" class="fi ls-no-spin" placeholder="0" style="font-size:12px"></div>
       <div><label style="font-size:11px;color:#f59e0b">Oil (qts)</label>
-        <input type="number" class="fi" id="ml_oil" step="1" min="0" placeholder="0" style="font-size:12px"></div>
-      <div><label style="font-size:11px;color:#06b6d4">Comp Wash Done</label>
-        <select class="fi" id="ml_compwash" style="font-size:12px"><option value="">—</option><option value="done">✓ Done today</option></select></div>
-      <div><label style="font-size:11px;color:#a78bfa">ADAS Download Done</label>
-        <select class="fi" id="ml_adas" style="font-size:12px"><option value="">—</option><option value="done">✓ Done today</option></select></div>
+        <input type="number" class="fi ls-no-spin" id="ml_oil" step="1" min="0" class="fi ls-no-spin" placeholder="0" style="font-size:12px"></div>
+      <div style="display:flex;align-items:center;gap:8px;padding-top:14px"><input type="checkbox" id="ml_compwash" style="width:16px;height:16px;accent-color:#06b6d4;cursor:pointer"><label for="ml_compwash" style="font-size:12px;color:#06b6d4;cursor:pointer;font-weight:600">Comp Wash Done</label></div>
+      <div style="display:flex;align-items:center;gap:8px;padding-top:14px"><input type="checkbox" id="ml_adas" style="width:16px;height:16px;accent-color:#a78bfa;cursor:pointer"><label for="ml_adas" style="font-size:12px;color:#a78bfa;cursor:pointer;font-weight:600">ADAS Download Done</label></div>
     </div>
     <div style="margin-bottom:10px"><label style="font-size:11px;color:var(--text3)">Comment</label>
       <input type="text" class="fi" id="ml_comment" placeholder="Maintenance, snags, weather etc." style="font-size:12px"></div>
@@ -5109,8 +5103,8 @@ window.saveMaintField=function(date,ac,field,rawVal){
   render();
 };
 window.addMaintEntry=function(){
-  const cwSel=document.getElementById('ml_compwash')?.value;
-  const adasSel=document.getElementById('ml_adas')?.value;
+  const cwSel=document.getElementById('ml_compwash')?.checked?'done':'';
+  const adasSel=document.getElementById('ml_adas')?.checked?'done':'';
   const date=document.getElementById('ml_date')?.value;
   if(!date){toast('Select a date.','warn');return;}
   const ac=S.maintEntryAc||'ZK-SLD';
