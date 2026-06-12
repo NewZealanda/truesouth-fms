@@ -1719,9 +1719,9 @@ function renderLoginInner(){
         <form id="login-form" action="javascript:void(0)" onsubmit="window.tryLogin();return false" autocomplete="on"><div style="margin-bottom:16px">
           <label style="display:block;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase">Email</label>
           <div style="display:flex;align-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;overflow:hidden">
-            <input id="li_e" type="text" autocomplete="username" placeholder="you"
+            <input id="li_e" type="text" autocomplete="username" placeholder="yourname@truesouthflights.co.nz"
               style="flex:1;padding:11px 14px;background:transparent;border:none;color:#fff;font-size:14px;outline:none;min-width:0"
-              oninput="window.updateLoginSuffix()" onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
+              oninput="window.updateLoginSuffix()" onfocus="if(!this.value)document.getElementById('li_e_sfx').style.display='inline';window.updateLoginSuffix()" onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
             <span id="li_e_sfx" style="padding:0 12px 0 0;color:rgba(255,255,255,.35);font-size:12px;white-space:nowrap">@truesouthflights.co.nz</span>
           </div>
         </div>
@@ -1730,7 +1730,7 @@ function renderLoginInner(){
             <label style="font-size:11px;font-weight:600;color:rgba(255,255,255,.45);letter-spacing:.5px;text-transform:uppercase">Password</label>
             <button tabindex="-1" onclick="window.handleForgot()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:11px;cursor:pointer;padding:0">Forgot password?</button>
           </div>
-          <input id="li_p" type="password" autocomplete="current-password" placeholder="••••••••"
+          <input id="li_p" type="password" autocomplete="current-password" placeholder="••••••••••••"
             style="width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box"
             onkeydown="if(event.key==='Enter')window.tryLogin();else if(event.key==='Backspace'&&S.loginErr&&this.value){this.value='';event.preventDefault();}">
         </div>
@@ -1738,7 +1738,7 @@ function renderLoginInner(){
 ${S.resetStep===1?`<div style='margin-top:16px;padding:14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:10px'><div style='font-size:13px;color:#6ee7b7;margin-bottom:10px;font-weight:600'>📧 Reset email sent to ${S.resetEmail||'your email'}</div><div id='reset-err' style='display:none;color:#fca5a5;font-size:12px;margin-bottom:8px;background:rgba(239,68,68,.1);padding:6px 10px;border-radius:6px'></div><input id='li_reset_code' type='text' maxlength='6' placeholder='6-digit code' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:18px;text-align:center;letter-spacing:4px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_pw' type='password' placeholder='New password (min 6 chars)' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_conf' type='password' placeholder='Confirm new password' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:10px' onkeydown="if(event.key==='Enter')window.handleReset()"><div style='display:flex;gap:8px'><button onclick='window.handleReset()' style='flex:2;padding:10px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer'>Set New Password</button><button onclick='S.resetStep=0;S.resetCode=null;render()' style='flex:1;padding:10px;background:rgba(255,255,255,.08);border:none;border-radius:8px;color:rgba(255,255,255,.6);font-size:12px;cursor:pointer'>Cancel</button></div></div>`:''}
       </div>
       <div style="text-align:center;margin-top:20px;font-size:11px;color:rgba(255,255,255,.2)">True South Flights Ltd · Queenstown, New Zealand</div>
-      <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">v20.65</div>
+      <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">v20.66</div>
     </div>
   </div>`;
 }
@@ -3709,7 +3709,7 @@ window.lsAc=v=>{
   if(newA){
     const excess=Object.keys(kS).filter(i=>parseInt(i)>=newA.seats.length&&parseFloat(kS[i])>0).length
               +Object.keys(kN).filter(i=>parseInt(i)>=newA.seats.length&&kN[i]).length;
-    if(excess>0){if(!confirm('⚠ '+acDisp(v)+' only has '+(newA.seats.length-1)+' pax seats.\n\n'+excess+' passenger(s) exceed capacity and will not be included in W&B calculations.\n\nSwitch aircraft anyway?')){S.form.ac=S.form.ac;return;}toast('⚠ '+excess+' pax exceed '+acDisp(v)+''s capacity — excluded from W&B.','warn');}
+    if(excess>0){if(!confirm('⚠ '+acDisp(v)+' only has '+(newA.seats.length-1)+' pax seats.\n\n'+excess+' passenger(s) exceed capacity and will not be included in W&B calculations.\n\nSwitch aircraft anyway?')){S.form.ac=S.form.ac;return;}toast('⚠ '+excess+' pax exceed '+acDisp(v)+' capacity — excluded from W&B.','warn');}
   }
   render();
 };
