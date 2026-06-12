@@ -928,8 +928,8 @@ function runSolver(){
 
 
 // ── State ──
-function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
-function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},fuel:'',burnOff:'',sig:null};}
+function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
+function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},fuel:'',burnOff:'',sig:null};}
 
 let S={
   // Auth
@@ -2131,18 +2131,21 @@ function renderLoadsheet(){
       const nm=f.names[idx]||'';
       const wt=f.seats[idx]||'';
       const bg=f.bags[idx]||'';
-      const infantNm=f.infantNames?.[idx]||'';
-      const mom=((parseFloat(wt)||0)+(parseFloat(bg)||0))*s.arm;
-      const grp=S.dispatch.pax.find(p=>p.name===nm)?.group||'';
+      // Infant: stored in infantNames or embedded in name as "Name + Baby"
+      const rawInfant=f.infantNames?.[idx]||'';
+      const nameHasInfant=nm.includes(' + ');
+      const displayNm=nameHasInfant?nm.split(' + ')[0]:nm;
+      const infantNm=rawInfant||(nameHasInfant?nm.split(' + ').slice(1).join(' + '):'');
+      const grp=S.dispatch.pax.find(p=>p.name===nm||p.name===displayNm)?.group||'';
       const gc=grp?groupColor(grp):null;
       const hasPerson=nm||parseFloat(wt);
       return`<div style="background:var(--card2);border-radius:7px;padding:6px 8px;border-left:3px solid ${hasPerson?(gc||'var(--accent)'):'var(--border2)'}">
-        <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:${infantNm?'2px':'4px'}">
           <span style="font-size:9px;font-weight:700;color:var(--text3);width:18px">${s.lbl}</span>
-          <input class="fi" type="text" value="${nm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px;${nm&&nm.includes('+')?'color:#db2777;font-weight:700':''}" onblur="lsN(${idx},this.value)">
+          <input class="fi" type="text" value="${displayNm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px" onblur="lsN(${idx},this.value)">
         </div>
         ${infantNm?`<div style="font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}</div>`:''}
-        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:4px;align-items:center">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
           <div>
             <div style="font-size:8px;color:var(--text3)">WT kg</div>
             <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px" onblur="lsS(${idx},this.value)">
@@ -2150,10 +2153,6 @@ function renderLoadsheet(){
           <div>
             <div style="font-size:8px;color:var(--text3)">BAG kg</div>
             <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px" onblur="lsB(${idx},this.value)">
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:8px;color:var(--text3)">MOM</div>
-            <div style="font-size:10px;color:var(--text3)">${mom.toFixed(0)}</div>
           </div>
         </div>
       </div>`;
@@ -2173,13 +2172,52 @@ function renderLoadsheet(){
       </div>
     </div>`;
 
-    cargoH=`<div class="card"><div class="st">Cargo / Baggage</div>
-      ${a.cargo.map((c,i)=>{const w=f.cargo[i]||'',mom=((parseFloat(w)||0)*c.arm).toFixed(0);
-        return`<div style="display:grid;grid-template-columns:1.8fr 1.2fr .7fr;gap:8px;align-items:end;padding:6px 0;border-bottom:1px solid var(--border)">
-          <div><label>${c.lbl}${c.maxKg?` (max ${c.maxKg}kg)`:''}</label></div>
-          <input class="fi" type="number" placeholder="kg" value="${w}" style="font-size:13px" onblur="lsC(${i},this.value)">
-          <div style="text-align:right;font-size:12px;color:var(--text3);padding-bottom:2px">${mom}</div>
-        </div>`;}).join('')}</div>`;
+    const isPod=a.cargo.length>1&&a.cargo[0]?.lbl?.startsWith('Pod');
+    const podColors=['rgba(59,130,246,.15)','rgba(16,185,129,.15)','rgba(245,158,11,.15)','rgba(168,85,247,.15)'];
+    const podBorders=['rgba(59,130,246,.5)','rgba(16,185,129,.5)','rgba(245,158,11,.5)','rgba(168,85,247,.5)'];
+    const podTextColors=['#60a5fa','#34d399','#fbbf24','#c084fc'];
+    if(isPod){
+      // Aircraft silhouette SVG with coloured zone overlays
+      const nz=a.cargo.length;
+      const zoneW=Math.floor(100/nz);
+      const zoneSVG=a.cargo.map((zn,zi)=>{
+        const x=zi*zoneW;const w=zi===nz-1?100-x:zoneW;
+        const col=podBorders[zi%4];
+        return`<rect x="${x}%" y="30%" width="${w}%" height="40%" fill="${podColors[zi%4]}" stroke="${col}" stroke-width="1.5" rx="3"/>
+               <text x="${x+w/2}%" y="53%" text-anchor="middle" font-size="9" fill="${podTextColors[zi%4]}" font-weight="700">${zn.lbl.replace('Pod ','Z')}</text>`;
+      }).join('');
+      const fusSVG=`<svg viewBox="0 0 300 60" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:360px;height:60px;margin-bottom:10px">
+        <!-- fuselage -->
+        <rect x="2%" y="28%" width="96%" height="44%" rx="10" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+        <!-- nose cone -->
+        <ellipse cx="2.5%" cy="50%" rx="2.5%" ry="22%" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+        <!-- tail fin -->
+        <polygon points="97%,17% 100%,17% 100%,50%" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="1"/>
+        ${zoneSVG}
+        <!-- front/rear labels -->
+        <text x="4%" y="18%" font-size="8" fill="rgba(255,255,255,.3)">FRONT</text>
+        <text x="84%" y="18%" font-size="8" fill="rgba(255,255,255,.3)">REAR</text>
+      </svg>`;
+      const zoneBoxes=a.cargo.map((zn,zi)=>{
+        const w=f.cargo[zi]||'';
+        return`<div style="background:${podColors[zi%4]};border:1px solid ${podBorders[zi%4]};border-radius:10px;padding:10px 12px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:${podTextColors[zi%4]};text-transform:uppercase;margin-bottom:6px">${zn.lbl}${zn.maxKg?' · max '+zn.maxKg+'kg':''}</div>
+          <div style="display:flex;align-items:baseline;gap:5px">
+            <input class="fi" type="number" placeholder="0" value="${w}" style="font-size:20px;font-weight:800;width:70px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
+            <span style="font-size:12px;color:${podTextColors[zi%4]}">kg</span>
+          </div>
+          <div style="font-size:11px;color:${podTextColors[zi%4]};margin-top:4px">${w?'mom '+(((parseFloat(w)||0)*zn.arm).toFixed(0)):''}</div>
+        </div>`;
+      }).join('');
+      cargoH=`<div class="card"><div class="st">Pod Cargo</div>${fusSVG}<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${zoneBoxes}</div></div>`;
+    } else {
+      cargoH=`<div class="card"><div class="st">Cargo / Baggage</div>
+        ${a.cargo.map((zn,i)=>{const w=f.cargo[i]||'';
+          return`<div style="display:grid;grid-template-columns:1.8fr 1.2fr;gap:8px;align-items:end;padding:6px 0;border-bottom:1px solid var(--border)">
+            <div><label>${zn.lbl}${zn.maxKg?` (max ${zn.maxKg}kg)`:''}</label></div>
+            <input class="fi" type="number" placeholder="kg" value="${w}" style="font-size:13px" onblur="lsC(${i},this.value)">
+          </div>`;}).join('')}</div>`;
+    }
 
     const fuelRemKg=fuelKgVal-a.gndBurn-burnKgVal;
     const flightMin=a?.layout==='ga8'?(parseFloat(burnVal||a?.burnDef||35)/58*60).toFixed(0):(burnKgVal/136.1*60).toFixed(0);
@@ -2207,7 +2245,7 @@ function renderLoadsheet(){
           <input class="fi" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:20px;font-weight:800;width:80px;padding:0;background:transparent;border:none;border-bottom:1px solid rgba(239,68,68,.4);color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
           <span style="font-size:12px;color:#f87171">${a?.layout==='ga8'?'L':burnUnit_}</span>
         </div>
-        <div style="font-size:11px;color:#f87171;margin-top:4px">= ${burnKgVal.toFixed(1)} kg</div>
+        <div style="font-size:11px;color:#f87171;margin-top:4px">= ${burnKgVal.toFixed(1)} kg · ≈ ${flightMin} min</div>
       </div>
       <div style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:6px">Fuel @ Dest</div>
@@ -3281,7 +3319,7 @@ window.clearManifest=()=>{if(!confirm('Clear all passengers and aircraft?'))retu
 function generateLoadsheet(acId){
   const a=S.aircraft[acId];const d=S.dispatch;if(!a)return;
   const setup=d.acSetup.find(s=>s.acId===acId);const form=bF();
-  form.ac=acId;form.dep=d.dep;form.dest=d.dest;form.date=d.date;form.etd=d.etd;
+  form.ac=acId;form.dep=d.dep;form.dest=d.dest;form.date=d.date;form.etd=d.etd;form.etdCustom=d.etdCustom||false;
   form.pic=setup?.pic||'';form.coPilot=setup?.coPilot||'';
   const picCrew=S.crew.find(c=>c.n===form.pic);if(picCrew){form.seats[0]=String(picCrew.w);form.names[0]=form.pic;}
   if(setup?.coPilot){const cp=S.crew.find(c=>c.n===setup.coPilot);if(cp){form.seats[1]=String(cp.w);form.names[1]=setup.coPilot;}}
@@ -3388,7 +3426,8 @@ function etdOptions(dateStr){
 }
 function etdSelect(val,dateStr,dispatchKey){
   var opts=etdOptions(dateStr);
-  var isCustom=val&&opts.indexOf(val)<0;
+  var stateObj=dispatchKey==='dispatch'?S.dispatch:(dispatchKey==='form'?S.form:null);
+  var isCustom=(val&&opts.indexOf(val)<0)||(stateObj&&stateObj.etdCustom);
   var oc='handleEtdSel(this,\"'+dispatchKey+'\")';
   var oc2='handleEtdCustom(this,\"'+dispatchKey+'\")';
   var h='<div style="display:flex;gap:6px">';
@@ -3404,14 +3443,19 @@ function etdSelect(val,dateStr,dispatchKey){
   return h;
 }
 window.handleEtdSel=function(sel,key){
-  const v=sel.value,inp=document.getElementById('etd_'+key);
-  if(v==='custom'){if(inp)inp.style.display='block';}
-  else{if(inp)inp.style.display='none';
-    if(key==='dispatch'){S.dispatch.etd=v;}else{S.form.etd=v;}
-    render();}
+  const v=sel.value;
+  const obj=key==='dispatch'?S.dispatch:(key==='form'?S.form:null);
+  if(v==='custom'){
+    if(obj){obj.etdCustom=true;obj.etd='';}
+    render();
+  } else {
+    if(obj){obj.etd=v;obj.etdCustom=false;}
+    render();
+  }
 };
 window.handleEtdCustom=function(inp,key){
-  if(key==='dispatch')S.dispatch.etd=inp.value;else S.form.etd=inp.value;
+  const obj=key==='dispatch'?S.dispatch:(key==='form'?S.form:null);
+  if(obj){obj.etd=inp.value;if(inp.value)obj.etdCustom=false;}
 };
 
 // ── Route Map (Leaflet) ──
