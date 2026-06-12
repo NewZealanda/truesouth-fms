@@ -1265,37 +1265,22 @@ function broadcastDispatch(){
     ref:String(_rtRef)}));
 }
 // ── Manifest pax tab-key navigation ──
+// tabindex="-1" on all non-pax manifest inputs means Tab naturally cycles through
+// only the 4 pax fields (name/group/weight/bag). We just handle "create new pax" at the end.
 document.addEventListener('keydown',function(e){
-  if(e.key!=='Tab')return;
-  // On the manifest page, block ALL tab navigation except within pax rows
-  if(S.tab==='manifest') e.preventDefault();
+  if(e.key!=='Tab'||e.shiftKey)return;
   const el=e.target;
   const pf=el.dataset&&el.dataset.field;
   const pr=el.dataset&&el.dataset.row;
-  if(pf===undefined||pr===undefined)return; // not a pax input — tab blocked on manifest, ignored elsewhere
-  e.preventDefault();
+  if(pf!=='bag'||pr===undefined)return;
   const rowIdx=parseInt(pr);
-  const fields=['name','group','weight','bag'];
-  const fi=fields.indexOf(pf);
-  let targetRow,targetField;
-  if(!e.shiftKey){
-    if(fi<fields.length-1){targetRow=rowIdx;targetField=fields[fi+1];}
-    else{targetRow=rowIdx+1;targetField='name';}
-  }else{
-    if(fi>0){targetRow=rowIdx;targetField=fields[fi-1];}
-    else if(rowIdx>0){targetRow=rowIdx-1;targetField='bag';}
-    else return;
-  }
-  const next=document.querySelector('[data-row="'+targetRow+'"][data-field="'+targetField+'"]');
-  if(next){next.focus();if(next.select)next.select();}
-  else if(!e.shiftKey&&targetField==='name'){
-    // Past last row — create new passenger and focus its name field
-    addPax();
-    setTimeout(function(){
-      const n=document.querySelector('[data-row="'+targetRow+'"][data-field="name"]');
-      if(n){n.focus();if(n.select)n.select();}
-    },30);
-  }
+  if(document.querySelector('[data-row="'+(rowIdx+1)+'"][data-field="name"]'))return;
+  e.preventDefault();
+  addPax();
+  setTimeout(function(){
+    const n=document.querySelector('[data-row="'+(rowIdx+1)+'"][data-field="name"]');
+    if(n){n.focus();if(n.select)n.select();}
+  },30);
 });
 function startPresenceBroadcast(section){
   if(S._presSection===section)return;
@@ -1595,10 +1580,12 @@ function render(){
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
   if(S.tab==='loadsheet'){setupSig();var lf=S.form;if(lf.dep&&lf.dest)setTimeout(function(){renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);},150);}
   // ── Restore focus after re-render ──
+  // Pax inputs (data-row/data-field): always restore
   if(_aeRow!==undefined&&_aeField){
     const _re=document.querySelector('[data-row="'+_aeRow+'"][data-field="'+_aeField+'"]');
     if(_re){_re.focus();try{_re.setSelectionRange(_aeSS,_aeSE);}catch{}}
-  } else if(_aeId){
+  // ID-based inputs: only restore when NOT on manifest page (pax tab is controlled by Tab handler)
+  } else if(_aeId&&S.tab!=='manifest'){
     const _re=document.getElementById(_aeId);
     if(_re){_re.focus();try{_re.setSelectionRange(_aeSS,_aeSE);}catch{}}
   }
@@ -1844,7 +1831,7 @@ function renderApp(){
             <span title="${S.rtStatus==='live'?'Live — real-time sync active':'Offline — reconnecting...'}" style="width:7px;height:7px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':'#6b7280'};flex-shrink:0;box-shadow:${S.rtStatus==='live'?'0 0 6px #22c55e80':'none'}"></span>
             <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
           </div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.48 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.50 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button tabindex="-1" onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button tabindex="-1" onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -1923,19 +1910,19 @@ function renderStep1(){
       ${sel?`<div onclick="event.stopPropagation()">
         <div class="g2" style="margin-bottom:10px">
           <div><label>PIC</label>
-            <select class="fi" onchange="setAcField('${a.id}','pic',this.value)">
+            <select tabindex="-1" class="fi" onchange="setAcField('${a.id}','pic',this.value)">
               <option value="">— select PIC —</option>
               ${pilotCrewList().filter(c=>{const ac=S.aircraft[a.id];if(!ac)return true;const t=ac.layout==='c208'?'C208B':'GA8';return(c.endorse||[]).includes(t);}).map(c=>`<option value="${c.n}"${setup.pic===c.n?' selected':''}>${c.n} (${c.w}kg)</option>`).join('')}
             </select></div>
           <div><label>Co-Pilot (optional)</label>
-            <select class="fi" onchange="setAcField('${a.id}','coPilot',this.value)">
+            <select tabindex="-1" class="fi" onchange="setAcField('${a.id}','coPilot',this.value)">
               <option value="">None — Seat 1 = pax</option>
               ${pilotCrewList().filter(c=>{const ac=S.aircraft[a.id];if(!ac)return true;const t=ac.layout==='c208'?'C208B':'GA8';return(c.endorse||[]).includes(t);}).map(c=>`<option value="${c.n}"${setup.coPilot===c.n?' selected':''}>${c.n}</option>`).join('')}
             </select></div>
         </div>
         <div><label>Fuel at departure (${unit}) <span style="font-weight:400;color:var(--text3);font-size:10px">= ${fuelKgV.toFixed(1)}kg</span></label>
           <div class="fuel-row">
-            <input class="fi" type="number" value="${fuelVal}" placeholder="${defFuel}" onblur="setAcField('${a.id}','fuelInput',parseFloat(this.value)||null)">
+            <input tabindex="-1" class="fi" type="number" value="${fuelVal}" placeholder="${defFuel}" onblur="setAcField('${a.id}','fuelInput',parseFloat(this.value)||null)">
             <span style="font-size:12px;color:var(--text3);padding-bottom:2px">${unit}</span>
           </div></div>
       </div>`:''}
@@ -1966,9 +1953,9 @@ function renderStep1(){
         <input class="fi" type="text" placeholder="Name (+ Infant)" value="${p.name||''}" style="font-size:13px" data-row="${i}" data-field="name" onblur="window.paxNameBlur(${oi},this.value)">
         ${p.infantName?`<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#ec4899;font-weight:600;padding:0 4px">👶 ${p.infantName}<button tabindex="-1" onclick="window.rmInfant(${oi})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></span>`:''}
       </div>
-      <input tabindex="-1" class="fi" type="text" placeholder="Group" value="${p.group||''}" style="font-size:13px" data-row="${i}" data-field="group" list="grp${oi}" onblur="setPaxField(${oi},'group',this.value)">
+      <input class="fi" type="text" placeholder="Group" value="${p.group||''}" style="font-size:13px" data-row="${i}" data-field="group" list="grp${oi}" onblur="setPaxField(${oi},'group',this.value)">
       <datalist id="grp${oi}">${groups.map(g=>`<option value="${g}">`).join('')}</datalist>
-      <input tabindex="-1" class="fi" type="number" placeholder="kg" value="${p.weight||''}" style="font-size:13px" data-row="${i}" data-field="weight" onblur="setPaxField(${oi},'weight',this.value)">
+      <input class="fi" type="number" placeholder="kg" value="${p.weight||''}" style="font-size:13px" data-row="${i}" data-field="weight" onblur="setPaxField(${oi},'weight',this.value)">
       <input class="fi" type="number" placeholder="bag" value="${p.bag||''}" style="font-size:13px" data-row="${i}" data-field="bag" onblur="setPaxField(${oi},'bag',this.value)">
       <button tabindex="-1" class="icon-btn red" onclick="rmPax(${oi})" style="width:28px;height:28px;font-size:13px">✕</button>
     </div>`;
@@ -1981,15 +1968,15 @@ function renderStep1(){
   return`
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
     <input class="fi" type="text" placeholder="Manifest name (e.g. NZQN-NZMF 9 Jun)" value="${d.name||''}" style="flex:1;font-size:13px" tabindex="-1" onblur="S.dispatch.name=this.value;autoSaveDispatch()">
-    <button class="btn btn-ghost" style="font-size:12px" onclick="saveManifest()">💾 Save</button>
-    <button class="btn btn-ghost" style="font-size:12px" onclick="S.tab='saved';S.savedTab='manifests';render()">📂 Load</button>
-    <button class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>
+    <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="saveManifest()">💾 Save</button>
+    <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="S.tab='saved';S.savedTab='manifests';render()">📂 Load</button>
+    <button tabindex="-1" class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>
   </div>
   <div class="card"><div class="st">Flight Details</div>
     <div class="g2">
-      <div><label>Departure</label><select class="fi" onchange="S.dispatch.dep=this.value;autoSaveDispatch();render()">${aptOpts(d.dep)}</select></div>
-      <div><label>Destination</label><select class="fi" onchange="S.dispatch.dest=this.value;autoSaveDispatch();render()">${aptOpts(d.dest)}</select></div>
-      <div><label>Date</label><input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch()"></div>
+      <div><label>Departure</label><select tabindex="-1" class="fi" onchange="S.dispatch.dep=this.value;autoSaveDispatch();render()">${aptOpts(d.dep)}</select></div>
+      <div><label>Destination</label><select tabindex="-1" class="fi" onchange="S.dispatch.dest=this.value;autoSaveDispatch();render()">${aptOpts(d.dest)}</select></div>
+      <div><label>Date</label><input tabindex="-1" type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch()"></div>
       <div><label>ETD</label>${etdSelect(d.etd,d.date,"dispatch")}</div>
     </div></div>
   <div class="card"><div class="st">Select Aircraft, PICs & Fuel</div>
@@ -2009,9 +1996,9 @@ function renderStep1(){
       ${['AC','TYPE','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
     </div>
     ${paxRows}
-    <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-ghost" style="flex:1;font-size:13px" onclick="addPax()">+ Add Passenger</button></div>
+    <div style="display:flex;gap:8px;margin-top:10px"><button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="addPax()">+ Add Passenger</button></div>
   </div>
-  <button class="btn-full ${canNext?'btn-primary':'btn-disabled'}" onclick="${canNext?'autoAllocate()':''}"
+  <button tabindex="-1" class="btn-full ${canNext?'btn-primary':'btn-disabled'}" onclick="${canNext?'autoAllocate()':''}"
     ${!canNext?'disabled':''}>Auto-Allocate & Open Seat Map →</button>`;
 }
 
