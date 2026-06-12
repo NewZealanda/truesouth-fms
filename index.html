@@ -1816,7 +1816,7 @@ function renderApp(){
             <span title="${S.rtStatus==='live'?'Live — real-time sync active':'Offline — reconnecting...'}" style="width:7px;height:7px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':'#6b7280'};flex-shrink:0;box-shadow:${S.rtStatus==='live'?'0 0 6px #22c55e80':'none'}"></span>
             <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
           </div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.39 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.40 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button tabindex="-1" onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button tabindex="-1" onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -4189,18 +4189,26 @@ function initMaintenance(){
     // Try cloud first (async), fall back to localStorage immediately
     loadMaintenanceFromCloud().then(function(cloud){
       if(cloud&&cloud.hist&&cloud.hist.length>0){
-        // Merge: cloud wins for dates it has, keep any local-only dates
-        const byDate={};
-        cloud.hist.forEach(function(e){byDate[e.date+':'+e.ac]=e;});
-        (S.maintenance&&S.maintenance.hist||[]).forEach(function(e){
-          const k=e.date+':'+e.ac;if(!byDate[k])byDate[k]=e;
-        });
-        S.maintenance=Object.assign({},cloud);
-        S.maintenance.hist=Object.values(byDate).sort(function(a,b){return a.date.localeCompare(b.date);});
-        saveMaintenance();
-        render();
+        const local=S.maintenance;
+        // Only merge if cloud has more entries (avoids overwriting fresh local edits)
+        if(cloud.hist.length>(local&&local.hist&&local.hist.length||0)){
+          // Merge by date: local entries override cloud for same date (local is fresher)
+          const byDate={};
+          cloud.hist.forEach(function(e){byDate[e.date]=e;});
+          (local&&local.hist||[]).forEach(function(e){
+            byDate[e.date]=Object.assign({},byDate[e.date]||{},e);
+          });
+          const merged=Object.assign({},cloud);
+          merged.hist=Object.values(byDate).sort(function(a,b){return a.date.localeCompare(b.date);});
+          if(local){['compwash','adas','bookings','priority'].forEach(function(k){
+            if(local[k]&&Object.keys(local[k]).length>0)merged[k]=local[k];
+          });}
+          S.maintenance=merged;
+          saveMaintenance();
+          render();
+        }
       }
-    });
+    });;
     const stored=lsGet('ts_maintenance');
     if(stored&&stored.hist&&stored.hist.length>0){
       // If seed version changed, merge new seed entries into stored data
