@@ -936,7 +936,7 @@ let S={
   user:null,users:[],loginEmail:'',loginPw:'',loginErr:null,toasts:[],
   // Data
   crew:[],aircraft:{},charterRates:{},saved:[],manifests:[],
-  syncStatus:'connecting',
+  syncStatus:'connecting',rtStatus:'offline',rtPresence:{},_presSection:null,
   // Audit
   auditLog:[],
   // Maintenance
@@ -1109,7 +1109,7 @@ async function loadAll(){
   const savedUser=sessionStorage.getItem('ts_user');
   if(savedUser)try{S.user=JSON.parse(savedUser);}catch{}
   // Restore remembered session if no session in sessionStorage
-  if(!S.user){const rem=localStorage.getItem('ts_remembered_user');if(rem)try{const ru=JSON.parse(rem);const live=S.users.find(x=>x.id===ru.id&&x.passwordHash===ru.passwordHash);if(live){S.user=live;if(live.email==='andrew@truesouthflights.co.nz')live.superAdmin=true;sessionStorage.setItem('ts_user',JSON.stringify(live));}}catch(e){}}
+  if(!S.user){const rem=localStorage.getItem('ts_remembered_user');if(rem)try{const ru=JSON.parse(rem);const live=S.users.find(x=>x.id===ru.id&&x.passwordHash===ru.passwordHash);if(live){S.user=live;if(live.email==='andrew@truesouthflights.co.nz')live.superAdmin=true;sessionStorage.setItem('ts_user',JSON.stringify(live));setTimeout(initRealtime,0);}}catch(e){}}
   // Load audit log from localStorage first (instant)
   S.auditLog=lsGet('ts_audit_log')||[];
   render();
@@ -1135,6 +1135,124 @@ async function loadAll(){
       }
     }catch(e){console.warn('Audit fetch failed:',e);}})();
   }
+}
+
+// ── Supabase Realtime ──
+let _rtWs=null,_rtRef=0,_rtHb=null,_rtRecon=null,_rtPending=new Set(),_rtFlush=null;
+
+function initRealtime(){
+  if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
+  clearInterval(_rtHb);clearTimeout(_rtRecon);
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings'];
+  try{
+    _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
+    _rtWs.onopen=function(){
+      _rtRef++;
+      _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'phx_join',
+        payload:{config:{broadcast:{self:false},postgres_changes:tables.map(function(t){return{event:'*',schema:'public',table:t};})},access_token:SK},
+        ref:String(_rtRef)}));
+      _rtHb=setInterval(function(){
+        if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(_rtRef)}));}
+      },29000);
+      S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);render();
+    };
+    _rtWs.onmessage=function(e){
+      try{
+        const msg=JSON.parse(e.data);
+        if(msg.event==='postgres_changes'){
+          const tbl=msg.payload&&msg.payload.data&&msg.payload.data.table;
+          if(tbl){_rtPending.add(tbl);clearTimeout(_rtFlush);_rtFlush=setTimeout(flushRtUpdates,500);}
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='pres'){
+          const p=msg.payload.payload;
+          if(p&&p.userId&&p.userId!==S.user?.id){
+            S.rtPresence=S.rtPresence||{};
+            if(p.section){S.rtPresence[p.userId]={name:p.name,section:p.section,color:p.color,ts:p.ts};}
+            else{delete S.rtPresence[p.userId];}
+            const now=Date.now();
+            Object.keys(S.rtPresence).forEach(function(k){if(now-(S.rtPresence[k].ts||0)>25000)delete S.rtPresence[k];});
+            render();
+          }
+        }
+      }catch(err){}
+    };
+    _rtWs.onclose=function(){
+      clearInterval(_rtHb);
+      if(S.rtStatus!=='offline'){S.rtStatus='offline';render();}
+      if(S.user)_rtRecon=setTimeout(initRealtime,8000);
+    };
+    _rtWs.onerror=function(){try{_rtWs.close();}catch{}};
+  }catch(e){console.warn('Realtime init error:',e);}
+}
+
+async function flushRtUpdates(){
+  const tables=[..._rtPending];_rtPending.clear();
+  let changed=false;
+  for(const t of tables){const ok=await reloadTable(t);if(ok)changed=true;}
+  if(changed)render();
+}
+
+async function reloadTable(table){
+  if(table==='ts_loadsheets'){
+    const ls=await sbF('ts_loadsheets');
+    if(ls){S.saved=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});lsSet('ts_loadsheets_cache',S.saved);return true;}
+  } else if(table==='ts_manifests'){
+    const ms=await sbF('ts_manifests');
+    if(ms){S.manifests=ms.map(function(r){return{id:r.id,name:r.name,savedAt:r.saved_at,data:r.data};});lsSet('ts_manifests_cache',S.manifests);return true;}
+  } else if(table==='ts_crew'){
+    const crew=await sbF('ts_crew');
+    if(crew&&crew.length){
+      S.crew=crew.map(function(c){return{id:c.id,n:c.name,w:c.weight||0,
+        endorse:c.endorsements?JSON.parse(c.endorsements):[],
+        code:c.code||'',dlNum:c.dl_num||'',caaNum:c.caa_license||'',
+        medExpiry:c.medical_expiry||'',ocaDue:c.oca_due||'',
+        firstAid:c.first_aid||'',avsecExpiry:c.avsec_expiry||'',
+        photo:lsGet('ts_crew_photo_'+c.id)||''};});
+      lsSet('ts_crew_cache',S.crew);return true;
+    }
+  } else if(table==='ts_aircraft'){
+    const acR=await sbF('ts_aircraft');
+    if(acR&&acR.length){S.aircraft={};acR.forEach(function(r){S.aircraft[r.id]=r.data||r;});lsSet('ts_aircraft_cache',S.aircraft);return true;}
+  } else if(table==='ts_users'){
+    const us=await sbF('ts_users');
+    if(us&&us.length){
+      S.users=us.map(function(r){return{id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',
+        passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,
+        superAdmin:r.super_admin||r.email==='andrew@truesouthflights.co.nz'||false,
+        isPilot:r.is_pilot||r.role==='pilot'||false};});
+      lsSet('ts_users_cache',S.users);
+      if(S.user){const fresh=S.users.find(function(u){return u.id===S.user.id;});if(fresh){S.user=Object.assign({},fresh);sessionStorage.setItem('ts_user',JSON.stringify(S.user));}}
+      return true;
+    }
+  } else if(table==='ts_charter_rates'){
+    const cr=await sbF('ts_charter_rates');
+    if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,r.rates];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
+  } else if(table==='ts_settings'){
+    try{
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=eq.role_perms&select=value',{headers:SH});
+      if(r.ok){const d=await r.json();if(d[0]&&d[0].value){S.rolePerms=JSON.parse(d[0].value);lsSet('ts_role_perms',S.rolePerms);return true;}}
+    }catch(e){}
+  }
+  return false;
+}
+
+// ── Presence broadcasting ──
+let _presInterval=null;
+function broadcastPresence(section){
+  S._presSection=section;
+  if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
+  _rtRef++;
+  _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
+    payload:{type:'broadcast',event:'pres',payload:{
+      userId:S.user.id,name:S.user.name||S.user.email,
+      section:section,color:presColor(S.user.id),ts:Date.now()
+    }},ref:String(_rtRef)}));
+}
+function startPresenceBroadcast(section){
+  if(S._presSection===section)return;
+  clearInterval(_presInterval);
+  broadcastPresence(section);
+  _presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},4000);
 }
 
 // ── Simple auth (hashed with btoa for demo — production would use Supabase Auth) ──
@@ -1251,7 +1369,7 @@ async function _doLogin(emailArg,passArg){
   if(remMe&&remMe.checked){try{localStorage.setItem('ts_remembered_user',JSON.stringify(u));}catch(e){}}
   // Full audit log
   auditLog('login','Login successful');
-  S.tab=u.role==='maint'?'maintenance':'manifest';render();
+  S.tab=u.role==='maint'?'maintenance':'manifest';render();initRealtime();
   // Fetch latest audit log from Supabase after login
   if(u.superAdmin){
     (async()=>{try{
@@ -1269,7 +1387,7 @@ async function _doLogin(emailArg,passArg){
 
 window.tryLogin=function(){_doLogin();};
 window.updateLoginSuffix=function(){var s=document.getElementById('li_e_sfx');var e=document.getElementById('li_e');if(s&&e)s.style.display=e.value.includes('@')?'none':'';};
-function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.removeItem('ts_remembered_user');render();}
+function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.removeItem('ts_remembered_user');broadcastPresence(null);if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}S.rtStatus='offline';S.rtPresence={};S._presSection=null;clearInterval(_presInterval);render();}
 
 // ── Pilot list: S.crew + any pilot/admin users without a linked crew record ──
 function pilotCrewList(){
@@ -1290,6 +1408,26 @@ function pilotCrewList(){
     list.push(Object.assign({},cr,{w:w}));
   });
   return list;
+}
+
+// ── Presence ──
+const PRES_COLORS=['#f87171','#fb923c','#fbbf24','#34d399','#22d3ee','#60a5fa','#a78bfa','#f472b6'];
+function presColor(id){let h=0;for(let i=0;i<(id||'').length;i++)h=(h*31+id.charCodeAt(i))&0xfffffff;return PRES_COLORS[h%PRES_COLORS.length];}
+function presBarH(section){
+  if(!S.user)return'';
+  const now=Date.now();
+  const others=Object.values(S.rtPresence||{}).filter(function(p){return p.section===section&&now-p.ts<25000;});
+  if(!others.length)return'';
+  return'<div style="display:flex;align-items:center;gap:6px;padding:4px 0 10px;flex-wrap:wrap">'
+    +'<span style="font-size:11px;color:var(--text3);font-weight:600">Also viewing:</span>'
+    +others.map(function(p){
+      const init=(p.name||'?').trim().split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
+      return'<div title="'+p.name+'" style="display:flex;align-items:center;gap:4px">'
+        +'<div style="width:22px;height:22px;border-radius:50%;background:'+p.color+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">'+init+'</div>'
+        +'<span style="font-size:11px;font-weight:600;color:'+p.color+'">'+p.name.split(' ')[0]+'</span>'
+        +'</div>';
+    }).join('<span style="color:var(--border2);font-size:10px;padding:0 2px">·</span>')
+    +'</div>';
 }
 
 // ── Layouts ──
@@ -1579,8 +1717,11 @@ function renderApp(){
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
-          <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.32 · 12 Jun</div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <span title="${S.rtStatus==='live'?'Live — real-time sync active':'Offline — reconnecting...'}" style="width:7px;height:7px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':'#6b7280'};flex-shrink:0;box-shadow:${S.rtStatus==='live'?'0 0 6px #22c55e80':'none'}"></span>
+            <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
+          </div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.37 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -1618,10 +1759,10 @@ function renderOperations(){
   const bar='<div style="display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px">'+
     subTabs.map(t=>'<button class="sub-tab '+(opsTab===t.id?'on':'')+'" onclick="S.tab=\''+t.id+'\';window.scrollTo(0,0);render()" style="font-size:13px;padding:7px 16px">'+t.lbl+'</button>').join('')+
     '</div>';
-  if(opsTab==='seatmap'){ return bar+renderSeatmap(); }
-  if(opsTab==='loadsheet'){ try{return bar+renderLoadsheet();}catch(e){return bar+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';} }
-  if(opsTab==='saved') return bar+renderSaved();
-  return bar+renderManifest();
+  if(opsTab==='seatmap'){ startPresenceBroadcast('seatmap');return bar+presBarH('seatmap')+renderSeatmap(); }
+  if(opsTab==='loadsheet'){ startPresenceBroadcast('loadsheet');try{return bar+presBarH('loadsheet')+renderLoadsheet();}catch(e){return bar+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';} }
+  if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return bar+renderSaved();}
+  startPresenceBroadcast('manifest');return bar+presBarH('manifest')+renderManifest();
 }
 
 function renderManifest(){
@@ -2323,7 +2464,7 @@ function renderLoadsheet(){
           ${!f.sig?`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:var(--border2);font-family:'Barlow Condensed',sans-serif;font-size:15px;letter-spacing:.12em">${(!S.sigMode||S.sigMode==='draw')?'DRAW SIGNATURE HERE':'APPLY NAME ABOVE'}</div>`:''}
         </div>
         <button onclick="clearSig()" style="margin-top:6px;padding:5px 12px;border-radius:6px;border:1px solid var(--border2);background:transparent;font-size:12px;cursor:pointer;color:var(--text2)">Clear</button>`
-        :`<div style="padding:10px;background:var(--card2);border-radius:8px;font-size:12px;color:var(--text3);margin-bottom:8px">${wbBadLS&&canSign?(fwdCogLS?"⚠ Forward CoG — fix seating before signing.":"⚠ Fix W&B before signing."):"Only pilots can sign loadsheets. Save as draft for a pilot to complete."}</div>`}
+        :`<div style="padding:10px;background:var(--card2);border-radius:8px;font-size:12px;color:var(--text3);margin-bottom:8px">${canSign?(r&&a&&r.towCog!=null&&r.towCog<a.cogMin?"⚠ Forward CoG — fix seating before signing.":!allOk?"⚠ Fix W&B before signing.":""):"Only pilots can sign loadsheets. Save as draft for a pilot to complete."}</div>`}
         <div style="margin-top:12px">
           ${(()=>{
             const fwdCog=r&&a&&r.towCog!=null&&r.towCog<a.cogMin;
@@ -3828,7 +3969,14 @@ window.savePerson=async function(){
       const uIdx=S.users.findIndex(function(x){return x.id===userId;});
       if(uIdx>=0) S.users[uIdx]=userRec;else S.users.push(userRec);
       lsSet('ts_users_cache',S.users);
-      await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,role:userRec.role,linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash,weight:userRec.weight||0,is_pilot:!!userRec.isPilot}]);
+      // Two-tier upsert: full payload first, minimal fallback if columns missing
+      const fullUR=await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,role:userRec.role,
+        linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash,weight:userRec.weight||0,is_pilot:!!userRec.isPilot}]);
+      if(!fullUR){
+        const minUR=await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,
+          role:userRec.role,linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash}]);
+        if(!minUR) toast('Warning: account may not have saved to server — check connection','warn');
+      }
     }
   }
 
