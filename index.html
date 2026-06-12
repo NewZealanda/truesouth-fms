@@ -1038,7 +1038,7 @@ async function loadAll(){
     // ── Users ──
     const us=await sbF('ts_users');
     if(us&&us.length){
-      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||false,isPilot:r.is_pilot||r.role==='pilot'||false}));
+      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.email==='andrew@truesouthflights.co.nz'||false,isPilot:r.is_pilot||r.role==='pilot'||false}));
       lsSet('ts_users_cache',S.users);
     } else {
       const cached=lsGet('ts_users_cache');
@@ -1580,7 +1580,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.31 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.32 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
