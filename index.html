@@ -3398,7 +3398,7 @@ window.setTab=function(t){
 window.toggleAcSetup=id=>{
   const i=S.dispatch.acSetup.findIndex(s=>s.acId===id);
   if(i>=0)S.dispatch.acSetup.splice(i,1);
-  else{const a=S.aircraft[id];S.dispatch.acSetup.push({acId:id,pic:'',coPilot:'',fuelInput:a?Math.round(fromKg(a.fuelKg,id)):null,_ts:Date.now()}));}
+  else{const a=S.aircraft[id];S.dispatch.acSetup.push({acId:id,pic:'',coPilot:'',fuelInput:a?Math.round(fromKg(a.fuelKg,id)):null,_ts:Date.now()});}
   render();
 };
 window.setAcField=(id,field,val)=>{const s=S.dispatch.acSetup.find(x=>x.acId===id);if(s){s[field]=val;s._ts=Date.now();autoSaveDispatch();render();}};
