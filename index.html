@@ -254,7 +254,7 @@ const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
   pilot:       {operations:true, charter:false,maintenance:true, admin_crew:true,admin_users:false},
-  desk:        {operations:true, charter:true, maintenance:false,admin_crew:true,admin_users:false},
+  desk:        {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:false},
   maint:       {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false},
   maintenance: {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false},
   ground_staff:{operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false}
@@ -1598,7 +1598,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.25 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.26 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -2256,12 +2256,7 @@ function renderLoadsheet(){
       }).join('');
       cargoH=''; // pod zones moved into seatmap left column
     } else {
-      cargoH=`<div class="card"><div class="st">Cargo / Baggage</div>
-        ${a.cargo.map((zn,i)=>{const w=f.cargo[i]||'';
-          return`<div style="display:grid;grid-template-columns:1.8fr 1.2fr;gap:8px;align-items:end;padding:6px 0;border-bottom:1px solid var(--border)">
-            <div><label>${zn.lbl}${zn.maxKg?` (max ${zn.maxKg}kg)`:''}</label></div>
-            <input class="fi" type="number" placeholder="kg" value="${w}" style="font-size:13px" onblur="lsC(${i},this.value)">
-          </div>`;}).join('')}</div>`;
+      cargoH=''; // non-pod cargo now shown inline under cabin SVG
     }
 
     const fuelRemKg=fuelKgVal-a.gndBurn-burnKgVal;
@@ -3391,10 +3386,14 @@ function generateLoadsheet(acId){
 window.lsAc=v=>{
   // Preserve passenger names/weights/bags when switching aircraft
   const kN=S.form.names||{},kS=S.form.seats||{},kB=S.form.bags||{},kI=S.form.infantNames||{};
+  const oldType=(S.aircraft[S.form.ac]||{}).type;
+  const newType=(S.aircraft[v]||{}).type;
+  const sameType=!!(oldType&&oldType===newType);
   S.form.ac=v;
   S.form.names=kN;S.form.seats=kS;S.form.bags=kB;S.form.infantNames=kI;
-  // Reset aircraft-specific fields only
-  S.form.cargo={};S.form.fuel='';S.form.burnOff='';S.form.sig=null;
+  // Keep fuel/cargo only when staying on same aircraft type
+  if(!sameType){S.form.cargo={};S.form.fuel='';S.form.burnOff='';}
+  S.form.sig=null;
   render();
 };
 window.lsPIC=v=>{S.form.pic=v;const c=pilotCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[0]=String(c.w);S.form.names[0]=v;}else{S.form.names[0]=v;}render();};
@@ -4177,14 +4176,15 @@ function renderMaintOverview(){
         ${duePill(adasDays,7,'ADAS','#a78bfa')}
       </div>`:''}
       ${bk.length?'<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">'+
-        bk.map(b=>`<div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:5px">
-          <span style="color:${b.confirmed?'#22c55e':'#f59e0b'};font-size:10px">${b.confirmed?'●':'○'}</span>
-          ${fmtMaintDate(b.date)} — ${b.notes||'Maintenance'}
-          <span style="font-size:10px;color:var(--text3)">${b.confirmed?'Confirmed':'Pencilled'}</span>
+        bk.map(b=>`<div style="font-size:12px;color:var(--text1);display:flex;align-items:center;gap:6px;padding:3px 0">
+          <span style="color:${b.confirmed?'#22c55e':'#f59e0b'};font-size:13px">${b.confirmed?'●':'◑'}</span>
+          <span style="font-weight:600">${fmtMaintDate(b.date)}</span>
+          <span style="color:var(--text2)">— ${b.notes||'Maintenance'}</span>
+          <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:${b.confirmed?'rgba(34,197,94,.15)':'rgba(245,158,11,.15)'};color:${b.confirmed?'#22c55e':'#f59e0b'}">${b.confirmed?'Confirmed':'Pencilled'}</span>
         </div>`).join('')+
       '</div>':''}
       ${isAdmin?`<div style="margin-top:10px">
-        <button onclick="S.maintEditAc='${ac}';S.maintTab='bookings';render()" style="width:100%;padding:5px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;color:var(--text2)">Edit Check / Bookings</button>
+        <button onclick="event.stopPropagation();S.maintEditAc='${ac}';S.maintTab='bookings';window.scrollTo(0,0);render()" style="width:100%;padding:5px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;color:var(--text2)">Edit Check / Bookings</button>
       </div>`:''}
     </div>`;
   }).join('');
