@@ -202,7 +202,7 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 /* PWA safe area padding for iPhone notch/home bar */
 @supports(padding:max(0px)){
   .page{padding-bottom:max(80px,env(safe-area-inset-bottom) + 70px);}
-  .nav-bar{padding-top:max(4px,env(safe-area-inset-top));padding-bottom:max(4px,env(safe-area-inset-bottom));}
+  .nav-bar{padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(4px,env(safe-area-inset-bottom));}
 }
 </style>
 </head>
@@ -1163,6 +1163,10 @@ function initRealtime(){
           const tbl=msg.payload&&msg.payload.data&&msg.payload.data.table;
           if(tbl){_rtPending.add(tbl);clearTimeout(_rtFlush);_rtFlush=setTimeout(flushRtUpdates,500);}
         }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='dispatch'){
+          const dp=msg.payload.payload;
+          if(dp&&S.tab==='manifest')mergeDispatch(dp);
+        }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='pres'){
           const p=msg.payload.payload;
           if(p&&p.userId&&p.userId!==S.user?.id){
@@ -1253,6 +1257,13 @@ function broadcastPresence(section){
       section:section,color:presColor(S.user.id),ts:Date.now()
     }},ref:String(_rtRef)}));
 }
+function broadcastDispatch(){
+  if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
+  _rtRef++;
+  _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
+    payload:{type:'broadcast',event:'dispatch',payload:S.dispatch},
+    ref:String(_rtRef)}));
+}
 function startPresenceBroadcast(section){
   if(S._presSection===section)return;
   clearInterval(_presInterval);
@@ -1270,6 +1281,7 @@ function autoSaveDispatch(){
     S.dispatch._updatedBy=S.user.id;
     await sbU('ts_manifests',[{id:'live_draft',name:'__live__',
       saved_at:new Date().toISOString(),data:S.dispatch}]);
+    broadcastDispatch();
   },800);
 }
 
@@ -1890,12 +1902,12 @@ function renderStep1(){
     // Aircraft assignment buttons (one per selected AC, toggle-style)
     const acBtns=d.acSetup.length?d.acSetup.map(s=>{
       const id=s.acId,lbl=id.replace('ZK-',''),col=AC_COL[id]||'#64748b',sel=p.pinAc===id;
-      return`<button tabindex="-1" onclick="setPaxField(${oi},'pinAc','${id}')" style="padding:2px 0;width:100%;border-radius:4px;border:1px solid ${col}${sel?'99':'33'};background:${sel?col+'28':'transparent'};color:${sel?col:'var(--text3)'};font-size:10px;font-weight:800;cursor:pointer;line-height:1.5">${lbl}</button>`;
+      return`<button tabindex="-1" onclick="setPaxField(${oi},'pinAc','${id}')" style="padding:2px 8px;border-radius:20px;border:1px solid ${col}${sel?'cc':'33'};background:${sel?col+'28':'transparent'};color:${sel?col:'var(--text3)'};font-size:10px;font-weight:800;cursor:pointer;line-height:1.6;white-space:nowrap">${lbl}</button>`;
     }).join(''):'';
-    return `<div style="display:grid;grid-template-columns:${d.acSetup.length?'44px ':''}52px 1.5fr 1fr .75fr .65fr 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${p.pinAc?AC_COL[p.pinAc]+'15':''}">
-      ${d.acSetup.length?`<div style="display:flex;flex-direction:column;gap:2px">${acBtns}</div>`:''}
-      <div style="display:flex;flex-direction:column;gap:2px">
-        <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 5px;border-radius:4px 0 0 4px;border:1px solid rgba(59,130,246,.5);background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.3)':'transparent'};color:${(p.type||'adult')==='adult'?'#60a5fa':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.4">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 5px;border-radius:0 4px 4px 0;border:1px solid rgba(16,185,129,.5);border-left:none;background:${p.type==='child'?'rgba(16,185,129,.3)':'transparent'};color:${p.type==='child'?'#34d399':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.4">C</button>
+    return `<div style="display:grid;grid-template-columns:auto 1.5fr 1fr 65px 65px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${p.pinAc?AC_COL[p.pinAc]+'15':''}">
+      <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center">
+        <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 8px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6;white-space:nowrap">Adult</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 8px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6;white-space:nowrap">Child</button>
+        ${acBtns}
       </div>
       <div style="display:flex;flex-direction:column;gap:2px">
         <input class="fi" type="text" placeholder="Name (+ Infant)" value="${p.name||''}" style="font-size:13px" onblur="window.paxNameBlur(${oi},this.value)">
