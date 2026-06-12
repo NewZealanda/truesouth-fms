@@ -1273,7 +1273,17 @@ function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.
 
 // ── Pilot list: S.crew + any pilot/admin users without a linked crew record ──
 function pilotCrewList(){
-  const list=[...S.crew];
+  // Start with crew, but fill in weight from linked user if crew.w is 0
+  const list=S.crew.map(function(cr){
+    if(cr.w) return cr;
+    const crn=(cr.n||'').trim().toLowerCase();
+    const lu=(S.users||[]).find(function(u){
+      const lc=(u.linkedCrew||'').trim().toLowerCase();
+      return lc&&lc===crn;
+    });
+    if(lu&&lu.weight) return Object.assign({},cr,{w:lu.weight});
+    return cr;
+  });
   (S.users||[]).forEach(function(u){
     if(u.role!=='pilot'&&!u.isPilot)return;
     const uName=(u.name||u.email||'').trim();
@@ -1588,7 +1598,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.24 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.25 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -2074,7 +2084,7 @@ function renderStep2(){
 // ── LOADSHEET ──
 function renderLoadsheet(){
   const f=S.form,a=S.aircraft[f.ac],r=a?calcFormWB(f):null,allOk=r&&r.towOk&&r.lwOk&&r.cogOk;
-  const picCrew=S.crew.find(c=>c.n===f.pic);
+  const picCrew=pilotCrewList().find(c=>c.n===f.pic);
   if(picCrew&&String(f.seats[0])!==String(picCrew.w))f.seats[0]=String(picCrew.w);
 
   const acOpts=Object.values(S.aircraft).map(x=>`<option value="${x.id}"${f.ac===x.id?' selected':''}>${x.name} — ${x.type}</option>`).join('');
@@ -3344,8 +3354,8 @@ function generateLoadsheet(acId){
   const setup=d.acSetup.find(s=>s.acId===acId);const form=bF();
   form.ac=acId;form.dep=d.dep;form.dest=d.dest;form.date=d.date;form.etd=d.etd;form.etdCustom=d.etdCustom||false;
   form.pic=setup?.pic||'';form.coPilot=setup?.coPilot||'';
-  const picCrew=S.crew.find(c=>c.n===form.pic);if(picCrew){form.seats[0]=String(picCrew.w);form.names[0]=form.pic;}
-  if(setup?.coPilot){const cp=S.crew.find(c=>c.n===setup.coPilot);if(cp){form.seats[1]=String(cp.w);form.names[1]=setup.coPilot;}}
+  const picCrew=pilotCrewList().find(c=>c.n===form.pic);if(picCrew&&picCrew.w){form.seats[0]=String(picCrew.w);form.names[0]=form.pic;}
+  if(setup?.coPilot){const cp=pilotCrewList().find(c=>c.n===setup.coPilot);if(cp&&cp.w){form.seats[1]=String(cp.w);form.names[1]=setup.coPilot;}}
   else{const sm=d.seatMap[acId]||{};const p=sm[1]?paxById(sm[1]):null;if(p){form.seats[1]=p.weight||'';form.bags[1]=p.bag||'';form.names[1]=p.name||'';}}
   form.fuel=String(fuelKgForSetup(acId));
   const sm=d.seatMap[acId]||{};
@@ -3357,8 +3367,8 @@ function generateLoadsheet(acId){
 
 // ── Loadsheet form handlers ──
 window.lsAc=v=>{S.form.ac=v;S.form.seats={};S.form.bags={};S.form.names={};S.form.cargo={};S.form.fuel='';S.form.burnOff='';S.form.sig=null;render();};
-window.lsPIC=v=>{S.form.pic=v;const c=S.crew.find(x=>x.n===v);if(c){S.form.seats[0]=String(c.w);S.form.names[0]=v;}render();};
-window.lsCoPilot=v=>{S.form.coPilot=v;const c=S.crew.find(x=>x.n===v);if(c){S.form.seats[1]=String(c.w);S.form.names[1]=v;}else{delete S.form.seats[1];delete S.form.names[1];}render();};
+window.lsPIC=v=>{S.form.pic=v;const c=pilotCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[0]=String(c.w);S.form.names[0]=v;}else{S.form.names[0]=v;}render();};
+window.lsCoPilot=v=>{S.form.coPilot=v;const c=pilotCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[1]=String(c.w);S.form.names[1]=v;}else{delete S.form.seats[1];delete S.form.names[1];}render();};
 window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;render();};window.lsB=(i,v)=>{S.form.bags[i]=v;render();};window.lsC=(i,v)=>{S.form.cargo[i]=v;render();};
 window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));render();};
 window.lsBurn=(v,acId)=>{S.form.burnOff=v;render();};
@@ -3451,8 +3461,8 @@ function etdSelect(val,dateStr,dispatchKey){
   var opts=etdOptions(dateStr);
   var stateObj=dispatchKey==='dispatch'?S.dispatch:(dispatchKey==='form'?S.form:null);
   var isCustom=(val&&opts.indexOf(val)<0)||(stateObj&&stateObj.etdCustom);
-  var oc='handleEtdSel(this,\"'+dispatchKey+'\")';
-  var oc2='handleEtdCustom(this,\"'+dispatchKey+'\")';
+  var oc="handleEtdSel(this,'"+dispatchKey+"')";
+  var oc2="handleEtdCustom(this,'"+dispatchKey+"')";
   var h='<div style="display:flex;gap:6px">';
   h+='<select class="fi" id="etd_sel_'+dispatchKey+'" style="flex:1" onchange="'+oc+'">';
   h+='<option value="">— ETD —</option>';
@@ -3700,7 +3710,7 @@ window.openPersonModal=function(crewId,userId){
     draft:{
       n:cr?cr.n:(u?u.name:''),
       code:cr?cr.code||'':'',
-      w:cr?cr.w||'':'',
+      w:cr?(cr.w||u?.weight||''):(u?u.weight||'':''),
       dlNum:cr?cr.dlNum||'':'',
       caaNum:cr?cr.caaNum||'':'',
       medExpiry:cr?cr.medExpiry||'':'',
@@ -3765,10 +3775,18 @@ window.savePerson=async function(){
     if(existIdx>=0) S.crew[existIdx]=crewRec;else S.crew.push(crewRec);
     lsSet('ts_crew_cache',S.crew);
     if(d.photo) lsSet('ts_crew_photo_'+crewId,d.photo);
-    await sbU('ts_crew',[{id:crewId,name:finalName,weight:parseFloat(d.w)||null,
-      endorsements:JSON.stringify(d.endorse||[]),code:d.code||'',dl_num:d.dlNum||'',
-      caa_license:d.caaNum||'',medical_expiry:d.medExpiry||null,oca_due:d.ocaDue||null,
-      first_aid:d.firstAid||null,avsec_expiry:d.avsecExpiry||null,photo:d.photo||''}]);
+    {
+      const fullR=await sbU('ts_crew',[{id:crewId,name:finalName,weight:parseFloat(d.w)||null,
+        endorsements:JSON.stringify(d.endorse||[]),code:d.code||'',dl_num:d.dlNum||'',
+        caa_license:d.caaNum||'',medical_expiry:d.medExpiry||null,oca_due:d.ocaDue||null,
+        first_aid:d.firstAid||null,avsec_expiry:d.avsecExpiry||null,photo:d.photo||''}]);
+      if(!fullR){
+        // Full upsert failed (likely missing columns) — retry with minimal safe payload
+        const minR=await sbU('ts_crew',[{id:crewId,name:finalName,weight:parseFloat(d.w)||null,
+          endorsements:JSON.stringify(d.endorse||[]),code:d.code||''}]);
+        if(!minR) toast('Warning: profile may not have saved to server — check connection','warn');
+      }
+    }
   }
 
   // ── Save user record (only if email present OR already has userId) ──
