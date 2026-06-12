@@ -1273,30 +1273,34 @@ function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.
 
 // ── Pilot list: S.crew + any pilot/admin users without a linked crew record ──
 function pilotCrewList(){
-  // Start with crew, but fill in weight from linked user if crew.w is 0
-  const list=S.crew.map(function(cr){
-    if(cr.w) return cr;
+  // Only include crew whose linked user account is pilot-eligible (role===pilot or isPilot===true).
+  // Crew with NO linked account are included (independent crew profiles assumed pilot-eligible).
+  const list=[];
+  S.crew.forEach(function(cr){
     const crn=(cr.n||'').trim().toLowerCase();
     const lu=(S.users||[]).find(function(u){
       const lc=(u.linkedCrew||'').trim().toLowerCase();
-      return lc&&lc===crn;
+      const un=(u.name||u.email||'').trim().toLowerCase();
+      return (lc&&lc===crn)||(un===crn);
     });
-    if(lu&&lu.weight) return Object.assign({},cr,{w:lu.weight});
-    return cr;
+    // Has a linked account that is explicitly not a pilot → skip
+    if(lu&&lu.role!=='pilot'&&!lu.isPilot) return;
+    // Enrich weight from user if crew record lacks it
+    const w=cr.w||(lu&&lu.weight?lu.weight:0);
+    list.push(Object.assign({},cr,{w:w}));
   });
+  // Also add pilot-role / isPilot users not already represented by a crew record
   (S.users||[]).forEach(function(u){
     if(u.role!=='pilot'&&!u.isPilot)return;
     const uName=(u.name||u.email||'').trim();
     if(!uName)return;
     const linked=(u.linkedCrew||'').trim().toLowerCase();
     const uNameLower=uName.toLowerCase();
-    // Already in list? Match by linkedCrew name OR user display name
     const already=list.find(function(cr){
       const crn=(cr.n||'').trim().toLowerCase();
       return crn===(linked||uNameLower)||crn===uNameLower||(linked&&crn===linked);
     });
     if(!already){
-      // Try to find crew record by any name fragment
       const crewMatch=S.crew.find(function(cr){
         const crn=(cr.n||'').trim().toLowerCase();
         return crn.includes(uNameLower)||uNameLower.includes(crn)||
@@ -1598,7 +1602,7 @@ function renderApp(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:11px;opacity:.65;color:#fff">${sh}</div>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.27 · 12 Jun</div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">v20.30 · 12 Jun</div>
           <div style="display:flex;align-items:center;gap:4px">
             <button onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
@@ -1704,23 +1708,25 @@ function renderStep1(){
   const ri=realPax.map((p,i)=>{
     // Find the original index in d.pax for setPaxField
     const oi=d.pax.indexOf(p);
-    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr .75fr .65fr 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${p.pinAc?AC_COL[p.pinAc]+'15':''}">
-      <select class="fi" style="font-size:11px;padding:6px 4px;border-left:3px solid ${AC_COL[p.pinAc]||'var(--border)'};border-radius:6px" onchange="setPaxField(${oi},'pinAc',this.value)">
-        <option value="">Any AC</option>
-        ${d.acSetup.map(s=>`<option value="${s.acId}"${p.pinAc===s.acId?' selected':''}>${s.acId.replace('ZK-','')}</option>`).join('')}
-      </select>
+    // Aircraft assignment buttons (one per selected AC, toggle-style)
+    const acBtns=d.acSetup.length?d.acSetup.map(s=>{
+      const id=s.acId,lbl=id.replace('ZK-',''),col=AC_COL[id]||'#64748b',sel=p.pinAc===id;
+      return`<button tabindex="-1" onclick="setPaxField(${oi},'pinAc','${id}')" style="padding:2px 0;width:100%;border-radius:4px;border:1px solid ${col}${sel?'99':'33'};background:${sel?col+'28':'transparent'};color:${sel?col:'var(--text3)'};font-size:10px;font-weight:800;cursor:pointer;line-height:1.5">${lbl}</button>`;
+    }).join(''):'';
+    return `<div style="display:grid;grid-template-columns:${d.acSetup.length?'44px ':''}52px 1.5fr 1fr .75fr .65fr 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${p.pinAc?AC_COL[p.pinAc]+'15':''}">
+      ${d.acSetup.length?`<div style="display:flex;flex-direction:column;gap:2px">${acBtns}</div>`:''}
       <div style="display:flex;flex-direction:column;gap:2px">
-        <button onclick="setPaxField(${oi},'type','adult')" style="padding:2px 5px;border-radius:4px 0 0 4px;border:1px solid rgba(59,130,246,.5);background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.3)':'transparent'};color:${(p.type||'adult')==='adult'?'#60a5fa':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.4">A</button><button onclick="setPaxField(${oi},'type','child')" style="padding:2px 5px;border-radius:0 4px 4px 0;border:1px solid rgba(16,185,129,.5);border-left:none;background:${p.type==='child'?'rgba(16,185,129,.3)':'transparent'};color:${p.type==='child'?'#34d399':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.4">C</button>
+        <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 5px;border-radius:4px 0 0 4px;border:1px solid rgba(59,130,246,.5);background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.3)':'transparent'};color:${(p.type||'adult')==='adult'?'#60a5fa':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.4">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 5px;border-radius:0 4px 4px 0;border:1px solid rgba(16,185,129,.5);border-left:none;background:${p.type==='child'?'rgba(16,185,129,.3)':'transparent'};color:${p.type==='child'?'#34d399':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.4">C</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:2px">
         <input class="fi" type="text" placeholder="Name (+ Infant)" value="${p.name||''}" style="font-size:13px" onblur="window.paxNameBlur(${oi},this.value)">
-        ${p.infantName?`<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#ec4899;font-weight:600;padding:0 4px">👶 ${p.infantName}<button onclick="window.rmInfant(${oi})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></span>`:''}
+        ${p.infantName?`<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#ec4899;font-weight:600;padding:0 4px">👶 ${p.infantName}<button tabindex="-1" onclick="window.rmInfant(${oi})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></span>`:''}
       </div>
-      <input class="fi" type="text" placeholder="Group" value="${p.group||''}" style="font-size:13px" list="grp${oi}" onblur="setPaxField(${oi},'group',this.value)">
+      <input tabindex="-1" class="fi" type="text" placeholder="Group" value="${p.group||''}" style="font-size:13px" list="grp${oi}" onblur="setPaxField(${oi},'group',this.value)">
       <datalist id="grp${oi}">${groups.map(g=>`<option value="${g}">`).join('')}</datalist>
-      <input class="fi" type="number" placeholder="kg" value="${p.weight||''}" style="font-size:13px" onblur="setPaxField(${oi},'weight',this.value)">
+      <input tabindex="-1" class="fi" type="number" placeholder="kg" value="${p.weight||''}" style="font-size:13px" onblur="setPaxField(${oi},'weight',this.value)">
       <input class="fi" type="number" placeholder="bag" value="${p.bag||''}" style="font-size:13px" onblur="setPaxField(${oi},'bag',this.value)">
-      <button class="icon-btn red" onclick="rmPax(${oi})" style="width:28px;height:28px;font-size:13px">✕</button>
+      <button tabindex="-1" class="icon-btn red" onclick="rmPax(${oi})" style="width:28px;height:28px;font-size:13px">✕</button>
     </div>`;
   });
   return ri.join('');
@@ -2169,7 +2175,7 @@ function renderLoadsheet(){
             <span style="font-size:9px;font-weight:700;color:var(--text3);width:18px">${s.lbl}</span>
             <input class="fi" type="text" value="${displayNm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px" onblur="lsN(${idx},this.value)">
           </div>
-          ${infantNm?`<div style="font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}</div>`:''}
+          ${infantNm?`<div style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}<button onclick="window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></div>`:''}
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
             <div>
               <div style="font-size:8px;color:var(--text3)">WT kg</div>
@@ -3232,6 +3238,8 @@ window.paxNameBlur=function(i,val){
   setTimeout(render,50);
 };
 window.rmInfant=function(i){S.dispatch.pax[i].infantName=null;render();};
+window.lsRmInfant=function(idx){if(S.form.infantNames)delete S.form.infantNames[idx];// also clear from name field if encoded there
+var nm=S.form.names&&S.form.names[idx]||'';if(nm.includes(' + '))S.form.names[idx]=nm.split(' + ')[0].trim();render();};
 window.rmPax=i=>{S.dispatch.pax.splice(i,1);render();};
 window.setPaxField=(i,k,v)=>{if(S.dispatch.pax[i])S.dispatch.pax[i][k]=v;render();};
 
