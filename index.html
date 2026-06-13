@@ -3808,7 +3808,7 @@ window.openNamePopup=function(idx){
     +'<input id="name-popup-input" type="text" value="'+(p.name||'').replace(/"/g,'&quot;')+'" placeholder="First Last" style="width:100%;padding:12px;font-size:17px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text1);box-sizing:border-box;margin-bottom:14px">'
     +'<div style="display:flex;gap:10px">'
     +'<button onclick="window.saveNamePopup('+idx+')" style="flex:1;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer">Save</button>'
-    +'<button onclick="document.getElementById('name-popup-overlay').remove()" style="flex:1;padding:12px;background:var(--bg3);color:var(--text1);border:1px solid var(--border);border-radius:8px;font-size:16px;cursor:pointer">Cancel</button>'
+    +'<button onclick="document.getElementById(\'name-popup-overlay\').remove()" style="flex:1;padding:12px;background:var(--bg3);color:var(--text1);border:1px solid var(--border);border-radius:8px;font-size:16px;cursor:pointer">Cancel</button>'
     +'</div></div>';
   document.body.appendChild(ov);
   setTimeout(function(){var inp=document.getElementById('name-popup-input');if(inp){inp.focus();inp.select();}},80);
