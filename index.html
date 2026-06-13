@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v21.77';
+const APP_VER='v21.78';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -4541,42 +4541,20 @@ window.setTab=function(t){
   if(t==='admin'){
     Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){render();});
   }
-  // Re-fetch maintenance from cloud every time the tab is opened
+  // Load maintenance: show local data instantly, sync from cloud in background
   if(t==='maintenance'){
-    S.maintenance={hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{},_loading:true};
-    var _maintTimeout=new Promise(function(res){setTimeout(function(){res(null);},4000);});
-    Promise.race([loadMaintenanceFromCloud(),_maintTimeout]).then(function(cloud){
+    var _mLocal=lsGet('ts_maintenance');
+    S.maintenance=(_mLocal&&_mLocal.hist)
+      ?Object.assign({},_mLocal,{_loading:false})
+      :{hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{},_loading:false};
+    // Background cloud sync — update silently if cloud has data
+    loadMaintenanceFromCloud().then(function(cloud){
       if(cloud&&cloud.hist){
-        // Cloud has data — use it
         S.maintenance=cloud;
-      } else {
-        // Cloud empty — check if localStorage has data to migrate up
-        var local=lsGet('ts_maintenance');
-        if(local&&local.hist&&local.hist.length>0){
-          S.maintenance=local;
-          // Push localStorage data to Supabase (one-time migration)
-          sbU('ts_settings',[{key:'maintenance',value:JSON.stringify(local)}]).then(function(){
-            toast('Maintenance data synced to cloud ✓','ok');
-          }).catch(function(){
-            toast('Could not sync maintenance to cloud.','warn');
-          });
-        } else {
-          // No cloud, no local — fresh state, just show empty maintenance
-          S.maintenance={hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{},_loading:false};
-        }
+        lsSet('ts_maintenance',cloud);
+        render();
       }
-      render();
-    }).catch(function(){
-      // Network error — fall back to localStorage silently
-      var local=lsGet('ts_maintenance');
-      if(local&&local.hist&&local.hist.length>0){
-        S.maintenance=local;
-      } else {
-        // No local data either — show empty maintenance, not an error
-        S.maintenance={hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{},_loading:false};
-      }
-      render();
-    });
+    }).catch(function(){});
   }
   window.scrollTo(0,0);
   render();
