@@ -2875,6 +2875,7 @@ function renderLoadsheet(){
         :`<div style="padding:10px;background:var(--card2);border-radius:8px;font-size:12px;color:var(--text3);margin-bottom:8px">${canSign?(r&&a&&r.towCog!=null&&r.towCog<a.cogMin?"⚠ Forward CoG — fix seating before signing.":!allOk?"⚠ Fix W&B before signing.":""):"Only pilots can sign loadsheets. Save as draft for a pilot to complete."}</div>`}
         <div style="margin-top:12px">
           ${(()=>{
+            const _overCap=a?Object.keys(f.seats).filter(i=>parseInt(i)>=a.seats.length&&(parseFloat(f.seats[i])>0||f.names[i])).length:0;
             const fwdCog=r&&a&&r.towCog!=null&&r.towCog<a.cogMin;
             const canSubmit=canSign&&allOk&&f.sig&&f.pic&&!fwdCog;
             const fwdWarn=fwdCog?`<div style="padding:8px 12px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fde68a">⚠ Forward CoG ${r.towCog?.toFixed(2)}" — forward of limit ${a?.cogMin}". Adjust seating before submitting.</div>`:'';
