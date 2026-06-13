@@ -313,15 +313,15 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.47';
+const APP_VER='v21.50';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
 const CREW_DEF=[{id:'c1',name:"P. Daniell",weight:104},{id:'c2',name:"A. Adamson",weight:110},{id:'c3',name:"T. Patel",weight:89},{id:'c4',name:"J. Yang",weight:73},{id:'c5',name:"L. McLean",weight:70},{id:'c6',name:"L. Hancock",weight:96},{id:'c7',name:"D. Ogden",weight:85},{id:'c9',name:"J. Cooper",weight:89},{id:'c10',name:"M. Stott",weight:62},{id:'c11',name:"L. Vincent",weight:68}];
 
 const AC_DEF={
-  "ZK-SLD":{id:"ZK-SLD",name:"ZK-SLD",type:"GA-8 Airvan",ew:1059.91,ea:52.46,em:55603.546,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:40,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLDRev.#110626",layout:"ga8",fuelOver:20},
-  "ZK-SLQ":{id:"ZK-SLQ",name:"ZK-SLQ",type:"GA-8 Airvan",ew:1064.9,ea:53.15,em:56599.77,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:40,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLQRev.#110626",layout:"ga8",fuelOver:20},
+  "ZK-SLD":{id:"ZK-SLD",name:"ZK-SLD",type:"GA-8 Airvan",ew:1059.91,ea:52.46,em:55603.546,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:35,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLDRev.#110626",layout:"ga8",fuelOver:20},
+  "ZK-SLQ":{id:"ZK-SLQ",name:"ZK-SLQ",type:"GA-8 Airvan",ew:1064.9,ea:53.15,em:56599.77,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:35,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLQRev.#110626",layout:"ga8",fuelOver:20},
   "ZK-SLA":{id:"ZK-SLA",name:"ZK-SLA",type:"C-208B Grand Caravan",ew:2384.58,ea:192.24,em:458411.659,mtow:3968,mlw:3856,mrw:3969,cogMin:182.57,cogMax:204.4,fuelKg:363,fuelArm:201.98,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:133.5,crew:true},{lbl:"Seat 1",arm:133.5},{lbl:"Seat 2",arm:173.5},{lbl:"Seat 3",arm:173.5},{lbl:"Seat 4",arm:203.36},{lbl:"Seat 5",arm:203.36},{lbl:"Seat 6",arm:234.35},{lbl:"Seat 7",arm:234.35},{lbl:"Seat 8",arm:264.35},{lbl:"Seat 9",arm:264.35},{lbl:"Seat 10",arm:294.15},{lbl:"Seat 11",arm:294.15},{lbl:"Seat 12",arm:343},{lbl:"Seat 13",arm:343}],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSLARev.#110626",layout:"c208",fuelOver:50},
   "ZK-SDB":{id:"ZK-SDB",name:"ZK-SDB",type:"C-208B Grand Caravan",ew:2460.17,ea:192.958,em:474709.483,mtow:4110,mlw:4082,mrw:4111,cogMin:183.49,cogMax:204.4,fuelKg:363,fuelArm:203.1,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:135.5,crew:true},{lbl:"Seat 1",arm:135.5},{lbl:"Seat 2",arm:176.9},{lbl:"Seat 3",arm:176.9},{lbl:"Seat 4",arm:211.9},{lbl:"Seat 5",arm:211.9},{lbl:"Seat 6",arm:246.9},{lbl:"Seat 7",arm:246.9},{lbl:"Seat 8",arm:281.9},{lbl:"Seat 9",arm:281.9},{lbl:"Seat 10",arm:344},{lbl:"Seat 11",arm:344}],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSDBRev.#110626B",layout:"c208",fuelOver:50},
   "ZK-SLB":{id:"ZK-SLB",name:"ZK-SLB",type:"C-208B Grand Caravan",ew:2340.91,ea:190.01,em:444796.309,mtow:3968,mlw:3856,mrw:3969,cogMin:181.71,cogMax:204.4,fuelKg:363,fuelArm:201.98,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:133.5,crew:true},{lbl:"Seat 1",arm:133.5},{lbl:"Seat 2",arm:173.5},{lbl:"Seat 3",arm:173.5},{lbl:"Seat 4",arm:203.36},{lbl:"Seat 5",arm:203.36},{lbl:"Seat 6",arm:234.35},{lbl:"Seat 7",arm:234.35},{lbl:"Seat 8",arm:264.35},{lbl:"Seat 9",arm:264.35},{lbl:"Seat 10",arm:294.15},{lbl:"Seat 11",arm:294.15},{lbl:"Seat 12",arm:343},{lbl:"Seat 13",arm:343}],removedSeats:[12,13],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSLBRev.#110626",layout:"c208",fuelOver:50}
@@ -2981,7 +2981,7 @@ function renderSaved(){
               +'<span class="pill pill-blue">'+(s.form.dep||'?')+' &#x2192; '+(s.form.dest||'?')+'</span>'
               +(isSigned?'<span class="pill pill-green">&#x2713; Signed</span>':'<span class="pill" style="background:#0c1a3a;color:#93c5fd">UNSIGNED</span>')
               +'</div>'
-              +'<div style="font-size:12px;color:var(--text3)">'+(s.form.date||'?')+(s.form.etd?' &#xb7; '+s.form.etd:'')+' &#xb7; '+new Date(s.savedAt||0).toLocaleDateString('en-NZ')+'</div>'
+              +'<div style="font-size:12px;color:var(--text3)">'+(s.form.date||'?')+(s.form.etd?' &#xb7; ETD: '+s.form.etd:'')+' &#xb7; '+(Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length)+' PAX &#xb7; PIC: '+(s.form.pic||'?')+' &#xb7; Saved: '+(s.savedAt?new Date(s.savedAt).toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}):'&mdash;')+'</div>'
               +'</div>'
               +'<div style="display:flex;gap:5px;flex-shrink:0">'
               +'<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" data-sid="'+s.id+'" onclick="editSaved(this.dataset.sid)">Open</button>'
@@ -2998,7 +2998,7 @@ function renderSaved(){
       <input type="checkbox" ${S.savedSel[m.id]?'checked':''} onchange="window.toggleSavedSel('${m.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
       <div style="flex:1">
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
-        <div style="font-size:12px;color:var(--text3)">${m.savedAt?new Date(m.savedAt).toLocaleDateString('en-NZ'):''} · ${m.data?.pax?.length||0} pax</div>
+        <div style="font-size:12px;color:var(--text3)">${m.savedAt?new Date(m.savedAt).toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}):''} · ${m.data?.pax?.length||0} pax</div>
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-ghost" style="font-size:12px" onclick="loadManifest('${m.id}')">Load</button>
@@ -3024,7 +3024,7 @@ function renderSaved(){
               <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
               <span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 UNSIGNED</span>
             </div>
-            <div style="font-size:12px;color:var(--text3)">${s.form.date||'?'}${s.form.etd?' · '+s.form.etd:''} · PIC: ${s.form.pic||'?'}</div>
+            <div style="font-size:12px;color:var(--text3)">${s.form.date||'?'}${s.form.etd?' · ETD: '+s.form.etd:''} · ${Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length} PAX · PIC: ${s.form.pic||'?'} · Saved: ${s.savedAt?new Date(s.savedAt).toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}):'&mdash;'}</div>
           </div>
           <div style="display:flex;gap:5px;flex-shrink:0">
             <button class="btn btn-sky" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>
@@ -3092,7 +3092,7 @@ function renderSaved(){
             ${isSigned?(s.driveUploaded?'<span class="pill pill-green" style="font-size:10px">☁ Drive ✓</span>':'<span class="pill" style="background:rgba(100,116,139,.12);border:1px solid var(--border2);color:var(--text3);font-size:10px">☁ Not uploaded</span>'):''}
 
           </div>
-          <div style="font-size:12px;color:var(--text3)">${s.form.date||'?'}${s.form.etd?' · '+s.form.etd:''} · PIC: ${s.form.pic||'?'}</div>
+          <div style="font-size:12px;color:var(--text3)">${s.form.date||'?'}${s.form.etd?' · ETD: '+s.form.etd:''} · ${Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length} PAX · PIC: ${s.form.pic||'?'} · Saved: ${s.savedAt?new Date(s.savedAt).toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}):'&mdash;'}</div>
         </div>
         <div style="display:flex;gap:5px;flex-shrink:0">
           ${isSigned?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${s.id}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${s.id}')">&#x21BA; Reopen</button>`:`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>`}
