@@ -2943,7 +2943,7 @@ function renderLoadsheet(){
       <div style="font-size:12px;color:#93c5fd;font-weight:600">ZK-${S.lsAc||f.ac.replace('ZK-','')} ${a?' &middot; '+a.type+' &middot; EW '+a.ew+'kg &middot; MTOW '+a.mtow+'kg':''}</div>
       <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">
         <span style="font-size:11px;color:var(--text3)">Change aircraft:</span>
-        ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){return'<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="window.changeLsAircraft('ZK-'+ac)">'+ac+'</button>';}).join('')}
+        ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){return'<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="window.changeLsAircraft(\'ZK-'+ac+'\')">'+ac+'</button>';}).join('')}
       </div>
     </div>
     <div class="g2">
