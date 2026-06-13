@@ -315,7 +315,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.69';
+const APP_VER='v21.70';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -1112,8 +1112,6 @@ async function loadAll(){
     if(us&&us.length){
       S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,isPilot:r.is_pilot||r.role==='pilot'||false}));
       lsSet('ts_users_cache',S.users);
-    }
-    if(_initPads&&_initPads.length){S.pads=_initPads.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});}
     } else {
       const cached=lsGet('ts_users_cache');
       if(cached&&cached.length){S.users=cached;}
@@ -1125,6 +1123,7 @@ async function loadAll(){
         await sbU('ts_users',[{id:admin.id,name:admin.name,email:admin.email,role:admin.role,linked_crew:admin.linkedCrew,password_hash:admin.passwordHash}]);
       }
     }
+    if(_initPads&&_initPads.length){S.pads=_initPads.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});}
 
     // ── Role Permissions ──
     try{
@@ -2879,7 +2878,7 @@ function renderLoadsheet(){
           </div>
           ${infantNm?`<div style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}<button onclick="window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></div>`:''}
           
-          ${hasPerson?`<div style="display:grid;grid-template-columns:50px 50px 1fr;gap:4px;align-items:end">
+          <div style="display:grid;grid-template-columns:50px 50px${hasPerson?' 1fr':''};gap:4px;align-items:end">
             <div>
               <div style="font-size:8px;color:var(--text3)">WT kg</div>
               <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsS(${idx},this.value);window.lsCheckChildWt(${idx})">
@@ -2888,20 +2887,11 @@ function renderLoadsheet(){
               <div style="font-size:8px;color:var(--text3)">BAG kg</div>
               <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsB(${idx},this.value)">
             </div>
-            <div style="display:flex;gap:3px;padding-bottom:2px;justify-content:flex-end">
+            ${hasPerson?`<div style="display:flex;gap:3px;padding-bottom:2px;justify-content:flex-end">
               <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'A')" style="padding:1px 6px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(74,222,128,.3)':'rgba(74,222,128,.8)'};background:${(f.paxType||{})[idx]==='C'?'transparent':'rgba(74,222,128,.2)'};color:#4ade80;font-size:10px;font-weight:700;cursor:pointer">A</button>
               <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'C')" style="padding:1px 6px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.8)':'rgba(251,146,60,.3)'};background:${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.2)':'transparent'};color:#fb923c;font-size:10px;font-weight:700;cursor:pointer">C</button>
-            </div>
-          </div>`:<div style="display:grid;grid-template-columns:50px 50px;gap:4px">
-            <div>
-              <div style="font-size:8px;color:var(--text3)">WT kg</div>
-              <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsS(${idx},this.value);window.lsCheckChildWt(${idx})">
-            </div>
-            <div>
-              <div style="font-size:8px;color:var(--text3)">BAG kg</div>
-              <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsB(${idx},this.value)">
-            </div>
-          </div>}
+            </div>`:''}
+          </div>
         </div>`;
       });
       // Seat 1 sits in right column — insert blank spacer in left column first
