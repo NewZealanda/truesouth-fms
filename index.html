@@ -278,6 +278,7 @@ const SH={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer 
 const sbF=async(t,q='')=>{try{const r=await fetch(`${SB}/rest/v1/${t}?select=*${q}&order=created_at.desc`,{headers:SH});return r.ok?r.json():null;}catch{return null;}};
 const sbU=async(t,d)=>{try{const r=await fetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);return null;}};
 const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:SH});return r.ok;}catch{return false;}};
+const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
 
 
 // ── Constants ──
@@ -293,74 +294,36 @@ const DEFAULT_ROLE_PERMS={
 };
 const GRP_COLOURS=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];
 // Airport map: ICAO → full name
-const APTS={
-  NZQN:"Queenstown",NZMF:"Milford Sound",NZDN:"Dunedin",NZNV:"Invercargill",
-  NZCH:"Christchurch",NZWN:"Wellington",NZNS:"Nelson",NZWF:"Wanaka",
-  NZGT:"Gore",NZGY:"Gore (Gemstone Bay)",NZMC:"Mount Cook / Pukaki",NZMW:"Manapouri",
-  NZMO:"Mossburn",NZOA:"Oamaru",NZLX:"Luggate",NZTU:"Tuatapere",
-  NZUK:"Motueka",NZOU:"Omarama",NZVL:"Lumsden",NZCS:"Caesar's Landing",
-  NZFJ:"Franz Josef",NZFO:"Fox Glacier",NZHT:"Haast",NZMK:"Moeraki",
-  NZPN:"Picton",NZWB:"Westport",NZHK:"Hokitika",NZGM:"Greymouth",
-  NZNP:"New Plymouth",NZPM:"Palmerston North",NZPP:"Paraparaumu",NZWU:"Whanganui",
-  NZHN:"Hamilton",NZAP:"Taupo",NZTG:"Tauranga",NZRO:"Rotorua",
-  NZGS:"Gisborne",NZNR:"Napier / Hastings",NZKK:"Kaikōura",NZKT:"Kaitaia",
-  NZWR:"Wairoa",NZWS:"Westshore (Napier)",NZWK:"Whakatāne",NZAA:"Auckland",NZTK:"Te Anau"
-};
-const APS=Object.keys(APTS);
-// Build airport option HTML for a given selected value
-function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selected':''}>${APTS[k]} (${k})</option>`).join('');}
-
-
-// Aircraft colours from Google Calendar
-const AC_COL={
-  "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
-};
-const APP_VER='v21.73';
-const acDisp=id=>id?id.replace('ZK-',''):id;
-
-// ── Default Data ──
-const CREW_DEF=[{id:'c1',name:"P. Daniell",weight:104},{id:'c2',name:"A. Adamson",weight:110},{id:'c3',name:"T. Patel",weight:89},{id:'c4',name:"J. Yang",weight:73},{id:'c5',name:"L. McLean",weight:70},{id:'c6',name:"L. Hancock",weight:96},{id:'c7',name:"D. Ogden",weight:85},{id:'c9',name:"J. Cooper",weight:89},{id:'c10',name:"M. Stott",weight:62},{id:'c11',name:"L. Vincent",weight:68}];
-
-const AC_DEF={
-  "ZK-SLD":{id:"ZK-SLD",name:"ZK-SLD",type:"GA-8 Airvan",ew:1059.91,ea:52.46,em:55603.546,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:35,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLDRev.#110626",layout:"ga8",fuelOver:20},
-  "ZK-SLQ":{id:"ZK-SLQ",name:"ZK-SLQ",type:"GA-8 Airvan",ew:1064.9,ea:53.15,em:56599.77,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:35,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLQRev.#110626",layout:"ga8",fuelOver:20},
-  "ZK-SLA":{id:"ZK-SLA",name:"ZK-SLA",type:"C-208B Grand Caravan",ew:2384.58,ea:192.24,em:458411.659,mtow:3968,mlw:3856,mrw:3969,cogMin:182.57,cogMax:204.4,fuelKg:363,fuelArm:201.98,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:133.5,crew:true},{lbl:"Seat 1",arm:133.5},{lbl:"Seat 2",arm:173.5},{lbl:"Seat 3",arm:173.5},{lbl:"Seat 4",arm:203.36},{lbl:"Seat 5",arm:203.36},{lbl:"Seat 6",arm:234.35},{lbl:"Seat 7",arm:234.35},{lbl:"Seat 8",arm:264.35},{lbl:"Seat 9",arm:264.35},{lbl:"Seat 10",arm:294.15},{lbl:"Seat 11",arm:294.15},{lbl:"Seat 12",arm:343},{lbl:"Seat 13",arm:343}],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSLARev.#110626",layout:"c208",fuelOver:50},
-  "ZK-SDB":{id:"ZK-SDB",name:"ZK-SDB",type:"C-208B Grand Caravan",ew:2460.17,ea:192.958,em:474709.483,mtow:4110,mlw:4082,mrw:4111,cogMin:183.49,cogMax:204.4,fuelKg:363,fuelArm:203.1,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:135.5,crew:true},{lbl:"Seat 1",arm:135.5},{lbl:"Seat 2",arm:176.9},{lbl:"Seat 3",arm:176.9},{lbl:"Seat 4",arm:211.9},{lbl:"Seat 5",arm:211.9},{lbl:"Seat 6",arm:246.9},{lbl:"Seat 7",arm:246.9},{lbl:"Seat 8",arm:281.9},{lbl:"Seat 9",arm:281.9},{lbl:"Seat 10",arm:344},{lbl:"Seat 11",arm:344}],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSDBRev.#110626B",layout:"c208",fuelOver:50},
-  "ZK-SLB":{id:"ZK-SLB",name:"ZK-SLB",type:"C-208B Grand Caravan",ew:2340.91,ea:190.01,em:444796.309,mtow:3968,mlw:3856,mrw:3969,cogMin:181.71,cogMax:204.4,fuelKg:363,fuelArm:201.98,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:133.5,crew:true},{lbl:"Seat 1",arm:133.5},{lbl:"Seat 2",arm:173.5},{lbl:"Seat 3",arm:173.5},{lbl:"Seat 4",arm:203.36},{lbl:"Seat 5",arm:203.36},{lbl:"Seat 6",arm:234.35},{lbl:"Seat 7",arm:234.35},{lbl:"Seat 8",arm:264.35},{lbl:"Seat 9",arm:264.35},{lbl:"Seat 10",arm:294.15},{lbl:"Seat 11",arm:294.15},{lbl:"Seat 12",arm:343},{lbl:"Seat 13",arm:343}],removedSeats:[12,13],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSLBRev.#110626",layout:"c208",fuelOver:50}
-};
-
-// ── Charter rates default ──
-const CHARTER_RATES_DEF={
-  "ZK-SLD":{perHour:2500,minHours:1,currency:'NZD'},
-  "ZK-SLQ":{perHour:2500,minHours:1,currency:'NZD'},
-  "ZK-SLA":{perHour:4500,minHours:1,currency:'NZD'},
-  "ZK-SDB":{perHour:5000,minHours:1,currency:'NZD'},
-  "ZK-SLB":{perHour:4500,minHours:1,currency:'NZD'},
-};
-
-// Airport approximate distances (nm) — can be refined
-const APT_COORDS={
-  NZQN:{lat:-45.021,lng:168.739},NZMF:{lat:-44.674,lng:167.924},NZDN:{lat:-45.928,lng:170.198},
-  NZNV:{lat:-46.412,lng:168.313},NZCH:{lat:-43.489,lng:172.532},NZWN:{lat:-41.327,lng:174.805},
-  NZAA:{lat:-37.008,lng:174.792},NZNS:{lat:-41.298,lng:173.221},NZWF:{lat:-44.722,lng:169.246},
-  // Mt Cook, Glentanner (Lake Pukaki NW), Glenorchy, Pukaki/Twizel
-  NZMC:{lat:-43.766,lng:170.135},NZGT:{lat:-43.907,lng:170.128},NZGY:{lat:-44.850,lng:168.396},NZUK:{lat:-44.237,lng:170.119},
-  // Te Anau/Manapouri airport, Makarora, Gore aerodrome
-  NZMO:{lat:-45.533,lng:167.650},NZMW:{lat:-44.230,lng:169.232},NZGC:{lat:-46.157,lng:168.898},NZTU:{lat:-46.133,lng:167.683},
-  // Omarama, Oamaru, Lumsden, Cromwell
-  NZOA:{lat:-44.482,lng:170.017},NZOU:{lat:-45.033,lng:170.983},NZVL:{lat:-45.752,lng:168.446},NZCS:{lat:-45.049,lng:169.171},
-  // Alexandra, Tākaka
-  NZLX:{lat:-45.212,lng:169.373},NZTK:{lat:-40.817,lng:172.776},
-  NZFJ:{lat:-43.363,lng:170.134},NZFO:{lat:-43.463,lng:170.018},
-  NZHT:{lat:-43.865,lng:169.041},NZMK:{lat:-44.601,lng:171.234},NZPN:{lat:-41.345,lng:174.059},
-  NZWB:{lat:-41.738,lng:171.581},NZHK:{lat:-42.714,lng:170.985},NZGM:{lat:-42.460,lng:171.193},
-  NZNP:{lat:-39.008,lng:174.179},NZPM:{lat:-40.321,lng:175.617},NZPP:{lat:-40.905,lng:174.989},
-  NZWU:{lat:-39.962,lng:175.024},NZHN:{lat:-37.867,lng:175.332},NZAP:{lat:-38.740,lng:176.084},
-  NZTG:{lat:-37.672,lng:176.196},NZRO:{lat:-38.109,lng:176.317},NZGS:{lat:-38.663,lng:177.977},
-  NZNR:{lat:-39.466,lng:176.870},NZKK:{lat:-42.425,lng:173.607},NZKT:{lat:-35.070,lng:173.286},
-  NZWR:{lat:-39.245,lng:177.404},NZWS:{lat:-39.465,lng:176.870},NZWK:{lat:-37.920,lng:176.914}
-};
-function distNm(a,b){const A=APT_COORDS[a],B=APT_COORDS[b];if(!A||!B)return 0;const R=3440,dLat=(B.lat-A.lat)*Math.PI/180,dLng=(B.lng-A.lng)*Math.PI/180,s=Math.sin(dLat/2)**2+Math.cos(A.lat*Math.PI/180)*Math.cos(B.lat*Math.PI/180)*Math.sin(dLng/2)**2;return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));}
+var APTS={};var APT_COORDS={};var APS=[];
+var _APT_PINNED=["NZQN","NZMF","NZMC","NZFJ"];
+function _getAllApts(){
+  var base=typeof NZ_AERODROMES!=="undefined"?NZ_AERODROMES:[];
+  var custom=[];try{custom=JSON.parse(lsGet("custom_aerodromes")||"[]");}catch(e){}
+  var map={};
+  base.forEach(function(a){map[a.icao]=a;});
+  custom.forEach(function(a){map[a.icao]=a;});
+  return Object.values(map);
+}
+function _rebuildAptData(){
+  var all=_getAllApts();
+  APTS={};APT_COORDS={};
+  all.forEach(function(a){APTS[a.icao]=a.name;APT_COORDS[a.icao]={lat:a.lat,lng:a.lon};});
+  APS=Object.keys(APTS);
+}
+function aptOpts(sel){
+  _rebuildAptData();
+  var all=_getAllApts();
+  var pinned=_APT_PINNED.map(function(ic){return all.find(function(a){return a.icao===ic;});}).filter(Boolean);
+  var rest=all.filter(function(a){return _APT_PINNED.indexOf(a.icao)<0;});
+  var south=rest.filter(function(a){return a.lat<=-41.35;}).sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});
+  var north=rest.filter(function(a){return a.lat>-41.35;}).sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});
+  function opt(a){return '<option value="'+a.icao+'"'+(sel===a.icao?' selected':'')+'>'+a.name+' ('+a.icao+')</option>';}
+  return '<optgroup label="* Featured">'+pinned.map(opt).join('')+'</optgroup>'
+    +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
+    +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
+}
+const APP_VER='v21.75';
+function distNm(a,b){if(!Object.keys(APT_COORDS).length)_rebuildAptData();const A=APT_COORDS[a],B=APT_COORDS[b];if(!A||!B)return 0;const R=3440,dLat=(B.lat-A.lat)*Math.PI/180,dLng=(B.lng-A.lng)*Math.PI/180,s=Math.sin(dLat/2)**2+Math.cos(A.lat*Math.PI/180)*Math.cos(B.lat*Math.PI/180)*Math.sin(dLng/2)**2;return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));}
 
 
 // ── Utility ──
@@ -1072,14 +1035,8 @@ async function loadAll(){
 
     // ── Loadsheets ──
     const ls=await sbF('ts_loadsheets');
-    // Load uploaded sheet IDs from Supabase settings
-    let _uploadedIds=new Set(lsGet('ts_drive_uploaded_ids')||[]);
-    try{
-      const _ur=await fetch(SB+'/rest/v1/ts_settings?key=eq.drive_uploaded_ids&select=value',{headers:SH});
-      if(_ur.ok){const _urows=await _ur.json();if(_urows&&_urows.length){const _uval=typeof _urows[0].value==='string'?JSON.parse(_urows[0].value):_urows[0].value;if(Array.isArray(_uval)){_uploadedIds=new Set(_uval);lsSet('ts_drive_uploaded_ids',_uval);}}}
-    }catch(_){}
     if(ls){
-      S.saved=ls.map(r=>({id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete',driveUploaded:_uploadedIds.has(r.id)}));
+      S.saved=ls.map(r=>({id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete',driveUploaded:!!r.drive_uploaded}));
       lsSet('ts_loadsheets_cache',S.saved);
     } else {
       const cached=lsGet('ts_loadsheets_cache');
@@ -2184,19 +2141,24 @@ function renderApp(){
           <div style="font-size:17px;font-weight:800;color:var(--text1)">How to use TrueSouth FMS</div>
           <button onclick="S._helpOpen=false;render()" style="background:transparent;border:none;font-size:18px;color:var(--text3);cursor:pointer;padding:0 4px">&#x00D7;</button>
         </div>
-        <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;flex-direction:column;gap:18px">
           ${[
-            {n:1,title:'Add Passengers',body:'Go to the Operations tab. Enter passenger names and weights. Infants attach under their guardian seat.'},
-            {n:2,title:'Assign Seats',body:'On the Seatmap, drag passengers into seats. Tap Re-Allocate to let the solver suggest an optimal layout.'},
-            {n:3,title:'Create a Loadsheet',body:'Once seats look right, tap Create Loadsheet under each aircraft to open a pre-filled loadsheet tab.'},
-            {n:4,title:'Complete the Loadsheet',body:'Confirm passenger weights, enter fuel and burn-off, and add cargo. The W&B summary updates live.'},
-            {n:5,title:'Sign and Submit',body:'The PIC draws their signature in the PIC Certification box. Once signed, tap Save and Submit to finalise.'},
-            {n:6,title:'View and Upload',body:'Completed loadsheets appear in the Saved tab. From there you can re-open, upload to Google Drive, or print.'},
-            {n:7,title:'Admin (admins only)',body:'Manage crew accounts, roles, Google Drive setup, and aerodromes. View statistics from signed loadsheets.'},
-          ].map(s=>`<div style="display:flex;gap:12px;align-items:flex-start">
-            <div style="width:26px;height:26px;border-radius:50%;background:var(--acc);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${s.n}</div>
-            <div><div style="font-size:13px;font-weight:700;color:var(--text1);margin-bottom:2px">${s.title}</div>
-            <div style="font-size:12px;color:var(--text3);line-height:1.5">${s.body}</div></div>
+            {n:1,title:'Add Passengers',body:'Go to the <strong style="color:var(--text)">Operations</strong> tab. Tap <strong style="color:var(--text)">+ Add Passenger</strong> and enter their name and weight in kg. Tap <strong style="color:var(--text)">+ Infant</strong> under a passenger to attach an infant to that seat.',img:'help_1_add_pax'},
+            {n:2,title:'Assign Seats',body:'Switch to the <strong style="color:var(--text)">Seatmap</strong> sub-tab. Drag passengers from the list into the seat slots. Tap <strong style="color:var(--text)">Re-Allocate</strong> to let the solver find an optimal weight-balanced layout automatically.',img:'help_2_seatmap'},
+            {n:3,title:'Create a Loadsheet',body:'Once the seatmap looks right, tap <strong style="color:var(--text)">Create Loadsheet</strong> under the aircraft. This opens a pre-filled loadsheet tab with all passenger weights and seat assignments already populated.',img:'help_3_create_ls'},
+            {n:4,title:'Complete the Loadsheet',body:'Review passenger weights and names. Enter <strong style="color:var(--text)">Fuel (litres)</strong> and <strong style="color:var(--text)">Burn-off</strong>. Add cargo weights if applicable. The Weight &amp; Balance chart updates live — green means within limits.',img:'help_4_complete_ls'},
+            {n:5,title:'Sign and Submit',body:'Scroll to the <strong style="color:var(--text)">PIC Certification</strong> box. The PIC draws their signature using a finger or stylus. Once signed, tap <strong style="color:var(--text)">Save &amp; Submit</strong> to lock and file the loadsheet.',img:'help_5_sign'},
+            {n:6,title:'View and Upload',body:'Completed loadsheets appear in the <strong style="color:var(--text)">Saved</strong> sub-tab. Tap the cloud icon to upload to Google Drive. Select multiple with checkboxes then use the print or upload buttons in the bulk bar.',img:'help_6_saved'},
+            {n:7,title:'Admin (admins only)',body:'Go to the <strong style="color:var(--text)">Admin</strong> tab to manage crew accounts, set permissions, configure Google Drive upload, add custom aerodromes, and view flight statistics.',img:'help_7_admin'},
+          ].map(s=>`<div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden">
+            <div style="display:flex;gap:12px;align-items:flex-start;padding:12px">
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--acc);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${s.n}</div>
+              <div><div style="font-size:13px;font-weight:700;color:var(--text1);margin-bottom:4px">${s.title}</div>
+              <div style="font-size:12px;color:var(--text3);line-height:1.6">${s.body}</div></div>
+            </div>
+            <div style="background:var(--card2);border-top:1px solid var(--border);height:140px;display:flex;align-items:center;justify-content:center" id="help-img-${s.img}">
+              <span style="font-size:11px;color:var(--text3);opacity:.5">[ screenshot placeholder ]</span>
+            </div>
           </div>`).join('')}
         </div>
       </div>
@@ -2899,14 +2861,18 @@ function renderLoadsheet(){
     seatsH=`<div class="card" id="lsf-seats" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
       <div class="st" style="display:flex;align-items:center;justify-content:space-between">Seats &amp; Passengers${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}</div>
       ${wbSummary}
-      <div style="text-align:center;margin-bottom:10px">
-        ${renderCabinSVG(f.ac,false,f,window.innerWidth<=520?40:52,window.innerWidth<=520?34:44)}
-      </div>
-      ${picCard}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">${paxCards}</div>
-      <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:6px;border-top:1px solid var(--border)">
-        <span style="font-size:12px;font-weight:700;color:var(--text3)">Total Pax</span>
-        <span style="font-size:13px;font-weight:700">${r?r.paxW.toFixed(1):'—'} kg</span>
+      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+        <div style="flex-shrink:0">
+          ${renderCabinSVG(f.ac,false,f,window.innerWidth<=520?40:52,window.innerWidth<=520?34:44)}
+        </div>
+        <div style="flex:1;min-width:200px">
+          ${picCard}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">${paxCards}</div>
+          <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:6px;border-top:1px solid var(--border)">
+            <span style="font-size:12px;font-weight:700;color:var(--text3)">Total Pax</span>
+            <span style="font-size:13px;font-weight:700">${r?r.paxW.toFixed(1):'—'} kg</span>
+          </div>
+        </div>
       </div>
     </div>`;
 
@@ -2938,8 +2904,7 @@ function renderLoadsheet(){
         </div>`;
       }).join('');
       cargoH=`<div class="card" id="lsf-cargo" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};display:flex;flex-direction:column"><div class="st">Cargo Pod Zones</div>
-        ${fusSVG}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${zoneBoxes}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1">${zoneBoxes}</div>
       </div>`;
     } else {
       cargoH='';
@@ -2950,33 +2915,33 @@ function renderLoadsheet(){
     const fuelDestLbl=a?.layout==='ga8'
       ?`${(fuelRemKg/AVGAS).toFixed(0)}L (${fuelRemKg.toFixed(0)}kg) remaining`
       :`${(fuelRemKg/LB).toFixed(0)} lbs remaining`;
-    fuelH=`<div class="card" id="lsf-fuel" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};flex:1;display:flex;flex-direction:column"><div class="st">Fuel & Burn</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:10px 12px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:6px">Fuel Loaded</div>
-        <div style="display:flex;align-items:baseline;gap:5px">
-          <input class="fi ls-no-spin" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:20px;font-weight:800;width:80px;padding:0;background:transparent;border:none;border-bottom:1px solid rgba(59,130,246,.4);color:var(--text)" onblur="lsFuel(this.value,'${f.ac}')">
-          <span style="font-size:12px;color:#60a5fa">${fuelUnit_}</span>
+    fuelH=`<div class="card" id="lsf-fuel" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};display:flex;flex-direction:column"><div class="st">Fuel & Burn</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1">
+      <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:4px">Fuel Loaded</div>
+        <div style="display:flex;align-items:baseline;gap:4px">
+          <input class="fi ls-no-spin" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsFuel(this.value,'${f.ac}')">
+          <span style="font-size:11px;color:#60a5fa">${fuelUnit_}</span>
         </div>
-        <div style="font-size:11px;color:#60a5fa;margin-top:4px">= ${fuelKgVal.toFixed(1)} kg</div>
+        <div style="font-size:10px;color:#60a5fa;margin-top:2px">${fuelKgVal.toFixed(1)} kg</div>
       </div>
-      <div style="background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30);border-radius:10px;padding:10px 12px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#f59e0b;text-transform:uppercase;margin-bottom:6px">Ground Burn</div>
-        <div style="font-size:20px;font-weight:800;color:var(--text)">${a.gndBurn}</div>
-        <div style="font-size:11px;color:#f59e0b;margin-top:4px">kg</div>
+      <div style="background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30);border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f59e0b;text-transform:uppercase;margin-bottom:4px">Gnd Burn</div>
+        <div style="font-size:16px;font-weight:800;color:var(--text)">${a.gndBurn}</div>
+        <div style="font-size:10px;color:#f59e0b;margin-top:2px">kg</div>
       </div>
-      <div style="background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.30);border-radius:10px;padding:10px 12px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#f87171;text-transform:uppercase;margin-bottom:6px">Flight Burn</div>
-        <div style="display:flex;align-items:baseline;gap:5px">
-          <input class="fi ls-no-spin" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:20px;font-weight:800;width:80px;padding:0;background:transparent;border:none;border-bottom:1px solid rgba(239,68,68,.4);color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
-          <span style="font-size:12px;color:#f87171">${a?.layout==='ga8'?'L':burnUnit_}</span>
+      <div style="background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.30);border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f87171;text-transform:uppercase;margin-bottom:4px">Flt Burn</div>
+        <div style="display:flex;align-items:baseline;gap:4px">
+          <input class="fi ls-no-spin" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
+          <span style="font-size:11px;color:#f87171">${a?.layout==='ga8'?'L':burnUnit_}</span>
         </div>
-        <div style="font-size:11px;color:#f87171;margin-top:4px">= ${burnKgVal.toFixed(1)} kg · ≈ ${flightMin} min</div>
+        <div style="font-size:10px;color:#f87171;margin-top:2px">≈ ${flightMin} min</div>
       </div>
-      <div style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:10px;padding:10px 12px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:6px">Fuel @ Dest</div>
-        <div style="font-size:20px;font-weight:800;color:var(--text)">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
-        <div style="font-size:11px;color:#4ade80;margin-top:4px">${a?.layout==='ga8'?'litres remaining':'lbs remaining'}</div>
+      <div style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:4px">@ Dest</div>
+        <div style="font-size:16px;font-weight:800;color:var(--text)">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
+        <div style="font-size:10px;color:#4ade80;margin-top:2px">${a?.layout==='ga8'?'litres':'lbs'}</div>
       </div>
     </div></div>`;
 
@@ -3096,7 +3061,7 @@ function renderLoadsheet(){
       </div>
       <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
         <span style="font-size:10px;color:var(--text3)">Change:</span>
-        ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){return'<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="window.changeLsAircraft(\'ZK-'+ac+'\')">'+ac+'</button>';}).join('')}
+        ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){var col=AC_COL['ZK-'+ac]||'#64748b';return'<button style="font-size:10px;padding:3px 9px;border-radius:6px;border:1.5px solid '+col+';background:transparent;color:'+col+';font-weight:700;cursor:pointer" onclick="window.changeLsAircraft(\'ZK-'+ac+'\')">'+ac+'</button>';}).join('')}
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
@@ -3333,7 +3298,6 @@ const NZ_AERODROMES=[
   {icao:'NZTH',name:'Thames',lat:-37.1567,lon:175.5503,elev:11},
   {icao:'NZWV',name:'Waihi Beach',lat:-37.4300,lon:175.9519,elev:4},
   {icao:'NZGB',name:'Great Barrier Island (Claris)',lat:-36.2417,lon:175.4728,elev:20},
-  {icao:'NZOX',name:'Omarama',lat:-44.5822,lon:169.9858,elev:1407},
   {icao:'NZTG',name:'Tauranga',lat:-37.6719,lon:176.1961,elev:13},
   {icao:'NZWK',name:'Whakatane',lat:-37.9206,lon:176.9142,elev:20},
   {icao:'NZRO',name:'Rotorua',lat:-38.1092,lon:176.3172,elev:935},
@@ -3533,6 +3497,7 @@ window.aeroAddCustom=function(){
   custom.push({icao:icao,name:name,lat:lat,lon:lon,elev:elev,custom:true});
   _aerodromesCustom=custom;
   lsSet('custom_aerodromes',JSON.stringify(custom));
+  if(typeof _rebuildAptData==='function')_rebuildAptData();
   toast('Added '+icao+' ('+name+')','ok');
   render();
 };
@@ -3540,6 +3505,7 @@ window.aeroDeleteCustom=function(icao){
   var custom=_getCustomAerodromes().filter(function(c){return c.icao!==icao;});
   _aerodromesCustom=custom;
   lsSet('custom_aerodromes',JSON.stringify(custom));
+  if(typeof _rebuildAptData==='function')_rebuildAptData();
   if(S._aeroSel===icao)S._aeroSel=null;
   render();
 };
@@ -3698,14 +3664,14 @@ function renderSaved(){
       <option value="pic"${sort==='pic'?' selected':''}>By PIC</option>
     </select>
     <button class="btn btn-sky" onclick="newSheet()">+ New</button>
-    ${Object.keys(S.savedSel).length<items.length?`<button class="btn btn-ghost" style="font-size:12px" onclick="window.selectAllSaved(items.map(x=>x.id))">Select All (${items.length})</button>`:`<button class="btn btn-ghost" style="font-size:12px" onclick="window.clearSavedSel()">Deselect All</button>`}
+    ${Object.keys(S.savedSel).length<items.length?`<button class="btn btn-ghost" style="font-size:12px" onclick="window.selectAllSaved(${JSON.stringify(items.map(x=>x.id))})">Select All (${items.length})</button>`:`<button class="btn btn-ghost" style="font-size:12px" onclick="window.clearSavedSel()">Deselect All</button>`}
   </div>
   ${_bulkBar}
   ${!items.length
     ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">📋 ${S.saved.length?'No results for "'+search+'"':'No saved loadsheets'}</div>`
     :items.map(s=>{
       const col=AC_COL[s.form.ac]||'#64748b';
-      const _paxCnt=Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length;
+      const _paxCnt=Object.keys(s.form.names||{}).filter(function(k){var ki=parseInt(k);if(ki===0)return false;var nm=s.form.names[k];return nm&&nm.trim();}).length;
       const _savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
       const r=calcFormWB(s.form);
       const ok=r&&r.towOk&&r.lwOk&&r.cogOk;
@@ -3765,7 +3731,7 @@ function renderCharter(){
         <span style="font-weight:700;font-size:13px;color:var(--text2)">Leg ${i+1}</span>
         ${legs.length>1?`<button class="icon-btn red" onclick="removeLeg(${i})" style="width:26px;height:26px;font-size:12px">✕</button>`:''}
       </div>
-      <div class="g3" style="margin-bottom:10px">
+      <div class="g2" style="margin-bottom:10px">
         <div><label>From</label>
           <select class="fi" onchange="setLeg(${i},'from',this.value)">
             ${aptOpts(leg.from)}
@@ -3774,11 +3740,13 @@ function renderCharter(){
           <select class="fi" onchange="setLeg(${i},'to',this.value)">
             ${aptOpts(leg.to)}
           </select></div>
-        <div><label>Aircraft</label>
-          <select class="fi" onchange="setLeg(${i},'acId',this.value)">
-            <option value="">— select —</option>
-            ${Object.values(S.aircraft).map(x=>`<option value="${x.id}"${leg.acId===x.id?' selected':''}>${x.name}</option>`).join('')}
-          </select></div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label>Aircraft</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+          ${Object.values(S.aircraft).map(x=>{const col=AC_COL[x.id]||'#64748b';const sel=leg.acId===x.id;return`<button onclick="setLeg(${i},'acId','${x.id}')" style="padding:6px 12px;border-radius:7px;border:2px solid ${col};background:${sel?col:'transparent'};color:${sel?'#fff':col};font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">${x.id.replace('ZK-','')}</button>`;}).join('')}
+          ${leg.acId?`<button onclick="setLeg(${i},'acId','')" style="padding:6px 10px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:11px;cursor:pointer">✕ Clear</button>`:''}
+        </div>
       </div>
       <div class="g2" style="margin-bottom:10px">
         <div>
@@ -5052,10 +5020,6 @@ window.bulkUploadSaved=async function(){
     if(!sheet)continue;
     try{
       await uploadToDrive(sheet,_bulkToken);
-      sheet.driveUploaded=true;
-      var stored=lsGet('ts_drive_uploaded_ids')||[];
-      if(!stored.includes(sheet.id)){stored.push(sheet.id);lsSet('ts_drive_uploaded_ids',stored);}
-      sbU('ts_settings',[{key:'drive_uploaded_ids',value:JSON.stringify(stored)}]).catch(function(){});
       ok++;
     }catch(e){fail++;}
   }
@@ -5654,6 +5618,12 @@ window.uploadToDrive=async function(sheet,preToken){
     var folderLink='https://drive.google.com/drive/folders/'+monthId;
     S.driveStatus='ok:'+fname;S.driveLastLink=fileLink;S.driveLastFile=fname;S.driveLastFolder=folderLink;
     S.appMsg={type:'ok',text:'Saved to Drive: '+fname+' — <a href="'+fileLink+'" target="_blank" style="color:inherit">Open ↗</a> &nbsp; <a href="'+folderLink+'" target="_blank" style="color:inherit">Folder ↗</a>'};
+    // Mark as uploaded in Supabase — updates drive_uploaded column on ts_loadsheets row
+    if(sheet&&sheet.id){
+      sbPatch('ts_loadsheets',sheet.id,{drive_uploaded:true}).catch(function(){});
+      var _sh=S.saved.find(function(s){return s.id===sheet.id;});
+      if(_sh)_sh.driveUploaded=true;
+    }
     render();
     // No popup - status banner handles it
   }else{
@@ -6063,13 +6033,7 @@ window.forceUploadAll=async function(){
     var _sheet=pending[_i];
     try{
       await uploadToDrive(_sheet,sharedToken);
-      _sheet.driveUploaded=true;ok++;
-      // Persist uploaded ID to Supabase + localStorage so it survives reloads
-      (function(sid){
-        var ids=lsGet('ts_drive_uploaded_ids')||[];
-        if(!ids.includes(sid)){ids.push(sid);lsSet('ts_drive_uploaded_ids',ids);}
-        sbU('ts_settings',[{key:'drive_uploaded_ids',value:JSON.stringify(ids)}]).catch(function(){});
-      })(_sheet.id);
+      ok++;
       S.uploadProgress='Uploaded '+ok+'/'+pending.length+'…';render();
     }catch(_e){fail++;console.error('Upload failed:',_sheet.id,_e);}
   }
@@ -6262,10 +6226,6 @@ window.uploadSingleSheet=async function(id){
   toast('Uploading to Drive…','info');
   try{
     await uploadToDrive(sheet,null);
-    sheet.driveUploaded=true;
-    var ids=lsGet('ts_drive_uploaded_ids')||[];
-    if(!ids.includes(id)){ids.push(id);lsSet('ts_drive_uploaded_ids',ids);}
-    sbU('ts_settings',[{key:'drive_uploaded_ids',value:JSON.stringify(ids)}]).catch(function(){});
     toast('Uploaded to Drive ✓','ok');render();
   }catch(e){
     toast('Upload failed: '+(e&&e.message||e),'err');
@@ -6373,6 +6333,20 @@ function renderMaintAircraftData(){
   return renderAdminAircraft();
 }
 
+function _lastUpdatedLabel(ac){
+  const hist=(S.maintenance?.hist||[]).filter(function(e){return e[ac]!=null;});
+  if(!hist.length) return null;
+  const lastDate=hist[hist.length-1].date;
+  const today=new Date();today.setHours(0,0,0,0);
+  const d=new Date(lastDate+'T00:00:00');
+  const diff=Math.round((today-d)/(1000*60*60*24));
+  if(diff===0) return 'Updated today';
+  if(diff===1) return 'Updated yesterday';
+  if(diff<7){const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];return 'Updated '+days[d.getDay()];}
+  if(diff<14) return 'Updated last week';
+  return 'Updated '+d.toLocaleDateString('en-NZ',{day:'numeric',month:'short'});
+}
+
 function renderMaintOverview(){
   const m=S.maintenance||{};
   const acs=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'];
@@ -6467,6 +6441,7 @@ function renderMaintOverview(){
       ${isAdmin?`<div style="margin-top:10px">
         <button onclick="event.stopPropagation();S.maintEditAc='${ac}';S.maintTab='bookings';window.scrollTo(0,0);render()" style="width:100%;padding:5px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;color:var(--text2)">Edit Check / Bookings</button>
       </div>`:''}
+      ${(function(){const lbl=_lastUpdatedLabel(ac);return lbl?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--text3);opacity:.7">${lbl}</div>`:'';})()}
     </div>`;
   }).join('');
 
