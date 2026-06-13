@@ -283,11 +283,13 @@ const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  pilot:       {operations:true, charter:false,maintenance:true, admin_crew:true,admin_users:false},
-  desk:        {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:false},
-  maint:       {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false},
-  maintenance: {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false},
-  ground_staff:{operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false}
+  superadmin:  {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true},
+  admin:       {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false},
+  pilot:       {operations:true, charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false},
+  desk:        {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false},
+  maint:       {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false},
+  maintenance: {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false},
+  ground_staff:{operations:false,charter:false,maintenance:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false}
 };
 const GRP_COLOURS=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];
 // Airport map: ICAO → full name
@@ -313,7 +315,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.67';
+const APP_VER='v21.69';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -1106,9 +1108,12 @@ async function loadAll(){
 
     // ── Users ──
     const us=await sbF('ts_users');
+    const _initPads=await sbF('ts_scratchpads');
     if(us&&us.length){
-      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.email==='andrew@truesouthflights.co.nz'||false,isPilot:r.is_pilot||r.role==='pilot'||false}));
+      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,isPilot:r.is_pilot||r.role==='pilot'||false}));
       lsSet('ts_users_cache',S.users);
+    }
+    if(_initPads&&_initPads.length){S.pads=_initPads.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});}
     } else {
       const cached=lsGet('ts_users_cache');
       if(cached&&cached.length){S.users=cached;}
@@ -1179,7 +1184,7 @@ async function loadAll(){
   if(savedUser)try{S.user=JSON.parse(savedUser);}catch{}
   if(S.user){auditLog('session_restore',{via:'session',user:S.user.email});setTimeout(function(){initRealtime();},300);}
   // Restore remembered session if no session in sessionStorage
-  if(!S.user){const rem=localStorage.getItem('ts_remembered_user');if(rem)try{const ru=JSON.parse(rem);const live=S.users.find(x=>x.id===ru.id&&x.passwordHash===ru.passwordHash);if(live){S.user=live;if(live.email==='andrew@truesouthflights.co.nz')live.superAdmin=true;sessionStorage.setItem('ts_user',JSON.stringify(live));['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});auditLog('session_restore',{via:'remember_me',user:live.email});setTimeout(initRealtime,0);}}catch(e){}}
+  if(!S.user){const rem=localStorage.getItem('ts_remembered_user');if(rem)try{const ru=JSON.parse(rem);const live=S.users.find(x=>x.id===ru.id&&x.passwordHash===ru.passwordHash);if(live){S.user=live;if(live.email==='andrew@truesouthflights.co.nz'||live.email==='adamsonandrew1@gmail.com'||live.role==='superadmin')live.superAdmin=true;sessionStorage.setItem('ts_user',JSON.stringify(live));['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});auditLog('session_restore',{via:'remember_me',user:live.email});setTimeout(initRealtime,0);}}catch(e){}}
   // Load audit log from localStorage first (instant)
   S.auditLog=lsGet('ts_audit_log')||[];
   render();
@@ -1406,7 +1411,7 @@ async function reloadTable(table){
     if(us&&us.length){
       S.users=us.map(function(r){return{id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',
         passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,
-        superAdmin:r.super_admin||r.email==='andrew@truesouthflights.co.nz'||false,
+        superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,
         isPilot:r.is_pilot||r.role==='pilot'||false};});
       lsSet('ts_users_cache',S.users);
       if(S.user){const fresh=S.users.find(function(u){return u.id===S.user.id;});if(fresh){S.user=Object.assign({},fresh);sessionStorage.setItem('ts_user',JSON.stringify(S.user));}}
@@ -1719,7 +1724,7 @@ async function _doLogin(emailArg,passArg){
     return;
   }
   S.user=u;S.loginErr=null;
-  if(u.email==='andrew@truesouthflights.co.nz') u.superAdmin=true;
+  if(u.email==='andrew@truesouthflights.co.nz'||u.email==='adamsonandrew1@gmail.com'||u.role==='superadmin') u.superAdmin=true;
   sessionStorage.setItem('ts_user',JSON.stringify(u));
   const remMe=document.getElementById('li_rem');
   if(remMe&&remMe.checked){try{localStorage.setItem('ts_remembered_user',JSON.stringify(u));}catch(e){}}
@@ -2873,20 +2878,30 @@ function renderLoadsheet(){
             <input class="fi" type="text" value="${displayNm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px" onblur="lsN(${idx},this.value)">
           </div>
           ${infantNm?`<div style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}<button onclick="window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></div>`:''}
-          ${hasPerson?`<div style="display:flex;gap:4px;margin-bottom:4px;padding-left:22px">
-            <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'A')" style="padding:1px 7px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(74,222,128,.3)':'rgba(74,222,128,.8)'};background:${(f.paxType||{})[idx]==='C'?'transparent':'rgba(74,222,128,.2)'};color:#4ade80;font-size:10px;font-weight:700;cursor:pointer">A</button>
-            <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'C')" style="padding:1px 7px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.8)':'rgba(251,146,60,.3)'};background:${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.2)':'transparent'};color:#fb923c;font-size:10px;font-weight:700;cursor:pointer">C</button>
-          </div>`:''}
-          <div style="display:grid;grid-template-columns:52px 52px;gap:4px">
+          
+          ${hasPerson?`<div style="display:grid;grid-template-columns:50px 50px 1fr;gap:4px;align-items:end">
             <div>
               <div style="font-size:8px;color:var(--text3)">WT kg</div>
-              <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:50px" onblur="lsS(${idx},this.value);window.lsCheckChildWt(${idx})">
+              <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsS(${idx},this.value);window.lsCheckChildWt(${idx})">
             </div>
             <div>
               <div style="font-size:8px;color:var(--text3)">BAG kg</div>
-              <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:50px" onblur="lsB(${idx},this.value)">
+              <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsB(${idx},this.value)">
             </div>
-          </div>
+            <div style="display:flex;gap:3px;padding-bottom:2px;justify-content:flex-end">
+              <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'A')" style="padding:1px 6px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(74,222,128,.3)':'rgba(74,222,128,.8)'};background:${(f.paxType||{})[idx]==='C'?'transparent':'rgba(74,222,128,.2)'};color:#4ade80;font-size:10px;font-weight:700;cursor:pointer">A</button>
+              <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'C')" style="padding:1px 6px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.8)':'rgba(251,146,60,.3)'};background:${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.2)':'transparent'};color:#fb923c;font-size:10px;font-weight:700;cursor:pointer">C</button>
+            </div>
+          </div>`:<div style="display:grid;grid-template-columns:50px 50px;gap:4px">
+            <div>
+              <div style="font-size:8px;color:var(--text3)">WT kg</div>
+              <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsS(${idx},this.value);window.lsCheckChildWt(${idx})">
+            </div>
+            <div>
+              <div style="font-size:8px;color:var(--text3)">BAG kg</div>
+              <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsB(${idx},this.value)">
+            </div>
+          </div>}
         </div>`;
       });
       // Seat 1 sits in right column — insert blank spacer in left column first
@@ -2915,7 +2930,7 @@ function renderLoadsheet(){
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">${boxes}</div>
       </div>`;
     })();
-    seatsH=`<div class="card" id="lsf-seats"><div class="st" style="display:flex;align-items:center;justify-content:space-between">Seats &amp; Passengers${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}</div>
+    seatsH=`<div class="card" id="lsf-seats" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st" style="display:flex;align-items:center;justify-content:space-between">Seats &amp; Passengers${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}</div>
       ${wbSummary}
       <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;justify-content:center">
         <div style="flex-shrink:0">
@@ -2975,7 +2990,7 @@ function renderLoadsheet(){
     const fuelDestLbl=a?.layout==='ga8'
       ?`${(fuelRemKg/AVGAS).toFixed(0)}L (${fuelRemKg.toFixed(0)}kg) remaining`
       :`${(fuelRemKg/LB).toFixed(0)} lbs remaining`;
-    fuelH=`<div class="card" id="lsf-fuel"><div class="st">Fuel & Burn</div>
+    fuelH=`<div class="card" id="lsf-fuel" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};flex:1;display:flex;flex-direction:column"><div class="st">Fuel & Burn</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:6px">Fuel Loaded</div>
@@ -3030,7 +3045,7 @@ function renderLoadsheet(){
         return`<div style="display:flex;justify-content:space-between;padding:3px 8px;border-radius:4px"><span style="font-size:12px;color:var(--text3)">${row.l}</span><span style="font-size:12px;font-weight:600">${row.v.toFixed(1)} kg</span></div>`;
       }).join('');
 
-      calcH=`<div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}"><div class="st">Weight & Balance</div>
+      calcH=`<div class="card" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};flex:1;display:flex;flex-direction:column"><div class="st">Weight & Balance</div>
         <div style="margin-bottom:14px">${wbRows}</div>
         <div class="g3">
           <div class="badge ${r.towOk?'bok':'berr'}"><div class="blbl">Takeoff</div><div class="bval">${r.tow.toFixed(1)}</div><div class="bsub">max ${r.mtow}kg</div></div>
@@ -3042,7 +3057,7 @@ function renderLoadsheet(){
       </div>`;
 
       const canSign=S.user?.role==='pilot'||S.user?.role==='admin';
-      sigH=`<div class="card"><div class="st">PIC Certification</div>
+      sigH=`<div class="card" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};opacity:.9"><div class="st">PIC Certification</div>
         <p style="font-size:13px;color:var(--text3);margin-bottom:12px;line-height:1.6">I hereby certify that the particulars recorded on the above load sheet are correct${a.type.includes('208')?' and Part 125 security measures have been followed':''}.</p>
         ${canSign?`<div style="margin-bottom:6px;display:flex;gap:6px">
           <button onclick="S.sigMode='draw';render()" style="padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:${(!S.sigMode||S.sigMode==='draw')?'var(--acc)':'var(--card2)'};color:${(!S.sigMode||S.sigMode==='draw')?'#fff':'var(--text2)'}">✍ Draw</button>
@@ -3113,7 +3128,7 @@ function renderLoadsheet(){
     }
   }
   return`${draftBanner}${_overCapBanner}${clearBtn}
-  <div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}">
+  <div class="card" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};flex:1;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:${AC_COL[f.ac]||'#93c5fd'}">ZK-${S.lsAc||f.ac.replace('ZK-','')}</div>
@@ -3155,7 +3170,7 @@ function renderLoadsheet(){
         ${etdSelect(f.etd,f.date,"form")}
       </div>
     </div>
-  </div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
+  </div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px;border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
   ${seatsH}${unallocH}${a?cargoH:''}${(a&&fuelH&&calcH)?`<div style="display:flex;gap:14px;align-items:stretch;flex-wrap:wrap"><div style="flex:1;min-width:280px;display:flex;flex-direction:column">${fuelH}</div><div style="flex:1;min-width:280px;display:flex;flex-direction:column">${calcH}</div></div>`:(a?fuelH:'')+calcH}${sigH}`;
 }
 window.lsCheckChildWt=function(idx){
@@ -3401,7 +3416,7 @@ const NZ_AERODROMES=[
   {icao:'NZMK',name:'Motueka',lat:-41.1233,lon:172.9900,elev:39},
   {icao:'NZTK',name:'Takaka (Golden Bay)',lat:-40.8133,lon:172.7758,elev:102},
   {icao:'NZKM',name:'Karamea',lat:-41.2333,lon:172.1028,elev:30},
-  {icao:'NZMR',name:'Murchison',lat:-41.6103,lon:172.3361,elev:748},
+  {icao:'NZMR',name:'Murchison',lat:-41.7975,lon:172.3147,elev:748},
   {icao:'NZKI',name:'Kaikoura',lat:-42.4250,lon:173.6050,elev:20},
   {icao:'NZHM',name:'Hanmer Springs',lat:-42.5194,lon:172.8317,elev:1250},
   {icao:'NZWS',name:'Westport',lat:-41.7381,lon:171.5808,elev:13},
@@ -3412,18 +3427,17 @@ const NZ_AERODROMES=[
   {icao:'NZHT',name:'Haast',lat:-43.8653,lon:169.0417,elev:13},
   {icao:'NZCH',name:'Christchurch International',lat:-43.4894,lon:172.5322,elev:123},
   {icao:'NZRT',name:'Rangiora',lat:-43.2983,lon:172.5503,elev:275},
-  {icao:'NZWL',name:'Hokitika (Westland)',lat:-42.7136,lon:170.9850,elev:146},
-  {icao:'NZFF',name:'Ashburton',lat:-43.9033,lon:171.7961,elev:302},
+  {icao:'NZWL',name:'West Melton',lat:-43.4777,lon:172.3915,elev:146},
+  {icao:'NZFF',name:'Forest Field',lat:-43.3857,lon:172.3606,elev:302},
   {icao:'NZAS',name:'Ashburton',lat:-43.9033,lon:171.7978,elev:302},
-  {icao:'NZRI',name:'Rangiora (Loburn)',lat:-43.2917,lon:172.5558,elev:275},
-  {icao:'NZPH',name:'Palmerston (Otago)',lat:-45.4833,lon:170.7167,elev:830},
+  {icao:'NZRI',name:'Rangitata Island',lat:-44.0854,lon:171.4162,elev:275},
   {icao:'NZTU',name:'Timaru',lat:-44.3028,lon:171.2253,elev:89},
   {icao:'NZOU',name:'Oamaru',lat:-44.9700,lon:171.0819,elev:99},
   {icao:'NZMC',name:'Mount Cook (Pukaki)',lat:-43.7650,lon:170.1344,elev:2493},
-  {icao:'NZGT',name:'Gore',lat:-46.2167,lon:168.8222,elev:408},
+  {icao:'NZGT',name:'Glentanner',lat:-43.9110,lon:170.1273,elev:408},
   {icao:'NZTL',name:'Lake Tekapo',lat:-44.0050,lon:170.4447,elev:2490},
-  {icao:'NZUK',name:'Lake Tekapo (Benmore)',lat:-44.2333,lon:170.2333,elev:1400},
-  {icao:'NZOA',name:'Omarama',lat:-44.5822,lon:169.9858,elev:1407},
+  {icao:'NZUK',name:'Pukaki',lat:-44.2380,lon:170.1189,elev:1400},
+  {icao:'NZOA',name:'Omarama',lat:-44.4860,lon:169.9850,elev:1407},
   {icao:'NZWF',name:'Wanaka',lat:-44.7222,lon:169.2458,elev:1142},
   {icao:'NZMW',name:'Makarora',lat:-44.2183,lon:169.2408,elev:1083},
   {icao:'NZQN',name:'Queenstown',lat:-45.0211,lon:168.7392,elev:1171},
@@ -3433,12 +3447,11 @@ const NZ_AERODROMES=[
   {icao:'NZLX',name:'Alexandra',lat:-45.2117,lon:169.3731,elev:758},
   {icao:'NZCS',name:'Cromwell',lat:-45.0603,lon:169.1958,elev:890},
   {icao:'NZRX',name:'Roxburgh',lat:-45.5417,lon:169.3083,elev:482},
-  {icao:'NZMO',name:'Motueka (S)',lat:-41.1350,lon:172.9739,elev:39},
+  {icao:'NZMO',name:'Manapouri',lat:-45.5325,lon:167.6430,elev:39},
   {icao:'NZMF',name:'Milford Sound',lat:-44.6733,lon:167.9233,elev:10},
   {icao:'NZNV',name:'Invercargill',lat:-46.4124,lon:168.3131,elev:5},
   {icao:'NZGC',name:'Gore',lat:-46.2167,lon:168.8222,elev:408},
   {icao:'NZVL',name:'Mandeville (Gore)',lat:-46.1608,lon:168.8317,elev:397},
-  {icao:'NZCB',name:'Collingwood',lat:-40.6733,lon:172.6708,elev:46},
   {icao:'NZRC',name:'Ryan\'s Creek (Stewart Is)',lat:-46.8997,lon:168.1006,elev:52},
   {icao:'NZCI',name:'Chatham Islands',lat:-43.8100,lon:-176.4572,elev:43}
 ];
@@ -4005,8 +4018,8 @@ window.loadMoreAudit=async function(){
 
 
 function renderAdminPerms(){
-  const roles=['pilot','desk','maint','ground_staff'];
-  const roleLabels={pilot:'Pilot',desk:'Desk',maint:'Maintenance',ground_staff:'Ground Staff'};
+  const roles=['superadmin','admin','pilot','desk','maint','ground_staff'];
+  const roleLabels={superadmin:'Superadmin',admin:'Admin',pilot:'Pilot',desk:'Desk',maint:'Maintenance',ground_staff:'Ground Staff'};
   const mainPages=[
     {id:'operations', lbl:'Operations', icon:'✈️', desc:'Manifest, Seatmap & Loadsheet'},
     {id:'charter',    lbl:'Charter',    icon:'💰', desc:'Charter pricing & bookings'},
@@ -4015,8 +4028,11 @@ function renderAdminPerms(){
   const adminPages=[
     {id:'admin_crew',  lbl:'Crew & Profile', icon:'👤', desc:'View crew list and edit own profile'},
     {id:'admin_users', lbl:'User Accounts',  icon:'🔐', desc:'Manage user logins and roles (admin-only)'},
+    {id:'scratchpad',  lbl:'Scratchpad',     icon:'📝', desc:'Shared notes & drawing board'},
+    {id:'audit',       lbl:'Audit Log',      icon:'🔍', desc:'System audit log (superadmin only)'}
   ];
   const rp=S.rolePerms||{};
+  const ROLE_LEVEL={superadmin:1,admin:2,pilot:3,desk:3,maint:3,ground_staff:4};
 
   function togStyle(on){
     return on
@@ -4057,7 +4073,7 @@ function renderAdminPerms(){
 
   return`<div class="card">
     <div class="st">Role Permissions</div>
-    <p style="font-size:12px;color:var(--text3);margin-bottom:16px">Control what each role can access. Changes apply immediately and sync across devices. Admin accounts always see everything.</p>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:16px">Superadmin (L1) &gt; Admin (L2) &gt; Pilot/Desk/Maint (L3) &gt; Ground (L4). Admins can only edit lower-level accounts. Changes sync across devices. Admin accounts always see everything.</p>
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;min-width:480px">
         ${thead}
@@ -4093,7 +4109,7 @@ window.toggleRolePerm=function(role,page){
 };
 
 function renderAdmin(){
-  const isAdmin=S.user?.role==='admin';
+  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
   // Non-admin: show sub-tabs based on their role permissions
   if(!isAdmin){
     const _role=S.user?.role||'desk';
@@ -4197,10 +4213,11 @@ function renderAdminGDrive(){
   </div>`;
 }
 function renderAdminPeople(){
-  const isAdmin=S.user?.role==='admin';
+  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
   const ad=S.admin;
   const today=new Date();today.setHours(0,0,0,0);
-  const roleColour={admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10b981',maint:'#a78bfa',ground_staff:'#64748b'};
+  const ROLE_LEVEL={superadmin:1,admin:2,pilot:3,desk:3,maint:3,ground_staff:4};
+const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10b981',maint:'#a78bfa',ground_staff:'#64748b'};
   function expiryCol(v){if(!v)return'var(--text3)';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'#ef4444':dy<30?'#f59e0b':'#22c55e';}
   function expiryBg(v){if(!v)return'transparent';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'rgba(239,68,68,.08)':dy<30?'rgba(245,158,11,.08)':'transparent';}
   function fmt(v){if(!v)return'—';const p=v.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:v;}
@@ -4289,9 +4306,10 @@ function renderAdminPeople(){
         +'<input class="fi" type="email" value="'+(d.email||'')+'" placeholder="email@truesouth.co.nz" style="font-size:14px" oninput="S.admin.personModal.draft.email=this.value"></div>'
         +(isAdmin?'<div><label style="font-size:11px;color:var(--text3)">ROLE</label>'
         +'<select class="fi" style="font-size:13px" onchange="S.admin.personModal.draft.role=this.value">'
-        +'<option value="desk"'+(d.role==='desk'?' selected':'')+'>Desk</option>'
-        +'<option value="pilot"'+(d.role==='pilot'?' selected':'')+'>Pilot</option>'
+        +(S.user?.superAdmin?'<option value="superadmin"'+(d.role==='superadmin'?' selected':'')+'>Superadmin</option>':'')
         +'<option value="admin"'+(d.role==='admin'?' selected':'')+'>Admin</option>'
+        +'<option value="pilot"'+(d.role==='pilot'?' selected':'')+'>Pilot</option>'
+        +'<option value="desk"'+(d.role==='desk'?' selected':'')+'>Desk</option>'
         +'<option value="maint"'+(d.role==='maint'?' selected':'')+'>Maintenance</option>'
         +'<option value="ground_staff"'+(d.role==='ground_staff'?' selected':'')+'>Ground Staff</option>'
         +'</select></div>':'')
@@ -4354,7 +4372,9 @@ function renderAdminPeople(){
     const role=u?u.role:'';
     const email=u?u.email:'';
     const isMe=p.userId===S.user?.id;
-    const canEdit=isAdmin||isMe;
+    const myLevel=ROLE_LEVEL[S.user?.role||'']||99;
+    const theirLevel=ROLE_LEVEL[role||'']||3;
+    const canEdit=isMe||S.user?.superAdmin||(isAdmin&&theirLevel>myLevel);
 
     // Worst expiry bg
     let worstBg='transparent';
@@ -5928,7 +5948,7 @@ window.savePerson=async function(){
   const m=S.admin.personModal;if(!m)return;
   const d=m.draft;
   const name=(d.n||'').trim();
-  const isAdmin=S.user?.role==='admin';
+  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
   // Validate
   if(!name&&!d.email){S.admin.err='Name is required.';render();return;}
   const finalName=name||(d.email?d.email.split('@')[0]:'');
