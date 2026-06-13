@@ -311,7 +311,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.24';
+const APP_VER='v21.28';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -1644,6 +1644,20 @@ function pilotCrewList(){
   });
   return list;
 }
+function anyCrewList(){
+  var list=[];
+  S.crew.forEach(function(cr){
+    var crn=(cr.n||'').trim().toLowerCase();
+    var lu=(S.users||[]).find(function(u){
+      var lc=(u.linkedCrew||'').trim().toLowerCase();
+      var un=(u.name||u.email||'').trim().toLowerCase();
+      return (lc&&lc===crn)||(un===crn);
+    });
+    var w=cr.w||(lu&&lu.weight?lu.weight:0);
+    list.push(Object.assign({},cr,{w:w}));
+  });
+  return list;
+}
 
 // ── Presence ──
 const PRES_COLORS=['#f87171','#fb923c','#fbbf24','#34d399','#22d3ee','#60a5fa','#a78bfa','#f472b6'];
@@ -2043,15 +2057,6 @@ function renderOperations(){
   const lsTabIds=LS_ACS.map(function(ac){return 'ls_'+ac;});
   const validTabs=['manifest','seatmap','saved'].concat(lsTabIds);
   const opsTab=validTabs.includes(sub)?sub:'manifest';
-  if(opsTab.startsWith('ls_')){
-    const _ac=opsTab.slice(3);
-    if(S.lsAc!==_ac||S.form!==S.lsForms[_ac]){
-      if(S.lsAc) S.lsForms[S.lsAc]=S.form;
-      S.lsAc=_ac;
-      if(!S.lsForms[_ac]) S.lsForms[_ac]=bF_ac('ZK-'+_ac);
-      S.form=S.lsForms[_ac];
-    }
-  }
   const subTabs=[{id:'manifest',lbl:'Manifest'},{id:'seatmap',lbl:'Seatmap'}]
     .concat(LS_ACS.map(function(ac){return{id:'ls_'+ac,lbl:ac};}))
     .concat([{id:'saved',lbl:'Saved ('+S.saved.length+')'}]);
@@ -2139,7 +2144,7 @@ function renderStep1(){
         <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:2px">
-        <input class="fi" type="text" placeholder="Name (+ Infant)" value="${p.name||''}" style="font-size:13px" data-row="${i}" data-field="name" onblur="window.paxNameBlur(${oi},this.value)">
+        <div style="display:flex;gap:3px;align-items:center"><input class="fi" type="text" placeholder="Name" value="${p.name||''}" style="font-size:13px;flex:1;min-width:0" data-row="${i}" data-field="name" onblur="window.paxNameBlur(${oi},this.value)"><button onclick="window.openNamePopup(${oi})" style="padding:2px 5px;font-size:14px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--text2);cursor:pointer;flex-shrink:0" title="Edit name">&#9998;</button></div>
         ${p.infantName?`<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#ec4899;font-weight:600;padding:0 4px">👶 ${p.infantName}<button tabindex="-1" onclick="window.rmInfant(${oi})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></span>`:''}
       </div>
       <input class="fi" type="text" placeholder="Group" value="${p.group||''}" style="font-size:13px" data-row="${i}" data-field="group" list="grp${oi}" onblur="setPaxField(${oi},'group',this.value)">
@@ -2517,7 +2522,7 @@ function renderLoadsheet(){
   const _lsAcType=(()=>{const ac=S.aircraft[f.ac];if(!ac)return null;return ac.layout==='c208'?'C208B':'GA8';})();
   const _lsPilots=_lsAcType?pilotCrewList().filter(c=>(c.endorse||[]).includes(_lsAcType)):pilotCrewList();
   const crewOpts=_lsPilots.map(c=>`<option value="${c.n}"${f.pic===c.n?' selected':''}>${c.n}${c.w?' ('+c.w+'kg)':''}</option>`).join('');
-  const cpOpts=`<option value="">None</option>`+_lsPilots.map(c=>`<option value="${c.n}"${f.coPilot===c.n?' selected':''}>${c.n}</option>`).join('');
+  const cpOpts=`<option value="">None</option>`+anyCrewList().map(c=>`<option value="${c.n}"${f.coPilot===c.n?' selected':''}>${c.n}</option>`).join('');
 
   const backBanner=S.dispatch.pax.length?`<div style="padding:9px 14px;background:#1e0a4a;border:1px solid #6d28d9;border-radius:8px;color:#c4b5fd;font-size:13px;font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
     <span>From manifest · ${S.dispatch.pax.length} pax</span>
@@ -2538,7 +2543,7 @@ function renderLoadsheet(){
   const burnKgVal=f.burnOff?burnToKg(f.burnOff,f.ac):burnToKg(a?.burnDef||0,f.ac);
 
   // ── Unified Seats section (SVG seatmap + editable cards) ──
-  let seatsH='',cargoH='',fuelH='',calcH='',sigH='';
+  let seatsH='',cargoH='',fuelH='',calcH='',sigH='',unallocH='';
   if(a){
     const cW=parseFloat(f.seats[0]||0);
     const picMom=(cW*(a.seats[0]?.arm||0)).toFixed(0);
@@ -2596,14 +2601,14 @@ function renderLoadsheet(){
             <input class="fi" type="text" value="${displayNm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px" onblur="lsN(${idx},this.value)">
           </div>
           ${infantNm?`<div style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}<button onclick="window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></div>`:''}
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+          <div style="display:grid;grid-template-columns:52px 52px;gap:4px">
             <div>
               <div style="font-size:8px;color:var(--text3)">WT kg</div>
-              <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px" onblur="lsS(${idx},this.value)">
+              <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:50px" onblur="lsS(${idx},this.value)">
             </div>
             <div>
               <div style="font-size:8px;color:var(--text3)">BAG kg</div>
-              <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px" onblur="lsB(${idx},this.value)">
+              <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:50px" onblur="lsB(${idx},this.value)">
             </div>
           </div>
         </div>`;
@@ -2805,8 +2810,28 @@ function renderLoadsheet(){
       <div><label>Departure</label><select class="fi" onchange="S.form.dep=this.value;S.formDirty=true;safeRender()">${aptOpts(f.dep)}</select></div>
       <div><label>Destination</label><select class="fi" onchange="S.form.dest=this.value;safeRender()">${aptOpts(f.dest)}</select></div>
     </div></div>
+  {
+    const ua=f._unallocated;
+    if(ua&&ua.length){
+      const selIdx=S._selUnalloc;
+      const cards=ua.map(function(p,i){
+        const sel=selIdx===i;
+        return '<div onclick="window.tapUnallocated('+i+')" style="cursor:pointer;padding:8px 10px;border-radius:8px;border:2px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'rgba(124,58,237,.15)':'var(--card2)')+';display:flex;align-items:center;gap:8px">'
+          +'<div style="flex:1;min-width:0">'
+          +'<div style="font-weight:600;font-size:13px;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(p.name||'(no name)')+'</div>'
+          +'<div style="font-size:11px;color:var(--text3)">'+(p.weight?p.weight+'kg':'')+(p.bag?' &middot; bag '+p.bag+'kg':'')+(p.infant?' &middot; +infant':'')+'</div>'
+          +'</div>'
+          +'<button onclick="event.stopPropagation();window.removeUnallocated('+i+')" style="padding:2px 7px;font-size:12px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--text3);cursor:pointer">&times;</button>'
+          +'</div>';
+      }).join('');
+      const hint=selIdx!=null
+        ?'<div style="font-size:11px;color:var(--accent);font-weight:600;margin-bottom:6px">Passenger selected &mdash; tap an empty seat above to assign</div>'
+        :'<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Tap a passenger, then tap an empty seat above to place them</div>';
+      unallocH='<div class="card"><div class="st">Unallocated Passengers ('+ua.length+')</div>'+hint+'<div style="display:flex;flex-direction:column;gap:6px">'+cards+'</div></div>';
+    }
+  }
   ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
-  ${seatsH}${a?cargoH:''}${a?fuelH:''}${calcH}${sigH}`;
+  ${seatsH}${unallocH}${a?cargoH:''}${a?fuelH:''}${calcH}${sigH}`;
 }
 
 
@@ -3770,7 +3795,30 @@ window.paxNameBlur=function(i,val){
   if(S.dispatch.pax[i])S.dispatch.pax[i]._ts=Date.now();
   autoSaveDispatch();
   setTimeout(safeRender,50);
+}
+window.openNamePopup=function(idx){
+  var p=S.dispatch.pax[idx];if(!p)return;
+  var ex=document.getElementById('name-popup-overlay');if(ex)ex.remove();
+  var ov=document.createElement('div');
+  ov.id='name-popup-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+  ov.innerHTML='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:400px;box-sizing:border-box">'
+    +'<div style="font-weight:700;font-size:16px;margin-bottom:12px;color:var(--text1)">Passenger Name</div>'
+    +'<div style="font-size:12px;color:var(--text3);margin-bottom:4px">Format: First Last (+ Infant)</div>'
+    +'<input id="name-popup-input" type="text" value="'+(p.name||'').replace(/"/g,'&quot;')+'" placeholder="First Last" style="width:100%;padding:12px;font-size:17px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text1);box-sizing:border-box;margin-bottom:14px">'
+    +'<div style="display:flex;gap:10px">'
+    +'<button onclick="window.saveNamePopup('+idx+')" style="flex:1;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer">Save</button>'
+    +'<button onclick="document.getElementById('name-popup-overlay').remove()" style="flex:1;padding:12px;background:var(--bg3);color:var(--text1);border:1px solid var(--border);border-radius:8px;font-size:16px;cursor:pointer">Cancel</button>'
+    +'</div></div>';
+  document.body.appendChild(ov);
+  setTimeout(function(){var inp=document.getElementById('name-popup-input');if(inp){inp.focus();inp.select();}},80);
 };
+window.saveNamePopup=function(idx){
+  var inp=document.getElementById('name-popup-input');if(!inp)return;
+  window.paxNameBlur(idx,inp.value.trim());
+  var ov=document.getElementById('name-popup-overlay');if(ov)ov.remove();
+};
+;
 window.rmInfant=function(i){S.dispatch.pax[i].infantName=null;if(S.dispatch.pax[i])S.dispatch.pax[i]._ts=Date.now();autoSaveDispatch();render();};
 window.lsRmInfant=function(idx){if(S.form.infantNames)delete S.form.infantNames[idx];// also clear from name field if encoded there
 var nm=S.form.names&&S.form.names[idx]||'';if(nm.includes(' + '))S.form.names[idx]=nm.split(' + ')[0].trim();render();};
@@ -3871,6 +3919,18 @@ window.dropOnPool=(ev,forceAc)=>{
 window.tapFormSeat=(seatIdx,acId)=>{
   const f=S.form;
   const nm=f.names[seatIdx]||'';
+  if(S._selUnalloc!=null){
+    const ua=f._unallocated;
+    if(ua&&ua[S._selUnalloc]){
+      const p=ua[S._selUnalloc];
+      if(nm){ua.push({name:nm,weight:f.seats[seatIdx]||'',bag:f.bags[seatIdx]||'',infant:(f.infantNames||{})[seatIdx]||''});}
+      f.names[seatIdx]=p.name;f.seats[seatIdx]=p.weight;f.bags[seatIdx]=p.bag;
+      if(!f.infantNames)f.infantNames={};
+      if(p.infant)f.infantNames[seatIdx]=p.infant;else delete f.infantNames[seatIdx];
+      ua.splice(S._selUnalloc,1);
+    }
+    S._selUnalloc=null;S._selFormSeat=null;render();return;
+  }
   if(S._selFormSeat!=null){
     const from=S._selFormSeat;
     if(from!==seatIdx){
@@ -3884,6 +3944,14 @@ window.tapFormSeat=(seatIdx,acId)=>{
     S._selFormSeat=seatIdx;
   }
   render();
+};
+window.tapUnallocated=function(idx){
+  S._selUnalloc=(S._selUnalloc===idx)?null:idx;
+  S._selFormSeat=null;render();
+};
+window.removeUnallocated=function(idx){
+  if(S.form._unallocated)S.form._unallocated.splice(idx,1);
+  if(S._selUnalloc===idx)S._selUnalloc=null;render();
 };
 window.startDragForm=(ev,idx,acId)=>{S.dragState={fromFormIdx:idx,fromFormAc:acId};ev.dataTransfer.setData('text/plain',String(idx));};
 window.dropFormSeat=(ev,toIdx,acId)=>{
@@ -4037,9 +4105,42 @@ window.lsCopyFlight=function(targetAc){
   const src=S.form;
   if(!S.lsForms[targetAc]) S.lsForms[targetAc]=bF_ac('ZK-'+targetAc);
   const tgt=S.lsForms[targetAc];
+  const tgtAc=S.aircraft['ZK-'+targetAc];
+  const tgtSeatCount=tgtAc?tgtAc.seats.length:999;
   tgt.dep=src.dep;tgt.dest=src.dest;tgt.date=src.date;tgt.etd=src.etd;tgt.etdCustom=src.etdCustom||false;
   tgt.pic=src.pic;tgt.coPilot=src.coPilot;
-  toast('Flight details copied to ZK-'+targetAc,'ok');
+  tgt.names={};tgt.seats={};tgt.bags={};tgt.infantNames={};tgt._unallocated=[];
+  const srcInfants=src.infantNames||{};
+  Object.keys(src.names||{}).forEach(function(k){
+    const i=parseInt(k);
+    const nm=src.names[i]||'';const wt=src.seats[i]||'';
+    const bg=src.bags[i]||'';const inf=srcInfants[i]||'';
+    if(!nm&&!wt)return;
+    if(i<tgtSeatCount){
+      tgt.names[i]=nm;tgt.seats[i]=wt;tgt.bags[i]=bg;
+      if(inf){if(!tgt.infantNames)tgt.infantNames={};tgt.infantNames[i]=inf;}
+    } else {
+      tgt._unallocated.push({name:nm,weight:wt,bag:bg,infant:inf});
+    }
+  });
+  tgt.cargo=Object.assign({},src.cargo||{});
+  // Fuel: copy increased fuel if same aircraft type, otherwise use target standard
+  const srcAc=S.aircraft[src.ac];
+  const srcType=(srcAc&&(srcAc.layout||srcAc.type||'')).toLowerCase();
+  const tgtType=(tgtAc&&(tgtAc.layout||tgtAc.type||'')).toLowerCase();
+  const sameType=srcType&&tgtType&&srcType===tgtType;
+  const srcStdFuel=srcAc&&srcAc.fuelKg?Math.round(fromKg(srcAc.fuelKg,src.ac)):0;
+  const srcFuelVal=parseFloat(src.fuel)||0;
+  if(sameType&&srcFuelVal>srcStdFuel){
+    tgt.fuel=src.fuel;
+    tgt.burnOff=src.burnOff||'';
+  } else if(tgtAc&&tgtAc.fuelKg){
+    tgt.fuel=String(Math.round(fromKg(tgtAc.fuelKg,'ZK-'+targetAc)));
+    tgt.burnOff='';
+  }
+  const unallocCount=tgt._unallocated.length;
+  const paxCount=Object.keys(tgt.names).filter(function(k){return tgt.names[k];}).length;
+  toast('Copied to ZK-'+targetAc+' ('+paxCount+' seats'+(unallocCount?' +'+unallocCount+' unallocated':'')+')','ok');
 };
 
 window.lsTrimExcess=()=>{
@@ -4056,7 +4157,7 @@ window.lsDelPax=idx=>{
   delete S.form.names[idx];delete S.form.seats[idx];delete S.form.bags[idx];delete S.form.infantNames[idx];
   render();
 };
-window.lsPIC=v=>{S.form.pic=v;const c=pilotCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[0]=String(c.w);S.form.names[0]=v;}else{S.form.names[0]=v;}render();};
+window.lsPIC=v=>{S.form.pic=v;const c=anyCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[0]=String(c.w);S.form.names[0]=v;}else{S.form.names[0]=v;}render();};
 window.lsCoPilot=v=>{S.form.coPilot=v;const c=pilotCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[1]=String(c.w);S.form.names[1]=v;}else{delete S.form.seats[1];delete S.form.names[1];}render();};
 window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;render();};window.lsB=(i,v)=>{S.form.bags[i]=v;render();};window.lsC=(i,v)=>{S.form.cargo[i]=v;render();};
 window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));render();};
@@ -4571,7 +4672,8 @@ window.savePerson=async function(){
       if(!fullR){
         // Full upsert failed (likely missing columns) — retry with minimal safe payload
         const minR=await sbU('ts_crew',[{id:crewId,name:finalName,weight:parseFloat(d.w)||null,
-          endorsements:JSON.stringify(d.endorse||[]),code:d.code||''}]);
+          endorsements:JSON.stringify(d.endorse||[]),code:d.code||'',dl_num:d.dlNum||'',
+          caa_license:d.caaNum||'',medical_expiry:d.medExpiry||null,oca_due:d.ocaDue||null}]);
         if(!minR) toast('Warning: profile may not have saved to server — check connection','warn');
       }
     }
