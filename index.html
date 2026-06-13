@@ -195,6 +195,8 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 
   /* W&B grid on loadsheet */
   .wb-grid{grid-template-columns:1fr 1fr!important;}
+@keyframes lsFlash{0%{outline:3px solid #fbbf24;background:rgba(251,191,36,.18);}100%{outline:3px solid transparent;background:transparent;}}
+.ls-flash{animation:lsFlash 2s ease-out;border-radius:6px;}
 
   /* Pax row - tighter fixed cols on mobile */
   .pax-row{grid-template-columns:70px 44px 1.5fr 0.8fr 44px 44px 26px!important;}
@@ -311,7 +313,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.41';
+const APP_VER='v21.46';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -1207,7 +1209,7 @@ const _sessionId='sess_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
 function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings'];
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance'];
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
     _rtWs.onopen=function(){
@@ -1243,7 +1245,7 @@ function initRealtime(){
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='dispatch'){
           const dp=msg.payload.payload;
-          if(dp&&S.tab==='manifest')mergeDispatch(dp);
+          if(dp&&(S.tab==='manifest'||S.tab==='seatmap')){mergeDispatch(dp);S._pendingFlash=(S._pendingFlash||[]).concat(['flash-manifest','flash-seatmap']);}
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='pres'){
           const p=msg.payload.payload;
@@ -1258,15 +1260,27 @@ function initRealtime(){
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='crew_update'){
           if(msg.payload.payload&&msg.payload.payload.updatedBy!==S.user?.id){
-            Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){render();});
+            Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){S._pendingFlash=(S._pendingFlash||[]).concat(['flash-admin']);render();});
           }
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_saved'){
+          if(S.tab==='saved'){reloadTable('ts_loadsheets').then(function(){render();});}
+          else{reloadTable('ts_loadsheets');}
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_update'){
           const _lsp=msg.payload.payload;
           if(_lsp&&_lsp.acCode&&_lsp.sessionId!==_sessionId){
+            if(S.lsAc===_lsp.acCode&&S.form&&_lsp.form){
+              S._lsFlash=S._lsFlash||{};var _fNow=Date.now();var _of=S.form;var _nf=_lsp.form;
+              if(String(_of.fuel||'')!==String(_nf.fuel||'')||String(_of.burnOff||'')!==String(_nf.burnOff||''))S._lsFlash.fuel=_fNow;
+              if(String(_of.dep||'')!==String(_nf.dep||'')||String(_of.dest||'')!==String(_nf.dest||'')||String(_of.pic||'')!==String(_nf.pic||'')||String(_of.coPilot||'')!==String(_nf.coPilot||''))S._lsFlash.route=_fNow;
+              var _oN=_of.names||{},_nN=_nf.names||{};
+              if(Object.keys(Object.assign({},_oN,_nN)).some(function(k){return String(_oN[k]||'')!==String(_nN[k]||'');}))S._lsFlash.seats=_fNow;
+            }
             S.lsForms[_lsp.acCode]=_lsp.form;
             if(S.lsAc===_lsp.acCode){S.form=_lsp.form;}
-            safeRender();
+            if(S.tab==='saved')reloadTable('ts_loadsheets').then(function(){safeRender();});
+            else safeRender();
           }
         }
       }catch(err){}
@@ -1285,6 +1299,12 @@ async function flushRtUpdates(){
   let changed=false;
   for(const t of tables){const ok=await reloadTable(t);if(ok)changed=true;}
   if(changed){
+    var _fIds=[];
+    if(tables.some(function(t){return t==='ts_charter_rates';}))_fIds.push('flash-charter');
+    if(tables.some(function(t){return t==='ts_maintenance';}))_fIds.push('flash-maintenance');
+    if(tables.some(function(t){return t==='ts_aircraft';}))_fIds.push('flash-maintenance','flash-charter');
+    if(tables.some(function(t){return t==='ts_crew'||t==='ts_users';}))_fIds.push('flash-admin');
+    if(_fIds.length)S._pendingFlash=(S._pendingFlash||[]).concat(_fIds);
     safeRender();
   }
 }
@@ -1297,11 +1317,14 @@ async function reloadTable(table){
     const ms=await sbF('ts_manifests');
     if(ms){
       const live=ms.find(function(r){return r.id==='live_draft';});
+      var _lsForeignChange=false;
       ms.forEach(function(r){
         if(r.id.startsWith('ls_live_')&&r.data){
           const _ac=r.id.slice(8);
+          if(Date.now()-_ownLSSaveTs<3500){return;} // suppress own postgres echo
           S.lsForms[_ac]=r.data;
           if(S.lsAc===_ac)S.form=r.data;
+          _lsForeignChange=true;
         }
       });
       var _ownEcho=false;
@@ -1310,7 +1333,7 @@ async function reloadTable(table){
         else{mergeDispatch(live.data);}
       }
       S.manifests=ms.filter(function(r){return r.id!=='live_draft'&&!r.id.startsWith('ls_live_');}).map(function(r){return{id:r.id,name:r.name,savedAt:r.saved_at,data:r.data};});
-      lsSet('ts_manifests_cache',S.manifests);return !_ownEcho;
+      lsSet('ts_manifests_cache',S.manifests);return !_ownEcho||_lsForeignChange;
     }
   } else if(table==='ts_crew'){
     const crew=await sbF('ts_crew');
@@ -1444,12 +1467,14 @@ function autoSaveDispatch(){
 
 // -- Loadsheet live sync --
 let _autoSaveLSTimer=null;
+let _ownLSSaveTs=0;
 function autoSaveLS(){
   if(!S.user||!S.lsAc)return;
   clearTimeout(_autoSaveLSTimer);
   _autoSaveLSTimer=setTimeout(async function(){
     const acCode=S.lsAc;
     const form=dc(S.form);
+    _ownLSSaveTs=Date.now();
     await sbU('ts_manifests',[{id:'ls_live_'+acCode,name:'__ls_live__',saved_at:new Date().toISOString(),data:form}]);
     broadcastLS(acCode,form);
     toast('Loadsheet saved','ok');
@@ -1719,7 +1744,6 @@ function presBarInner(section){
       const init=(p.name||'?').trim().split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
       return'<div title="'+p.name+'" style="display:flex;align-items:center;gap:4px">'
         +'<div style="width:22px;height:22px;border-radius:50%;background:'+p.color+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">'+init+'</div>'
-        +'<span style="font-size:11px;font-weight:600;color:'+p.color+'">'+p.name.split(' ')[0]+'</span>'
         +'</div>';
     }).join('<span style="color:var(--border2);font-size:10px;padding:0 2px">·</span>')
     +'</div>';
@@ -1814,6 +1838,8 @@ function render(){
   // Maintenance-only users: redirect to maintenance if on wrong tab
   if(S.user?.role==='maint'&&S.tab!=='maintenance') S.tab='maintenance';
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
+  if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
+  if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
   if(S.tab.startsWith('ls_')){setupSig();var lf=S.form;if(lf.dep&&lf.dest)setTimeout(function(){renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);},150);}
   // ── Restore focus after re-render ──
   // Force-focus (set by Tab handler) takes priority over activeElement detection
@@ -2087,9 +2113,9 @@ function renderApp(){
         <span>${S.appMsg.text}</span>
         <button onclick="S.appMsg=null;render()" style="padding:2px 8px;border-radius:4px;border:1px solid currentColor;background:transparent;cursor:pointer;font-size:11px;color:inherit">✕</button>
       </div>`:''}
-      ${S.tab==='charter'?renderCharter():
-        S.tab==='maintenance'?renderMaintenance():
-        S.tab==='admin'?renderAdmin():
+      ${S.tab==='charter'?'<div id="flash-charter">'+renderCharter()+'</div>':
+        S.tab==='maintenance'?'<div id="flash-maintenance">'+renderMaintenance()+'</div>':
+        S.tab==='admin'?'<div id="flash-admin">'+renderAdmin()+'</div>':
         renderOperations()}
     </div>
   </div>`;
@@ -2097,6 +2123,33 @@ function renderApp(){
 
 
 // ── MANIFEST ──
+function _triggerFlash(ids){
+  if(!ids)return;if(!Array.isArray(ids))ids=[ids];
+  ids.forEach(function(id){
+    var el=document.getElementById(id);
+    if(el&&!el.classList.contains('ls-flash')){
+      el.classList.add('ls-flash');
+      setTimeout(function(){if(el)el.classList.remove('ls-flash');},2000);
+    }
+  });
+}
+function _applyLsFlash(){
+  if(!S._lsFlash)return;
+  var now=Date.now();
+  Object.keys(S._lsFlash).forEach(function(k){
+    var age=now-S._lsFlash[k];
+    if(age>2200){delete S._lsFlash[k];return;}
+    var elId=k==='fuel'?'lsf-fuel':(k==='route'?'lsf-seats':'lsf-seats');
+    var el=document.getElementById(elId);
+    if(el&&!el.classList.contains('ls-flash')){
+      el.classList.add('ls-flash');
+      var rem=Math.max(100,2000-age);
+      setTimeout(function(){if(el)el.classList.remove('ls-flash');},rem);
+    }
+    delete S._lsFlash[k];
+  });
+  _triggerFlash('flash-loadsheet');
+}
 function renderOperations(){
   const LS_ACS=['SLA','SLB','SLD','SLQ','SDB'];
   const sub=S.tab||'manifest';
@@ -2115,10 +2168,10 @@ function renderOperations(){
       return'<button class="sub-tab '+(_sel?'on':'')+'" onclick="window.switchOpsTab(\''+t.id+'\')" style="font-size:12px;padding:6px 12px;white-space:nowrap'+_cs+'">'+t.lbl+'</button>';
     }).join('')+
     '</div>';
-  if(opsTab==='seatmap'){ startPresenceBroadcast('seatmap');return bar+presBarH('seatmap')+renderSeatmap(); }
-  if(opsTab.startsWith('ls_')){ startPresenceBroadcast('loadsheet');try{return bar+presBarH('loadsheet')+renderLoadsheet();}catch(e){return bar+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';} }
+  if(opsTab==='seatmap'){ startPresenceBroadcast('seatmap');return bar+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>'; }
+  if(opsTab.startsWith('ls_')){ startPresenceBroadcast('loadsheet');try{return bar+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return bar+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';} }
   if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return bar+renderSaved();}
-  startPresenceBroadcast('manifest');return bar+presBarH('manifest')+renderManifest();
+  startPresenceBroadcast('manifest');return bar+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
 }
 
 function renderManifest(){
@@ -2526,7 +2579,7 @@ function renderStep2(){
           ${sr?`<span class="pill ${sr.towOk?'pill-green':sr.towFatal?'pill-red':'pill-warn'}">${sr.tow?.toFixed(0)}/${sr.mtow}kg</span>
             <span class="pill ${cogPillClass(sr.cog,sr.cogMin,sr.cogMax)}">CoG ${sr.cog?.toFixed(2)}"</span>`:''}
           <span class="pill pill-blue">${paxCount}/${paxTotal} pax</span>
-          <button onclick="generateLoadsheet('${id}')" style="margin-left:auto;padding:5px 12px;border-radius:7px;border:none;background:${_ok?'linear-gradient(135deg,#7B9EC6,#4A6D96)':_warn?'#854d0e':'#7f1d1d'};color:#fff;font-size:12px;font-weight:700;cursor:pointer">
+          <button onclick="window.openAcLoadsheet('${id}')" style="margin-left:auto;padding:5px 12px;border-radius:7px;border:none;background:${_ok?'linear-gradient(135deg,#7B9EC6,#4A6D96)':_warn?'#854d0e':'#7f1d1d'};color:#fff;font-size:12px;font-weight:700;cursor:pointer">
             ${id.replace('ZK-','')} Loadsheet ${_ok?'✓':_warn?'⚠':'⛔'}
           </button>
         </div>
@@ -2691,9 +2744,9 @@ function renderLoadsheet(){
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">${boxes}</div>
       </div>`;
     })();
-    seatsH=`<div class="card"><div class="st">Seats &amp; Passengers</div>
+    seatsH=`<div class="card" id="lsf-seats"><div class="st">Seats &amp; Passengers</div>
       ${wbSummary}
-      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;justify-content:center">
         <div style="flex-shrink:0">
           ${renderCabinSVG(f.ac,false,f,window.innerWidth<=520?46:60,window.innerWidth<=520?40:50)}
           ${podZonesInlineH}
@@ -2751,7 +2804,7 @@ function renderLoadsheet(){
     const fuelDestLbl=a?.layout==='ga8'
       ?`${(fuelRemKg/AVGAS).toFixed(0)}L (${fuelRemKg.toFixed(0)}kg) remaining`
       :`${(fuelRemKg/LB).toFixed(0)} lbs remaining`;
-    fuelH=`<div class="card"><div class="st">Fuel & Burn</div>
+    fuelH=`<div class="card" id="lsf-fuel"><div class="st">Fuel & Burn</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:6px">Fuel Loaded</div>
@@ -2868,9 +2921,9 @@ function renderLoadsheet(){
   }
   return`${backBanner}${editBanner}${draftBanner}${_overCapBanner}${clearBtn}
   <div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}"><div class="st">Flight Details</div>
-    <div style="margin-bottom:10px;padding:8px 12px;background:#0c1a3a;border-radius:8px;border:1px solid #1e3a5f;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <div style="margin-bottom:10px;padding:8px 12px;background:#0c1a3a;border-radius:8px;border:1px solid #1e3a5f;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center">
       <div style="font-size:12px;color:#93c5fd;font-weight:600">ZK-${S.lsAc||f.ac.replace('ZK-','')} ${a?' &middot; '+a.type+' &middot; EW '+a.ew+'kg &middot; MTOW '+a.mtow+'kg':''}</div>
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">
         <span style="font-size:11px;color:var(--text3)">Copy flight to:</span>
         ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){return'<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="window.lsCopyFlight(\''+ac+'\')">'+ac+'</button>';}).join('')}
       </div>
@@ -2892,6 +2945,8 @@ function renderSaved(){
   const tab=S.savedTab||'unsigned';
   const search=(S.savedSearch||'').toLowerCase();
   const sort=S.savedSort||'newest';
+  const _myName=(S.user?.linkedCrew||S.user?.name||'').trim();
+  const mySheets=_myName?S.saved.filter(function(s){return(s.form&&s.form.pic||'').trim()===_myName;}):[];
 
   const driveStatusHTML=''; // handled by appMsg banner
   const _selCount=Object.keys(S.savedSel).length;
@@ -2906,10 +2961,34 @@ function renderSaved(){
     <button class="sub-tab ${tab==='unsigned'?'on':''}" onclick="S.savedTab='unsigned';render()">Active — Unsigned (${S.saved.filter(s=>s.status==='unsigned').length})</button>
     <button class="sub-tab ${tab==='loadsheets'?'on':''}" onclick="S.savedTab='loadsheets';render()">All (${S.saved.length})</button>
     <button class="sub-tab ${tab==='archived'?'on':''}" onclick="S.savedTab='archived';render()">📦 Archived — Signed (${S.saved.filter(s=>s.status==='complete').length})</button>
+    ${_myName?`<button class="sub-tab ${tab==='mine'?'on':''}" onclick="S.savedTab='mine';render()">Mine (${mySheets.length})</button>`:''}
     <button class="sub-tab ${tab==='manifests'?'on':''}" onclick="S.savedTab='manifests';render()">Manifests (${S.manifests.length})</button>
   </div>`;
 
   // ── Manifests tab ──
+  if(tab==='mine'){
+    return tabBar+(_myName
+      ?(!mySheets.length
+        ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">No loadsheets found as PIC for ${_myName}</div>`
+        :mySheets.map(function(s){
+            var col=AC_COL[s.form.ac]||'#64748b';
+            var isSigned=s.status==='complete';
+            return'<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid '+col+'">'
+              +'<div style="flex:1;min-width:0">'
+              +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">'
+              +'<span style="font-weight:700;font-size:14px">'+(s.form.ac||'?')+'</span>'
+              +'<span class="pill pill-blue">'+(s.form.dep||'?')+' &#x2192; '+(s.form.dest||'?')+'</span>'
+              +(isSigned?'<span class="pill pill-green">&#x2713; Signed</span>':'<span class="pill" style="background:#0c1a3a;color:#93c5fd">UNSIGNED</span>')
+              +'</div>'
+              +'<div style="font-size:12px;color:var(--text3)">'+(s.form.date||'?')+(s.form.etd?' &#xb7; '+s.form.etd:'')+' &#xb7; '+new Date(s.savedAt||0).toLocaleDateString('en-NZ')+'</div>'
+              +'</div>'
+              +'<div style="display:flex;gap:5px;flex-shrink:0">'
+              +'<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" onclick="editSaved(''+s.id+'')">Open</button>'
+              +'<button class="btn btn-red" style="font-size:12px;padding:6px 10px" onclick="delSaved(''+s.id+'')">Delete</button>'
+              +'</div></div>';
+          }).join(''))
+      :'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">No crew name linked to your account.</div>');
+  }
   if(tab==='manifests'){
     return tabBar+_bulkBar+`
     ${!S.manifests.length
@@ -4232,6 +4311,22 @@ window.clearManifest=()=>{
 };
 
 // ── Generate loadsheet from manifest ──
+window.openAcLoadsheet=async function(acId){
+  var ac=acId.replace('ZK-','');
+  var existing=S.lsForms[ac];
+  var hasFuel=existing&&existing.fuel&&String(existing.fuel)!=='0';
+  var hasNames=existing&&Object.values(existing.names||{}).some(function(v){return v&&v.trim();});
+  if(hasFuel||hasNames){
+    var _copyId='ls_copy_'+ac+'_'+Date.now();
+    var _copy={id:_copyId,savedAt:new Date().toISOString(),form:dc(existing),status:'unsigned'};
+    S.saved=S.saved.filter(function(s){return s.id!==_copyId;});
+    S.saved.unshift(_copy);
+    lsSet('ts_loadsheets_cache',S.saved);
+    try{await sbU('ts_loadsheets',[{id:_copy.id,form:_copy.form,saved_at:_copy.savedAt,status:'unsigned'}]);}catch(e){}
+    toast('Previous loadsheet saved as draft','ok');
+  }
+  generateLoadsheet(acId);
+};
 function generateLoadsheet(acId){
   const a=S.aircraft[acId];const d=S.dispatch;if(!a)return;
   const setup=d.acSetup.find(s=>s.acId===acId);const form=bF();
@@ -4316,13 +4411,13 @@ window.lsCopyFlight=function(targetAc){
   const srcType=(srcAc&&(srcAc.layout||srcAc.type||'')).toLowerCase();
   const tgtType=(tgtAc&&(tgtAc.layout||tgtAc.type||'')).toLowerCase();
   const sameType=srcType&&tgtType&&srcType===tgtType;
-  const srcStdFuel=srcAc&&srcAc.fuelKg?Math.round(fromKg(srcAc.fuelKg,src.ac)):0;
-  const srcFuelVal=parseFloat(src.fuel)||0;
-  if(sameType&&srcFuelVal>srcStdFuel){
+  const srcStdFuelKg=srcAc&&srcAc.fuelKg?srcAc.fuelKg:0;
+  const srcFuelValKg=parseFloat(src.fuel)||0;
+  if(sameType&&srcFuelValKg>srcStdFuelKg){
     tgt.fuel=src.fuel;
     tgt.burnOff=src.burnOff||'';
   } else if(tgtAc&&tgtAc.fuelKg){
-    tgt.fuel=String(Math.round(fromKg(tgtAc.fuelKg,'ZK-'+targetAc)));
+    tgt.fuel=String(tgtAc.fuelKg);
     tgt.burnOff='';
   }
   const unallocCount=tgt._unallocated.length;
@@ -4411,6 +4506,7 @@ window.saveUnsigned=async()=>{
   S.editId=id;S.formDirty=false;
   lsSet('ts_loadsheets_cache',S.saved);
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned'}]);
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog(isEdit?'loadsheet_edit':'loadsheet_save',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Loadsheet saved.','ok');
   render();
@@ -4427,6 +4523,7 @@ window.handleSubmit=async()=>{
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);lsSet('ts_loadsheets_cache',S.saved);
   // Google Drive upload happens via nightly scheduler only
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
   S.editId=null;S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.formDirty=false;S.tab='saved';
   toast('Loadsheet submitted and synced.','ok');
