@@ -167,7 +167,7 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 }
 /* ── Responsive ── */
 @media(max-width:480px){
-  input[type=date]{max-width:100%;box-sizing:border-box;min-width:0;width:100%;}
+  input[type=date]{max-width:160px;box-sizing:border-box;min-width:0;}
   /* Layout */
   .g2{grid-template-columns:1fr;}
   .g3{grid-template-columns:1fr 1fr;}
@@ -195,6 +195,9 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 
   /* W&B grid on loadsheet */
   .wb-grid{grid-template-columns:1fr 1fr!important;}
+
+  /* Pax row - tighter fixed cols on mobile */
+  .pax-row{grid-template-columns:70px 44px 1.5fr 0.8fr 44px 44px 26px!important;}
 
   /* Buttons */
   .btn-full{padding:14px;font-size:14px;}
@@ -308,7 +311,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.16';
+const APP_VER='v21.24';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -956,6 +959,7 @@ function runSolver(){
 // ── State ──
 function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
 function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},fuel:'',burnOff:'',sig:null};}
+function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
 let S={
   // Auth
@@ -972,7 +976,7 @@ let S={
   // Manifest / Dispatch
   dispatch:bD(),viewAc:null,viewAc2:null,selectedPax:null,solverRes:{},
   // Loadsheet form
-  form:bF(),editId:null,
+  form:bF(),editId:null,lsForms:{},lsAc:'SLA',
   // UI state
   tab:'manifest',
   savedSearch:'',savedSort:'newest',savedTab:'loadsheets',savedSel:{},
@@ -1086,6 +1090,12 @@ async function loadAll(){
       const cached=lsGet('ts_manifests_cache');
       if(cached)S.manifests=cached;
     }
+
+    // Init per-aircraft loadsheet forms
+    ['SLA','SLB','SLD','SLQ','SDB'].forEach(function(ac){
+      if(!S.lsForms[ac]) S.lsForms[ac]=bF_ac('ZK-'+ac);
+    });
+    S.form=S.lsForms[S.lsAc||'SLA'];
 
     // ── Users ──
     const us=await sbF('ts_users');
@@ -1244,6 +1254,11 @@ function initRealtime(){
             updatePresBar(S._presSection||'manifest');
           }
         }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='crew_update'){
+          if(msg.payload.payload&&msg.payload.payload.updatedBy!==S.user?.id){
+            Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){render();});
+          }
+        }
       }catch(err){}
     };
     _rtWs.onclose=function(){
@@ -1355,11 +1370,11 @@ let _ffRow=null,_ffField=null;
 document.addEventListener('keydown',function(e){
   if(e.key!=='Tab')return;
   if(!document.querySelector('[data-field="name"]'))return;
-  e.preventDefault();
   const el=e.target;
   const pf=el.dataset&&el.dataset.field;
   const pr=el.dataset&&el.dataset.row;
   if(!pf||pr===undefined||pr===null)return;
+  e.preventDefault();
   const rowIdx=parseInt(pr);
   const fields=['name','group','weight','bag'];
   const fi=fields.indexOf(pf);
@@ -1739,7 +1754,7 @@ function render(){
   // Maintenance-only users: redirect to maintenance if on wrong tab
   if(S.user?.role==='maint'&&S.tab!=='maintenance') S.tab='maintenance';
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
-  if(S.tab==='loadsheet'){setupSig();var lf=S.form;if(lf.dep&&lf.dest)setTimeout(function(){renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);},150);}
+  if(S.tab.startsWith('ls_')){setupSig();var lf=S.form;if(lf.dep&&lf.dest)setTimeout(function(){renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);},150);}
   // ── Restore focus after re-render ──
   // Force-focus (set by Tab handler) takes priority over activeElement detection
   if(_ffRow!==null){
@@ -2004,7 +2019,7 @@ function renderApp(){
         </div>
       </div>
       <div style="display:flex;gap:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">
-        ${tabs.map(t=>`<button tabindex="-1" class="nav-tab ${['manifest','seatmap','loadsheet','saved'].includes(S.tab)&&t.id==='operations'?'on':S.tab===t.id?'on':'off'}" onclick="setTab('${t.id}')">${t.lbl}</button>`).join('')}
+        ${tabs.map(t=>`<button tabindex="-1" class="nav-tab ${['manifest','seatmap','saved','ls_SLA','ls_SLB','ls_SLD','ls_SLQ','ls_SDB'].includes(S.tab)&&t.id==='operations'?'on':S.tab===t.id?'on':'off'}" onclick="setTab('${t.id}')">${t.lbl}</button>`).join('')}
       </div>
     </div>
     <div class="page">
@@ -2023,19 +2038,28 @@ function renderApp(){
 
 // ── MANIFEST ──
 function renderOperations(){
+  const LS_ACS=['SLA','SLB','SLD','SLQ','SDB'];
   const sub=S.tab||'manifest';
-  const opsTab=['manifest','seatmap','loadsheet','saved'].includes(sub)?sub:'manifest';
-  const subTabs=[
-    {id:'manifest',lbl:'Manifest'},
-    {id:'seatmap',lbl:'Seatmap'},
-    {id:'loadsheet',lbl:'Loadsheet'},
-    {id:'saved',lbl:`Saved (${S.saved.length})`},
-  ];
-  const bar='<div style="display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px">'+
-    subTabs.map(t=>'<button class="sub-tab '+(opsTab===t.id?'on':'')+'" onclick="S.tab=\''+t.id+'\';window.scrollTo(0,0);render()" style="font-size:13px;padding:7px 16px">'+t.lbl+'</button>').join('')+
+  const lsTabIds=LS_ACS.map(function(ac){return 'ls_'+ac;});
+  const validTabs=['manifest','seatmap','saved'].concat(lsTabIds);
+  const opsTab=validTabs.includes(sub)?sub:'manifest';
+  if(opsTab.startsWith('ls_')){
+    const _ac=opsTab.slice(3);
+    if(S.lsAc!==_ac||S.form!==S.lsForms[_ac]){
+      if(S.lsAc) S.lsForms[S.lsAc]=S.form;
+      S.lsAc=_ac;
+      if(!S.lsForms[_ac]) S.lsForms[_ac]=bF_ac('ZK-'+_ac);
+      S.form=S.lsForms[_ac];
+    }
+  }
+  const subTabs=[{id:'manifest',lbl:'Manifest'},{id:'seatmap',lbl:'Seatmap'}]
+    .concat(LS_ACS.map(function(ac){return{id:'ls_'+ac,lbl:ac};}))
+    .concat([{id:'saved',lbl:'Saved ('+S.saved.length+')'}]);
+  const bar='<div style="display:flex;gap:3px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none">'+
+    subTabs.map(function(t){return'<button class="sub-tab '+(opsTab===t.id?'on':'')+'" onclick="window.switchOpsTab(\''+t.id+'\')" style="font-size:12px;padding:6px 12px;white-space:nowrap">'+t.lbl+'</button>';}).join('')+
     '</div>';
   if(opsTab==='seatmap'){ startPresenceBroadcast('seatmap');return bar+presBarH('seatmap')+renderSeatmap(); }
-  if(opsTab==='loadsheet'){ startPresenceBroadcast('loadsheet');try{return bar+presBarH('loadsheet')+renderLoadsheet();}catch(e){return bar+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';} }
+  if(opsTab.startsWith('ls_')){ startPresenceBroadcast('loadsheet');try{return bar+presBarH('loadsheet')+renderLoadsheet();}catch(e){return bar+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';} }
   if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return bar+renderSaved();}
   startPresenceBroadcast('manifest');return bar+presBarH('manifest')+renderManifest();
 }
@@ -2107,7 +2131,7 @@ function renderStep1(){
       const id=s.acId,lbl=id.replace('ZK-',''),col=AC_COL[id]||'#64748b',sel=p.pinAc===id;
       return`<button tabindex="-1" onclick="setPaxField(${oi},'pinAc','${id}')" style="padding:2px 8px;border-radius:20px;border:1px solid ${col}${sel?'cc':'33'};background:${sel?col+'28':'transparent'};color:${sel?col:'var(--text3)'};font-size:10px;font-weight:800;cursor:pointer;line-height:1.6;white-space:nowrap">${lbl}</button>`;
     }).join(''):'';
-    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 65px 65px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${p.pinAc?AC_COL[p.pinAc]+'15':''}">
+    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 48px 48px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${p.pinAc?AC_COL[p.pinAc]+'15':''}">
       <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-width:0">
         ${acBtns}
       </div>
@@ -2141,7 +2165,7 @@ function renderStep1(){
     <div class="g2">
       <div><label>Departure</label><select tabindex="-1" class="fi" onchange="S.dispatch.dep=this.value;autoSaveDispatch();safeRender()">${aptOpts(d.dep)}</select></div>
       <div><label>Destination</label><select tabindex="-1" class="fi" onchange="S.dispatch.dest=this.value;autoSaveDispatch();safeRender()">${aptOpts(d.dest)}</select></div>
-      <div><label>Date</label><input tabindex="-1" type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch()"></div>
+      <div><label>Date</label><input tabindex="-1" type="date" class="fi" value="${d.date}" style="width:100%;max-width:100%;box-sizing:border-box" onchange="S.dispatch.date=this.value;autoSaveDispatch()"></div>
       <div><label>ETD</label>${etdSelect(d.etd,d.date,"dispatch")}</div>
     </div></div>
   <div class="card"><div class="st">Select Aircraft, PICs & Fuel</div>
@@ -2157,7 +2181,7 @@ function renderStep1(){
       ${(()=>{const nonInf=d.pax.filter(p=>!p.infant).length;return nonInf>totalSeats&&totalSeats>0?`<span style="color:#ef4444;font-weight:700">⚠ ${nonInf-totalSeats} over capacity</span>`:'';})()} 
     </div>
   </div>
-    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 65px 65px 28px;gap:5px;padding:4px 0 6px;border-bottom:2px solid var(--border);margin-bottom:2px">
+    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 48px 48px 28px;gap:5px;padding:4px 0 6px;border-bottom:2px solid var(--border);margin-bottom:2px">
       ${['AC','TYPE','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
     </div></div>
     ${paxRows}
@@ -2212,7 +2236,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
           :nm?('background:rgba(255,255,255,.93);border-left:4px solid '+(gc||col)+';border-radius:8px')
           :'background:rgba(255,255,255,.05);border-radius:8px';
         const lsTextCol=nm&&!isCrew?'color:#1a2035':'color:rgba(255,255,255,.7)';
-        seatRowsHTML+=`<div class="seat ${isCrew?'crew':nm?'filled':''}" style="width:${seatSz}px;height:${seatHt}px;${lsSeatStyle}" onclick="${nm&&!isCrew?`tapFormSeat(${cell.i},'${acId}')`:''}" draggable="${!isCrew&&nm?'true':'false'}" ondragstart="if(${!isCrew&&!!nm})startDragForm(event,${cell.i},'${acId}')" ondragover="event.preventDefault()" ondrop="dropFormSeat(event,${cell.i},'${acId}')">
+        seatRowsHTML+=`<div class="seat ${isCrew?'crew':nm?'filled':''} ${S._selFormSeat===cell.i?'sel-src':''}" style="width:${seatSz}px;height:${seatHt}px;${lsSeatStyle}${S._selFormSeat===cell.i?';box-shadow:0 0 0 2px #f59e0b':''}" onclick="${nm&&!isCrew?`tapFormSeat(${cell.i},'${acId}')`:''}" draggable="${!isCrew&&nm?'true':'false'}" ondragstart="if(${!isCrew&&!!nm})startDragForm(event,${cell.i},'${acId}')" ondragover="event.preventDefault()" ondrop="dropFormSeat(event,${cell.i},'${acId}')">
           <span class="seat-lbl" style="${nm&&!isCrew?'color:#475569;opacity:.7':''}font-size:9px">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc};top:3px;right:3px"></div>`:''}
           ${nm?`<div class="seat-name" style="${lsTextCol};font-weight:700;font-size:${seatSz<52?'7px':'9px'}">${nm.split(' ')[0].slice(0,seatSz<52?5:9)}${(form?.infantNames?.[cell.i])?' 👶':''}</div><div class="seat-wt" style="${lsTextCol};font-size:${seatSz<52?'7px':'8px'}">${wt>0?wt+'kg':''}</div>`:isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.85);font-weight:700">${isPIC?'PIC':'CP'}</div>`:''}
@@ -2304,7 +2328,7 @@ window.toggleLockAc=function(acId){
   const i=S.lockedAcs.indexOf(acId);
   if(i>=0) S.lockedAcs.splice(i,1);
   else S.lockedAcs.push(acId);
-  render();
+  autoSaveDispatch();render();
 };
 
 window.reAllocate=function(){
@@ -2501,7 +2525,7 @@ function renderLoadsheet(){
   </div>`:'';
   const editBanner=S.editId?`<div style="padding:9px 14px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;color:var(--warn-text);font-size:13px;font-weight:600;margin-bottom:10px">✏ Editing saved loadsheet</div>`:'';
   const draftBanner=f.status==='unsigned'?`<div style="padding:9px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;margin-bottom:10px">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
-  const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.form=bF();S.editId=null;render();}">Clear & Start Blank</button>`;
+  const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;render();}">Clear & Start Blank</button>`;
 
   // Fuel display
   const fuelUnit_=a?fuelUnit(f.ac):'kg';
@@ -2766,8 +2790,13 @@ function renderLoadsheet(){
 
   return`${backBanner}${editBanner}${draftBanner}${_overCapBanner}${clearBtn}
   <div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}"><div class="st">Flight Details</div>
-    <div style="margin-bottom:10px"><label>Aircraft</label><select class="fi" onchange="lsAc(this.value)"><option value="">— select —</option>${acOpts}</select></div>
-    ${a?`<div style="margin-bottom:10px;padding:8px 12px;background:#0c1a3a;border-radius:8px;border:1px solid #1e3a5f;font-size:12px;color:#93c5fd;font-weight:600">${a.type} · EW ${a.ew}kg · MTOW ${a.mtow}kg · C of G ${a.cogMin}–${a.cogMax}"</div>`:''}
+    <div style="margin-bottom:10px;padding:8px 12px;background:#0c1a3a;border-radius:8px;border:1px solid #1e3a5f;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12px;color:#93c5fd;font-weight:600">ZK-${S.lsAc||f.ac.replace('ZK-','')} ${a?' &middot; '+a.type+' &middot; EW '+a.ew+'kg &middot; MTOW '+a.mtow+'kg':''}</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--text3)">Copy flight to:</span>
+        ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){return'<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="window.lsCopyFlight(\''+ac+'\')">'+ac+'</button>';}).join('')}
+      </div>
+    </div>
     <div class="g2">
       <div><label>PIC</label><select class="fi" onchange="lsPIC(this.value)"><option value="">— select —</option>${crewOpts}</select></div>
       <div><label>Co-Pilot</label><select class="fi" onchange="lsCoPilot(this.value)">${cpOpts}</select></div>
@@ -3616,9 +3645,28 @@ window.applyReset=async()=>{
   S.showReset=false;render();
 };
 
+window.switchOpsTab=function(tabId){
+  if(tabId.startsWith('ls_')){
+    const ac=tabId.slice(3);
+    if(S.lsAc&&S.lsAc!==ac) S.lsForms[S.lsAc]=S.form;
+    S.lsAc=ac;
+    if(!S.lsForms[ac]) S.lsForms[ac]=bF_ac('ZK-'+ac);
+    S.form=S.lsForms[ac];
+    S.tab=tabId;
+  } else if(tabId==='saved'){
+    S.tab=tabId;
+    reloadTable('ts_loadsheets').then(function(){render();});
+    window.scrollTo(0,0);
+    return;
+  } else {
+    S.tab=tabId;
+  }
+  window.scrollTo(0,0);
+  render();
+};
 window.setTab=function(t){
   if(t==='operations'){
-    if(!['manifest','seatmap','loadsheet','saved'].includes(S.tab)) S.tab='manifest';
+    if(!['manifest','seatmap','saved','ls_SLA','ls_SLB','ls_SLD','ls_SLQ','ls_SDB'].includes(S.tab)) S.tab='manifest';
   } else {
     S.tab=t;
   }
@@ -3647,6 +3695,10 @@ window.setTab=function(t){
         }
       }catch(e){}
     })();
+  }
+  // Re-fetch loadsheets from Supabase every time saved tab is opened
+  if(t==='saved'){
+    reloadTable('ts_loadsheets').then(function(){render();});
   }
   // Re-fetch crew + users from Supabase every time admin/crew tab is opened
   if(t==='admin'){
@@ -3699,7 +3751,7 @@ window.toggleAcSetup=id=>{
   const i=S.dispatch.acSetup.findIndex(s=>s.acId===id);
   if(i>=0)S.dispatch.acSetup.splice(i,1);
   else{const a=S.aircraft[id];S.dispatch.acSetup.push({acId:id,pic:'',coPilot:'',fuelInput:a?Math.round(fromKg(a.fuelKg,id)):null,_ts:Date.now()});}
-  render();
+  autoSaveDispatch();render();
 };
 window.setAcField=(id,field,val)=>{const s=S.dispatch.acSetup.find(x=>x.acId===id);if(s){s[field]=val;s._ts=Date.now();autoSaveDispatch();safeRender();}};
 window.addPax=function(infant){S.dispatch.pax.push({id:'p_'+Date.now(),name:'',weight:infant?10:0,bag:0,group:'',pinAc:null,_ts:Date.now(),infant:!!infant,type:'adult'});autoSaveDispatch();render();};
@@ -3816,9 +3868,22 @@ window.dropOnPool=(ev,forceAc)=>{
 };
 
 // Loadsheet form seat map drag
-window.tapFormSeat=(idx,acId)=>{
-  // For loadsheet seating plan — move passenger by clicking
-  // For now just highlight — full swap done via names fields below
+window.tapFormSeat=(seatIdx,acId)=>{
+  const f=S.form;
+  const nm=f.names[seatIdx]||'';
+  if(S._selFormSeat!=null){
+    const from=S._selFormSeat;
+    if(from!==seatIdx){
+      const swp=(obj,a,b)=>{const t=obj[a];obj[a]=obj[b];obj[b]=t;};
+      swp(f.names,from,seatIdx);swp(f.seats,from,seatIdx);
+      swp(f.bags,from,seatIdx);
+      if(!f.infantNames)f.infantNames={};swp(f.infantNames,from,seatIdx);
+    }
+    S._selFormSeat=null;
+  } else if(nm){
+    S._selFormSeat=seatIdx;
+  }
+  render();
 };
 window.startDragForm=(ev,idx,acId)=>{S.dragState={fromFormIdx:idx,fromFormAc:acId};ev.dataTransfer.setData('text/plain',String(idx));};
 window.dropFormSeat=(ev,toIdx,acId)=>{
@@ -3914,7 +3979,7 @@ window.bulkUploadSaved=async function(){
   render();
 };
 
-window.clearManifest=()=>{if(!confirm('Clear all passengers and aircraft?'))return;S.dispatch=bD();sbDel('ts_manifests','live_draft');S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};render();};
+window.clearManifest=()=>{if(!confirm('Clear all passengers and aircraft?'))return;S.dispatch=bD();S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};autoSaveDispatch();render();};
 
 // ── Generate loadsheet from manifest ──
 function generateLoadsheet(acId){
@@ -3930,7 +3995,7 @@ function generateLoadsheet(acId){
   const seatIdxs=paxSeatIdxs(acId)||[];seatIdxs.forEach(function(i){if(i<=1)return;const p=sm[i]?paxById(sm[i]):null;if(p){form.seats[i]=p.weight||'';form.bags[i]=p.bag||'';form.names[i]=p.name||'';if(p.infantName)form.infantNames[i]=p.infantName;}});
   // seat 1 infant (non-copilot)
   {const p=sm[1]?paxById(sm[1]):null;if(p&&p.infantName)form.infantNames[1]=p.infantName;}
-  S.form=form;S.editId=null;S.formDirty=false;S.tab='loadsheet';render();
+  const _lsAcCode=acId.replace('ZK-','');S.lsForms[_lsAcCode]=form;S.lsAc=_lsAcCode;S.form=form;S.editId=null;S.formDirty=false;S.tab='ls_'+_lsAcCode;render();
 };
 
 // ── Loadsheet form handlers ──
@@ -3968,6 +4033,15 @@ window.lsAc=v=>{
   }
   render();
 };
+window.lsCopyFlight=function(targetAc){
+  const src=S.form;
+  if(!S.lsForms[targetAc]) S.lsForms[targetAc]=bF_ac('ZK-'+targetAc);
+  const tgt=S.lsForms[targetAc];
+  tgt.dep=src.dep;tgt.dest=src.dest;tgt.date=src.date;tgt.etd=src.etd;tgt.etdCustom=src.etdCustom||false;
+  tgt.pic=src.pic;tgt.coPilot=src.coPilot;
+  toast('Flight details copied to ZK-'+targetAc,'ok');
+};
+
 window.lsTrimExcess=()=>{
   const a=S.aircraft[S.form.ac];if(!a)return;
   const max=a.seats.length;
@@ -4039,12 +4113,12 @@ window.handleSubmit=async()=>{
   // Google Drive upload happens via nightly scheduler only
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
-  S.editId=null;S.form=bF();S.formDirty=false;S.tab='saved';
+  S.editId=null;S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.formDirty=false;S.tab='saved';
   toast('Loadsheet submitted and synced.','ok');
   render();
 };
-window.newSheet=()=>{S.form=bF();S.editId=null;S.tab='loadsheet';render();};
-window.editSaved=id=>{const s=S.saved.find(x=>x.id===id);if(!s)return;S.form=dc(s.form);S.editId=id;S.tab='loadsheet';render();};
+window.newSheet=()=>{S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;S.tab='ls_'+S.lsAc;render();};
+window.editSaved=id=>{const s=S.saved.find(x=>x.id===id);if(!s)return;const _eAc=(s.form?.ac||'ZK-'+S.lsAc).replace('ZK-','');S.lsAc=_eAc;S.lsForms[_eAc]=dc(s.form);S.form=S.lsForms[_eAc];S.editId=id;S.tab='ls_'+_eAc;render();};
 window.delSaved=async id=>{if(!confirm('Delete this loadsheet?'))return;S.saved=S.saved.filter(s=>s.id!==id);lsSet('ts_loadsheets_cache',S.saved);render();await sbDel('ts_loadsheets',id);};
 
 // ── Charter ──
@@ -4535,6 +4609,13 @@ window.savePerson=async function(){
   toast(finalName+' saved','ok');
   // Reload crew + users from Supabase to confirm save and refresh all viewers
   Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){render();});
+  // Broadcast crew update to all connected devices
+  if(_rtWs&&_rtWs.readyState===1){
+    _rtRef++;
+    _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
+      payload:{type:'broadcast',event:'crew_update',payload:{updatedBy:S.user?.id}},
+      ref:String(_rtRef)}));
+  }
   render();
 };
 
