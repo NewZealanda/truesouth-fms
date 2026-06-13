@@ -315,7 +315,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.70';
+const APP_VER='v21.73';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -2804,7 +2804,7 @@ function renderLoadsheet(){
   const burnKgVal=f.burnOff?burnToKg(f.burnOff,f.ac):burnToKg(a?.burnDef||0,f.ac);
 
   // ── Unified Seats section (SVG seatmap + editable cards) ──
-  let seatsH='',cargoH='',fuelH='',calcH='',sigH='',unallocH='';
+  let seatsH='',cargoH='',fuelH='',calcH='',sigH='',unallocH='',isPod=false;
   if(a){
     const cW=parseFloat(f.seats[0]||0);
     const picMom=(cW*(a.seats[0]?.arm||0)).toFixed(0);
@@ -2856,106 +2856,73 @@ function renderLoadsheet(){
     // Pax seat cards (2-column grid)
     // Seat 1 is right-front (co-pilot side) — needs empty left-column spacer
     // Then seats 2&3, 4&5... are left/right pairs down the cabin
-    const seatCards=(()=>{
-      const cards=a.seats.slice(1).map(function(s,i){
-        const idx=i+1;
-        const nm=f.names[idx]||'';
-        const wt=f.seats[idx]||'';
-        const bg=f.bags[idx]||'';
-        const rawInfant=f.infantNames?.[idx]||'';
-        const nameHasInfant=nm.includes(' + ');
-        const displayNm=nameHasInfant?nm.split(' + ')[0]:nm;
-        const infantNm=rawInfant||(nameHasInfant?nm.split(' + ').slice(1).join(' + '):'');
-        const grp=S.dispatch.pax.find(p=>p.name===nm||p.name===displayNm)?.group||'';
-        const gc=grp?groupColor(grp):null;
-        const hasPerson=nm||parseFloat(wt);
-        const selUnalloc=S._selUnalloc!=null;const selSeat=S._selFormSeat===idx;
-        return`<div onclick="window.tapFormSeat(${idx},'${f.ac}')" draggable="${nm?'true':'false'}" ondragstart="window.lsSeatDragStart(${idx},event)" ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'" ondragleave="event.currentTarget.style.outline=''}" ondrop="window.lsDropOnSeat(${idx},event)" style="position:relative;cursor:${selUnalloc||nm?'pointer':'default'};background:${selSeat?'rgba(245,158,11,.15)':selUnalloc&&!nm?'rgba(124,58,237,.1)':'var(--card2)'};border-radius:7px;padding:6px 8px;border-left:3px solid ${hasPerson?(gc||'var(--accent)'):selUnalloc?'var(--accent)':'var(--border2)'};transition:outline .1s">
-          ${hasPerson?`<button onclick="window.lsDelPax(${idx})" title="Remove passenger" style="position:absolute;top:3px;right:3px;width:12px;height:12px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:8px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;z-index:1;opacity:0.45" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.45'">×</button>`:''}
-          <div style="display:flex;align-items:center;gap:4px;margin-bottom:${infantNm?'2px':'4px'}">
-            <span style="font-size:9px;font-weight:700;color:var(--text3);width:18px">${s.lbl}</span>
-            <input class="fi" type="text" value="${displayNm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px" onblur="lsN(${idx},this.value)">
+    const paxCards=a.seats.slice(1).map(function(s,i){
+      const idx=i+1;
+      const nm=f.names[idx]||'';
+      const wt=f.seats[idx]||'';
+      const bg=f.bags[idx]||'';
+      const rawInfant=f.infantNames?.[idx]||'';
+      const nameHasInfant=nm.includes(' + ');
+      const displayNm=nameHasInfant?nm.split(' + ')[0]:nm;
+      const infantNm=rawInfant||(nameHasInfant?nm.split(' + ').slice(1).join(' + '):'');
+      const grp=S.dispatch.pax.find(p=>p.name===nm||p.name===displayNm)?.group||'';
+      const gc=grp?groupColor(grp):null;
+      const hasPerson=nm||parseFloat(wt);
+      const selUnalloc=S._selUnalloc!=null;const selSeat=S._selFormSeat===idx;
+      return`<div onclick="window.tapFormSeat(${idx},'${f.ac}')" draggable="${nm?'true':'false'}" ondragstart="window.lsSeatDragStart(${idx},event)" ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'" ondragleave="event.currentTarget.style.outline=''}" ondrop="window.lsDropOnSeat(${idx},event)" style="position:relative;cursor:${selUnalloc||nm?'pointer':'default'};background:${selSeat?'rgba(245,158,11,.15)':selUnalloc&&!nm?'rgba(124,58,237,.1)':'var(--card2)'};border-radius:7px;padding:6px 8px;border-left:3px solid ${hasPerson?(gc||'var(--accent)'):selUnalloc?'var(--accent)':'var(--border2)'};transition:outline .1s">
+        ${hasPerson?`<button onclick="window.lsDelPax(${idx})" title="Remove" style="position:absolute;top:3px;right:3px;width:12px;height:12px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:8px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;z-index:1;opacity:0.45" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.45'">×</button>`:''}
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:${infantNm?'2px':'4px'}">
+          <span style="font-size:9px;font-weight:700;color:var(--text3);min-width:18px">${s.lbl}</span>
+          <input class="fi" type="text" value="${displayNm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px" onblur="lsN(${idx},this.value)">
+        </div>
+        ${infantNm?`<div style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}<button onclick="window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></div>`:''}
+        <div style="display:grid;grid-template-columns:50px 50px 1fr;gap:4px;align-items:end">
+          <div>
+            <div style="font-size:8px;color:var(--text3)">WT kg</div>
+            <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsS(${idx},this.value);window.lsCheckChildWt(${idx})">
           </div>
-          ${infantNm?`<div style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}<button onclick="window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></div>`:''}
-          
-          <div style="display:grid;grid-template-columns:50px 50px${hasPerson?' 1fr':''};gap:4px;align-items:end">
-            <div>
-              <div style="font-size:8px;color:var(--text3)">WT kg</div>
-              <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsS(${idx},this.value);window.lsCheckChildWt(${idx})">
-            </div>
-            <div>
-              <div style="font-size:8px;color:var(--text3)">BAG kg</div>
-              <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsB(${idx},this.value)">
-            </div>
-            ${hasPerson?`<div style="display:flex;gap:3px;padding-bottom:2px;justify-content:flex-end">
-              <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'A')" style="padding:1px 6px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(74,222,128,.3)':'rgba(74,222,128,.8)'};background:${(f.paxType||{})[idx]==='C'?'transparent':'rgba(74,222,128,.2)'};color:#4ade80;font-size:10px;font-weight:700;cursor:pointer">A</button>
-              <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'C')" style="padding:1px 6px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.8)':'rgba(251,146,60,.3)'};background:${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.2)':'transparent'};color:#fb923c;font-size:10px;font-weight:700;cursor:pointer">C</button>
-            </div>`:''}
+          <div>
+            <div style="font-size:8px;color:var(--text3)">BAG kg</div>
+            <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsB(${idx},this.value)">
           </div>
-        </div>`;
-      });
-      // Seat 1 sits in right column — insert blank spacer in left column first
-      return picCard+cards.join('');
-    })();
-    const isPod=a.cargo.length>1&&a.cargo[0]?.lbl?.startsWith('Pod');
+          <div style="display:flex;gap:3px;padding-bottom:2px;justify-content:flex-end">
+            <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'A')" style="padding:1px 6px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(74,222,128,.3)':'rgba(74,222,128,.8)'};background:${(f.paxType||{})[idx]==='C'?'transparent':'rgba(74,222,128,.2)'};color:#4ade80;font-size:10px;font-weight:700;cursor:pointer">A</button>
+            <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'C')" style="padding:1px 6px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.8)':'rgba(251,146,60,.3)'};background:${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.2)':'transparent'};color:#fb923c;font-size:10px;font-weight:700;cursor:pointer">C</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    isPod=a.cargo.length>1&&a.cargo[0]?.lbl?.startsWith('Pod');
     const podColors=['rgba(59,130,246,.15)','rgba(16,185,129,.15)','rgba(245,158,11,.15)','rgba(168,85,247,.15)'];
     const podBorders=['rgba(59,130,246,.5)','rgba(16,185,129,.5)','rgba(245,158,11,.5)','rgba(168,85,247,.5)'];
     const podTextColors=['#60a5fa','#34d399','#fbbf24','#c084fc'];
-    // ── Pod zone inline inputs (injected into left column of seatsH) ──
-    const podZonesInlineH=(()=>{
-      if(!isPod) return '';
-      const boxes=a.cargo.map((zn,zi)=>{
-        const w=f.cargo[zi]||'';
-        return`<div style="background:${podColors[zi%4]};border:1px solid ${podBorders[zi%4]};border-radius:8px;padding:7px 9px">
-          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:${podTextColors[zi%4]};text-transform:uppercase;margin-bottom:4px">${zn.lbl.replace('Pod Zone ','Zone ')}${zn.maxKg?' · max '+zn.maxKg+'kg':''}</div>
-          <div style="display:flex;align-items:baseline;gap:4px">
-            <input class="fi ls-no-spin" type="number" placeholder="0" value="${w}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
-            <span style="font-size:11px;color:${podTextColors[zi%4]}">kg</span>
-          </div>
-          ${w?`<div style="font-size:10px;color:${podTextColors[zi%4]};margin-top:2px">mom ${((parseFloat(w)||0)*zn.arm).toFixed(0)}</div>`:''}
-        </div>`;
-      }).join('');
-      return`<div style="margin-top:8px">
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:5px">Pod Cargo</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">${boxes}</div>
-      </div>`;
-    })();
-    seatsH=`<div class="card" id="lsf-seats" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st" style="display:flex;align-items:center;justify-content:space-between">Seats &amp; Passengers${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}</div>
+    seatsH=`<div class="card" id="lsf-seats" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
+      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Seats &amp; Passengers${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}</div>
       ${wbSummary}
-      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;justify-content:center">
-        <div style="flex-shrink:0">
-          ${renderCabinSVG(f.ac,false,f,window.innerWidth<=520?46:60,window.innerWidth<=520?40:50)}
-          ${podZonesInlineH}
-        </div>
-        <div style="flex:1;min-width:200px">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${seatCards}</div>
-          <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:6px;border-top:1px solid var(--border)">
-            <span style="font-size:12px;font-weight:700;color:var(--text3)">Total Pax</span>
-            <span style="font-size:13px;font-weight:700">${r?r.paxW.toFixed(1):'—'} kg</span>
-          </div>
-        </div>
+      <div style="text-align:center;margin-bottom:10px">
+        ${renderCabinSVG(f.ac,false,f,window.innerWidth<=520?40:52,window.innerWidth<=520?34:44)}
+      </div>
+      ${picCard}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">${paxCards}</div>
+      <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:6px;border-top:1px solid var(--border)">
+        <span style="font-size:12px;font-weight:700;color:var(--text3)">Total Pax</span>
+        <span style="font-size:13px;font-weight:700">${r?r.paxW.toFixed(1):'—'} kg</span>
       </div>
     </div>`;
 
     if(isPod){
-      // Aircraft silhouette SVG with coloured zone overlays
       const nz=a.cargo.length;
       const zoneW=Math.floor(100/nz);
       const zoneSVG=a.cargo.map((zn,zi)=>{
         const x=zi*zoneW;const w=zi===nz-1?100-x:zoneW;
-        const col=podBorders[zi%4];
-        return`<rect x="${x}%" y="30%" width="${w}%" height="40%" fill="${podColors[zi%4]}" stroke="${col}" stroke-width="1.5" rx="3"/>
+        return`<rect x="${x}%" y="30%" width="${w}%" height="40%" fill="${podColors[zi%4]}" stroke="${podBorders[zi%4]}" stroke-width="1.5" rx="3"/>
                <text x="${x+w/2}%" y="53%" text-anchor="middle" font-size="9" fill="${podTextColors[zi%4]}" font-weight="700">${zn.lbl.replace('Pod Zone ','Zone ')}</text>`;
       }).join('');
-      const fusSVG=`<svg viewBox="0 0 300 60" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:360px;height:60px;margin-bottom:10px">
-        <!-- fuselage -->
+      const fusSVG=`<svg viewBox="0 0 300 60" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:50px;margin-bottom:8px">
         <rect x="2%" y="28%" width="96%" height="44%" rx="10" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
-        <!-- nose cone -->
         <ellipse cx="2.5%" cy="50%" rx="2.5%" ry="22%" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
-        <!-- tail fin -->
         <polygon points="97%,17% 100%,17% 100%,50%" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="1"/>
         ${zoneSVG}
-        <!-- front/rear labels -->
         <text x="4%" y="18%" font-size="8" fill="rgba(255,255,255,.3)">FRONT</text>
         <text x="84%" y="18%" font-size="8" fill="rgba(255,255,255,.3)">REAR</text>
       </svg>`;
@@ -2970,9 +2937,12 @@ function renderLoadsheet(){
           <div style="font-size:11px;color:${podTextColors[zi%4]};margin-top:4px">${w?'mom '+(((parseFloat(w)||0)*zn.arm).toFixed(0)):''}</div>
         </div>`;
       }).join('');
-      cargoH=''; // pod zones moved into seatmap left column
+      cargoH=`<div class="card" id="lsf-cargo" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};display:flex;flex-direction:column"><div class="st">Cargo Pod Zones</div>
+        ${fusSVG}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${zoneBoxes}</div>
+      </div>`;
     } else {
-      cargoH=''; // non-pod cargo now shown inline under cabin SVG
+      cargoH='';
     }
 
     const fuelRemKg=fuelKgVal-a.gndBurn-burnKgVal;
@@ -3161,7 +3131,7 @@ function renderLoadsheet(){
       </div>
     </div>
   </div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px;border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
-  ${seatsH}${unallocH}${a?cargoH:''}${(a&&fuelH&&calcH)?`<div style="display:flex;gap:14px;align-items:stretch;flex-wrap:wrap"><div style="flex:1;min-width:280px;display:flex;flex-direction:column">${fuelH}</div><div style="flex:1;min-width:280px;display:flex;flex-direction:column">${calcH}</div></div>`:(a?fuelH:'')+calcH}${sigH}`;
+  ${seatsH}${unallocH}${(a&&fuelH&&calcH)?`<div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">${isPod&&cargoH?`<div style="flex:1;min-width:220px;display:flex;flex-direction:column">${cargoH}</div>`:''}${fuelH?`<div style="flex:1;min-width:220px;display:flex;flex-direction:column">${fuelH}</div>`:''}${calcH?`<div style="flex:2;min-width:280px;display:flex;flex-direction:column">${calcH}</div>`:''}</div>`:(a?((isPod?cargoH:'')+fuelH):'')+calcH}${sigH}`;
 }
 window.lsCheckChildWt=function(idx){
   const f=S.form;if(!f)return;
@@ -3600,6 +3570,7 @@ function renderSaved(){
   const _bulkBar=_selCount>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
     <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_selCount} item(s) selected</span>
     <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
+    <button onclick="window.printMultiSheet(Object.keys(S.savedSel))" style="padding:5px 12px;border-radius:6px;border:none;background:#374151;color:#fff;font-size:16px;font-weight:700;cursor:pointer" title="Print selected">&#x1F5A8;</button>
     ${_selSignedCount>0?`<button onclick="window.bulkUploadSaved()" style="padding:5px 14px;border-radius:6px;border:none;background:#1a73e8;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;box-shadow:0 1px 4px rgba(26,115,232,.4)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>Upload to Drive (${_selSignedCount})</button>`:''}
     <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Delete ${_selCount}</button>
   </div>`:'';
@@ -3758,7 +3729,8 @@ function renderSaved(){
         </div>
         <div style="display:flex;gap:5px;flex-shrink:0">
           ${isSigned?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${s.id}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${s.id}')">&#x21BA; Reopen</button>`:`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>`}
-          ${isSigned?`<button class="btn" style="font-size:12px;padding:6px 10px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${s.id}')">${s.driveUploaded?'☁ Re-upload':'☁ Upload'}</button>`:''}
+          ${isSigned&&(S.gdriveEnabled||S.gdriveClientId)?`<button class="btn" title="${s.driveUploaded?'Re-upload to Drive':'Upload to Drive'}" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${s.id}')">&#x2601;</button>`:''}
+          <button class="btn" title="Print" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer" onclick="window.printSingleSheet('${s.id}')">&#x1F5A8;</button>
           <button class="btn btn-red" style="font-size:12px;padding:6px 10px" onclick="delSaved('${s.id}')">Delete</button>
         </div></div>`;
     }).join('')}`;
@@ -4649,6 +4621,17 @@ window.toggleAcSetup=id=>{
 window.setAcField=(id,field,val)=>{const s=S.dispatch.acSetup.find(x=>x.acId===id);if(s){s[field]=val;s._ts=Date.now();if(field==='coPilot'){const cp=anyCrewList().find(x=>x.n===val);s._cpWeight=cp?cp.w:0;}autoSaveDispatch();safeRender();}};
 window.addPax=function(infant){S.dispatch.pax.push({id:'p_'+Date.now(),name:'',weight:infant?10:0,bag:0,group:'',pinAc:null,_ts:Date.now(),infant:!!infant,type:'adult'});autoSaveDispatch();render();};
 window.addInfant=function(){addPax(true);};
+function _paxSafeRender(){
+  var ae=document.activeElement;
+  if(ae&&ae.dataset&&(ae.dataset.field==='name'||ae.dataset.field==='group'||ae.dataset.field==='weight'||ae.dataset.field==='bag'))return;
+  safeRender();
+}
+function _lsSafeRender(){
+  var ae=document.activeElement;
+  var lsEl=document.getElementById('flash-loadsheet');
+  if(ae&&lsEl&&lsEl.contains(ae)&&(ae.tagName==='INPUT'||ae.tagName==='SELECT'||ae.tagName==='TEXTAREA'))return;
+  autoSaveLS();safeRender();
+}
 window.paxNameBlur=function(i,val){
   const plusIdx=val.indexOf(' + ');
   if(S.dispatch.pax[i]){
@@ -4662,7 +4645,7 @@ window.paxNameBlur=function(i,val){
   }
   if(S.dispatch.pax[i])S.dispatch.pax[i]._ts=Date.now();
   autoSaveDispatch();
-  setTimeout(safeRender,50);
+  setTimeout(_paxSafeRender,150);
 }
 window.openPaxFieldPopup=function(pidx,field){
   var p=S.dispatch.pax[pidx];if(!p)return;
@@ -4745,7 +4728,7 @@ window.setPaxField=(i,k,v)=>{
       }
     }
   }
-  autoSaveDispatch();setTimeout(safeRender,50);
+  autoSaveDispatch();setTimeout(_paxSafeRender,150);
 };
 
 // ── Seat map handlers ──
@@ -5261,9 +5244,9 @@ window.lsCoPilot=v=>{
   autoSaveLS();
   render();
 };
-window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;render();};window.lsB=(i,v)=>{S.form.bags[i]=v;render();};window.lsC=(i,v)=>{S.form.cargo[i]=v;autoSaveLS();render();};
-window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));autoSaveLS();render();};
-window.lsBurn=(v,acId)=>{S.form.burnOff=v;autoSaveLS();render();};
+window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;setTimeout(_lsSafeRender,150);};window.lsB=(i,v)=>{S.form.bags[i]=v;setTimeout(_lsSafeRender,150);};window.lsC=(i,v)=>{S.form.cargo[i]=v;setTimeout(_lsSafeRender,150);};
+window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));setTimeout(_lsSafeRender,150);};
+window.lsBurn=(v,acId)=>{S.form.burnOff=v;setTimeout(_lsSafeRender,150);};
 window.clearSig=()=>{S.form.sig=null;S.sigTypedName='';autoSaveLS();render();};
 
 // Apply typed name as a signature
@@ -5717,6 +5700,7 @@ function generatePrintHTML(sheet){
   var remKg=fuelKgV-a.gndBurn-burnKgV;
   var fuelU=fuelUnit(f.ac);
   var fuelDisplay=f.ac?fromKg(fuelKgV,f.ac).toFixed(1):fuelKgV;
+  var remDisplay=f.ac?fromKg(Math.max(0,remKg),f.ac).toFixed(1):Math.max(0,remKg).toFixed(1);
 
   // Shared inline styles
   var TD='border:1px solid #e2e8f0;padding:5px 8px;font-family:Arial,sans-serif;font-size:11px;vertical-align:top;';
@@ -5850,7 +5834,7 @@ function generatePrintHTML(sheet){
     +'<tr><td style="'+TD+'color:#666">Fuel at departure</td><td style="'+TD+'text-align:right">'+fuelKgV.toFixed(1)+' kg ('+fuelDisplay+' '+fuelU+')</td></tr>'
     +'<tr><td style="'+TD+'color:#666">Ground burn</td><td style="'+TD+'text-align:right">'+a.gndBurn+' kg</td></tr>'
     +'<tr><td style="'+TD+'color:#666">Flight burn</td><td style="'+TD+'text-align:right">'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr>'
-    +'<tr style="background:'+acFaint+'"><td style="'+TD+'border-left:3px solid '+acCol+';font-weight:700">Fuel at destination</td><td style="'+TD+'text-align:right;font-weight:700">'+remKg.toFixed(1)+' kg</td></tr>'
+    +'<tr style="background:'+acFaint+'"><td style="'+TD+'border-left:3px solid '+acCol+';font-weight:700">Fuel at destination</td><td style="'+TD+'text-align:right;font-weight:700">'+remDisplay+' '+fuelU+'</td></tr>'
     +'</table>'
 
     // Certification
@@ -6157,6 +6141,120 @@ function fmtMaintDate(d){
 }
 
 window.retryMaintenance=function(){setTab('maintenance');};
+
+function generateHalfSheetContent(sheet){
+  var f=sheet.form;
+  var a=S.aircraft[f.ac]||{seats:[],cargo:[],doc:'',type:'',burnDef:'',burnDefUnit:'kg',gndBurn:0,fuelArm:0,ew:0,em:0,cogMin:0,cogMax:0,mtow:0,mlw:0};
+  var r=calcFormWB(f);
+  var acCol=AC_COL[f.ac]||'#1e6b8c';
+  function hexRgba(h,op){var x=parseInt(h.slice(1),16);return 'rgba('+((x>>16)&255)+','+((x>>8)&255)+','+(x&255)+','+op+')';}
+  var acFaint=hexRgba(acCol,0.08);
+  var allOk=r&&r.towOk&&r.lwOk&&r.cogOk;
+  var statusBg=allOk?'#f0fdf4':'#fef2f2';
+  var statusBorder=allOk?'#16a34a':'#dc2626';
+  var statusColor=allOk?'#15803d':'#b91c1c';
+  var fuelKgV=parseFloat(f.fuel)||0;
+  var burnKgV=r?r.burnKg:0;
+  var remKg=fuelKgV-(a.gndBurn||0)-burnKgV;
+  var fuelU=fuelUnit(f.ac);
+  var fuelDisplay=f.ac?fromKg(fuelKgV,f.ac).toFixed(1):fuelKgV;
+  var remDisplay=f.ac?fromKg(Math.max(0,remKg),f.ac).toFixed(1):Math.max(0,remKg).toFixed(1);
+  var TD='border:1px solid #e2e8f0;padding:3px 6px;font-family:Arial,sans-serif;font-size:9px;vertical-align:top;';
+  var TH='border:1px solid '+acCol+';padding:3px 6px;font-family:Arial,sans-serif;font-size:8px;font-weight:700;text-align:left;background:'+acCol+';color:#fff;';
+  // Seat rows
+  var seatRows='';
+  a.seats.forEach(function(s,i){
+    var n=(f.names&&f.names[i])||'';var w=(f.seats&&f.seats[i])||'';var b=(f.bags&&f.bags[i])||'';
+    if(n||parseFloat(w)){
+      var inf=(f.infantNames&&f.infantNames[i])||'';
+      var pt=(f.paxType&&f.paxType[i])||'A';
+      seatRows+='<tr style="background:'+(i===0?acFaint:'transparent')+'">'
+        +'<td style="'+TD+'font-weight:'+(i===0?'700':'400')+';color:'+(i===0?acCol:'#111')+'">'+s.lbl+'</td>'
+        +'<td style="'+TD+'">'+n+(inf?' + '+inf:'')+(i>0&&n?' <span style="font-size:8px;color:'+(pt==='C'?'#ea580c':'#16a34a')+';margin-left:3px">'+(pt==='C'?'C':'A')+'</span>':'')+'</td>'
+        +'<td style="'+TD+'text-align:right">'+(w||'—')+'</td>'
+        +'<td style="'+TD+'text-align:right">'+(b||'—')+'</td>'
+        +'</tr>';
+    }
+  });
+  var cargoRows='';
+  if(a.cargo&&a.cargo.length){a.cargo.forEach(function(zn,i){var w=(f.cargo&&f.cargo[i])||'';if(w)cargoRows+='<tr><td style="'+TD+'">'+zn.lbl+'</td><td style="'+TD+'text-align:right">'+w+' kg</td></tr>';});}
+  return '<div style="font-family:Arial,sans-serif;font-size:9px;color:#111;height:100%;display:flex;flex-direction:column;gap:5px">'
+    // Header strip
+    +'<div style="display:flex;align-items:center;gap:10px;border-left:4px solid '+acCol+';padding:4px 8px">'
+    +'<div><div style="font-size:12px;font-weight:800;color:'+acCol+'">'+f.ac.replace('ZK-','')+' <span style="color:#444;font-weight:400;font-size:10px">'+a.type+'</span></div>'
+    +'<div style="font-size:8px;color:#666">TRUE SOUTH FLIGHTS — LOADSHEET</div></div>'
+    +'<div style="flex:1"></div>'
+    +'<div style="text-align:right;font-size:9px"><div><b>'+(APTS[f.dep]||f.dep||'—')+'</b> → <b>'+(APTS[f.dest]||f.dest||'—')+'</b></div>'
+    +'<div style="color:#666">'+f.date+' &nbsp; ETD '+(f.etd||'—')+'</div></div></div>'
+    // Status
+    +'<div style="padding:4px 8px;border:1.5px solid '+statusBorder+';border-radius:4px;background:'+statusBg+';color:'+statusColor+';font-weight:800;font-size:9px">'+(allOk?'✓  ALL LIMITS WITHIN RANGE':'⚠  ONE OR MORE LIMITS EXCEEDED')+'</div>'
+    // Two-col: flight info + W&B
+    +'<div style="display:flex;gap:8px">'
+    +'<table style="flex:1;border-collapse:collapse;font-size:9px"><tr><th colspan="2" style="'+TH+'">FLIGHT</th></tr>'
+    +'<tr><td style="'+TD+'color:#666">PIC</td><td style="'+TD+'font-weight:700">'+f.pic+'</td></tr>'
+    +(f.coPilot?'<tr><td style="'+TD+'color:#666">Co-Pilot</td><td style="'+TD+'">'+f.coPilot+'</td></tr>':'')
+    +(r?'<tr><td style="'+TD+'color:#666">TOW</td><td style="'+TD+'font-weight:700;color:'+(r.towOk?'#15803d':'#b91c1c')+'">'+r.tow.toFixed(1)+' / '+a.mtow+' kg</td></tr>':'')
+    +(r?'<tr><td style="'+TD+'color:#666">Land Wt</td><td style="'+TD+'font-weight:700;color:'+(r.lwOk?'#15803d':'#b91c1c')+'">'+r.lw.toFixed(1)+' / '+a.mlw+' kg</td></tr>':'')
+    +(r?'<tr><td style="'+TD+'color:#666">C of G</td><td style="'+TD+'font-weight:700;color:'+(r.cogOk?'#15803d':'#b91c1c')+'">'+r.towCog.toFixed(2)+'" ('+a.cogMin+'–'+a.cogMax+'")</td></tr>':'')
+    +'</table>'
+    +'<table style="flex:1;border-collapse:collapse;font-size:9px"><tr><th colspan="2" style="'+TH+'">FUEL</th></tr>'
+    +'<tr><td style="'+TD+'color:#666">Loaded</td><td style="'+TD+'">'+fuelKgV.toFixed(1)+' kg ('+fuelDisplay+' '+fuelU+')</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Gnd burn</td><td style="'+TD+'">'+(a.gndBurn||0)+' kg</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Flt burn</td><td style="'+TD+'">'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr>'
+    +'<tr style="background:'+acFaint+'"><td style="'+TD+'border-left:2px solid '+acCol+';font-weight:700">@ Dest</td><td style="'+TD+'font-weight:700">'+remDisplay+' '+fuelU+'</td></tr>'
+    +'</table></div>'
+    // Occupants
+    +'<table style="width:100%;border-collapse:collapse;font-size:9px"><tr><th colspan="4" style="'+TH+'">OCCUPANTS</th></tr>'
+    +'<tr><th style="'+TH+'">Seat</th><th style="'+TH+'">Name</th><th style="'+TH+'text-align:right">Wt kg</th><th style="'+TH+'text-align:right">Bag kg</th></tr>'
+    +seatRows
+    +(cargoRows?'<tr><th colspan="2" style="'+TH+'">CARGO</th><th colspan="2" style="'+TH+'"></th></tr>'+cargoRows:'')
+    +'</table>'
+    // Signature
+    +'<div style="margin-top:auto">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:9px"><tr><th colspan="2" style="'+TH+'">PIC CERTIFICATION</th></tr>'
+    +'<tr><td colspan="2" style="'+TD+'font-style:italic;color:#555;font-size:8px">I hereby certify the particulars above are correct'+(a.type&&a.type.includes('208')?' and Part 125 security measures followed':'')+'.</td></tr>'
+    +(f.sig?'<tr><td style="'+TD+'color:#666;width:25%">Signature</td><td style="'+TD+'"><img src="'+f.sig+'" style="max-height:36px;display:block"></td></tr>'
+           :'<tr><td style="'+TD+'color:#666">Signature</td><td style="'+TD+'padding:16px 6px">_____________________________</td></tr>')
+    +'<tr><td style="'+TD+'color:#666">Name / Date</td><td style="'+TD+'">'+f.pic+' &nbsp; '+f.date+'</td></tr>'
+    +'</table></div>'
+    +'</div>';
+}
+function _openPrintWindow(sheets){
+  var contents=sheets.map(generateHalfSheetContent);
+  var pairs=[];
+  for(var i=0;i<contents.length;i+=2){
+    pairs.push('<div class="pp">'
+      +'<div class="lsh">'+contents[i]+'</div>'
+      +(contents[i+1]?'<div class="lsh brd">'+contents[i+1]+'</div>':'<div class="lsh"></div>')
+      +'</div>');
+  }
+  var w=window.open('','_blank','width=900,height=750');
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Loadsheet</title>'
+    +'<style>'
+    +'*{box-sizing:border-box;margin:0;padding:0}'
+    +'body{background:#fff;font-family:Arial,sans-serif}'
+    +'@page{size:A4 portrait;margin:6mm}'
+    +'.pp{display:flex;flex-direction:column;height:277mm;page-break-after:always}'
+    +'.pp:last-child{page-break-after:auto}'
+    +'.lsh{flex:1;overflow:hidden;padding:5mm}'
+    +'.lsh.brd{border-top:1px dashed #bbb}'
+    +'@media print{body{padding:0}}'
+    +'</style>'
+    +'</head><body>'+pairs.join('')
+    +'<script>window.onload=function(){window.print();}<\/script>'
+    +'</body></html>');
+  w.document.close();
+}
+window.printSingleSheet=function(id){
+  var sheet=S.saved.find(function(s){return s.id===id;});
+  if(!sheet)return;
+  _openPrintWindow([sheet]);
+};
+window.printMultiSheet=function(ids){
+  var sheets=ids.map(function(id){return S.saved.find(function(s){return s.id===id;});}).filter(Boolean);
+  if(!sheets.length)return;
+  _openPrintWindow(sheets);
+};
 window.uploadSingleSheet=async function(id){
   const sheet=S.saved.find(function(s){return s.id===id;});
   if(!sheet){return;}
