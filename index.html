@@ -313,7 +313,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.57';
+const APP_VER='v21.63';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -406,15 +406,17 @@ function calcAcWB(acId,paxList,fuelKgOverride){
 function calcFormWB(form){
   const a=S.aircraft[form.ac];if(!a)return null;
   const cW=parseFloat(form.seats[0]||0);
+  // Co-pilot (seat 1) weight counts as crew when a co-pilot is assigned
+  const cpW=form.coPilot?(parseFloat(form.seats[1]||0))+(parseFloat(form.bags[1]||0)):0;
   let wt=a.ew+cW,mom=a.em+cW*a.seats[0].arm,pW=0;
-  for(let i=1;i<a.seats.length;i++){const w=(parseFloat(form.seats[i]||0))+(parseFloat(form.bags[i]||0));pW+=w;wt+=w;mom+=w*a.seats[i].arm;}
+  for(let i=1;i<a.seats.length;i++){const w=(parseFloat(form.seats[i]||0))+(parseFloat(form.bags[i]||0));if(i===1&&form.coPilot){/* crew */}else{pW+=w;}wt+=w;mom+=w*a.seats[i].arm;}
   let cg=0;for(let i=0;i<a.cargo.length;i++){const w=parseFloat(form.cargo[i]||0);cg+=w;wt+=w;mom+=w*a.cargo[i].arm;}
   const zfw=wt,fW=parseFloat(form.fuel||a.fuelKg);wt+=fW;mom+=fW*a.fuelArm;const rW=wt;
   wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
   const tow=wt,towCog=mom/wt;
   const burnKg=form.burnOff?burnToKg(parseFloat(form.burnOff)||0,form.ac):burnToKg(a.burnDef,form.ac);
   wt-=burnKg;mom-=burnKg*a.fuelArm;
-  return{crewW:cW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn:a.gndBurn,tow,towCog,burnKg,lw:wt,lwCog:mom/wt,
+  return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn:a.gndBurn,tow,towCog,burnKg,lw:wt,lwCog:mom/wt,
     towOk:tow<=a.mtow,lwOk:wt<=a.mlw,cogOk:towCog>=a.cogMin&&towCog<=a.cogMax,
     mtow:a.mtow,mlw:a.mlw,cogMin:a.cogMin,cogMax:a.cogMax};
 }
@@ -960,7 +962,7 @@ function runSolver(){
 
 // ── State ──
 function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
-function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},fuel:'',burnOff:'',_unallocated:[],sig:null};}
+function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},fuel:'',burnOff:'',_unallocated:[],paxType:{},sig:null};}
 function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
 let S={
@@ -1873,7 +1875,7 @@ function render(){
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
-  if(S.tab.startsWith('ls_')){setupSig();var lf=S.form;if(lf.dep&&lf.dest)setTimeout(function(){renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);},150);}
+  if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest)setTimeout(function(){renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);},150);}
   // ── Restore focus after re-render ──
   // Force-focus (set by Tab handler) takes priority over activeElement detection
   if(_ffRow!==null){
@@ -2106,13 +2108,15 @@ function renderApp(){
   // Dynamic tab visibility — admin tab always shown; others controlled by rolePerms
   const _allTabs=[
     {id:'operations',lbl:'Operations'},
+    {id:'scratchpad',lbl:'Scratch'},
     {id:'charter',lbl:'Charter'},
     {id:'maintenance',lbl:'Maintenance'},
     {id:'admin',lbl:role==='admin'?'Admin':'Crew & Profile'},
   ];
   const tabs=_allTabs.filter(t=>{
-    if(role==='admin') return true; // admins see everything
-    if(t.id==='admin') return true; // crew/profile tab always visible
+    if(role==='admin') return true;
+    if(t.id==='admin') return true;
+    if(t.id==='scratchpad') return true; // always visible
     const perms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
     return perms[t.id]===true;
   });
@@ -2138,7 +2142,7 @@ function renderApp(){
         </div>
       </div>
       <div style="display:flex;gap:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">
-        ${tabs.map(t=>`<button tabindex="-1" class="nav-tab ${['manifest','seatmap','saved','ls_SLA','ls_SLB','ls_SLD','ls_SLQ','ls_SDB'].includes(S.tab)&&t.id==='operations'?'on':S.tab===t.id?'on':'off'}" onclick="setTab('${t.id}')">${t.lbl}</button>`).join('')}
+        ${tabs.map(t=>`<button tabindex="-1" class="nav-tab ${['manifest','seatmap','saved','loadsheet','ls_SLA','ls_SLB','ls_SLD','ls_SLQ','ls_SDB'].includes(S.tab)&&t.id==='operations'?'on':S.tab===t.id?'on':'off'}" onclick="setTab('${t.id}')">${t.lbl}</button>`).join('')}
       </div>
     </div>
     <div class="page">
@@ -2149,6 +2153,7 @@ function renderApp(){
       ${S.tab==='charter'?'<div id="flash-charter">'+renderCharter()+'</div>':
         S.tab==='maintenance'?'<div id="flash-maintenance">'+renderMaintenance()+'</div>':
         S.tab==='admin'?'<div id="flash-admin">'+renderAdmin()+'</div>':
+        S.tab==='scratchpad'?renderScratchpadPage():
         renderOperations()}
     </div>
   </div>`;
@@ -2214,37 +2219,37 @@ function renderOperations(){
     }
   }
   tabsH+='<button onclick="window.newLsTab()" style="padding:5px 10px;font-size:16px;line-height:1;font-weight:700;background:'+(S._newLsTab?'var(--acc)':'var(--card2)')+';border:1px solid '+(S._newLsTab?'var(--acc)':'var(--border)')+';border-radius:8px;cursor:pointer;color:'+(S._newLsTab?'#fff':'var(--text2)')+';flex-shrink:0" title="New Loadsheet">+</button>';
-  if(S.lsTabs.length>=2&&!S._lsManageMode){tabsH+='<button onclick="window.toggleLsManage()" style="padding:5px 8px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:var(--text3);cursor:pointer;flex-shrink:0" title="Manage loadsheets">&#x1f5d1;</button>';}
-  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='scratchpad')?'on':'')+'" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0" onclick="window.switchOpsTab(\'scratchpad\')">Scratch</button>';
+
   tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='saved')?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0;margin-left:auto">Saved ('+S.saved.length+')</button>';
   tabsH+='</div>';
   if(S.activeTabId&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return tabsH+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return tabsH+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
   if(S._newLsTab){return tabsH+renderNewLsPanel();}
   if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return tabsH+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
-  if(opsTab==='scratchpad'){
-    if(S._presSection&&S._presSection!=='scratchpad')broadcastPresence(null);
-    var _padTabsH='';
-    if(S.padTabs.length>0){
-      _padTabsH='<div style="display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
-      _padTabsH+='<button onclick="window.newPad()" style="padding:4px 10px;font-size:12px;background:var(--card2);border:1px solid var(--border2);border-radius:7px;cursor:pointer;color:var(--acc)">+ New</button>';
-      S.padTabs.forEach(function(pt){
-        var isAct=S.activePadId===pt.id;
-        _padTabsH+='<div style="display:inline-flex;align-items:stretch;border-radius:7px;overflow:hidden;border:1px solid '+(isAct?'var(--acc)':'var(--border2)')+'">';
-        _padTabsH+='<button onclick="window.switchPad(\''+pt.id+'\')" style="padding:4px 10px;font-size:12px;font-weight:'+(isAct?'700':'400')+';background:'+(isAct?'var(--acc)':'var(--card2)')+';border:none;color:'+(isAct?'#fff':'var(--text1)')+';cursor:pointer">'+((pt.title||'Untitled').slice(0,16))+'</button>';
-        _padTabsH+='<button onclick="window.closePad(\''+pt.id+'\')" style="padding:4px 6px;font-size:12px;background:'+(isAct?'var(--acc)':'var(--card2)')+';border:none;color:'+(isAct?'#fff':'var(--text3)')+';cursor:pointer">&#x00D7;</button>';
-        _padTabsH+='</div>';
-      });
-      _padTabsH+='</div>';
-    }
-    return tabsH+_padTabsH+renderScratchpad();
-  }
   if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return tabsH+renderSaved();}
   startPresenceBroadcast('manifest');return tabsH+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
 }
+function renderScratchpadPage(){
+  if(S._presSection&&S._presSection!=='scratchpad')broadcastPresence(null);
+  var _padTabsH='';
+  if(S.padTabs.length>0){
+    _padTabsH='<div style="display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
+    _padTabsH+='<button onclick="window.newPad()" style="padding:4px 10px;font-size:12px;background:var(--card2);border:1px solid var(--border2);border-radius:7px;cursor:pointer;color:var(--acc)">+ New</button>';
+    S.padTabs.forEach(function(pt){
+      var isAct=S.activePadId===pt.id;
+      _padTabsH+='<div style="display:inline-flex;align-items:stretch;border-radius:7px;overflow:hidden;border:1px solid '+(isAct?'var(--acc)':'var(--border2)')+'">'; 
+      _padTabsH+='<button onclick="window.switchPad(\''+pt.id+'\')" style="padding:4px 10px;font-size:12px;font-weight:'+(isAct?'700':'400')+';background:'+(isAct?'var(--acc)':'var(--card2)')+';border:none;color:'+(isAct?'#fff':'var(--text1)')+';cursor:pointer">'+((pt.title||'Untitled').slice(0,16))+'</button>';
+      _padTabsH+='<button onclick="window.closePad(\''+pt.id+'\')" style="padding:4px 6px;font-size:12px;background:'+(isAct?'var(--acc)':'var(--card2)')+';border:none;color:'+(isAct?'#fff':'var(--text3)')+';cursor:pointer">&#x00D7;</button>';
+      _padTabsH+='</div>';
+    });
+    _padTabsH+='</div>';
+  }
+  return _padTabsH+renderScratchpad();
+}
+
 function renderNewLsPanel(){
   var aircraft=Object.values(S.aircraft);
   var h='<div class="card"><div class="st">New Loadsheet</div>';
-  h+='<p style="font-size:13px;color:var(--text3);margin-bottom:14px">Select aircraft &mdash; seats and flight details pulled from the current manifest.</p>';
+  h+='<p style="font-size:13px;color:var(--text3);margin-bottom:14px">Select aircraft to create a new loadsheet.</p>';
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
   aircraft.forEach(function(a){
     var col=AC_COL[a.id]||'#64748b';
@@ -2428,7 +2433,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
         seatRowsHTML+=`<div class="seat ${isCrew?'crew':nm?'filled':''} ${S._selFormSeat===cell.i?'sel-src':''}" style="width:${seatSz}px;height:${seatHt}px;${lsSeatStyle}${S._selFormSeat===cell.i?';box-shadow:0 0 0 2px #f59e0b':''}" onclick="${!isCrew?`tapFormSeat(${cell.i},'${acId}')`:''}" draggable="${!isCrew&&nm?'true':'false'}" ondragstart="if(${!isCrew&&!!nm})startDragForm(event,${cell.i},'${acId}')" ondragover="event.preventDefault()" ondrop="dropFormSeat(event,${cell.i},'${acId}')">
           <span class="seat-lbl" style="${nm&&!isCrew?'color:#475569;opacity:.7':''}font-size:9px">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc};top:3px;right:3px"></div>`:''}
-          ${nm?`<div class="seat-name" style="${lsTextCol};font-weight:700;font-size:${seatSz<52?'7px':'9px'}">${nm.split(' ')[0].slice(0,seatSz<52?5:9)}${(form?.infantNames?.[cell.i])?' 👶':''}</div><div class="seat-wt" style="${lsTextCol};font-size:${seatSz<52?'7px':'8px'}">${wt>0?wt+'kg':''}</div>`:isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.85);font-weight:700">${isPIC?'PIC':'CP'}</div>`:''}
+          ${nm?`<div class="seat-name" style="${lsTextCol};font-weight:700;font-size:${seatSz<52?'7px':'9px'}">${nm.split(' ')[0].slice(0,seatSz<52?5:9)}${(form?.infantNames?.[cell.i])?' 👶':''}${(form?.paxType||{})[cell.i]==='C'?'<span style="font-size:7px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:2px;padding:0 2px;margin-left:2px">C</span>':''}</div><div class="seat-wt" style="${lsTextCol};font-size:${seatSz<52?'7px':'8px'}">${wt>0?wt+'kg':''}</div>`:isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.85);font-weight:700">${isPIC?'PIC':'CP'}</div>`:''}
         </div>`;
       } else {
         // Manifest seat map view
@@ -2455,7 +2460,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
           <span class="seat-lbl" style="${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
-            :p?`<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?' 👶':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
+            :p?`<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?' 👶':''}${(S.form?.paxType||{})[cell.i]==='C'?'<span style="font-size:7px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:2px;padding:0 2px;margin-left:2px">C</span>':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
         </div>`;
       }
     });
@@ -2653,19 +2658,19 @@ function renderStep2(){
       const paxTotal=paxSeatIdxs(id).length;
       const _ok=sr?.towOk&&sr?.lwOk&&sr?.cogOk;const _warn=sr&&!_ok&&!sr?.towFatal&&!sr?.lwFatal;
       return`<div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
           <div style="width:10px;height:10px;border-radius:50%;background:${col}"></div>
           <span style="font-weight:700;font-size:13px">${a?.name||id}</span>
           ${sr?`<span class="pill ${sr.towOk?'pill-green':sr.towFatal?'pill-red':'pill-warn'}">${sr.tow?.toFixed(0)}/${sr.mtow}kg</span>
             <span class="pill ${cogPillClass(sr.cog,sr.cogMin,sr.cogMax)}">CoG ${sr.cog?.toFixed(2)}"</span>`:''}
           <span class="pill pill-blue">${paxCount}/${paxTotal} pax</span>
-          <button onclick="window.createLsTab('${id}')" style="margin-left:auto;padding:5px 12px;border-radius:7px;border:none;background:${_ok?'linear-gradient(135deg,#7B9EC6,#4A6D96)':_warn?'#854d0e':'#7f1d1d'};color:#fff;font-size:12px;font-weight:700;cursor:pointer">
-            Create Loadsheet ${_ok?'✓':_warn?'⚠':'⛔'}
-          </button>
         </div>
         <div ondragover="event.preventDefault()" ondrop="dropOnPool(event,'${id}')">
           ${renderCabinSVG(id,true,null)}
         </div>
+        <button onclick="window.createLsTab('${id}')" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;border:none;background:${_ok?'linear-gradient(135deg,#166534,#15803d)':_warn?'linear-gradient(135deg,#78350f,#92400e)':'#7f1d1d'};color:#fff;font-size:13px;font-weight:700;cursor:pointer">
+          Create Loadsheet ${_ok?'&#x2713;':_warn?'&#x26a0;':'&#x26d4;'}
+        </button>
       </div>`;
     }).join('')}
   </div>`;
@@ -2706,11 +2711,11 @@ function renderLoadsheet(){
   const _lsAcType=(()=>{const ac=S.aircraft[f.ac];if(!ac)return null;return ac.layout==='c208'?'C208B':'GA8';})();
   const _lsPilots=_lsAcType?pilotCrewList().filter(c=>(c.endorse||[]).includes(_lsAcType)):pilotCrewList();
   const crewOpts=_lsPilots.map(c=>`<option value="${c.n}"${f.pic===c.n?' selected':''}>${c.n}${c.w?' ('+c.w+'kg)':''}</option>`).join('');
-  const cpOpts=`<option value="">None</option>`+anyCrewList().map(c=>`<option value="${c.n}"${f.coPilot===c.n?' selected':''}>${c.n}</option>`).join('');
+  const cpOpts=`<option value="">None</option>`+pilotCrewList().filter(c=>c.n!==f.pic).map(c=>`<option value="${c.n}"${f.coPilot===c.n?' selected':''}>${c.n}</option>`).join('');
 
   const editBanner=S.editId?`<div style="padding:9px 14px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;color:var(--warn-text);font-size:13px;font-weight:600;margin-bottom:10px">✏ Editing saved loadsheet</div>`:'';
   const draftBanner=f.status==='unsigned'?`<div style="padding:9px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;margin-bottom:10px">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
-  const _undoBtn=S._lsFormUndo?`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px;margin-left:6px" onclick="window.lsUndo()">&#x21b6; Undo</button>`:'';
+  const _undoBtn=(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px;margin-left:6px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:'';
   const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;render();}">Clear & Start Blank</button>`;
 
   // Fuel display
@@ -2729,10 +2734,13 @@ function renderLoadsheet(){
     const cW=parseFloat(f.seats[0]||0);
     const picMom=(cW*(a.seats[0]?.arm||0)).toFixed(0);
     // PAX / POB counts
-    const _paxSeats=Object.keys(f.names).filter(function(k){const ki=parseInt(k);return ki>=1&&!!f.names[k]&&ki<(a?a.seats.length:99);}).length;
+    const _isCpCrew=!!f.coPilot;
+    const _paxSeats=Object.keys(f.names).filter(function(k){const ki=parseInt(k);return ki>=1&&!!f.names[k]&&ki<(a?a.seats.length:99)&&!(ki===1&&_isCpCrew);}).length;
     const _infantCount=Object.keys(f.infantNames||{}).filter(function(k){const ki=parseInt(k);return !!(f.infantNames||{})[k]&&ki<(a?a.seats.length:99);}).length;
     const _paxCount=_paxSeats+_infantCount;
     const _pobCount=(f.names[0]?1:0)+_paxCount;
+    const _childCount=Object.keys(f.names).filter(function(k){const ki=parseInt(k);return ki>=1&&!!f.names[k]&&ki<(a?a.seats.length:99)&&!(ki===1&&_isCpCrew)&&(f.paxType||{})[ki]==='C';}).length;
+    const _adultCount=_paxSeats-_childCount;
     // W&B summary row
     const wbSummary=r?`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
       <div style="text-align:center;background:var(--card2);border-radius:7px;padding:6px 4px">
@@ -2744,8 +2752,13 @@ function renderLoadsheet(){
         <div style="font-size:13px;font-weight:700;color:${r.cogOk?'var(--ok-text)':'var(--err-text)'}">${r.towCog!=null?r.towCog.toFixed(2):'—'}</div>
       </div>
       <div style="text-align:center;background:var(--card2);border-radius:7px;padding:6px 4px">
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">PAX / POB</div>
-        <div style="font-size:13px;font-weight:700">${_paxCount} / ${_pobCount}</div>
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">PAX</div>
+        <div style="font-size:13px;font-weight:700">${_paxCount}</div>
+        <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;margin-top:2px">
+          ${_adultCount>0?`<span style="font-size:9px;font-weight:700;color:#4ade80">${_adultCount}A</span>`:''}
+          ${_childCount>0?`<span style="font-size:9px;font-weight:700;color:#fb923c">${_childCount}C</span>`:''}
+          ${_infantCount>0?`<span style="font-size:9px;font-weight:700;color:#ec4899">${_infantCount}i</span>`:''}
+        </div>
         <div style="font-size:9px;color:var(--text3)">${r.paxW.toFixed(0)}kg</div>
       </div>
       <div style="text-align:center;background:var(--card2);border-radius:7px;padding:6px 4px">
@@ -2913,20 +2926,34 @@ function renderLoadsheet(){
       <div style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:6px">Fuel @ Dest</div>
         <div style="font-size:20px;font-weight:800;color:var(--text)">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
-        <div style="font-size:11px;color:#4ade80;margin-top:4px">${a?.layout==='ga8'?'L · '+(fuelRemKg.toFixed(0))+' kg':'lbs · '+(fuelRemKg.toFixed(0))+' kg'}</div>
+        <div style="font-size:11px;color:#4ade80;margin-top:4px">${a?.layout==='ga8'?'litres remaining':'lbs remaining'}</div>
       </div>
     </div></div>`;
 
     if(r){
-      const wbRows=[['Empty Weight',a.ew],['Crew',r.crewW],['Passengers',r.paxW],['Cargo',r.cargoW],['Zero Fuel Weight',r.zfw],['Fuel',r.fuelW],['Ramp Weight',r.rampW],['~Ground Burn',-r.gndBurn],['Takeoff Weight',r.tow],['~Flight Burn',-r.burnKg],['Landing Weight',r.lw]]
-        .map(([l,v])=>{
-          if(typeof l==='string'&&l.startsWith('~')){
-            return`<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px dashed var(--border)"><span style="font-size:11px;color:var(--text3)">${l.slice(1)}</span><span style="font-size:11px;font-weight:600;color:#f87171">${v.toFixed(1)} kg</span></div>`;
-          }
-          return typeof v==='number'
-            ?`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="font-size:13px;color:var(--text3)">${l}</span><span style="font-size:13px;font-weight:600">${v.toFixed(1)} kg</span></div>`
-            :`<div style="padding:2px 0;border-bottom:1px dashed var(--border)"><span style="font-size:11px;color:var(--text3)">${v}</span></div>`;
-        }).join('');
+      const _wbSec=[
+        {l:'Empty Weight',v:a.ew,t:'base'},{l:'Crew',v:r.crewW,t:'add'},{l:'Passengers',v:r.paxW,t:'add'},
+        {l:'Cargo',v:r.cargoW,t:'add'},{l:'Zero Fuel Weight',v:r.zfw,t:'total'},
+        {l:'Fuel',v:r.fuelW,t:'add'},{l:'Ramp Weight',v:r.rampW,t:'total'},
+        {l:'Ground Burn',v:-r.gndBurn,t:'burn'},{l:'Takeoff Weight',v:r.tow,t:'limit',ok:r.towOk,lim:r.mtow},
+        {l:'Flight Burn',v:-r.burnKg,t:'burn'},{l:'Landing Weight',v:r.lw,t:'limit',ok:r.lwOk,lim:r.mlw},
+      ];
+      const wbRows=_wbSec.map(function(row){
+        if(row.t==='burn'){
+          return`<div style="display:flex;justify-content:space-between;padding:3px 8px;border-radius:4px;background:rgba(239,68,68,.07)"><span style="font-size:11px;color:#f87171;font-style:italic">- ${row.l}</span><span style="font-size:11px;font-weight:600;color:#f87171">${Math.abs(row.v).toFixed(1)} kg</span></div>`;
+        }
+        if(row.t==='total'){
+          return`<div style="display:flex;justify-content:space-between;padding:5px 8px;margin:3px 0;border-radius:6px;background:var(--card2);border:1px solid var(--border2)"><span style="font-size:12px;font-weight:700">${row.l}</span><span style="font-size:13px;font-weight:800">${row.v.toFixed(1)} kg</span></div>`;
+        }
+        if(row.t==='limit'){
+          const _p=Math.min(100,(row.v/row.lim*100));
+          const _bg=row.ok?'rgba(34,197,94,.12)':'rgba(239,68,68,.12)';
+          const _bd=row.ok?'rgba(34,197,94,.4)':'rgba(239,68,68,.4)';
+          const _c=row.ok?'#4ade80':'#f87171';
+          return`<div style="padding:6px 8px;margin:4px 0;border-radius:8px;background:${_bg};border:1px solid ${_bd}"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:700;color:${_c}">${row.l}</span><span style="font-size:13px;font-weight:800;color:${_c}">${row.v.toFixed(1)} <span style="font-size:10px;opacity:.7">/ ${row.lim} kg</span></span></div><div style="height:4px;border-radius:2px;background:rgba(255,255,255,.1)"><div style="height:100%;width:${_p}%;background:${_c};border-radius:2px"></div></div></div>`;
+        }
+        return`<div style="display:flex;justify-content:space-between;padding:3px 8px;border-radius:4px"><span style="font-size:12px;color:var(--text3)">${row.l}</span><span style="font-size:12px;font-weight:600">${row.v.toFixed(1)} kg</span></div>`;
+      }).join('');
 
       calcH=`<div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}"><div class="st">Weight & Balance</div>
         <div style="margin-bottom:14px">${wbRows}</div>
@@ -2947,7 +2974,7 @@ function renderLoadsheet(){
           <button onclick="S.sigMode='type';render()" style="padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:${S.sigMode==='type'?'var(--acc)':'var(--card2)'};color:${S.sigMode==='type'?'#fff':'var(--text2)'}">⌨ Type Name</button>
         </div>
         ${S.sigMode==='type'?`<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-          <input id="sigTypeInput" class="fi" type="text" placeholder="Type your full name to sign" style="flex:1;font-size:15px" value="${S.sigTypedName||''}">
+          <input id="sigTypeInput" class="fi" type="text" placeholder="Type your full name to sign" style="flex:1;font-size:15px" value="${S.sigTypedName||S.user?.name||''}">
           <button onclick="window.applyTypedSig()" style="padding:8px 14px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer;font-weight:600">Apply</button>
         </div>`:''}
         <div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden;position:relative;background:var(--card2);cursor:crosshair">
@@ -3030,6 +3057,7 @@ function renderLoadsheet(){
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Co-Pilot</div>
         <select class="fi" onchange="lsCoPilot(this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${cpOpts}</select>
+        <div style="font-size:9px;color:var(--text3);margin-top:3px;line-height:1.3">A staff member in the co-pilot seat does not automatically qualify as acting crew.</div>
       </div>
     </div>
     <div style="display:flex;align-items:stretch;gap:6px;margin-bottom:8px">
@@ -3056,9 +3084,29 @@ function renderLoadsheet(){
   </div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
   ${seatsH}${unallocH}${a?cargoH:''}${a?fuelH:''}${calcH}${sigH}`;
 }
+window.lsCheckChildWt=function(idx){
+  const f=S.form;if(!f)return;
+  if(!f.paxType)f.paxType={};
+  const wt=parseFloat(f.seats[idx]||0);
+  if(wt>0&&wt<50&&(!f.paxType[idx]||f.paxType[idx]==='A')){
+    if(confirm('Weight '+wt+'kg - is this passenger a child?')){
+      f.paxType[idx]='C';S.formDirty=true;autoSaveLS();safeRender();
+    } else { if(!f.paxType[idx]) f.paxType[idx]='A'; }
+  }
+};
+window.lsTogglePaxType=function(idx,type){
+  const f=S.form;if(!f)return;
+  if(!f.paxType)f.paxType={};
+  f.paxType[idx]=type;
+  if(type==='A'){
+    const wt=parseFloat(f.seats[idx]||0);
+    if(wt>0&&wt<50){
+      if(confirm('Weight '+wt+'kg - is this passenger a child?')) f.paxType[idx]='C';
+    }
+  }
+  S.formDirty=true;autoSaveLS();safeRender();
+};
 
-
-// ── SAVED (with search/sort) ──
 function renderSavedPadsList(){
   var pads=S.pads||[];
   var h='<div class="card"><div class="st" style="margin-bottom:12px">Scratchpads</div>';
@@ -3119,7 +3167,7 @@ function renderScratchpad(){
     +'<button class="btn btn-ghost" style="font-size:12px;color:var(--err-text)" onclick="window.deletePad(\''+act.id+'\')">Delete</button>'
     +'</div>'
     +(mode==='text'
-      ?'<textarea id="pad-text" style="width:100%;min-height:420px;background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:14px;font-size:14px;line-height:1.7;color:var(--text1);resize:vertical;font-family:inherit;box-sizing:border-box" placeholder="Notes, phone numbers, names, bookings, weather calls..." oninput="window.padUpdateContent(this.value)">'+contentSafe+'</textarea>'
+      ?'<textarea id="pad-text" style="width:100%;min-height:420px;background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:14px;font-size:14px;line-height:1.7;color:var(--text1);resize:vertical;font-family:inherit;box-sizing:border-box" placeholder="Notes, phone numbers, names, bookings, other notes..." oninput="window.padUpdateContent(this.value)">'+contentSafe+'</textarea>'
       :drawTools+'<canvas id="pad-canvas" width="1200" height="600" style="width:100%;background:#0f172a;border-radius:10px;border:1px solid var(--border2);cursor:crosshair;touch-action:none;display:block" onmousedown="window.padPointerDown(event)" onmousemove="window.padPointerMove(event)" onmouseup="window.padPointerUp(event)" onmouseleave="window.padPointerUp(event)" ontouchstart="window.padPointerDown(event)" ontouchmove="window.padPointerMove(event);event.preventDefault()" ontouchend="window.padPointerUp(event)"></canvas>'
     )
     +'</div>';
@@ -3339,52 +3387,61 @@ function renderAerodromes(){
   var filt=srch?all.filter(function(a){return a.icao.toLowerCase().includes(srch)||a.name.toLowerCase().includes(srch);}):all;
   var sel=S._aeroSel||null;
   var selEntry=sel?all.find(function(a){return a.icao===sel;}):null;
+
+  // Map init: show selected aerodrome or default NZ centre
   setTimeout(function(){
-    if(!selEntry){_aerodromesMap&&_aerodromesMap.remove&&(_aerodromesMap.remove(),_aerodromesMap=null);return;}
     var mapEl=document.getElementById('aero-map');
     if(!mapEl)return;
-    if(_aerodromesMap){
-      _aerodromesMap.setView([selEntry.lat,selEntry.lon],12);
-      if(_aerodromesMarker)_aerodromesMarker.setLatLng([selEntry.lat,selEntry.lon]).bindPopup(selEntry.icao+' &mdash; '+selEntry.name).openPopup();
-    } else {
-      _aerodromesMap=L.map('aero-map').setView([selEntry.lat,selEntry.lon],12);
+    var lat=selEntry?selEntry.lat:-36.85;
+    var lon=selEntry?selEntry.lon:174.76;
+    var zoom=selEntry?12:6;
+    if(!_aerodromesMap){
+      _aerodromesMap=L.map('aero-map').setView([lat,lon],zoom);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors',maxZoom:18}).addTo(_aerodromesMap);
-      _aerodromesMarker=L.marker([selEntry.lat,selEntry.lon]).addTo(_aerodromesMap).bindPopup(selEntry.icao+' &mdash; '+selEntry.name).openPopup();
+    } else {
+      _aerodromesMap.setView([lat,lon],zoom);
     }
-  },50);
+    if(_aerodromesMarker){_aerodromesMarker.remove();_aerodromesMarker=null;}
+    if(selEntry){
+      _aerodromesMarker=L.marker([selEntry.lat,selEntry.lon]).addTo(_aerodromesMap).bindPopup(selEntry.icao+' &#x2014; '+selEntry.name).openPopup();
+    }
+  },60);
 
   var rows=filt.map(function(a){
     var isCustom=custom.some(function(c){return c.icao===a.icao;});
     var isSelected=S._aeroSel===a.icao;
-    return '<tr onclick="window.aeroSelect(\''+a.icao+'\')" style="cursor:pointer;'+(isSelected?'background:var(--card2)':'')+'">'
-      +'<td style="padding:6px 10px;font-weight:700;color:var(--acc);font-size:13px">'+a.icao+'</td>'
-      +'<td style="padding:6px 10px;font-size:13px;color:var(--text1)">'+a.name+(isCustom?' <span style="font-size:9px;color:var(--ok-text);border:1px solid var(--ok-text);border-radius:4px;padding:1px 4px">custom</span>':'')+'</td>'
-      +'<td style="padding:6px 10px;font-size:12px;color:var(--text3)">'+a.lat.toFixed(4)+'</td>'
-      +'<td style="padding:6px 10px;font-size:12px;color:var(--text3)">'+a.lon.toFixed(4)+'</td>'
-      +'<td style="padding:6px 10px;font-size:12px;color:var(--text3)">'+a.elev+'ft</td>'
-      +(isCustom?'<td style="padding:6px 10px"><button onclick="event.stopPropagation();window.aeroDeleteCustom(\''+a.icao+'\')" style="font-size:11px;padding:2px 7px;background:transparent;border:1px solid var(--border2);border-radius:5px;color:var(--err-text);cursor:pointer">Remove</button></td>':'<td></td>')
+    return '<tr data-icao="'+a.icao+'" onclick="window.aeroSelect(this.dataset.icao)" style="cursor:pointer;background:'+(isSelected?'rgba(99,102,241,.12)':'')+';">'
+      +'<td style="padding:5px 8px;font-weight:700;color:var(--acc);font-size:12px">'+a.icao+'</td>'
+      +'<td style="padding:5px 8px;font-size:12px;color:var(--text1)">'+a.name+(isCustom?' <span style="font-size:9px;color:var(--ok-text);border:1px solid var(--ok-text);border-radius:3px;padding:1px 3px">custom</span>':'')+'</td>'
+      +'<td style="padding:5px 8px;font-size:11px;color:var(--text3)">'+a.elev+'ft</td>'
+      +(isCustom?'<td style="padding:5px 8px"><button data-deicao="'+a.icao+'" onclick="event.stopPropagation();window.aeroDeleteCustom(this.dataset.deicao)" style="font-size:10px;padding:1px 6px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--err-text);cursor:pointer">x</button></td>':'<td></td>')
       +'</tr>';
   }).join('');
 
-  var h='<div class="card" style="margin-bottom:14px">';
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">';
-  h+='<div class="st" style="margin:0">Aerodromes ('+all.length+' total &mdash; '+NZ_AERODROMES.length+' AIP NZ + '+custom.length+' custom)</div>';
-  h+='<input class="fi" type="text" placeholder="Search ICAO or name..." value="'+(S._aeroSearch||'')+'" oninput="window.aeroSearch(this.value)" style="width:220px">';
-  h+='</div>';
-  h+='<p style="font-size:12px;color:var(--text3);margin-bottom:12px">Review the list below. Click a row to see it on the map. Once verified, these aerodromes will be used in the Charter Calculator. Add any private strips using the form below.</p>';
-  h+='<div style="overflow-x:auto;border-radius:8px;border:1px solid var(--border2)">';
-  h+='<table style="width:100%;border-collapse:collapse"><thead>';
-  h+='<tr style="background:var(--card2)"><th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3)">ICAO</th><th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3)">Name</th><th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3)">Lat</th><th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3)">Lon</th><th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3)">Elev</th><th></th></tr>';
-  h+='</thead><tbody>'+rows+'</tbody></table></div>';
-  h+='</div>';
+  // Selected info pill
+  var selInfo=selEntry
+    ?'<div style="padding:6px 10px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);border-radius:6px;font-size:12px;color:var(--text2);margin-bottom:8px"><span style="font-weight:700;color:var(--acc)">'+selEntry.icao+'</span> &#x2014; '+selEntry.name+' &middot; Elev '+selEntry.elev+'ft &middot; '+selEntry.lat.toFixed(4)+', '+selEntry.lon.toFixed(4)+'</div>'
+    :'<div style="padding:6px 10px;background:var(--card2);border-radius:6px;font-size:12px;color:var(--text3);margin-bottom:8px">Click a row to see it on the map.</div>';
 
-  // Map
-  if(selEntry){
-    h+='<div class="card" style="margin-bottom:14px">';
-    h+='<div class="st" style="margin-bottom:8px">'+selEntry.icao+' &mdash; '+selEntry.name+'</div>';
-    h+='<div id="aero-map" style="height:340px;border-radius:10px;border:1px solid var(--border);overflow:hidden"></div>';
-    h+='</div>';
-  }
+  var h='<div class="card" style="margin-bottom:14px">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">';
+  h+='<div class="st" style="margin:0">Aerodromes ('+all.length+' &mdash; '+NZ_AERODROMES.length+' AIP NZ + '+custom.length+' custom)</div>';
+  h+='<input class="fi" type="text" placeholder="Search ICAO or name..." value="'+(S._aeroSearch||'')+'" oninput="window.aeroSearch(this.value)" style="width:200px">';
+  h+='</div>';
+  h+=selInfo;
+  // Two-column layout: list left, map right
+  h+='<div style="display:flex;gap:12px;align-items:flex-start">';
+  // Left: scrollable list
+  h+='<div style="flex:1;min-width:0;overflow-x:auto;border-radius:8px;border:1px solid var(--border2);max-height:480px;overflow-y:auto">';
+  h+='<table style="width:100%;border-collapse:collapse"><thead>';
+  h+='<tr style="position:sticky;top:0;z-index:1;background:var(--card2)"><th style="padding:5px 8px;text-align:left;font-size:10px;color:var(--text3)">ICAO</th><th style="padding:5px 8px;text-align:left;font-size:10px;color:var(--text3)">Name</th><th style="padding:5px 8px;text-align:left;font-size:10px;color:var(--text3)">Elev</th><th></th></tr>';
+  h+='</thead><tbody>'+rows+'</tbody></table></div>';
+  // Right: map (always visible)
+  h+='<div style="width:320px;flex-shrink:0">';
+  h+='<div id="aero-map" style="height:480px;border-radius:10px;border:1px solid var(--border);overflow:hidden"></div>';
+  h+='</div>';
+  h+='</div>';
+  h+='</div>';
 
   // Add custom aerodrome form
   h+='<div class="card"><div class="st" style="margin-bottom:12px">Add Custom Aerodrome / Strip</div>';
@@ -3425,6 +3482,20 @@ window.aeroDeleteCustom=function(icao){
   if(S._aeroSel===icao)S._aeroSel=null;
   render();
 };
+function _lsRelTime(iso){
+  if(!iso) return '';
+  var d=new Date(iso),now=new Date();
+  var h=d.getHours(),mn=d.getMinutes();
+  var hm=(h<10?'0':'')+h+':'+(mn<10?'0':'')+mn;
+  var todayStart=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  var dStart=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  var dayDiff=Math.round((todayStart-dStart)/86400000);
+  if(dayDiff===0) return 'Today '+hm;
+  if(dayDiff===1) return 'Yesterday '+hm;
+  if(dayDiff<=6) return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]+' '+hm;
+  var dd=d.getDate(),mm=d.getMonth()+1,yy=String(d.getFullYear()).slice(-2);
+  return (dd<10?'0':'')+dd+'-'+(mm<10?'0':'')+mm+'-'+yy;
+}
 function renderSaved(){
   const tab=S.savedTab||'unsigned';
   const search=(S.savedSearch||'').toLowerCase();
@@ -3457,8 +3528,9 @@ function renderSaved(){
         :mySheets.map(function(s){
             var col=AC_COL[s.form.ac]||'#64748b';
             var isSigned=s.status==='complete';
-            var _paxCnt=Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length;
-            var _savedStr=s.savedAt?(function(d){var x=new Date(d);var h=x.getHours();var mn=x.getMinutes();return x.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x.getMonth()]+' '+(h<10?'0':'')+h+':'+(mn<10?'0':'')+mn;})(s.savedAt):'';
+            var _isCpCrew=!!s.form.coPilot;
+            var _paxCnt=Object.keys(s.form.names||{}).filter(function(k){var ki=parseInt(k);return ki>=1&&!!(s.form.names||{})[k]&&((s.form.names||{})[k]||'').trim()&&!(ki===1&&_isCpCrew);}).length;
+            var _savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
             return'<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid '+col+'">'
               +'<div style="flex:1;min-width:0">'
               +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">'
@@ -3483,7 +3555,7 @@ function renderSaved(){
       <input type="checkbox" ${S.savedSel[m.id]?'checked':''} onchange="window.toggleSavedSel('${m.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
       <div style="flex:1">
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
-        <div style="font-size:12px;color:var(--text3)">${m.savedAt?(function(d){var x=new Date(d);var h=x.getHours();var mn=x.getMinutes();return x.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x.getMonth()]+' '+(h<10?'0':'')+h+':'+(mn<10?'0':'')+mn;})(m.savedAt):''} · ${m.data?.pax?.length||0} pax</div>
+        <div style="font-size:12px;color:var(--text3)">${m.savedAt?_lsRelTime(m.savedAt):''} · ${m.data?.pax?.length||0} pax</div>
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-ghost" style="font-size:12px" onclick="loadManifest('${m.id}')">Load</button>
@@ -3510,8 +3582,9 @@ function renderSaved(){
       ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">✓ All loadsheets signed</div>`
       :unsigned.map(s=>{
         const col=AC_COL[s.form.ac]||'#64748b';
-        const _paxCnt=Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length;
-        const _savedStr=s.savedAt?(function(d){var x=new Date(d);var h=x.getHours();var mn=x.getMinutes();return x.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x.getMonth()]+' '+(h<10?'0':'')+h+':'+(mn<10?'0':'')+mn;})(s.savedAt):'';
+        const _isCpCrew=!!s.form.coPilot;
+        const _paxCnt=Object.keys(s.form.names||{}).filter(function(k){var ki=parseInt(k);return ki>=1&&!!(s.form.names||{})[k]&&((s.form.names||{})[k]||'').trim()&&!(ki===1&&_isCpCrew);}).length;
+        const _savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
         return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid ${S.savedSel[s.id]?'#3b82f6':'#1e3a5f'};margin-bottom:8px;background:${S.savedSel[s.id]?'rgba(59,130,246,.08)':'var(--card)'};border-left:3px solid ${col}">
           <input type="checkbox" ${S.savedSel[s.id]?'checked':''} onchange="window.toggleSavedSel('${s.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
           <div style="flex:1;min-width:0">
@@ -3571,7 +3644,7 @@ function renderSaved(){
     :items.map(s=>{
       const col=AC_COL[s.form.ac]||'#64748b';
       const _paxCnt=Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length;
-      const _savedStr=s.savedAt?(function(d){var x=new Date(d);var h=x.getHours();var mn=x.getMinutes();return x.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x.getMonth()]+' '+(h<10?'0':'')+h+':'+(mn<10?'0':'')+mn;})(s.savedAt):'';
+      const _savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
       const r=calcFormWB(s.form);
       const ok=r&&r.towOk&&r.lwOk&&r.cogOk;
       const isSigned=s.status==='complete';
@@ -3941,14 +4014,62 @@ function renderAdmin(){
     return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
   }
   const ad=S.admin;
-  const sections=['people','perms','gdrive','aerodromes',...(S.user?.superAdmin?['audit']:[])];
-  const sectionLabels={people:'People',perms:'Permissions',gdrive:'Google Drive PDF',aerodromes:'Aerodromes',audit:'Audit Log'};
+  const sections=['people','perms','gdrive','aerodromes','statistics',...(S.user?.superAdmin?['audit']:[])];
+  const sectionLabels={people:'People',perms:'Permissions',gdrive:'Google Drive PDF',aerodromes:'Aerodromes',statistics:'Statistics',audit:'Audit Log'};
   const tabBar=`<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
     ${sections.map(s=>`<button class="sub-tab ${ad.section===s?'on':''}" onclick="S.admin.section='${s}';render()">${sectionLabels[s]}</button>`).join('')}
   </div>`;
-  return tabBar+{people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,audit:renderAdminAudit}[ad.section]?.()||renderAdminPeople();
+  return tabBar+{people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad.section]?.()||renderAdminPeople();
 }
 
+function renderAdminStatistics(){
+  const signed=S.saved.filter(function(s){return s.status==='complete'&&s.form;});
+  // Collect per-seat weights from signed loadsheets, split adult/child, ignoring infant seats
+  var adultWts=[],childWts=[],paxCount=0;
+  signed.forEach(function(s){
+    const f=s.form;
+    const a=S.aircraft[f.ac];
+    if(!a)return;
+    const isCpCrew=!!f.coPilot;
+    for(var i=1;i<a.seats.length;i++){
+      const nm=(f.names||{})[i]||'';
+      if(!nm.trim())continue;
+      if(i===1&&isCpCrew)continue; // skip co-pilot
+      const hasInfant=!!(f.infantNames||{})[i];
+      if(hasInfant)continue; // ignore seats with attached infants
+      const wt=parseFloat((f.seats||{})[i]||0);
+      if(!wt)continue;
+      paxCount++;
+      const typ=(f.paxType||{})[i]||'A';
+      if(typ==='C') childWts.push(wt);
+      else adultWts.push(wt);
+    }
+  });
+  const avg=function(arr){return arr.length?arr.reduce(function(a,b){return a+b;},0)/arr.length:0;};
+  const aAvg=avg(adultWts),cAvg=avg(childWts);
+  const statCard=function(label,val,sub){
+    return '<div style="background:var(--card2);border-radius:12px;padding:16px 18px;border:1px solid var(--border2);text-align:center">'
+      +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:700;margin-bottom:6px">'+label+'</div>'
+      +'<div style="font-size:28px;font-weight:900;color:var(--text)">'+val+'</div>'
+      +(sub?'<div style="font-size:11px;color:var(--text3);margin-top:3px">'+sub+'</div>':'')
+      +'</div>';
+  };
+  return '<div class="card"><div class="st">Passenger Weight Statistics</div>'
+    +'<p style="font-size:12px;color:var(--text3);margin-bottom:14px">Calculated from '+signed.length+' signed loadsheet(s). Excludes infant-attached seats and co-pilot.</p>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">'
+    +statCard('Total PAX (signed)',paxCount,'all signed loadsheets')
+    +statCard('Adults',adultWts.length,'pax')
+    +statCard('Avg Adult Wt',adultWts.length?aAvg.toFixed(1)+'kg':'N/A',adultWts.length?'from '+adultWts.length+' records':'')
+    +statCard('Children',childWts.length,'pax')
+    +statCard('Avg Child Wt',childWts.length?cAvg.toFixed(1)+'kg':'N/A',childWts.length?'from '+childWts.length+' records':'')
+    +'</div>'
+    +(adultWts.length||childWts.length?'<div style="margin-top:16px;padding:12px;background:var(--card2);border-radius:8px;border:1px solid var(--border2)">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px">Distribution</div>'
+      +(adultWts.length?'<div style="font-size:12px;margin-bottom:4px"><span style="color:#4ade80;font-weight:700">Adults:</span> min '+Math.min(...adultWts)+'kg, max '+Math.max(...adultWts)+'kg, avg '+aAvg.toFixed(1)+'kg</div>':'')
+      +(childWts.length?'<div style="font-size:12px"><span style="color:#fb923c;font-weight:700">Children:</span> min '+Math.min(...childWts)+'kg, max '+Math.max(...childWts)+'kg, avg '+cAvg.toFixed(1)+'kg</div>':'')
+      +'</div>':'')
+    +'</div>';
+}
 function renderAdminGDrive(){
   const enabled=S.gdriveEnabled;
   return `<div class="card"><div class="st">Google Drive PDF Upload</div>
@@ -4320,7 +4441,12 @@ window.switchOpsTab=function(tabId){
 };
 window.setTab=function(t){
   if(t==='operations'){
-    if(!['manifest','seatmap','saved','ls_SLA','ls_SLB','ls_SLD','ls_SLQ','ls_SDB'].includes(S.tab)) S.tab='manifest';
+    if(!['manifest','seatmap','saved','loadsheet','ls_SLA','ls_SLB','ls_SLD','ls_SLQ','ls_SDB'].includes(S.tab)) S.tab='manifest';
+  } else if(t==='scratchpad'){
+    S.tab=t;
+    if(S.pads.length===0&&S.padTabs.length===0){
+      reloadTable('ts_scratchpads').then(function(){render();});return;
+    }
   } else {
     S.tab=t;
   }
@@ -4879,9 +5005,12 @@ function generateLoadsheet(acId){
   // Fuel/burnOff defaults by aircraft type
   if(a.layout==='ga8'&&!form.burnOff){form.burnOff='35';}
   if(a.layout==='c208'){form.fuel=String(Math.round(800*0.453592));}
-  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:new Date().toISOString(),isNew:true});
+  var _savedAt=new Date().toISOString();
+  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:_savedAt,isNew:true});
   S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:new Date().toISOString()}},ref:String(_rtRef)}));}
+  // Save immediately so other devices can load it
+  sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:_savedAt,status:'unsigned'}]).catch(function(){});
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt}},ref:String(_rtRef)}));}
   render();
 };
 
@@ -5116,7 +5245,8 @@ window.closeLsTab=function(id){
   if(idx===-1)return;
   var tab=S.lsTabs[idx];
   if(tab.isNew){
-    // Never saved to DB -- just remove from tabs
+    // Was saved to DB on creation -- delete it on close
+    sbDel('ts_loadsheets',id).catch(function(){});
     S._lsFormUndo=null;
   } else {
     // Revert to original saved version in DB
@@ -6636,6 +6766,7 @@ window.saveMaintField=function(date,ac,field,rawVal){
     }
   }
   saveMaintenance();
+  if(rawVal.trim()) auditLog('maint_field_edit',{date:date,ac:ac,field:field,val:rawVal.trim()});
   render();
 };
 window.addMaintEntry=function(){
@@ -6691,19 +6822,19 @@ window.addMaintEntry=function(){
   if(cwSel==='done'){if(!S.maintenance.compwash)S.maintenance.compwash={};var _cwa=S.maintenance.compwash[ac]||[];if(!Array.isArray(_cwa))_cwa=_cwa?[_cwa]:[];if(!_cwa.includes(date))_cwa.push(date);S.maintenance.compwash[ac]=_cwa;}
   if(adasSel==='done'){if(!S.maintenance.adas)S.maintenance.adas={};var _ada=S.maintenance.adas[ac]||[];if(!Array.isArray(_ada))_ada=_ada?[_ada]:[];if(!_ada.includes(date))_ada.push(date);S.maintenance.adas[ac]=_ada;}
   saveMaintenance();
-  toast('Entry saved: '+ac+' '+hours+'hrs on '+fmtMaintDate(date),'ok');S.appMsg=null;render();
+  toast('Entry saved: '+ac+' '+hours+'hrs on '+fmtMaintDate(date),'ok');auditLog('maint_entry_add',{date:date,ac:ac,ttis:hours,starts:starts,landings:landings,oil:oil});S.appMsg=null;render();
 };
 window.toggleCWLog=function(date,ac){
   if(!S.maintenance.compwash)S.maintenance.compwash={};
   var arr=S.maintenance.compwash[ac]||[];if(!Array.isArray(arr))arr=arr?[arr]:[];
   var ix=arr.indexOf(date);if(ix>=0)arr.splice(ix,1);else arr.push(date);
-  S.maintenance.compwash[ac]=arr;saveMaintenance();render();
+  S.maintenance.compwash[ac]=arr;auditLog('maint_compwash_toggle',{date:date,ac:ac});saveMaintenance();render();
 };
 window.toggleADASLog=function(date,ac){
   if(!S.maintenance.adas)S.maintenance.adas={};
   var arr=S.maintenance.adas[ac]||[];if(!Array.isArray(arr))arr=arr?[arr]:[];
   var ix=arr.indexOf(date);if(ix>=0)arr.splice(ix,1);else arr.push(date);
-  S.maintenance.adas[ac]=arr;saveMaintenance();render();
+  S.maintenance.adas[ac]=arr;auditLog('maint_adas_toggle',{date:date,ac:ac});saveMaintenance();render();
 };
 
 window.deleteMaintEntry=function(date,ac){
@@ -6717,7 +6848,7 @@ window.deleteMaintEntry=function(date,ac){
   });
   if(S.maintenance.compwash?.[ac]){var _ca=S.maintenance.compwash[ac];if(Array.isArray(_ca))S.maintenance.compwash[ac]=_ca.filter(function(d){return d!==date;});else if(_ca===date)S.maintenance.compwash[ac]=null;}
   if(S.maintenance.adas?.[ac]){var _aa=S.maintenance.adas[ac];if(Array.isArray(_aa))S.maintenance.adas[ac]=_aa.filter(function(d){return d!==date;});else if(_aa===date)S.maintenance.adas[ac]=null;}
-  saveMaintenance();toast('Entry deleted','ok');render();
+  auditLog('maint_entry_delete',{date:date,ac:ac});saveMaintenance();toast('Entry deleted','ok');render();
 };
 window.addOilEntry=function(){
   const date=document.getElementById('oil_date')?.value;
@@ -6733,6 +6864,7 @@ window.addOilEntry=function(){
   S.maintenance.oil=S.maintenance.oil.filter(function(e){return e.date!==date;});
   S.maintenance.oil.push(entry);
   S.maintenance.oil.sort(function(a,b){return a.date.localeCompare(b.date);});
+  auditLog('maint_oil_entry',{date:date});
   saveMaintenance();
   toast('Oil entry saved.','ok');
 };
