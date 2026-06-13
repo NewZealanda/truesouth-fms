@@ -313,7 +313,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.46';
+const APP_VER='v21.47';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -2990,7 +2990,7 @@ function renderSaved(){
       :'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">No crew name linked to your account.</div>');
   }
   if(tab==='manifests'){
-    return tabBar+_bulkBar+`
+    return tabBar+_bulkBar+(S.manifests.length?'<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-red" style="font-size:12px" onclick="window.clearAllManifests()">&#x1f5d1; Clear All Manifests</button></div>':'')+`
     ${!S.manifests.length
       ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">📋 No saved manifests</div>`
       :S.manifests.map(m=>`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid ${S.savedSel[m.id]?'#3b82f6':'var(--border)'};margin-bottom:8px;background:${S.savedSel[m.id]?'rgba(59,130,246,.08)':'var(--card)'}">
@@ -3094,7 +3094,7 @@ function renderSaved(){
           <div style="font-size:12px;color:var(--text3)">${s.form.date||'?'}${s.form.etd?' · '+s.form.etd:''} · PIC: ${s.form.pic||'?'}</div>
         </div>
         <div style="display:flex;gap:5px;flex-shrink:0">
-          <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>
+          ${isSigned?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${s.id}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${s.id}')">&#x21BA; Reopen</button>`:`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>`}
           ${isSigned?`<button class="btn" style="font-size:12px;padding:6px 10px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${s.id}')">${s.driveUploaded?'☁ Re-upload':'☁ Upload'}</button>`:''}
           <button class="btn btn-red" style="font-size:12px;padding:6px 10px" onclick="delSaved('${s.id}')">Delete</button>
         </div></div>`;
@@ -4251,6 +4251,33 @@ window.undoManifest=function(){
   S.dispatch=S._dispatchUndo;S._dispatchUndo=null;S._undoLabel=null;
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
   autoSaveDispatch();render();
+};
+window.clearAllManifests=async function(){
+  if(!confirm('Delete ALL saved manifests? This cannot be undone.'))return;
+  var ids=S.manifests.map(function(m){return m.id;});
+  S.manifests=[];lsSet('ts_manifests_cache',[]);render();
+  for(var i=0;i<ids.length;i++){try{await sbDel('ts_manifests',ids[i]);}catch(e){}}
+};
+window.viewSaved=function(id){
+  var s=S.saved.find(function(x){return x.id===id;});
+  if(!s)return;
+  var _eAc=(s.form&&s.form.ac||'ZK-'+S.lsAc).replace('ZK-','');
+  if(S.lsAc&&S.lsAc!==_eAc)S.lsForms[S.lsAc]=S.form;
+  S.lsAc=_eAc;S.form=dc(s.form);S.editId=id;S.formDirty=false;S.tab='ls_'+_eAc;render();
+};
+window.reopenSaved=async function(id){
+  if(!confirm('Reopen this loadsheet for editing? The pilot signature will be cleared and they will need to re-sign.'))return;
+  var s=S.saved.find(function(x){return x.id===id;});
+  if(!s)return;
+  var form=dc(s.form);
+  form.sig=null;form.status='unsigned';form.sigTs=null;
+  s.form=form;s.status='unsigned';
+  lsSet('ts_loadsheets_cache',S.saved);
+  await sbU('ts_loadsheets',[{id:s.id,form:form,saved_at:s.savedAt,status:'unsigned'}]);
+  var _eAc=(form.ac||'ZK-'+S.lsAc).replace('ZK-','');
+  if(S.lsAc&&S.lsAc!==_eAc)S.lsForms[S.lsAc]=S.form;
+  S.lsAc=_eAc;S.form=form;S.editId=id;S.formDirty=false;S.tab='ls_'+_eAc;render();
+  toast('Loadsheet reopened - signature cleared','ok');
 };
 window.deleteManifest=async id=>{if(!confirm('Delete this manifest?'))return;S.manifests=S.manifests.filter(m=>m.id!==id);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_manifests',id);};
 window.toggleSavedSel=id=>{if(S.savedSel[id])delete S.savedSel[id];else S.savedSel[id]=true;render();};
