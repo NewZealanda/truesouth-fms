@@ -4544,7 +4544,8 @@ window.setTab=function(t){
   // Re-fetch maintenance from cloud every time the tab is opened
   if(t==='maintenance'){
     S.maintenance={hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{},_loading:true};
-    loadMaintenanceFromCloud().then(function(cloud){
+    var _maintTimeout=new Promise(function(res){setTimeout(function(){res(null);},4000);});
+    Promise.race([loadMaintenanceFromCloud(),_maintTimeout]).then(function(cloud){
       if(cloud&&cloud.hist){
         // Cloud has data — use it
         S.maintenance=cloud;
