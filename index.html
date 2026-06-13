@@ -154,6 +154,8 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 
 /* ── Scrollable content ── */
 .page{max-width:760px;margin:0 auto;padding:14px 12px 80px;}
+@keyframes lsFlash{0%{outline:3px solid #fbbf24;background:rgba(251,191,36,.18);}100%{outline:3px solid transparent;background:transparent;}}
+.ls-flash{animation:lsFlash 2s ease-out;border-radius:6px;}
 @media(min-width:900px){body.wide-mode .page{max-width:100%;padding:16px 28px 80px;}}
 @media(min-width:1400px){body.wide-mode .page{padding:16px 40px 80px;}}
 
@@ -195,8 +197,6 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 
   /* W&B grid on loadsheet */
   .wb-grid{grid-template-columns:1fr 1fr!important;}
-@keyframes lsFlash{0%{outline:3px solid #fbbf24;background:rgba(251,191,36,.18);}100%{outline:3px solid transparent;background:transparent;}}
-.ls-flash{animation:lsFlash 2s ease-out;border-radius:6px;}
 
   /* Pax row - tighter fixed cols on mobile */
   .pax-row{grid-template-columns:70px 44px 1.5fr 0.8fr 44px 44px 26px!important;}
@@ -313,7 +313,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.64';
+const APP_VER='v21.67';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -1290,6 +1290,12 @@ function initRealtime(){
             if(_pt&&!_pt._dirty){_pt.content=_pupl.content!=null?_pupl.content:_pt.content;_pt.title=_pupl.title||_pt.title;safeRender();}
             var _ps=S.pads.find(function(p){return p.id===_pupl.id;});
             if(_ps){_ps.content=_pupl.content!=null?_pupl.content:_ps.content;_ps.title=_pupl.title||_ps.title;}
+          }
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='pad_new'){
+          var _pnpl=msg.payload.payload;
+          if(_pnpl&&_pnpl.id&&!S.pads.find(function(p){return p.id===_pnpl.id;})){
+            reloadTable('ts_scratchpads').then(function(){safeRender();});
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='pad_stroke'){
@@ -2299,7 +2305,7 @@ function renderNewLsPanel(){
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
   aircraft.forEach(function(a){
     var col=AC_COL[a.id]||'#64748b';
-    h+='<button onclick="window.createLsTab(\''+a.id+'\')" style="padding:14px 22px;border-radius:12px;border:2px solid '+col+';background:'+col+'1a;color:'+col+';font-size:16px;font-weight:800;cursor:pointer;letter-spacing:.06em">'+a.id.replace('ZK-','')+'</button>';
+    h+='<button onclick="window.createBlankLsTab(\''+a.id+'\')" style="padding:14px 22px;border-radius:12px;border:2px solid '+col+';background:'+col+'1a;color:'+col+';font-size:16px;font-weight:800;cursor:pointer;letter-spacing:.06em">'+a.id.replace('ZK-','')+'</button>';
   });
   h+='</div></div>';
   return h;
@@ -2416,7 +2422,7 @@ function renderStep1(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').click()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Date</div>
-        <input tabindex="-1" type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">
+        <div style="position:relative"><div style="font-size:13px;font-weight:600;color:var(--text1)">${_fmtLsDate(d.date)}</div><input tabindex="-1" type="date" class="fi" value="${d.date}" onclick="event.stopPropagation()" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%"></div>
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">ETD</div>
@@ -2522,7 +2528,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
           <span class="seat-lbl" style="${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
-            :p?`<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?' 👶':''}${(S.form?.paxType||{})[cell.i]==='C'?'<span style="font-size:7px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:2px;padding:0 2px;margin-left:2px">C</span>':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
+            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:3px;padding:0 3px;line-height:1.4">C</div>':''}'<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?' 👶':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
         </div>`;
       }
     });
@@ -2780,8 +2786,6 @@ function renderLoadsheet(){
   const _lsPilots=_lsAcType?pilotCrewList().filter(c=>(c.endorse||[]).includes(_lsAcType)):pilotCrewList();
   const crewOpts=_lsPilots.map(c=>`<option value="${c.n}"${f.pic===c.n?' selected':''}>${c.n}${c.w?' ('+c.w+'kg)':''}</option>`).join('');
   const cpOpts=`<option value="">None</option>`+pilotCrewList().filter(c=>c.n!==f.pic).map(c=>`<option value="${c.n}"${f.coPilot===c.n?' selected':''}>${c.n}</option>`).join('');
-
-  const editBanner=S.editId?`<div style="padding:9px 14px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;color:var(--warn-text);font-size:13px;font-weight:600;margin-bottom:10px">✏ Editing saved loadsheet</div>`:'';
   const draftBanner=f.status==='unsigned'?`<div style="padding:9px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;margin-bottom:10px">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
   const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;render();}">Clear & Start Blank</button>`;
 
@@ -2869,10 +2873,14 @@ function renderLoadsheet(){
             <input class="fi" type="text" value="${displayNm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px" onblur="lsN(${idx},this.value)">
           </div>
           ${infantNm?`<div style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}<button onclick="window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></div>`:''}
+          ${hasPerson?`<div style="display:flex;gap:4px;margin-bottom:4px;padding-left:22px">
+            <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'A')" style="padding:1px 7px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(74,222,128,.3)':'rgba(74,222,128,.8)'};background:${(f.paxType||{})[idx]==='C'?'transparent':'rgba(74,222,128,.2)'};color:#4ade80;font-size:10px;font-weight:700;cursor:pointer">A</button>
+            <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'C')" style="padding:1px 7px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.8)':'rgba(251,146,60,.3)'};background:${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.2)':'transparent'};color:#fb923c;font-size:10px;font-weight:700;cursor:pointer">C</button>
+          </div>`:''}
           <div style="display:grid;grid-template-columns:52px 52px;gap:4px">
             <div>
               <div style="font-size:8px;color:var(--text3)">WT kg</div>
-              <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:50px" onblur="lsS(${idx},this.value)">
+              <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:50px" onblur="lsS(${idx},this.value);window.lsCheckChildWt(${idx})">
             </div>
             <div>
               <div style="font-size:8px;color:var(--text3)">BAG kg</div>
@@ -3104,7 +3112,7 @@ function renderLoadsheet(){
       unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--accent)\'" ondragleave="event.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)"><div class="st">Unallocated Passengers ('+ua.length+')</div>'+hint+'<div style="display:flex;flex-direction:column;gap:6px">'+cards+'</div></div>';
     }
   }
-  return`${editBanner}${draftBanner}${_overCapBanner}${clearBtn}
+  return`${draftBanner}${_overCapBanner}${clearBtn}
   <div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -3148,7 +3156,7 @@ function renderLoadsheet(){
       </div>
     </div>
   </div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
-  ${seatsH}${unallocH}${a?cargoH:''}${(a&&fuelH&&calcH)?`<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1;min-width:280px">${fuelH}</div><div style="flex:1;min-width:280px">${calcH}</div></div>`:(a?fuelH:'')+calcH}${sigH}`;
+  ${seatsH}${unallocH}${a?cargoH:''}${(a&&fuelH&&calcH)?`<div style="display:flex;gap:14px;align-items:stretch;flex-wrap:wrap"><div style="flex:1;min-width:280px;display:flex;flex-direction:column">${fuelH}</div><div style="flex:1;min-width:280px;display:flex;flex-direction:column">${calcH}</div></div>`:(a?fuelH:'')+calcH}${sigH}`;
 }
 window.lsCheckChildWt=function(idx){
   const f=S.form;if(!f)return;
@@ -3308,6 +3316,7 @@ window.padPointerUp=function(e){
     act.drawing.push(_padCurrStroke);
     act._dirty=true;
     if(typeof window._broadcastPadStroke==='function')window._broadcastPadStroke(act.id,_padCurrStroke);
+    if(typeof window._padAutoSave==='function')window._padAutoSave(act);
   }
   _padCurrStroke=null;
 };
@@ -3458,6 +3467,7 @@ function renderAerodromes(){
   setTimeout(function(){
     var mapEl=document.getElementById('aero-map');
     if(!mapEl)return;
+    if(_aerodromesMap&&!_aerodromesMap.getContainer().isConnected){_aerodromesMap.remove();_aerodromesMap=null;_aerodromesMarker=null;}
     var lat=selEntry?selEntry.lat:-36.85;
     var lon=selEntry?selEntry.lon:174.76;
     var zoom=selEntry?12:6;
@@ -3473,6 +3483,7 @@ function renderAerodromes(){
     }
   },60);
 
+  S._aeroFilt=filt.map(function(a){return a.icao;});
   var rows=filt.map(function(a){
     var isCustom=custom.some(function(c){return c.icao===a.icao;});
     var isSelected=S._aeroSel===a.icao;
@@ -3498,7 +3509,7 @@ function renderAerodromes(){
   // Two-column layout: list left, map right
   h+='<div style="display:flex;gap:12px;align-items:flex-start">';
   // Left: scrollable list
-  h+='<div style="flex:1;min-width:0;overflow-x:auto;border-radius:8px;border:1px solid var(--border2);max-height:480px;overflow-y:auto">';
+  h+='<div id="aero-list" tabindex="0" onkeydown="window.aeroKeyNav(event)" style="flex:1;min-width:0;overflow-x:auto;border-radius:8px;border:1px solid var(--border2);max-height:480px;overflow-y:auto">';
   h+='<table style="width:100%;border-collapse:collapse"><thead>';
   h+='<tr style="position:sticky;top:0;z-index:1;background:var(--card2)"><th style="padding:5px 8px;text-align:left;font-size:10px;color:var(--text3)">ICAO</th><th style="padding:5px 8px;text-align:left;font-size:10px;color:var(--text3)">Name</th><th style="padding:5px 8px;text-align:left;font-size:10px;color:var(--text3)">Elev</th><th></th></tr>';
   h+='</thead><tbody>'+rows+'</tbody></table></div>';
@@ -3524,6 +3535,17 @@ function renderAerodromes(){
 }
 
 window.aeroSelect=function(icao){S._aeroSel=icao;render();};
+window.aeroKeyNav=function(e){
+  if(e.key!=='ArrowDown'&&e.key!=='ArrowUp')return;
+  e.preventDefault();
+  var fl=S._aeroFilt||[];if(!fl.length)return;
+  var idx=fl.indexOf(S._aeroSel||'');
+  if(e.key==='ArrowDown')idx=Math.min(idx+1,fl.length-1);
+  else idx=Math.max(idx-1,0);
+  if(idx<0)idx=0;
+  S._aeroSel=fl[idx];render();
+  setTimeout(function(){var el=document.querySelector('[data-icao="'+S._aeroSel+'"]');if(el)el.scrollIntoView({block:'nearest'});},80);
+};
 window.aeroSearch=function(v){S._aeroSearch=v;render();};
 window.aeroAddCustom=function(){
   var icao=(document.getElementById('cae-icao').value||'').toUpperCase().trim();
@@ -4702,7 +4724,19 @@ window.lsRmInfant=function(idx){if(S.form.infantNames)delete S.form.infantNames[
 var nm=S.form.names&&S.form.names[idx]||'';if(nm.includes(' + '))S.form.names[idx]=nm.split(' + ')[0].trim();render();};
 window.rmPax=i=>{S._paxUndo=S._paxUndo||[];var removed=S.dispatch.pax.splice(i,1)[0];if(removed)S._paxUndo.push(removed);autoSaveDispatch();render();};
 window.undoPax=function(){if(!S._paxUndo||!S._paxUndo.length)return;var p=S._paxUndo.pop();p._ts=Date.now();S.dispatch.pax.push(p);autoSaveDispatch();render();};
-window.setPaxField=(i,k,v)=>{if(S.dispatch.pax[i]){S.dispatch.pax[i][k]=v;S.dispatch.pax[i]._ts=Date.now();autoSaveDispatch();}setTimeout(safeRender,50);};
+window.setPaxField=(i,k,v)=>{
+  if(!S.dispatch.pax[i])return;
+  S.dispatch.pax[i][k]=v;S.dispatch.pax[i]._ts=Date.now();
+  if(k==='weight'){
+    var _wv=parseFloat(v||0);
+    if(_wv>0&&_wv<50&&(!S.dispatch.pax[i].type||S.dispatch.pax[i].type==='adult')){
+      if(confirm('Weight '+_wv+'kg — is this passenger a child?')){
+        S.dispatch.pax[i].type='child';
+      }
+    }
+  }
+  autoSaveDispatch();setTimeout(safeRender,50);
+};
 
 // ── Seat map handlers ──
 window.tapPax=pid=>{S.selectedPax=S.selectedPax===pid?null:pid;render();};
@@ -5056,10 +5090,10 @@ function generateLoadsheet(acId){
   form.pic=setup?.pic||'';form.coPilot=setup?.coPilot||'';
   const picCrew=anyCrewList().find(c=>c.n===form.pic);if(picCrew&&picCrew.w){form.seats[0]=String(picCrew.w);form.names[0]=form.pic;}
   if(setup?.coPilot){const cp=anyCrewList().find(c=>c.n===setup.coPilot);if(cp&&cp.w){form.seats[1]=String(cp.w);form.names[1]=setup.coPilot;}}
-  else{const sm=d.seatMap[acId]||{};const p=sm[1]?paxById(sm[1]):null;if(p){form.seats[1]=p.weight||'';form.bags[1]=p.bag||'';form.names[1]=p.name||'';}}
+  else{const sm=d.seatMap[acId]||{};const p=sm[1]?paxById(sm[1]):null;if(p){form.seats[1]=p.weight||'';form.bags[1]=p.bag||'';form.names[1]=p.name||'';if(p.type==='child')form.paxType[1]='C';}}
   form.fuel=String(fuelKgForSetup(acId));
   const sm=d.seatMap[acId]||{};
-  const seatIdxs=paxSeatIdxs(acId)||[];seatIdxs.forEach(function(i){if(i<=1)return;const p=sm[i]?paxById(sm[i]):null;if(p){form.seats[i]=p.weight||'';form.bags[i]=p.bag||'';form.names[i]=p.name||'';if(p.infantName)form.infantNames[i]=p.infantName;}});
+  const seatIdxs=paxSeatIdxs(acId)||[];seatIdxs.forEach(function(i){if(i<=1)return;const p=sm[i]?paxById(sm[i]):null;if(p){form.seats[i]=p.weight||'';form.bags[i]=p.bag||'';form.names[i]=p.name||'';if(p.infantName)form.infantNames[i]=p.infantName;if(p.type==='child')form.paxType[i]='C';}});
   // seat 1 infant (non-copilot)
   {const p=sm[1]?paxById(sm[1]):null;if(p&&p.infantName)form.infantNames[1]=p.infantName;}
   const _lsAcCode=acId.replace('ZK-','');
@@ -5346,6 +5380,26 @@ window.deleteSelectedLsTabs=function(){
   S._lsManageMode=false;S._lsTabSel={};render();
 };
 window.createLsTab=function(acId){S._newLsTab=false;generateLoadsheet(acId);};
+window.createBlankLsTab=function(acId){
+  const a=S.aircraft[acId];if(!a)return;
+  const d=S.dispatch;
+  const setup=d.acSetup.find(function(s){return s.acId===acId;});
+  const form=bF();
+  form.ac=acId;
+  form.dep=d.dep;form.dest=d.dest;form.date=d.date;form.etd=d.etd;form.etdCustom=d.etdCustom||false;
+  form.pic=setup?.pic||'';form.coPilot=setup?.coPilot||'';
+  const picCrew=anyCrewList().find(function(c){return c.n===form.pic;});
+  if(picCrew&&picCrew.w){form.seats[0]=String(picCrew.w);form.names[0]=form.pic;}
+  const _lsAcCode=acId.replace('ZK-','');
+  const _newTabId='ls_'+_lsAcCode+'_'+Date.now();
+  S.lsForms[_lsAcCode]=form;S.lsAc=_lsAcCode;S.form=form;S.editId=_newTabId;S.formDirty=false;
+  var _savedAt=new Date().toISOString();
+  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:_savedAt,isNew:true});
+  S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
+  sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:_savedAt,status:'unsigned'}]).catch(function(){});
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt}},ref:String(_rtRef)}));}
+  render();
+};
 window.changeLsAircraft=function(targetAcFull){
   var tab=S.lsTabs.find(function(t){return t.id===S.activeTabId;});
   if(tab)tab.acId=targetAcFull;
@@ -5370,10 +5424,16 @@ window.delSaved=async id=>{if(!confirm('Delete this loadsheet?'))return;S.saved=
 var _padDebounce=null;
 window.newPad=function(){
   var id='pad_'+Date.now();
-  var pad={id:id,title:'Untitled',content:'',drawing:[],savedAt:new Date().toISOString(),_mode:'text',_dirty:true};
+  var nextN=(S.pads.length+S.padTabs.filter(function(t){return!S.pads.find(function(p){return p.id===t.id;});}).length)+1;
+  var title='Scratch '+nextN;
+  var pad={id:id,title:title,content:'',drawing:[],savedAt:new Date().toISOString(),_mode:'text',_dirty:false};
   S.padTabs.push(pad);S.activePadId=id;
   S.tab='scratchpad';S.activeTabId=null;S._newLsTab=false;
   render();
+  sbU('ts_scratchpads',[{id:id,title:title,content:'',drawing:[],saved_at:new Date().toISOString()}]).then(function(){
+    if(!S.pads.find(function(p){return p.id===id;}))S.pads.push({id:id,title:title,content:'',drawing:[]});
+    if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'pad_new',payload:{id:id,title:title}},ref:String(_rtRef)}));}
+  }).catch(function(){});
 };
 window.openPad=function(id){
   var ex=S.padTabs.find(function(t){return t.id===id;});
@@ -5385,8 +5445,6 @@ window.openPad=function(id){
 };
 window.switchPad=function(id){S.activePadId=id;render();};
 window.closePad=function(id){
-  var pt=S.padTabs.find(function(t){return t.id===id;});
-  if(pt&&pt._dirty){if(!confirm('Close without saving?'))return;}
   S.padTabs=S.padTabs.filter(function(t){return t.id!==id;});
   if(S.activePadId===id){S.activePadId=S.padTabs.length?S.padTabs[S.padTabs.length-1].id:null;}
   render();
@@ -5420,13 +5478,29 @@ window.deletePad=async function(id){
 };
 window.updatePadTitle=function(v){
   var act=S.padTabs.find(function(t){return t.id===S.activePadId;});if(!act)return;
-  act.title=v;act._dirty=true;window._broadcastPadUpdate&&window._broadcastPadUpdate(act);
+  act.title=v;act._dirty=true;
+  window._broadcastPadUpdate&&window._broadcastPadUpdate(act);
+  window._padAutoSave&&window._padAutoSave(act);
 };
 window.padUpdateContent=function(v){
   var act=S.padTabs.find(function(t){return t.id===S.activePadId;});if(!act)return;
   act.content=v;act._dirty=true;
   clearTimeout(_padDebounce);
-  _padDebounce=setTimeout(function(){window._broadcastPadUpdate&&window._broadcastPadUpdate(act);},600);
+  _padDebounce=setTimeout(function(){window._broadcastPadUpdate&&window._broadcastPadUpdate(act);window._padAutoSave&&window._padAutoSave(act);},600);
+};
+window._padAutoSave=function(act){
+  if(!act||!S.user)return;
+  clearTimeout(act._saveTimer);
+  act._saveTimer=setTimeout(async function(){
+    try{
+      await sbU('ts_scratchpads',[{id:act.id,title:act.title||'Untitled',content:act.content||'',drawing:act.drawing||[],saved_at:new Date().toISOString()}]);
+      act._dirty=false;
+      var ex=S.pads.findIndex(function(p){return p.id===act.id;});
+      if(ex>=0)S.pads[ex]=Object.assign({},S.pads[ex],{title:act.title,content:act.content,drawing:act.drawing});
+      else S.pads.push({id:act.id,title:act.title||'Untitled',content:act.content||'',drawing:act.drawing||[]});
+      safeRender();
+    }catch(e){}
+  },1500);
 };
 window._broadcastPadUpdate=function(act){
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'pad_update',payload:{id:act.id,title:act.title,content:act.content}},ref:String(_rtRef)}));}
