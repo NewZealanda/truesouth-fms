@@ -313,7 +313,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.53';
+const APP_VER='v21.57';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -979,7 +979,9 @@ let S={
   dispatch:bD(),viewAc:null,viewAc2:null,selectedPax:null,solverRes:{},
   // Loadsheet form
   form:bF(),editId:null,lsForms:{},lsAc:'SLA',
-  lsTabs:[],activeTabId:null,_newLsTab:false,
+  lsTabs:[],activeTabId:null,_newLsTab:false,_lsManageMode:false,_lsTabSel:{},_lsFormUndo:null,_lsFormUndoStack:[],
+  pads:[],padTabs:[],activePadId:null,_padMode:'text',_padDrawColor:'#ffffff',_padDrawWidth:3,_padEraser:false,
+  _aeroSearch:'',_aeroSel:null,
   // UI state
   tab:'manifest',
   savedSearch:'',savedSort:'newest',savedTab:'loadsheets',savedSel:{},
@@ -1265,8 +1267,29 @@ function initRealtime(){
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_saved'){
-          if(S.tab==='saved'){reloadTable('ts_loadsheets').then(function(){render();});}
+          if(S.tab==='saved'){reloadTable('ts_loadsheets');reloadTable('ts_scratchpads').then(function(){render();});}
           else{reloadTable('ts_loadsheets');}
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_tab_open'){
+          const _tp=msg.payload.payload;
+          if(_tp&&_tp.id&&!S.lsTabs.find(function(t){return t.id===_tp.id;})){
+            S.lsTabs.push({id:_tp.id,acId:_tp.acId,form:_tp.form,status:'unsigned',savedAt:_tp.savedAt});
+            safeRender();
+          }
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_tab_close'){
+          var _closeId=msg.payload.payload&&msg.payload.payload.id;
+          if(_closeId){S.lsTabs=S.lsTabs.filter(function(t){return t.id!==_closeId;});if(S.activeTabId===_closeId){S.activeTabId=null;S.editId=null;S.tab='manifest';}safeRender();}
+          if(_evt==='pad_update'&&_pl&&_pl.id){
+            var _pt=S.padTabs.find(function(t){return t.id===_pl.id;});
+            if(_pt&&!_pt._dirty){_pt.content=_pl.content!=null?_pl.content:_pt.content;_pt.title=_pl.title||_pt.title;safeRender();}
+            var _ps=S.pads.find(function(p){return p.id===_pl.id;});
+            if(_ps){_ps.content=_pl.content!=null?_pl.content:_ps.content;_ps.title=_pl.title||_ps.title;}
+          }
+          if(_evt==='pad_stroke'&&_pl&&_pl.id){
+            var _pt2=S.padTabs.find(function(t){return t.id===_pl.id;});
+            if(_pt2&&_pl.stroke){if(!_pt2.drawing)_pt2.drawing=[];_pt2.drawing.push(_pl.stroke);}
+          }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_update'){
           const _lsp=msg.payload.payload;
@@ -1313,7 +1336,14 @@ async function flushRtUpdates(){
 async function reloadTable(table){
   if(table==='ts_loadsheets'){
     const ls=await sbF('ts_loadsheets');
-    if(ls){S.saved=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});lsSet('ts_loadsheets_cache',S.saved);return true;}
+    if(ls){
+      S.saved=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});
+      lsSet('ts_loadsheets_cache',S.saved);
+      return true;
+    }
+  } else if(table==='ts_scratchpads'){
+    const ps=await sbF('ts_scratchpads');
+    if(ps){S.pads=ps.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});return true;}
   } else if(table==='ts_manifests'){
     const ms=await sbF('ts_manifests');
     if(ms){
@@ -1472,6 +1502,8 @@ let _ownLSSaveTs=0;
 function autoSaveLS(){
   const _id=S.editId;
   if(!S.user||!_id)return;
+  const _tab=S.lsTabs.find(function(t){return t.id===_id;});
+  if(_tab&&_tab.isNew)return; // never auto-save new unsaved tabs
   clearTimeout(_autoSaveLSTimer);
   _autoSaveLSTimer=setTimeout(async function(){
     const form=dc(S.form);
@@ -2163,18 +2195,49 @@ function renderOperations(){
       var isActive=S.activeTabId===tab.id&&!S._newLsTab;
       var col=AC_COL[tab.acId]||'#64748b';
       var signed=tab.status==='complete';
-      tabsH+='<div style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1px solid '+(isActive?col:'var(--border)')+';flex-shrink:0">';
-      tabsH+='<button onclick="window.switchLsTab(\''+tab.id+'\')" style="padding:5px 10px;font-size:12px;font-weight:700;background:'+(isActive?col+'33':'var(--card2)')+';border:none;cursor:pointer;color:'+(isActive?col:'var(--text2)')+';white-space:nowrap">'+acCode+(signed?' &#x2713;':'')+'</button>';
-      tabsH+='<button onclick="window.closeLsTab(\''+tab.id+'\')" style="padding:5px 7px;font-size:14px;line-height:1;background:'+(isActive?col+'22':'var(--card2)')+';border:none;border-left:1px solid '+(isActive?col+'44':'var(--border)')+';cursor:pointer;color:'+(isActive?col:'var(--text3)')+';" title="Close">&#xd7;</button>';
-      tabsH+='</div>';
+      var isSel=!!(S._lsTabSel&&S._lsTabSel[tab.id]);
+      if(S._lsManageMode){
+        tabsH+='<label style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid '+(isSel?'#ef4444':'var(--border)')+';background:'+(isSel?'rgba(239,68,68,.15)':'var(--card2)')+';cursor:pointer;flex-shrink:0;font-size:12px;font-weight:700;color:'+(isSel?'#fca5a5':col)+'">';
+        tabsH+='<input type="checkbox" '+(isSel?'checked':'')+' onchange="window.toggleLsTabSel(\''+tab.id+'\')" style="cursor:pointer">';
+        tabsH+=acCode+'</label>';
+      } else {
+        tabsH+='<div style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1px solid '+(isActive?col:'var(--border)')+';flex-shrink:0">';
+        tabsH+='<button onclick="window.switchLsTab(\''+tab.id+'\')" style="padding:5px 10px;font-size:12px;font-weight:700;background:'+(isActive?col+'33':'var(--card2)')+';border:none;cursor:pointer;color:'+(isActive?col:'var(--text2)')+';white-space:nowrap">'+acCode+(signed?' &#x2713;':'')+'</button>';
+        tabsH+='<button onclick="window.closeLsTab(\''+tab.id+'\')" style="padding:5px 7px;font-size:14px;line-height:1;background:'+(isActive?col+'22':'var(--card2)')+';border:none;border-left:1px solid '+(isActive?col+'44':'var(--border)')+';cursor:pointer;color:'+(isActive?col:'var(--text3)')+'" title="Close">&#xd7;</button>';
+        tabsH+='</div>';
+      }
     });
+    if(S._lsManageMode){
+      var _selCnt=Object.values(S._lsTabSel||{}).filter(Boolean).length;
+      tabsH+='<button onclick="window.deleteSelectedLsTabs()" '+(_selCnt?'':'disabled ')+' style="padding:5px 10px;border-radius:8px;border:1px solid #ef4444;background:rgba(239,68,68,.15);color:#fca5a5;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap">Delete '+(_selCnt||'0')+'</button>';
+      tabsH+='<button onclick="window.toggleLsManage()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:var(--text3);font-size:12px;cursor:pointer;flex-shrink:0">Cancel</button>';
+    }
   }
   tabsH+='<button onclick="window.newLsTab()" style="padding:5px 10px;font-size:16px;line-height:1;font-weight:700;background:'+(S._newLsTab?'var(--acc)':'var(--card2)')+';border:1px solid '+(S._newLsTab?'var(--acc)':'var(--border)')+';border-radius:8px;cursor:pointer;color:'+(S._newLsTab?'#fff':'var(--text2)')+';flex-shrink:0" title="New Loadsheet">+</button>';
+  if(S.lsTabs.length>=2&&!S._lsManageMode){tabsH+='<button onclick="window.toggleLsManage()" style="padding:5px 8px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:var(--text3);cursor:pointer;flex-shrink:0" title="Manage loadsheets">&#x1f5d1;</button>';}
+  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='scratchpad')?'on':'')+'" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0" onclick="window.switchOpsTab(\'scratchpad\')">Scratch</button>';
   tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='saved')?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0;margin-left:auto">Saved ('+S.saved.length+')</button>';
   tabsH+='</div>';
   if(S.activeTabId&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return tabsH+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return tabsH+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
   if(S._newLsTab){return tabsH+renderNewLsPanel();}
   if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return tabsH+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
+  if(opsTab==='scratchpad'){
+    if(S._presSection&&S._presSection!=='scratchpad')broadcastPresence(null);
+    var _padTabsH='';
+    if(S.padTabs.length>0){
+      _padTabsH='<div style="display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
+      _padTabsH+='<button onclick="window.newPad()" style="padding:4px 10px;font-size:12px;background:var(--card2);border:1px solid var(--border2);border-radius:7px;cursor:pointer;color:var(--acc)">+ New</button>';
+      S.padTabs.forEach(function(pt){
+        var isAct=S.activePadId===pt.id;
+        _padTabsH+='<div style="display:inline-flex;align-items:stretch;border-radius:7px;overflow:hidden;border:1px solid '+(isAct?'var(--acc)':'var(--border2)')+'">';
+        _padTabsH+='<button onclick="window.switchPad(\''+pt.id+'\')" style="padding:4px 10px;font-size:12px;font-weight:'+(isAct?'700':'400')+';background:'+(isAct?'var(--acc)':'var(--card2)')+';border:none;color:'+(isAct?'#fff':'var(--text1)')+';cursor:pointer">'+((pt.title||'Untitled').slice(0,16))+'</button>';
+        _padTabsH+='<button onclick="window.closePad(\''+pt.id+'\')" style="padding:4px 6px;font-size:12px;background:'+(isAct?'var(--acc)':'var(--card2)')+';border:none;color:'+(isAct?'#fff':'var(--text3)')+';cursor:pointer">&#x00D7;</button>';
+        _padTabsH+='</div>';
+      });
+      _padTabsH+='</div>';
+    }
+    return tabsH+_padTabsH+renderScratchpad();
+  }
   if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return tabsH+renderSaved();}
   startPresenceBroadcast('manifest');return tabsH+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
 }
@@ -2645,12 +2708,9 @@ function renderLoadsheet(){
   const crewOpts=_lsPilots.map(c=>`<option value="${c.n}"${f.pic===c.n?' selected':''}>${c.n}${c.w?' ('+c.w+'kg)':''}</option>`).join('');
   const cpOpts=`<option value="">None</option>`+anyCrewList().map(c=>`<option value="${c.n}"${f.coPilot===c.n?' selected':''}>${c.n}</option>`).join('');
 
-  const backBanner=S.dispatch.pax.length?`<div style="padding:9px 14px;background:#1e0a4a;border:1px solid #6d28d9;border-radius:8px;color:#c4b5fd;font-size:13px;font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
-    <span>From manifest · ${S.dispatch.pax.length} pax</span>
-    <button onclick="S.tab='seatmap';window.scrollTo(0,0);render()" style="padding:4px 10px;border-radius:6px;border:1px solid #6d28d9;background:transparent;color:#c4b5fd;font-size:12px;cursor:pointer">← Back to Seat Map</button>
-  </div>`:'';
   const editBanner=S.editId?`<div style="padding:9px 14px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;color:var(--warn-text);font-size:13px;font-weight:600;margin-bottom:10px">✏ Editing saved loadsheet</div>`:'';
   const draftBanner=f.status==='unsigned'?`<div style="padding:9px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;margin-bottom:10px">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
+  const _undoBtn=S._lsFormUndo?`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px;margin-left:6px" onclick="window.lsUndo()">&#x21b6; Undo</button>`:'';
   const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;render();}">Clear & Start Blank</button>`;
 
   // Fuel display
@@ -2668,6 +2728,11 @@ function renderLoadsheet(){
   if(a){
     const cW=parseFloat(f.seats[0]||0);
     const picMom=(cW*(a.seats[0]?.arm||0)).toFixed(0);
+    // PAX / POB counts
+    const _paxSeats=Object.keys(f.names).filter(function(k){const ki=parseInt(k);return ki>=1&&!!f.names[k]&&ki<(a?a.seats.length:99);}).length;
+    const _infantCount=Object.keys(f.infantNames||{}).filter(function(k){const ki=parseInt(k);return !!(f.infantNames||{})[k]&&ki<(a?a.seats.length:99);}).length;
+    const _paxCount=_paxSeats+_infantCount;
+    const _pobCount=(f.names[0]?1:0)+_paxCount;
     // W&B summary row
     const wbSummary=r?`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
       <div style="text-align:center;background:var(--card2);border-radius:7px;padding:6px 4px">
@@ -2679,8 +2744,9 @@ function renderLoadsheet(){
         <div style="font-size:13px;font-weight:700;color:${r.cogOk?'var(--ok-text)':'var(--err-text)'}">${r.towCog!=null?r.towCog.toFixed(2):'—'}</div>
       </div>
       <div style="text-align:center;background:var(--card2);border-radius:7px;padding:6px 4px">
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Pax</div>
-        <div style="font-size:13px;font-weight:700">${r.paxW.toFixed(0)}kg</div>
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">PAX / POB</div>
+        <div style="font-size:13px;font-weight:700">${_paxCount} / ${_pobCount}</div>
+        <div style="font-size:9px;color:var(--text3)">${r.paxW.toFixed(0)}kg</div>
       </div>
       <div style="text-align:center;background:var(--card2);border-radius:7px;padding:6px 4px">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Status</div>
@@ -2894,14 +2960,21 @@ function renderLoadsheet(){
           ${(()=>{
             const _overCap=a?Object.keys(f.seats).filter(i=>parseInt(i)>=a.seats.length&&(parseFloat(f.seats[i])>0||f.names[i])).length:0;
             const fwdCog=r&&a&&r.towCog!=null&&r.towCog<a.cogMin;
-            const canSubmit=canSign&&allOk&&f.sig&&f.pic&&!fwdCog;
-            const fwdWarn=fwdCog?`<div style="padding:8px 12px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fde68a">⚠ Forward CoG ${r.towCog?.toFixed(2)}" — forward of limit ${a?.cogMin}". Adjust seating before submitting.</div>`:'';
-            const btn=canSign
-              ?`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="width:100%;padding:13px;font-size:14px;font-weight:700" onclick="${canSubmit?'handleSubmit()':'saveUnsigned()'}">
-                ${!f.pic?'⚠ Select PIC first':fwdCog?'⚠ Fix CoG — Save Draft':!allOk?'⚠ Fix W&B — Save Draft':!f.sig?'💾 Save Draft':S.editId?'✅ Save & Submit':'✅ Sign & Submit'}
-              </button>`
-              :`<button class="btn-full btn-secondary" style="width:100%;padding:13px;font-size:14px;font-weight:700" onclick="${S.editId?'handleSubmit()':'saveUnsigned()'}" ${_overCap>0?'disabled':''} style="${_overCap>0?'opacity:.4;cursor:not-allowed':''}">\n                ${_overCap>0?'⛔ Fix over-capacity first':S.editId?'💾 Save Changes':'💾 Save Loadsheet'}\n              </button>`;
-            return fwdWarn+btn;
+            const fwdWarn=fwdCog?`<div style="padding:8px 12px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fde68a">&#x26a0; Forward CoG ${r.towCog?.toFixed(2)}" &#x2014; forward of limit ${a?.cogMin}". Adjust seating before submitting.</div>`:'';
+            if(f.sig){
+              // Signed: Submit & close
+              const canSubmit=canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0;
+              const btn=`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="width:100%;padding:13px;font-size:14px;font-weight:700" onclick="handleSubmit()" ${canSubmit?'':'disabled'}>
+                ${!f.pic?'&#x26a0; Select PIC first':fwdCog?'&#x26a0; Fix CoG first':!allOk?'&#x26a0; Fix W&B first':_overCap>0?'&#x26d4; Fix over-capacity first':'&#x2705; Submit &amp; Close'}
+              </button>`;
+              return fwdWarn+btn;
+            } else {
+              // Unsigned: Save draft & close
+              const btn=`<button class="btn-full btn-secondary" style="width:100%;padding:13px;font-size:14px;font-weight:700" onclick="saveUnsigned()" ${_overCap>0?'disabled':''}>
+                ${_overCap>0?'&#x26d4; Fix over-capacity first':'&#x1f4be; Save Draft &amp; Close'}
+              </button>`;
+              return fwdWarn+btn;
+            }
           })()}
         </div>
         <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">${a.doc}</div>
@@ -2937,28 +3010,421 @@ function renderLoadsheet(){
       unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--accent)\'" ondragleave="event.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)"><div class="st">Unallocated Passengers ('+ua.length+')</div>'+hint+'<div style="display:flex;flex-direction:column;gap:6px">'+cards+'</div></div>';
     }
   }
-  return`${backBanner}${editBanner}${draftBanner}${_overCapBanner}${clearBtn}
-  <div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}"><div class="st">Flight Details</div>
-    <div style="margin-bottom:10px;padding:8px 12px;background:#0c1a3a;border-radius:8px;border:1px solid #1e3a5f;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center">
-      <div style="font-size:12px;color:#93c5fd;font-weight:600">ZK-${S.lsAc||f.ac.replace('ZK-','')} ${a?' &middot; '+a.type+' &middot; EW '+a.ew+'kg &middot; MTOW '+a.mtow+'kg':''}</div>
-      <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">
-        <span style="font-size:11px;color:var(--text3)">Change aircraft:</span>
+  return`${editBanner}${draftBanner}${_overCapBanner}${clearBtn}${_undoBtn}
+  <div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:${AC_COL[f.ac]||'#93c5fd'}">ZK-${S.lsAc||f.ac.replace('ZK-','')}</div>
+        ${a?`<div style="font-size:11px;color:var(--text3);background:var(--card2);padding:3px 10px;border-radius:20px;border:1px solid var(--border2)">${a.type} &middot; EW ${a.ew}kg &middot; MTOW ${a.mtow}kg</div>`:''}
+      </div>
+      <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+        <span style="font-size:10px;color:var(--text3)">Change:</span>
         ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){return'<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="window.changeLsAircraft(\'ZK-'+ac+'\')">'+ac+'</button>';}).join('')}
       </div>
     </div>
-    <div class="g2">
-      <div><label>PIC</label><select class="fi" onchange="lsPIC(this.value)"><option value="">— select —</option>${crewOpts}</select></div>
-      <div><label>Co-Pilot</label><select class="fi" onchange="lsCoPilot(this.value)">${cpOpts}</select></div>
-      <div><label>Date</label><input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();"></div>
-      <div><label>ETD</label>${etdSelect(f.etd,f.date,"form")}</div>
-      <div><label>Departure</label><select class="fi" onchange="S.form.dep=this.value;S.formDirty=true;autoSaveLS();safeRender()">${aptOpts(f.dep)}</select></div>
-      <div style="position:relative"><label>Destination</label><select class="fi" onchange="S.form.dest=this.value;autoSaveLS();safeRender()">${aptOpts(f.dest)}</select><button onclick="const t=S.form.dep;S.form.dep=S.form.dest;S.form.dest=t;autoSaveLS();safeRender()" title="Swap departure and destination" style="position:absolute;right:28px;top:22px;background:none;border:none;color:var(--accent);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1">&#x21C4;</button></div>
-    </div></div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">PIC</div>
+        <select class="fi" onchange="lsPIC(this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)"><option value="">&#x2014; select &#x2014;</option>${crewOpts}</select>
+      </div>
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Co-Pilot</div>
+        <select class="fi" onchange="lsCoPilot(this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${cpOpts}</select>
+      </div>
+    </div>
+    <div style="display:flex;align-items:stretch;gap:6px;margin-bottom:8px">
+      <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Departure</div>
+        <select class="fi" onchange="S.form.dep=this.value;S.formDirty=true;autoSaveLS();safeRender()" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(f.dep)}</select>
+      </div>
+      <button onclick="const t=S.form.dep;S.form.dep=S.form.dest;S.form.dest=t;autoSaveLS();safeRender()" title="Swap" style="align-self:center;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--accent);font-size:16px;cursor:pointer;flex-shrink:0;line-height:1">&#x21C4;</button>
+      <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Destination</div>
+        <select class="fi" onchange="S.form.dest=this.value;autoSaveLS();safeRender()" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(f.dest)}</select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Date</div>
+        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">
+      </div>
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">ETD</div>
+        ${etdSelect(f.etd,f.date,"form")}
+      </div>
+    </div>
+  </div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
   ${seatsH}${unallocH}${a?cargoH:''}${a?fuelH:''}${calcH}${sigH}`;
 }
 
 
 // ── SAVED (with search/sort) ──
+function renderSavedPadsList(){
+  var pads=S.pads||[];
+  var h='<div class="card"><div class="st" style="margin-bottom:12px">Scratchpads</div>';
+  h+='<button class="btn btn-primary" style="margin-bottom:14px" onclick="window.newPad()">+ New Scratchpad</button>';
+  if(!pads.length){
+    h+='<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center">No saved scratchpads yet</div>';
+  } else {
+    h+='<div style="display:flex;flex-direction:column;gap:8px">';
+    pads.forEach(function(p){
+      var preview=(p.content||'').slice(0,80).replace(/\n/g,' ')||'(empty)';
+      h+='<div style="background:var(--card2);border-radius:10px;padding:10px 14px;border:1px solid var(--border2);display:flex;align-items:center;gap:10px;cursor:pointer" onclick="window.openPad(\''+p.id+'\')">';
+      h+='<div style="flex:1;min-width:0">';
+      h+='<div style="font-weight:700;font-size:14px;color:var(--text1);margin-bottom:2px">'+((p.title||'Untitled').replace(/</g,'&lt;'))+'</div>';
+      h+='<div style="font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+preview.replace(/</g,'&lt;')+'</div>';
+      h+='</div>';
+      h+='<button onclick="event.stopPropagation();window.deletePad(\''+p.id+'\')" style="padding:4px 9px;font-size:12px;background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer">Delete</button>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
+function renderScratchpad(){
+  var act=S.padTabs.find(function(t){return t.id===S.activePadId;});
+  if(!act) return renderSavedPadsList();
+  var mode=act._mode||'text';
+  if(mode==='draw') setTimeout(function(){window.initPadCanvas&&window.initPadCanvas();},30);
+  var titleSafe=(act.title||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  var contentSafe=(act.content||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  var unsaved=act._dirty?'<span style="font-size:10px;color:var(--warn-text);margin-left:4px">unsaved</span>':'';
+  var colBtns=['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ffffff','#000000'].map(function(cl){
+    var active=S._padDrawColor===cl;
+    return '<button onclick="window.setPadColor(\''+cl+'\')" style="width:26px;height:26px;border-radius:50%;background:'+cl+';border:'+(active?'3px solid var(--acc)':'2px solid var(--border2)')+';cursor:pointer;flex-shrink:0"></button>';
+  }).join('');
+  var drawW=S._padDrawWidth||3;
+  var isEraser=S._padEraser||false;
+  var drawTools='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'
+    +colBtns
+    +'<div style="display:flex;align-items:center;gap:5px;margin-left:8px">'
+    +'<span style="font-size:11px;color:var(--text3)">Size</span>'
+    +'<input type="range" min="1" max="20" value="'+drawW+'" oninput="window.setPadWidth(parseInt(this.value))" style="width:70px">'
+    +'<span style="font-size:11px;color:var(--text3)">'+drawW+'px</span>'
+    +'</div>'
+    +'<button onclick="window.setPadEraser()" class="btn btn-ghost" style="font-size:11px;padding:3px 8px;'+(isEraser?'border-color:var(--acc)':'')+'">Eraser</button>'
+    +'<button onclick="window.clearPadCanvas()" class="btn btn-ghost" style="font-size:11px;padding:3px 8px">Clear drawing</button>'
+    +'</div>';
+  return '<div class="card">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">'
+    +'<input type="text" value="'+titleSafe+'" placeholder="Untitled" class="fi" style="flex:1;min-width:120px;font-size:15px;font-weight:700;border:none;background:transparent;padding:4px 0" onchange="window.updatePadTitle(this.value)">'+unsaved
+    +'<div style="display:flex;gap:4px">'
+    +'<button class="sub-tab '+(mode==='text'?'on':'')+'" onclick="window.setPadMode(\'text\')" style="font-size:12px">&#x1F4DD; Text</button>'
+    +'<button class="sub-tab '+(mode==='draw'?'on':'')+'" onclick="window.setPadMode(\'draw\')" style="font-size:12px">&#x270F; Draw</button>'
+    +'</div>'
+    +'<button class="btn btn-ghost" style="font-size:12px" onclick="window.savePad()">&#x1F4BE; Save</button>'
+    +'<button class="btn btn-ghost" style="font-size:12px" onclick="window.clearPad()">Clear</button>'
+    +'<button class="btn btn-ghost" style="font-size:12px;color:var(--err-text)" onclick="window.deletePad(\''+act.id+'\')">Delete</button>'
+    +'</div>'
+    +(mode==='text'
+      ?'<textarea id="pad-text" style="width:100%;min-height:420px;background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:14px;font-size:14px;line-height:1.7;color:var(--text1);resize:vertical;font-family:inherit;box-sizing:border-box" placeholder="Notes, phone numbers, names, bookings, weather calls..." oninput="window.padUpdateContent(this.value)">'+contentSafe+'</textarea>'
+      :drawTools+'<canvas id="pad-canvas" width="1200" height="600" style="width:100%;background:#0f172a;border-radius:10px;border:1px solid var(--border2);cursor:crosshair;touch-action:none;display:block" onmousedown="window.padPointerDown(event)" onmousemove="window.padPointerMove(event)" onmouseup="window.padPointerUp(event)" onmouseleave="window.padPointerUp(event)" ontouchstart="window.padPointerDown(event)" ontouchmove="window.padPointerMove(event);event.preventDefault()" ontouchend="window.padPointerUp(event)"></canvas>'
+    )
+    +'</div>';
+}
+
+// ── Canvas drawing ──────────────────────────────────────────────
+var _padIsDrawing=false;
+var _padCurrStroke=null;
+
+function _padCanvasXY(e){
+  var cv=document.getElementById('pad-canvas');
+  if(!cv)return{x:0,y:0};
+  var r=cv.getBoundingClientRect();
+  var scaleX=cv.width/r.width,scaleY=cv.height/r.height;
+  var src=e.touches?e.touches[0]:e;
+  return{x:(src.clientX-r.left)*scaleX,y:(src.clientY-r.top)*scaleY};
+}
+
+window.initPadCanvas=function(){
+  var cv=document.getElementById('pad-canvas');
+  if(!cv||cv._inited)return;
+  cv._inited=true;
+  var ctx=cv.getContext('2d');
+  ctx.lineCap='round';ctx.lineJoin='round';
+  var act=S.padTabs.find(function(t){return t.id===S.activePadId;});
+  if(act&&act.drawing&&act.drawing.length){
+    act.drawing.forEach(function(stroke){
+      if(!stroke.points||stroke.points.length<1)return;
+      ctx.beginPath();
+      ctx.strokeStyle=stroke.color||'#ffffff';
+      ctx.lineWidth=stroke.width||3;
+      ctx.globalCompositeOperation=stroke.eraser?'destination-out':'source-over';
+      ctx.moveTo(stroke.points[0].x,stroke.points[0].y);
+      stroke.points.forEach(function(pt){ctx.lineTo(pt.x,pt.y);});
+      ctx.stroke();
+    });
+    ctx.globalCompositeOperation='source-over';
+  }
+};
+
+window.padPointerDown=function(e){
+  _padIsDrawing=true;
+  var pt=_padCanvasXY(e);
+  _padCurrStroke={color:S._padEraser?'#000':S._padDrawColor,width:S._padDrawWidth||3,eraser:!!S._padEraser,points:[pt]};
+  var cv=document.getElementById('pad-canvas');if(!cv)return;
+  var ctx=cv.getContext('2d');
+  ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.strokeStyle=S._padEraser?'rgba(0,0,0,1)':S._padDrawColor;
+  ctx.lineWidth=S._padDrawWidth||3;
+  ctx.globalCompositeOperation=S._padEraser?'destination-out':'source-over';
+  ctx.beginPath();ctx.moveTo(pt.x,pt.y);
+};
+
+window.padPointerMove=function(e){
+  if(!_padIsDrawing||!_padCurrStroke)return;
+  var pt=_padCanvasXY(e);
+  _padCurrStroke.points.push(pt);
+  var cv=document.getElementById('pad-canvas');if(!cv)return;
+  var ctx=cv.getContext('2d');
+  ctx.lineTo(pt.x,pt.y);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pt.x,pt.y);
+};
+
+window.padPointerUp=function(e){
+  if(!_padIsDrawing||!_padCurrStroke)return;
+  _padIsDrawing=false;
+  var ctx=document.getElementById('pad-canvas').getContext('2d');
+  ctx.globalCompositeOperation='source-over';
+  var act=S.padTabs.find(function(t){return t.id===S.activePadId;});
+  if(act){
+    if(!act.drawing)act.drawing=[];
+    act.drawing.push(_padCurrStroke);
+    act._dirty=true;
+    if(typeof window._broadcastPadStroke==='function')window._broadcastPadStroke(act.id,_padCurrStroke);
+  }
+  _padCurrStroke=null;
+};
+
+window.clearPadCanvas=function(){
+  var act=S.padTabs.find(function(t){return t.id===S.activePadId;});
+  if(!act)return;
+  act.drawing=[];act._dirty=true;
+  var cv=document.getElementById('pad-canvas');
+  if(cv){var ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);}
+};
+
+window.setPadColor=function(c){S._padDrawColor=c;S._padEraser=false;render();};
+window.setPadWidth=function(w){S._padDrawWidth=w;render();};
+window.setPadEraser=function(){S._padEraser=!S._padEraser;render();};
+window.setPadMode=function(m){
+  var act=S.padTabs.find(function(t){return t.id===S.activePadId;});
+  if(act){act._mode=m;render();}
+};
+// NZ Aerodrome database (AIP NZ sourced)
+const NZ_AERODROMES=[
+  {icao:'NZKT',name:'Kaitaia',lat:-35.0700,lon:173.2853,elev:270},
+  {icao:'NZDA',name:'Dargaville',lat:-35.9397,lon:173.8936,elev:6},
+  {icao:'NZKO',name:'Kaikohe',lat:-35.4511,lon:173.8172,elev:573},
+  {icao:'NZKK',name:'Kerikeri',lat:-35.2628,lon:173.9119,elev:492},
+  {icao:'NZWR',name:'Whangarei',lat:-35.7683,lon:174.3650,elev:133},
+  {icao:'NZRW',name:'Ruawai',lat:-36.0958,lon:173.9753,elev:6},
+  {icao:'NZPI',name:'Parakai',lat:-36.6517,lon:174.4333,elev:8},
+  {icao:'NZNE',name:'North Shore (Dairy Flat)',lat:-36.6567,lon:174.6553,elev:212},
+  {icao:'NZKF',name:'Kaipara Flats',lat:-36.4064,lon:174.5872,elev:90},
+  {icao:'NZWP',name:'Whenuapai (RNZAF)',lat:-36.7875,lon:174.6300,elev:103},
+  {icao:'NZAA',name:'Auckland International',lat:-37.0081,lon:174.7917,elev:23},
+  {icao:'NZAR',name:'Ardmore',lat:-37.0297,lon:174.9733,elev:111},
+  {icao:'NZKE',name:'Waiheke Island',lat:-36.8083,lon:175.0853,elev:445},
+  {icao:'NZME',name:'Mercer',lat:-37.2592,lon:175.1147,elev:30},
+  {icao:'NZCX',name:'Coromandel',lat:-36.7917,lon:175.5086,elev:13},
+  {icao:'NZWT',name:'Whitianga',lat:-36.8317,lon:175.6786,elev:15},
+  {icao:'NZUN',name:'Pauanui',lat:-37.0217,lon:175.8636,elev:19},
+  {icao:'NZTH',name:'Thames',lat:-37.1567,lon:175.5503,elev:11},
+  {icao:'NZWV',name:'Waihi Beach',lat:-37.4300,lon:175.9519,elev:4},
+  {icao:'NZGB',name:'Great Barrier Island (Claris)',lat:-36.2417,lon:175.4728,elev:20},
+  {icao:'NZOX',name:'Omarama',lat:-44.5822,lon:169.9858,elev:1407},
+  {icao:'NZTG',name:'Tauranga',lat:-37.6719,lon:176.1961,elev:13},
+  {icao:'NZWK',name:'Whakatane',lat:-37.9206,lon:176.9142,elev:20},
+  {icao:'NZRO',name:'Rotorua',lat:-38.1092,lon:176.3172,elev:935},
+  {icao:'NZOP',name:'Opotiki',lat:-38.0067,lon:177.3133,elev:39},
+  {icao:'NZRA',name:'Raglan',lat:-37.8042,lon:174.8608,elev:39},
+  {icao:'NZTE',name:'Te Kuiti',lat:-38.3317,lon:175.1508,elev:800},
+  {icao:'NZHN',name:'Hamilton',lat:-37.8667,lon:175.3322,elev:172},
+  {icao:'NZMA',name:'Matamata (Moto Moto)',lat:-37.7233,lon:175.7431,elev:150},
+  {icao:'NZAP',name:'Taupo',lat:-38.7397,lon:176.0836,elev:1335},
+  {icao:'NZTT',name:'Tirau',lat:-37.9750,lon:175.7569,elev:266},
+  {icao:'NZTM',name:'Tokoroa',lat:-38.2333,lon:175.8764,elev:950},
+  {icao:'NZTO',name:'Taumarunui',lat:-38.8381,lon:175.1578,elev:735},
+  {icao:'NZTN',name:'Turangi',lat:-38.9831,lon:175.8100,elev:1160},
+  {icao:'NZGA',name:'Galatea',lat:-38.3908,lon:176.7292,elev:581},
+  {icao:'NZGS',name:'Gisborne',lat:-38.6633,lon:177.9778,elev:15},
+  {icao:'NZRR',name:'Ruatoria',lat:-37.8856,lon:178.3247,elev:50},
+  {icao:'NZWO',name:'Wairoa',lat:-39.0069,lon:177.4072,elev:14},
+  {icao:'NZNR',name:'Napier (Hawke\'s Bay)',lat:-39.4658,lon:176.8700,elev:6},
+  {icao:'NZHS',name:'Hastings',lat:-39.6467,lon:176.7669,elev:72},
+  {icao:'NZYP',name:'Waipukurau',lat:-39.9994,lon:176.5356,elev:659},
+  {icao:'NZNP',name:'New Plymouth',lat:-39.0086,lon:174.1792,elev:97},
+  {icao:'NZHA',name:'Hawera',lat:-39.5919,lon:174.2742,elev:170},
+  {icao:'NZSD',name:'Stratford',lat:-39.3269,lon:174.3097,elev:830},
+  {icao:'NZWU',name:'Wanganui',lat:-39.9622,lon:175.0250,elev:27},
+  {icao:'NZFI',name:'Fielding',lat:-40.2158,lon:175.5689,elev:61},
+  {icao:'NZPM',name:'Palmerston North',lat:-40.3206,lon:175.6169,elev:151},
+  {icao:'NZFP',name:'Feilding Aerodrome',lat:-40.2333,lon:175.5667,elev:61},
+  {icao:'NZOH',name:'Ohakea (RNZAF)',lat:-40.2061,lon:175.3881,elev:164},
+  {icao:'NZVR',name:'Dannevirke',lat:-40.2117,lon:176.0886,elev:518},
+  {icao:'NZRU',name:'Waiouru (Military)',lat:-39.4453,lon:175.6581,elev:2682},
+  {icao:'NZDV',name:'Masterton (Hood)',lat:-40.9733,lon:175.6339,elev:364},
+  {icao:'NZMS',name:'Martinborough',lat:-41.2028,lon:175.4583,elev:328},
+  {icao:'NZMT',name:'Martinborough (Awamoa)',lat:-41.1833,lon:175.4500,elev:300},
+  {icao:'NZPP',name:'Paraparaumu',lat:-40.9047,lon:174.9892,elev:22},
+  {icao:'NZWN',name:'Wellington International',lat:-41.3272,lon:174.8050,elev:41},
+  {icao:'NZWB',name:'Marlborough (Blenheim)',lat:-41.5183,lon:173.8700,elev:109},
+  {icao:'NZOM',name:'Omaka (Blenheim)',lat:-41.4975,lon:173.8628,elev:105},
+  {icao:'NZPN',name:'Picton (Koromiko)',lat:-41.3467,lon:173.9561,elev:161},
+  {icao:'NZNS',name:'Nelson',lat:-41.2983,lon:173.2211,elev:17},
+  {icao:'NZMK',name:'Motueka',lat:-41.1233,lon:172.9900,elev:39},
+  {icao:'NZTK',name:'Takaka (Golden Bay)',lat:-40.8133,lon:172.7758,elev:102},
+  {icao:'NZKM',name:'Karamea',lat:-41.2333,lon:172.1028,elev:30},
+  {icao:'NZMR',name:'Murchison',lat:-41.6103,lon:172.3361,elev:748},
+  {icao:'NZKI',name:'Kaikoura',lat:-42.4250,lon:173.6050,elev:20},
+  {icao:'NZHM',name:'Hanmer Springs',lat:-42.5194,lon:172.8317,elev:1250},
+  {icao:'NZWS',name:'Westport',lat:-41.7381,lon:171.5808,elev:13},
+  {icao:'NZGM',name:'Greymouth',lat:-42.4617,lon:171.1900,elev:5},
+  {icao:'NZHK',name:'Hokitika',lat:-42.7136,lon:170.9850,elev:146},
+  {icao:'NZFO',name:'Franz Josef',lat:-43.3633,lon:170.1342,elev:240},
+  {icao:'NZFJ',name:'Fox Glacier (Weheka)',lat:-43.4622,lon:170.0189,elev:285},
+  {icao:'NZHT',name:'Haast',lat:-43.8653,lon:169.0417,elev:13},
+  {icao:'NZCH',name:'Christchurch International',lat:-43.4894,lon:172.5322,elev:123},
+  {icao:'NZRT',name:'Rangiora',lat:-43.2983,lon:172.5503,elev:275},
+  {icao:'NZWL',name:'Hokitika (Westland)',lat:-42.7136,lon:170.9850,elev:146},
+  {icao:'NZFF',name:'Ashburton',lat:-43.9033,lon:171.7961,elev:302},
+  {icao:'NZAS',name:'Ashburton',lat:-43.9033,lon:171.7978,elev:302},
+  {icao:'NZRI',name:'Rangiora (Loburn)',lat:-43.2917,lon:172.5558,elev:275},
+  {icao:'NZPH',name:'Palmerston (Otago)',lat:-45.4833,lon:170.7167,elev:830},
+  {icao:'NZTU',name:'Timaru',lat:-44.3028,lon:171.2253,elev:89},
+  {icao:'NZOU',name:'Oamaru',lat:-44.9700,lon:171.0819,elev:99},
+  {icao:'NZMC',name:'Mount Cook (Pukaki)',lat:-43.7650,lon:170.1344,elev:2493},
+  {icao:'NZGT',name:'Gore',lat:-46.2167,lon:168.8222,elev:408},
+  {icao:'NZTL',name:'Lake Tekapo',lat:-44.0050,lon:170.4447,elev:2490},
+  {icao:'NZUK',name:'Lake Tekapo (Benmore)',lat:-44.2333,lon:170.2333,elev:1400},
+  {icao:'NZOA',name:'Omarama',lat:-44.5822,lon:169.9858,elev:1407},
+  {icao:'NZWF',name:'Wanaka',lat:-44.7222,lon:169.2458,elev:1142},
+  {icao:'NZMW',name:'Makarora',lat:-44.2183,lon:169.2408,elev:1083},
+  {icao:'NZQN',name:'Queenstown',lat:-45.0211,lon:168.7392,elev:1171},
+  {icao:'NZGY',name:'Glenorchy',lat:-44.8667,lon:168.3833,elev:1220},
+  {icao:'NZDN',name:'Dunedin',lat:-45.9281,lon:170.1983,elev:4},
+  {icao:'NZTI',name:'Taieri (Mosgiel)',lat:-45.9275,lon:170.1983,elev:4},
+  {icao:'NZLX',name:'Alexandra',lat:-45.2117,lon:169.3731,elev:758},
+  {icao:'NZCS',name:'Cromwell',lat:-45.0603,lon:169.1958,elev:890},
+  {icao:'NZRX',name:'Roxburgh',lat:-45.5417,lon:169.3083,elev:482},
+  {icao:'NZMO',name:'Motueka (S)',lat:-41.1350,lon:172.9739,elev:39},
+  {icao:'NZMF',name:'Milford Sound',lat:-44.6733,lon:167.9233,elev:10},
+  {icao:'NZNV',name:'Invercargill',lat:-46.4124,lon:168.3131,elev:5},
+  {icao:'NZGC',name:'Gore',lat:-46.2167,lon:168.8222,elev:408},
+  {icao:'NZVL',name:'Mandeville (Gore)',lat:-46.1608,lon:168.8317,elev:397},
+  {icao:'NZCB',name:'Collingwood',lat:-40.6733,lon:172.6708,elev:46},
+  {icao:'NZRC',name:'Ryan\'s Creek (Stewart Is)',lat:-46.8997,lon:168.1006,elev:52},
+  {icao:'NZCI',name:'Chatham Islands',lat:-43.8100,lon:-176.4572,elev:43}
+];
+
+// ── Aerodrome admin page ─────────────────────────────────────────────────
+var _aerodromesMap=null;
+var _aerodromesMarker=null;
+var _aerodromesCustom=null; // loaded from lsGet
+
+function _getCustomAerodromes(){
+  if(!_aerodromesCustom){
+    try{_aerodromesCustom=JSON.parse(lsGet('custom_aerodromes')||'[]');}catch(e){_aerodromesCustom=[];}
+  }
+  return _aerodromesCustom;
+}
+
+function renderAerodromes(){
+  var custom=_getCustomAerodromes();
+  var all=NZ_AERODROMES.concat(custom);
+  var srch=(S._aeroSearch||'').toLowerCase();
+  var filt=srch?all.filter(function(a){return a.icao.toLowerCase().includes(srch)||a.name.toLowerCase().includes(srch);}):all;
+  var sel=S._aeroSel||null;
+  var selEntry=sel?all.find(function(a){return a.icao===sel;}):null;
+  setTimeout(function(){
+    if(!selEntry){_aerodromesMap&&_aerodromesMap.remove&&(_aerodromesMap.remove(),_aerodromesMap=null);return;}
+    var mapEl=document.getElementById('aero-map');
+    if(!mapEl)return;
+    if(_aerodromesMap){
+      _aerodromesMap.setView([selEntry.lat,selEntry.lon],12);
+      if(_aerodromesMarker)_aerodromesMarker.setLatLng([selEntry.lat,selEntry.lon]).bindPopup(selEntry.icao+' &mdash; '+selEntry.name).openPopup();
+    } else {
+      _aerodromesMap=L.map('aero-map').setView([selEntry.lat,selEntry.lon],12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors',maxZoom:18}).addTo(_aerodromesMap);
+      _aerodromesMarker=L.marker([selEntry.lat,selEntry.lon]).addTo(_aerodromesMap).bindPopup(selEntry.icao+' &mdash; '+selEntry.name).openPopup();
+    }
+  },50);
+
+  var rows=filt.map(function(a){
+    var isCustom=custom.some(function(c){return c.icao===a.icao;});
+    var isSelected=S._aeroSel===a.icao;
+    return '<tr onclick="window.aeroSelect(\''+a.icao+'\')" style="cursor:pointer;'+(isSelected?'background:var(--card2)':'')+'">'
+      +'<td style="padding:6px 10px;font-weight:700;color:var(--acc);font-size:13px">'+a.icao+'</td>'
+      +'<td style="padding:6px 10px;font-size:13px;color:var(--text1)">'+a.name+(isCustom?' <span style="font-size:9px;color:var(--ok-text);border:1px solid var(--ok-text);border-radius:4px;padding:1px 4px">custom</span>':'')+'</td>'
+      +'<td style="padding:6px 10px;font-size:12px;color:var(--text3)">'+a.lat.toFixed(4)+'</td>'
+      +'<td style="padding:6px 10px;font-size:12px;color:var(--text3)">'+a.lon.toFixed(4)+'</td>'
+      +'<td style="padding:6px 10px;font-size:12px;color:var(--text3)">'+a.elev+'ft</td>'
+      +(isCustom?'<td style="padding:6px 10px"><button onclick="event.stopPropagation();window.aeroDeleteCustom(\''+a.icao+'\')" style="font-size:11px;padding:2px 7px;background:transparent;border:1px solid var(--border2);border-radius:5px;color:var(--err-text);cursor:pointer">Remove</button></td>':'<td></td>')
+      +'</tr>';
+  }).join('');
+
+  var h='<div class="card" style="margin-bottom:14px">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">';
+  h+='<div class="st" style="margin:0">Aerodromes ('+all.length+' total &mdash; '+NZ_AERODROMES.length+' AIP NZ + '+custom.length+' custom)</div>';
+  h+='<input class="fi" type="text" placeholder="Search ICAO or name..." value="'+(S._aeroSearch||'')+'" oninput="window.aeroSearch(this.value)" style="width:220px">';
+  h+='</div>';
+  h+='<p style="font-size:12px;color:var(--text3);margin-bottom:12px">Review the list below. Click a row to see it on the map. Once verified, these aerodromes will be used in the Charter Calculator. Add any private strips using the form below.</p>';
+  h+='<div style="overflow-x:auto;border-radius:8px;border:1px solid var(--border2)">';
+  h+='<table style="width:100%;border-collapse:collapse"><thead>';
+  h+='<tr style="background:var(--card2)"><th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3)">ICAO</th><th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3)">Name</th><th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3)">Lat</th><th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3)">Lon</th><th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3)">Elev</th><th></th></tr>';
+  h+='</thead><tbody>'+rows+'</tbody></table></div>';
+  h+='</div>';
+
+  // Map
+  if(selEntry){
+    h+='<div class="card" style="margin-bottom:14px">';
+    h+='<div class="st" style="margin-bottom:8px">'+selEntry.icao+' &mdash; '+selEntry.name+'</div>';
+    h+='<div id="aero-map" style="height:340px;border-radius:10px;border:1px solid var(--border);overflow:hidden"></div>';
+    h+='</div>';
+  }
+
+  // Add custom aerodrome form
+  h+='<div class="card"><div class="st" style="margin-bottom:12px">Add Custom Aerodrome / Strip</div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px">';
+  h+='<div><label>ICAO Code</label><input class="fi" id="cae-icao" type="text" placeholder="NZXX" maxlength="4" style="text-transform:uppercase"></div>';
+  h+='<div><label>Name</label><input class="fi" id="cae-name" type="text" placeholder="My Airstrip"></div>';
+  h+='<div><label>Latitude</label><input class="fi" id="cae-lat" type="number" step="0.0001" placeholder="-41.2345"></div>';
+  h+='<div><label>Longitude</label><input class="fi" id="cae-lon" type="number" step="0.0001" placeholder="174.5678"></div>';
+  h+='<div><label>Elevation (ft)</label><input class="fi" id="cae-elev" type="number" placeholder="100"></div>';
+  h+='</div>';
+  h+='<button class="btn btn-primary" onclick="window.aeroAddCustom()">Add Aerodrome</button>';
+  h+='</div>';
+  return h;
+}
+
+window.aeroSelect=function(icao){S._aeroSel=icao;render();};
+window.aeroSearch=function(v){S._aeroSearch=v;render();};
+window.aeroAddCustom=function(){
+  var icao=(document.getElementById('cae-icao').value||'').toUpperCase().trim();
+  var name=(document.getElementById('cae-name').value||'').trim();
+  var lat=parseFloat(document.getElementById('cae-lat').value);
+  var lon=parseFloat(document.getElementById('cae-lon').value);
+  var elev=parseInt(document.getElementById('cae-elev').value)||0;
+  if(!icao||!name||isNaN(lat)||isNaN(lon)){toast('Fill in ICAO, name, lat and lon','warn');return;}
+  var custom=_getCustomAerodromes();
+  var existIdx=custom.findIndex(function(c){return c.icao===icao;});
+  if(existIdx>=0)custom.splice(existIdx,1);
+  custom.push({icao:icao,name:name,lat:lat,lon:lon,elev:elev,custom:true});
+  _aerodromesCustom=custom;
+  lsSet('custom_aerodromes',JSON.stringify(custom));
+  toast('Added '+icao+' ('+name+')','ok');
+  render();
+};
+window.aeroDeleteCustom=function(icao){
+  var custom=_getCustomAerodromes().filter(function(c){return c.icao!==icao;});
+  _aerodromesCustom=custom;
+  lsSet('custom_aerodromes',JSON.stringify(custom));
+  if(S._aeroSel===icao)S._aeroSel=null;
+  render();
+};
 function renderSaved(){
   const tab=S.savedTab||'unsigned';
   const search=(S.savedSearch||'').toLowerCase();
@@ -3028,17 +3494,26 @@ function renderSaved(){
   // ── Unsigned tab ──
   if(tab==='unsigned'){
     const unsigned=S.saved.filter(s=>s.status==='unsigned');
+    const _unsignedSelCount=Object.keys(S.savedSel).filter(id=>unsigned.find(s=>s.id===id)).length;
+    const _unsignedBulkBar=_unsignedSelCount>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_unsignedSelCount} selected</span>
+      <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
+      <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Delete ${_unsignedSelCount}</button>
+    </div>`:'';
     return tabBar+`
-    <div style="margin-bottom:10px;padding:10px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600">
-      🖊 ${unsigned.length} loadsheet${unsigned.length!==1?'s':''} awaiting pilot signature
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:10px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px">
+      <span style="color:#93c5fd;font-size:13px;font-weight:600;flex:1">🖊 ${unsigned.length} loadsheet${unsigned.length!==1?'s':''} awaiting pilot signature</span>
+      ${unsigned.length?`<button class="btn btn-ghost" style="font-size:12px" onclick="window.selectAllSaved(${JSON.stringify(unsigned.map(s=>s.id))})">${_unsignedSelCount===unsigned.length?'Deselect All':'Select All'}</button>`:''}
     </div>
+    ${_unsignedBulkBar}
     ${!unsigned.length
       ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">✓ All loadsheets signed</div>`
       :unsigned.map(s=>{
         const col=AC_COL[s.form.ac]||'#64748b';
         const _paxCnt=Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length;
         const _savedStr=s.savedAt?(function(d){var x=new Date(d);var h=x.getHours();var mn=x.getMinutes();return x.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x.getMonth()]+' '+(h<10?'0':'')+h+':'+(mn<10?'0':'')+mn;})(s.savedAt):'';
-        return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid #1e3a5f;margin-bottom:8px;background:var(--card);border-left:3px solid ${col}">
+        return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid ${S.savedSel[s.id]?'#3b82f6':'#1e3a5f'};margin-bottom:8px;background:${S.savedSel[s.id]?'rgba(59,130,246,.08)':'var(--card)'};border-left:3px solid ${col}">
+          <input type="checkbox" ${S.savedSel[s.id]?'checked':''} onchange="window.toggleSavedSel('${s.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
               <span style="font-weight:700;font-size:14px">${s.form.ac||'?'}</span>
@@ -3466,12 +3941,12 @@ function renderAdmin(){
     return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
   }
   const ad=S.admin;
-  const sections=['people','perms','gdrive',...(S.user?.superAdmin?['audit']:[])];
-  const sectionLabels={people:'People',perms:'Permissions',gdrive:'Google Drive PDF',audit:'Audit Log'};
+  const sections=['people','perms','gdrive','aerodromes',...(S.user?.superAdmin?['audit']:[])];
+  const sectionLabels={people:'People',perms:'Permissions',gdrive:'Google Drive PDF',aerodromes:'Aerodromes',audit:'Audit Log'};
   const tabBar=`<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
     ${sections.map(s=>`<button class="sub-tab ${ad.section===s?'on':''}" onclick="S.admin.section='${s}';render()">${sectionLabels[s]}</button>`).join('')}
   </div>`;
-  return tabBar+{people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,audit:renderAdminAudit}[ad.section]?.()||renderAdminPeople();
+  return tabBar+{people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,audit:renderAdminAudit}[ad.section]?.()||renderAdminPeople();
 }
 
 function renderAdminGDrive(){
@@ -3830,11 +4305,16 @@ window.switchOpsTab=function(tabId){
   if(tabId==='saved'){
     S.tab=tabId;
     reloadTable('ts_loadsheets').then(function(){render();});
-    window.scrollTo(0,0);
-    return;
-  } else {
-    S.tab=tabId;
+    window.scrollTo(0,0);return;
   }
+  if(tabId==='scratchpad'){
+    S.tab=tabId;
+    if(S.pads.length===0&&S.padTabs.length===0){
+      reloadTable('ts_scratchpads').then(function(){render();});
+    } else {render();}
+    window.scrollTo(0,0);return;
+  }
+  S.tab=tabId;
   window.scrollTo(0,0);
   render();
 };
@@ -3923,8 +4403,23 @@ window.setTab=function(t){
 // ── Manifest handlers ──
 window.toggleAcSetup=id=>{
   const i=S.dispatch.acSetup.findIndex(s=>s.acId===id);
-  if(i>=0)S.dispatch.acSetup.splice(i,1);
-  else{const a=S.aircraft[id];S.dispatch.acSetup.push({acId:id,pic:'',coPilot:'',fuelInput:a?Math.round(fromKg(a.fuelKg,id)):null,_ts:Date.now()});}
+  if(i>=0){
+    // Removing aircraft: delete empty pax rows (up to seat count)
+    const seatCount=paxSeatIdxs(id).length;
+    var removed=0;
+    S.dispatch.pax=S.dispatch.pax.filter(function(p){
+      if(removed<seatCount&&!p.name&&!p.infantName&&(!p.weight||p.weight===0)&&!p.infant){removed++;return false;}
+      return true;
+    });
+    S.dispatch.acSetup.splice(i,1);
+  } else {
+    const a=S.aircraft[id];
+    S.dispatch.acSetup.push({acId:id,pic:'',coPilot:'',fuelInput:a?Math.round(fromKg(a.fuelKg,id)):null,_ts:Date.now()});
+    // Add empty pax rows equal to pax seat count
+    const seatCount=paxSeatIdxs(id).length;
+    const now=Date.now();
+    for(var n=0;n<seatCount;n++){S.dispatch.pax.push({id:'p_'+now+'_'+n,name:'',weight:0,bag:0,group:'',pinAc:null,_ts:now,infant:false,type:'adult'});}
+  }
   autoSaveDispatch();render();
 };
 window.setAcField=(id,field,val)=>{const s=S.dispatch.acSetup.find(x=>x.acId===id);if(s){s[field]=val;s._ts=Date.now();if(field==='coPilot'){const cp=anyCrewList().find(x=>x.n===val);s._cpWeight=cp?cp.w:0;}autoSaveDispatch();safeRender();}};
@@ -4158,6 +4653,7 @@ window.lsSeatDragStart=function(idx,e){
 window.lsDropOnSeat=function(toIdx,e){
   e.preventDefault();
   e.currentTarget.style.outline='';
+{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
   const f=S.form;
   if(S._dragUnalloc!=null){
     // Drop from unallocated onto seat
@@ -4184,6 +4680,7 @@ window.lsDropOnSeat=function(toIdx,e){
 window.lsDropOnUnalloc=function(e){
   e.preventDefault();
   e.currentTarget.style.outline='';
+{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
   const f=S.form;
   if(S._dragSeat!=null){
     const nm=f.names[S._dragSeat]||'';
@@ -4200,6 +4697,7 @@ window.startDragForm=(ev,idx,acId)=>{S.dragState={fromFormIdx:idx,fromFormAc:acI
 window.dropFormSeat=(ev,toIdx,acId)=>{
   ev.preventDefault();
   if(S._dragUnalloc!=null){window.lsDropOnSeat(toIdx,ev);return;}
+  {var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
   if(!S.dragState?.fromFormIdx&&S.dragState?.fromFormIdx!==0)return;
   const from=S.dragState.fromFormIdx;
   // Swap names, weights, bags, infant names
@@ -4282,7 +4780,7 @@ window.viewSaved=function(id){
   var s=S.saved.find(function(x){return x.id===id;});
   if(!s)return;
   var acFull=s.form&&s.form.ac?s.form.ac:'ZK-SLA';
-  S.lsTabs.push({id:s.id,acId:acFull,form:dc(s.form),status:s.status||'unsigned',savedAt:s.savedAt});
+  S.lsTabs.push({id:s.id,acId:acFull,form:dc(s.form),status:s.status||'unsigned',savedAt:s.savedAt,isNew:false,originalForm:dc(s.form)});
   window.switchLsTab(s.id);
 };
 window.reopenSaved=async function(id){
@@ -4376,9 +4874,14 @@ function generateLoadsheet(acId){
   const _lsAcCode=acId.replace('ZK-','');
   const _newTabId='ls_'+_lsAcCode+'_'+Date.now();
   S.lsForms[_lsAcCode]=form;S.lsAc=_lsAcCode;S.form=form;S.editId=_newTabId;S.formDirty=false;
-  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:new Date().toISOString()});
+  // Populate _unallocated: pax pinned to this aircraft but not given a seat
+  {const _spIds=new Set(Object.values(sm));const _unass=(d.pax||[]).filter(function(p){return p.pinAc===acId&&!_spIds.has(p.id)&&!p.infant&&p.name;});if(_unass.length){form._unallocated=_unass.map(function(p){return{name:p.name,weight:p.weight,bag:p.bag||0,infant:p.infantName||null};});}}
+  // Fuel/burnOff defaults by aircraft type
+  if(a.layout==='ga8'&&!form.burnOff){form.burnOff='35';}
+  if(a.layout==='c208'){form.fuel=String(Math.round(800*0.453592));}
+  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:new Date().toISOString(),isNew:true});
   S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
-  try{sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:new Date().toISOString(),status:'unsigned'}]);}catch(e){}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:new Date().toISOString()}},ref:String(_rtRef)}));}
   render();
 };
 
@@ -4401,6 +4904,11 @@ window.lsAc=v=>{
     const excessIdxs=new Set();
     Object.keys(kN).forEach(i=>{if(parseInt(i)>=maxIdx&&kN[i])excessIdxs.add(i);});
     Object.keys(kS).forEach(i=>{if(parseInt(i)>=maxIdx&&parseFloat(kS[i])>0)excessIdxs.add(i);});
+    // Move excess passengers to _unallocated instead of deleting
+    excessIdxs.forEach(function(i){
+      const nm=kN[i]||'';const wt=kS[i]||'';const bg=kB[i]||'';const inf=(kI||{})[i]||'';
+      if(nm||wt){if(!S.form._unallocated)S.form._unallocated=[];S.form._unallocated.push({name:nm,weight:wt,bag:bg,infant:inf||null});}
+    });
     [S.form.seats,S.form.bags,S.form.names,S.form.infantNames].forEach(obj=>{
       Object.keys(obj).forEach(i=>{if(parseInt(i)>=maxIdx)delete obj[i];});
     });
@@ -4474,10 +4982,19 @@ window.lsTrimExcess=()=>{
   render();
 };
 window.lsDelPax=idx=>{
-  const nm=S.form.names[idx]||'';
-  if(!confirm('Remove passenger'+(nm?' "'+nm+'"':' from seat '+idx)+'?'))return;
-  delete S.form.names[idx];delete S.form.seats[idx];delete S.form.bags[idx];delete S.form.infantNames[idx];
-  render();
+  {var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
+  delete S.form.names[idx];delete S.form.seats[idx];delete S.form.bags[idx];
+  if(S.form.infantNames)delete S.form.infantNames[idx];
+  autoSaveLS();render();
+};
+window.lsUndo=function(){
+  var _us=S._lsFormUndoStack;
+  if(!_us||!_us.length)return;
+  S.form=_us.pop();
+  S._lsFormUndo=_us.length?_us[_us.length-1]:null;
+  var tab=S.lsTabs.find(function(t){return t.id===S.editId;});
+  if(tab)tab.form=S.form;
+  autoSaveLS();render();
 };
 window.lsPIC=v=>{S.form.pic=v;const c=anyCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[0]=String(c.w);S.form.names[0]=v;}else{S.form.names[0]=v;}autoSaveLS();render();};
 window.lsCoPilot=v=>{
@@ -4547,7 +5064,16 @@ window.saveUnsigned=async()=>{
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned'}]);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog(isEdit?'loadsheet_edit':'loadsheet_save',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
-  toast('Loadsheet saved.','ok');
+  toast('Draft saved.','ok');
+  // Close the tab
+  var _tid=id;var _idx=S.lsTabs.findIndex(function(t){return t.id===_tid;});
+  if(_idx!==-1){
+    if(S.activeTabId===_tid){
+      if(S.lsTabs.length>1){var _nx=S.lsTabs[_idx>0?_idx-1:1];S.activeTabId=_nx.id;S.form=_nx.form;S.lsAc=_nx.acId.replace('ZK-','');S.editId=_nx.id;}
+      else{S.activeTabId=null;S.editId=null;S._newLsTab=false;S.tab='saved';}
+    }
+    S.lsTabs.splice(_idx,1);
+  }
   render();
 };
 window.saveDraft=window.saveUnsigned; // alias for desk staff button
@@ -4564,8 +5090,17 @@ window.handleSubmit=async()=>{
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
-  S.editId=null;S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.formDirty=false;S.tab='saved';
-  toast('Loadsheet submitted and synced.','ok');
+  toast('Loadsheet submitted.','ok');
+  // Close the tab
+  var _tid=id;S.editId=null;S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.formDirty=false;
+  var _idx=S.lsTabs.findIndex(function(t){return t.id===_tid;});
+  if(_idx!==-1){
+    if(S.activeTabId===_tid){
+      if(S.lsTabs.length>1){var _nx=S.lsTabs[_idx>0?_idx-1:1];S.activeTabId=_nx.id;S.form=_nx.form;S.lsAc=_nx.acId.replace('ZK-','');S.editId=_nx.id;}
+      else{S.activeTabId=null;S._newLsTab=false;S.tab='saved';}
+    }
+    S.lsTabs.splice(_idx,1);
+  } else {S.tab='saved';}
   render();
 };
 window.newSheet=function(){S._newLsTab=true;S.activeTabId=null;S.tab='manifest';render();};
@@ -4579,6 +5114,20 @@ window.switchLsTab=function(id){
 window.closeLsTab=function(id){
   var idx=S.lsTabs.findIndex(function(t){return t.id===id;});
   if(idx===-1)return;
+  var tab=S.lsTabs[idx];
+  if(tab.isNew){
+    // Never saved to DB -- just remove from tabs
+    S._lsFormUndo=null;
+  } else {
+    // Revert to original saved version in DB
+    if(tab.originalForm){
+      try{sbU('ts_loadsheets',[{id:id,form:tab.originalForm,saved_at:tab.savedAt||new Date().toISOString(),status:tab.status||'unsigned'}]);}catch(e){}
+      S.saved=S.saved.map(function(s){return s.id===id?Object.assign({},s,{form:tab.originalForm}):s;});
+      lsSet('ts_loadsheets_cache',S.saved);
+    }
+  }
+  // Broadcast close to all users
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_close',payload:{id:id}},ref:String(_rtRef)}));}
   if(S.activeTabId===id){
     if(S.lsTabs.length>1){var next=S.lsTabs[idx>0?idx-1:1];S.activeTabId=next.id;S.form=next.form;S.lsAc=next.acId.replace('ZK-','');S.editId=next.id;}
     else{S.activeTabId=null;S.editId=null;S._newLsTab=false;S.tab='manifest';}
@@ -4586,6 +5135,21 @@ window.closeLsTab=function(id){
   S.lsTabs.splice(idx,1);render();
 };
 window.newLsTab=function(){S._newLsTab=true;S.activeTabId=null;S.tab='manifest';render();};
+window.toggleLsManage=function(){S._lsManageMode=!S._lsManageMode;S._lsTabSel={};render();};
+window.toggleLsTabSel=function(id){S._lsTabSel[id]=!S._lsTabSel[id];render();};
+window.deleteSelectedLsTabs=function(){
+  var ids=Object.keys(S._lsTabSel).filter(function(id){return S._lsTabSel[id];});
+  if(!ids.length)return;
+  ids.forEach(function(id){
+    sbDel('ts_loadsheets',id).catch(function(){});
+    S.saved=S.saved.filter(function(s){return s.id!==id;});
+    if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_close',payload:{id:id}},ref:String(_rtRef)}));}
+  });
+  lsSet('ts_loadsheets_cache',S.saved);
+  S.lsTabs=S.lsTabs.filter(function(t){return!S._lsTabSel[t.id];});
+  if(S.activeTabId&&S._lsTabSel[S.activeTabId]){S.activeTabId=null;S.editId=null;S.tab='manifest';}
+  S._lsManageMode=false;S._lsTabSel={};render();
+};
 window.createLsTab=function(acId){S._newLsTab=false;generateLoadsheet(acId);};
 window.changeLsAircraft=function(targetAcFull){
   var tab=S.lsTabs.find(function(t){return t.id===S.activeTabId;});
@@ -4607,6 +5171,74 @@ window.editSaved=function(id){
 window.delSaved=async id=>{if(!confirm('Delete this loadsheet?'))return;S.saved=S.saved.filter(s=>s.id!==id);lsSet('ts_loadsheets_cache',S.saved);render();await sbDel('ts_loadsheets',id);};
 
 // ── Charter ──
+// -- Pad (Scratchpad) management --
+var _padDebounce=null;
+window.newPad=function(){
+  var id='pad_'+Date.now();
+  var pad={id:id,title:'Untitled',content:'',drawing:[],savedAt:new Date().toISOString(),_mode:'text',_dirty:true};
+  S.padTabs.push(pad);S.activePadId=id;
+  S.tab='scratchpad';S.activeTabId=null;S._newLsTab=false;
+  render();
+};
+window.openPad=function(id){
+  var ex=S.padTabs.find(function(t){return t.id===id;});
+  if(ex){S.activePadId=id;render();return;}
+  var ps=S.pads.find(function(p){return p.id===id;});
+  if(!ps)return;
+  S.padTabs.push(Object.assign({},ps,{_mode:'text',_dirty:false}));
+  S.activePadId=id;S.tab='scratchpad';S.activeTabId=null;render();
+};
+window.switchPad=function(id){S.activePadId=id;render();};
+window.closePad=function(id){
+  var pt=S.padTabs.find(function(t){return t.id===id;});
+  if(pt&&pt._dirty){if(!confirm('Close without saving?'))return;}
+  S.padTabs=S.padTabs.filter(function(t){return t.id!==id;});
+  if(S.activePadId===id){S.activePadId=S.padTabs.length?S.padTabs[S.padTabs.length-1].id:null;}
+  render();
+};
+window.savePad=async function(){
+  var act=S.padTabs.find(function(t){return t.id===S.activePadId;});
+  if(!act||!S.user)return;
+  try{
+    await sbU('ts_scratchpads',[{id:act.id,title:act.title||'Untitled',content:act.content||'',drawing:act.drawing||[],saved_at:new Date().toISOString()}]);
+    act._dirty=false;
+    var ex=S.pads.findIndex(function(p){return p.id===act.id;});
+    if(ex>=0)S.pads[ex]=Object.assign({},S.pads[ex],{title:act.title,content:act.content,drawing:act.drawing});
+    else S.pads.push({id:act.id,title:act.title||'Untitled',content:act.content||'',drawing:act.drawing||[]});
+    toast('Saved','ok');render();
+  }catch(e){toast('Save failed','warn');}
+};
+window.clearPad=function(){
+  var act=S.padTabs.find(function(t){return t.id===S.activePadId;});if(!act)return;
+  act.content='';act.drawing=[];act._dirty=true;
+  var cv=document.getElementById('pad-canvas');
+  if(cv){var ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);}
+  render();
+};
+window.deletePad=async function(id){
+  if(!confirm('Delete this scratchpad?'))return;
+  try{await sbDel('ts_scratchpads',id);}catch(e){}
+  S.pads=S.pads.filter(function(p){return p.id!==id;});
+  S.padTabs=S.padTabs.filter(function(t){return t.id!==id;});
+  if(S.activePadId===id){S.activePadId=S.padTabs.length?S.padTabs[S.padTabs.length-1].id:null;}
+  render();
+};
+window.updatePadTitle=function(v){
+  var act=S.padTabs.find(function(t){return t.id===S.activePadId;});if(!act)return;
+  act.title=v;act._dirty=true;window._broadcastPadUpdate&&window._broadcastPadUpdate(act);
+};
+window.padUpdateContent=function(v){
+  var act=S.padTabs.find(function(t){return t.id===S.activePadId;});if(!act)return;
+  act.content=v;act._dirty=true;
+  clearTimeout(_padDebounce);
+  _padDebounce=setTimeout(function(){window._broadcastPadUpdate&&window._broadcastPadUpdate(act);},600);
+};
+window._broadcastPadUpdate=function(act){
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'pad_update',payload:{id:act.id,title:act.title,content:act.content}},ref:String(_rtRef)}));}
+};
+window._broadcastPadStroke=function(id,stroke){
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'pad_stroke',payload:{id:id,stroke:stroke}},ref:String(_rtRef)}));}
+};
 window.addLeg=()=>{
   const legs=S.charter.legs;
   const prev=legs.length>0?legs[legs.length-1]:{};
