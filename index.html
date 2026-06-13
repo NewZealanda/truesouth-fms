@@ -311,7 +311,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.30';
+const APP_VER='v21.33';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -422,7 +422,7 @@ function scoreAssign(acId,paxList){
   const a=S.aircraft[acId];if(!a)return 1e9;
   const setup=S.dispatch.acSetup.find(s=>s.acId===acId);
   const picW=setup?S.crew.find(c=>c.n===setup.pic)?.w||0:0;
-  const cpW=seat1IsCoPilot(acId)?S.crew.find(c=>c.n===setup?.coPilot)?.w||0:0;
+  const cpW=seat1IsCoPilot(acId)?(anyCrewList().find(c=>c.n===setup?.coPilot)?.w||0):0;
   const fW=fuelKgForSetup(acId);
   const sm=assignSeats(acId,paxList);
   let wt=a.ew+picW+cpW,mom=a.em+picW*a.seats[0].arm;
@@ -516,7 +516,7 @@ function calcAcScore(acId, paxList, fuelKgOv){
   const a=S.aircraft[acId]; if(!a||!paxList.length) return {score:1e9,tow:0,cog:0,towOk:false,cogOk:false,towOver:0};
   const setup=S.dispatch.acSetup.find(s=>s.acId===acId);
   const picW=setup?S.crew.find(c=>c.n===setup.pic)?.w||0:0;
-  const cpW=seat1IsCoPilot(acId)?S.crew.find(c=>c.n===setup?.coPilot)?.w||0:0;
+  const cpW=seat1IsCoPilot(acId)?(anyCrewList().find(c=>c.n===setup?.coPilot)?.w||0):0;
   const fW=fuelKgOv!=null?fuelKgOv:fuelKgForSetup(acId);
   const hasCoPilot=seat1IsCoPilot(acId);
   const cogTarget=(a.cogMin+a.cogMax)/2;
@@ -678,7 +678,7 @@ function acPayloadBudget(acId){
   const a=S.aircraft[acId]; if(!a) return 0;
   const setup=S.dispatch.acSetup.find(s=>s.acId===acId);
   const picW=S.crew.find(c=>c.n===setup?.pic)?.w||90;
-  const cpW=seat1IsCoPilot(acId)?S.crew.find(c=>c.n===setup?.coPilot)?.w||0:0;
+  const cpW=seat1IsCoPilot(acId)?(anyCrewList().find(c=>c.n===setup?.coPilot)?.w||0):0;
   const fW=fuelKgForSetup(acId);
   return a.mtow - a.ew - picW - cpW - fW + a.gndBurn;
 }
@@ -958,7 +958,7 @@ function runSolver(){
 
 // ── State ──
 function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
-function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},fuel:'',burnOff:'',sig:null};}
+function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},fuel:'',burnOff:'',_unallocated:[],sig:null};}
 function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
 let S={
@@ -2112,7 +2112,7 @@ function renderStep1(){
           <div><label>Co-Pilot (optional)</label>
             <select tabindex="-1" class="fi" onchange="setAcField('${a.id}','coPilot',this.value)">
               <option value="">None — Seat 1 = pax</option>
-              ${pilotCrewList().filter(c=>{const ac=S.aircraft[a.id];if(!ac)return true;const t=ac.layout==='c208'?'C208B':'GA8';return(c.endorse||[]).includes(t);}).map(c=>`<option value="${c.n}"${setup.coPilot===c.n?' selected':''}>${c.n}</option>`).join('')}
+              ${anyCrewList().map(c=>`<option value="${c.n}"${setup.coPilot===c.n?' selected':''}>${c.n}</option>`).join('')}
             </select></div>
         </div>
         <div><label>Fuel at departure (${unit}) <span style="font-weight:400;color:var(--text3);font-size:10px">= ${fuelKgV.toFixed(1)}kg</span></label>
@@ -3779,7 +3779,7 @@ window.toggleAcSetup=id=>{
   else{const a=S.aircraft[id];S.dispatch.acSetup.push({acId:id,pic:'',coPilot:'',fuelInput:a?Math.round(fromKg(a.fuelKg,id)):null,_ts:Date.now()});}
   autoSaveDispatch();render();
 };
-window.setAcField=(id,field,val)=>{const s=S.dispatch.acSetup.find(x=>x.acId===id);if(s){s[field]=val;s._ts=Date.now();autoSaveDispatch();safeRender();}};
+window.setAcField=(id,field,val)=>{const s=S.dispatch.acSetup.find(x=>x.acId===id);if(s){s[field]=val;s._ts=Date.now();if(field==='coPilot'){const cp=anyCrewList().find(x=>x.n===val);s._cpWeight=cp?cp.w:0;}autoSaveDispatch();safeRender();}};
 window.addPax=function(infant){S.dispatch.pax.push({id:'p_'+Date.now(),name:'',weight:infant?10:0,bag:0,group:'',pinAc:null,_ts:Date.now(),infant:!!infant,type:'adult'});autoSaveDispatch();render();};
 window.addInfant=function(){addPax(true);};
 window.paxNameBlur=function(i,val){
@@ -4056,8 +4056,8 @@ function generateLoadsheet(acId){
   const setup=d.acSetup.find(s=>s.acId===acId);const form=bF();
   form.ac=acId;form.dep=d.dep;form.dest=d.dest;form.date=d.date;form.etd=d.etd;form.etdCustom=d.etdCustom||false;
   form.pic=setup?.pic||'';form.coPilot=setup?.coPilot||'';
-  const picCrew=pilotCrewList().find(c=>c.n===form.pic);if(picCrew&&picCrew.w){form.seats[0]=String(picCrew.w);form.names[0]=form.pic;}
-  if(setup?.coPilot){const cp=pilotCrewList().find(c=>c.n===setup.coPilot);if(cp&&cp.w){form.seats[1]=String(cp.w);form.names[1]=setup.coPilot;}}
+  const picCrew=anyCrewList().find(c=>c.n===form.pic);if(picCrew&&picCrew.w){form.seats[0]=String(picCrew.w);form.names[0]=form.pic;}
+  if(setup?.coPilot){const cp=anyCrewList().find(c=>c.n===setup.coPilot);if(cp&&cp.w){form.seats[1]=String(cp.w);form.names[1]=setup.coPilot;}}
   else{const sm=d.seatMap[acId]||{};const p=sm[1]?paxById(sm[1]):null;if(p){form.seats[1]=p.weight||'';form.bags[1]=p.bag||'';form.names[1]=p.name||'';}}
   form.fuel=String(fuelKgForSetup(acId));
   const sm=d.seatMap[acId]||{};
@@ -4159,7 +4159,31 @@ window.lsDelPax=idx=>{
   render();
 };
 window.lsPIC=v=>{S.form.pic=v;const c=anyCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[0]=String(c.w);S.form.names[0]=v;}else{S.form.names[0]=v;}render();};
-window.lsCoPilot=v=>{S.form.coPilot=v;const c=pilotCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[1]=String(c.w);S.form.names[1]=v;}else{delete S.form.seats[1];delete S.form.names[1];}render();};
+window.lsCoPilot=v=>{
+  const f=S.form;
+  // Save displaced seat-1 passenger to unallocated before overwriting
+  const prevName=f.names[1]||'';
+  const prevWt=f.seats[1]||'';
+  const prevBag=f.bags[1]||'';
+  const prevInfant=(f.infantNames||{})[1]||'';
+  const wasPassenger=prevName&&prevName!==f.coPilot;
+  f.coPilot=v;
+  const cr=anyCrewList().find(x=>x.n===v);
+  if(v&&cr&&cr.w){
+    if(wasPassenger){
+      if(!f._unallocated)f._unallocated=[];
+      f._unallocated.push({name:prevName,weight:prevWt,bag:prevBag,infant:prevInfant});
+    }
+    f.seats[1]=String(cr.w);f.names[1]=v;
+  } else if(!v){
+    // Copilot cleared - seat 1 becomes empty pax seat
+    delete f.seats[1];delete f.names[1];
+    if(f.infantNames)delete f.infantNames[1];
+  } else {
+    delete f.seats[1];delete f.names[1];
+  }
+  render();
+};
 window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;render();};window.lsB=(i,v)=>{S.form.bags[i]=v;render();};window.lsC=(i,v)=>{S.form.cargo[i]=v;render();};
 window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));render();};
 window.lsBurn=(v,acId)=>{S.form.burnOff=v;render();};
