@@ -298,7 +298,8 @@ var APTS={};var APT_COORDS={};var APS=[];
 var _APT_PINNED=["NZQN","NZMF","NZMC","NZFJ"];
 function _getAllApts(){
   var base=typeof NZ_AERODROMES!=="undefined"?NZ_AERODROMES:[];
-  var custom=[];try{custom=JSON.parse(lsGet("custom_aerodromes")||"[]");}catch(e){}
+  var custom=[];
+  try{var _ca=lsGet("custom_aerodromes");if(Array.isArray(_ca))custom=_ca;else if(typeof _ca==="string"&&_ca)custom=JSON.parse(_ca);}catch(e){}
   var map={};
   base.forEach(function(a){map[a.icao]=a;});
   custom.forEach(function(a){map[a.icao]=a;});
@@ -322,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v21.75';
+const APP_VER='v21.76';
 function distNm(a,b){if(!Object.keys(APT_COORDS).length)_rebuildAptData();const A=APT_COORDS[a],B=APT_COORDS[b];if(!A||!B)return 0;const R=3440,dLat=(B.lat-A.lat)*Math.PI/180,dLng=(B.lng-A.lng)*Math.PI/180,s=Math.sin(dLat/2)**2+Math.cos(A.lat*Math.PI/180)*Math.cos(B.lat*Math.PI/180)*Math.sin(dLng/2)**2;return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));}
 
 
@@ -3387,7 +3388,7 @@ var _aerodromesCustom=null; // loaded from lsGet
 
 function _getCustomAerodromes(){
   if(!_aerodromesCustom){
-    try{_aerodromesCustom=JSON.parse(lsGet('custom_aerodromes')||'[]');}catch(e){_aerodromesCustom=[];}
+    try{var _ca=lsGet('custom_aerodromes');if(Array.isArray(_ca))_aerodromesCustom=_ca;else if(typeof _ca==='string'&&_ca)_aerodromesCustom=JSON.parse(_ca);else _aerodromesCustom=[];}catch(e){_aerodromesCustom=[];}
   }
   return _aerodromesCustom;
 }
@@ -3496,7 +3497,7 @@ window.aeroAddCustom=function(){
   if(existIdx>=0)custom.splice(existIdx,1);
   custom.push({icao:icao,name:name,lat:lat,lon:lon,elev:elev,custom:true});
   _aerodromesCustom=custom;
-  lsSet('custom_aerodromes',JSON.stringify(custom));
+  lsSet('custom_aerodromes',custom);
   if(typeof _rebuildAptData==='function')_rebuildAptData();
   toast('Added '+icao+' ('+name+')','ok');
   render();
@@ -3504,7 +3505,7 @@ window.aeroAddCustom=function(){
 window.aeroDeleteCustom=function(icao){
   var custom=_getCustomAerodromes().filter(function(c){return c.icao!==icao;});
   _aerodromesCustom=custom;
-  lsSet('custom_aerodromes',JSON.stringify(custom));
+  lsSet('custom_aerodromes',custom);
   if(typeof _rebuildAptData==='function')_rebuildAptData();
   if(S._aeroSel===icao)S._aeroSel=null;
   render();
