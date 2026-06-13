@@ -2983,8 +2983,8 @@ function renderSaved(){
               +'<div style="font-size:12px;color:var(--text3)">'+(s.form.date||'?')+(s.form.etd?' &#xb7; '+s.form.etd:'')+' &#xb7; '+new Date(s.savedAt||0).toLocaleDateString('en-NZ')+'</div>'
               +'</div>'
               +'<div style="display:flex;gap:5px;flex-shrink:0">'
-              +'<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" onclick="editSaved(''+s.id+'')">Open</button>'
-              +'<button class="btn btn-red" style="font-size:12px;padding:6px 10px" onclick="delSaved(''+s.id+'')">Delete</button>'
+              +'<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" data-sid="'+s.id+'" onclick="editSaved(this.dataset.sid)">Open</button>'
+              +'<button class="btn btn-red" style="font-size:12px;padding:6px 10px" data-sid="'+s.id+'" onclick="delSaved(this.dataset.sid)">Delete</button>'
               +'</div></div>';
           }).join(''))
       :'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">No crew name linked to your account.</div>');
