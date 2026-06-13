@@ -2154,8 +2154,8 @@ function _applyLsFlash(){
 function renderOperations(){
   const opsTab=S.tab||'manifest';
   var tabsH='<div style="display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center">';
-  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='manifest')?'on':'')+''" onclick="window.switchOpsTab(\'manifest\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0">Manifest</button>';
-  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='seatmap')?'on':'')+''" onclick="window.switchOpsTab(\'seatmap\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0">Seatmap</button>';
+  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='manifest')?'on':'')+'" onclick="window.switchOpsTab(\'manifest\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0">Manifest</button>';
+  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='seatmap')?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0">Seatmap</button>';
   if(S.lsTabs.length>0){
     tabsH+='<div style="width:1px;height:20px;background:var(--border);margin:0 2px;flex-shrink:0"></div>';
     S.lsTabs.forEach(function(tab){
@@ -2170,7 +2170,7 @@ function renderOperations(){
     });
   }
   tabsH+='<button onclick="window.newLsTab()" style="padding:5px 10px;font-size:16px;line-height:1;font-weight:700;background:'+(S._newLsTab?'var(--acc)':'var(--card2)')+';border:1px solid '+(S._newLsTab?'var(--acc)':'var(--border)')+';border-radius:8px;cursor:pointer;color:'+(S._newLsTab?'#fff':'var(--text2)')+';flex-shrink:0" title="New Loadsheet">+</button>';
-  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='saved')?'on':'')+''" onclick="window.switchOpsTab(\'saved\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0;margin-left:auto">Saved ('+S.saved.length+')</button>';
+  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='saved')?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0;margin-left:auto">Saved ('+S.saved.length+')</button>';
   tabsH+='</div>';
   if(S.activeTabId&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return tabsH+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return tabsH+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
   if(S._newLsTab){return tabsH+renderNewLsPanel();}
