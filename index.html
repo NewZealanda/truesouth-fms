@@ -2793,23 +2793,7 @@ function renderLoadsheet(){
     <button onclick="window.lsTrimExcess()" style="padding:5px 12px;border-radius:6px;border:1px solid #ef4444;background:transparent;color:#fca5a5;font-size:12px;cursor:pointer;white-space:nowrap;font-weight:700">Remove excess pax</button>
   </div>`:'';
 
-  return`${backBanner}${editBanner}${draftBanner}${_overCapBanner}${clearBtn}
-  <div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}"><div class="st">Flight Details</div>
-    <div style="margin-bottom:10px;padding:8px 12px;background:#0c1a3a;border-radius:8px;border:1px solid #1e3a5f;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <div style="font-size:12px;color:#93c5fd;font-weight:600">ZK-${S.lsAc||f.ac.replace('ZK-','')} ${a?' &middot; '+a.type+' &middot; EW '+a.ew+'kg &middot; MTOW '+a.mtow+'kg':''}</div>
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <span style="font-size:11px;color:var(--text3)">Copy flight to:</span>
-        ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){return'<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="window.lsCopyFlight(\''+ac+'\')">'+ac+'</button>';}).join('')}
-      </div>
-    </div>
-    <div class="g2">
-      <div><label>PIC</label><select class="fi" onchange="lsPIC(this.value)"><option value="">— select —</option>${crewOpts}</select></div>
-      <div><label>Co-Pilot</label><select class="fi" onchange="lsCoPilot(this.value)">${cpOpts}</select></div>
-      <div><label>Date</label><input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value"></div>
-      <div><label>ETD</label>${etdSelect(f.etd,f.date,"form")}</div>
-      <div><label>Departure</label><select class="fi" onchange="S.form.dep=this.value;S.formDirty=true;safeRender()">${aptOpts(f.dep)}</select></div>
-      <div><label>Destination</label><select class="fi" onchange="S.form.dest=this.value;safeRender()">${aptOpts(f.dest)}</select></div>
-    </div></div>
+  
   {
     const ua=f._unallocated;
     if(ua&&ua.length){
@@ -2830,7 +2814,23 @@ function renderLoadsheet(){
       unallocH='<div class="card"><div class="st">Unallocated Passengers ('+ua.length+')</div>'+hint+'<div style="display:flex;flex-direction:column;gap:6px">'+cards+'</div></div>';
     }
   }
-  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
+  return`${backBanner}${editBanner}${draftBanner}${_overCapBanner}${clearBtn}
+  <div class="card" style="border-left:3px solid ${AC_COL[f.ac]||'var(--border)'}"><div class="st">Flight Details</div>
+    <div style="margin-bottom:10px;padding:8px 12px;background:#0c1a3a;border-radius:8px;border:1px solid #1e3a5f;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12px;color:#93c5fd;font-weight:600">ZK-${S.lsAc||f.ac.replace('ZK-','')} ${a?' &middot; '+a.type+' &middot; EW '+a.ew+'kg &middot; MTOW '+a.mtow+'kg':''}</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--text3)">Copy flight to:</span>
+        ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){return'<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="window.lsCopyFlight(\''+ac+'\')">'+ac+'</button>';}).join('')}
+      </div>
+    </div>
+    <div class="g2">
+      <div><label>PIC</label><select class="fi" onchange="lsPIC(this.value)"><option value="">— select —</option>${crewOpts}</select></div>
+      <div><label>Co-Pilot</label><select class="fi" onchange="lsCoPilot(this.value)">${cpOpts}</select></div>
+      <div><label>Date</label><input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value"></div>
+      <div><label>ETD</label>${etdSelect(f.etd,f.date,"form")}</div>
+      <div><label>Departure</label><select class="fi" onchange="S.form.dep=this.value;S.formDirty=true;safeRender()">${aptOpts(f.dep)}</select></div>
+      <div><label>Destination</label><select class="fi" onchange="S.form.dest=this.value;safeRender()">${aptOpts(f.dest)}</select></div>
+    </div></div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
   ${seatsH}${unallocH}${a?cargoH:''}${a?fuelH:''}${calcH}${sigH}`;
 }
 
