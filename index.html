@@ -313,7 +313,7 @@ function aptOpts(sel){return APS.map(k=>`<option value="${k}"${sel===k?' selecte
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
-const APP_VER='v21.50';
+const APP_VER='v21.53';
 const acDisp=id=>id?id.replace('ZK-',''):id;
 
 // ── Default Data ──
@@ -979,6 +979,7 @@ let S={
   dispatch:bD(),viewAc:null,viewAc2:null,selectedPax:null,solverRes:{},
   // Loadsheet form
   form:bF(),editId:null,lsForms:{},lsAc:'SLA',
+  lsTabs:[],activeTabId:null,_newLsTab:false,
   // UI state
   tab:'manifest',
   savedSearch:'',savedSort:'newest',savedTab:'loadsheets',savedSel:{},
@@ -1469,15 +1470,15 @@ function autoSaveDispatch(){
 let _autoSaveLSTimer=null;
 let _ownLSSaveTs=0;
 function autoSaveLS(){
-  if(!S.user||!S.lsAc)return;
+  const _id=S.editId;
+  if(!S.user||!_id)return;
   clearTimeout(_autoSaveLSTimer);
   _autoSaveLSTimer=setTimeout(async function(){
-    const acCode=S.lsAc;
     const form=dc(S.form);
-    _ownLSSaveTs=Date.now();
-    await sbU('ts_manifests',[{id:'ls_live_'+acCode,name:'__ls_live__',saved_at:new Date().toISOString(),data:form}]);
-    broadcastLS(acCode,form);
-    toast('Loadsheet saved','ok');
+    const tab=S.lsTabs.find(function(t){return t.id===_id;});
+    if(tab){tab.form=form;}
+    await sbU('ts_loadsheets',[{id:_id,form:form,saved_at:new Date().toISOString(),status:form.status||'unsigned'}]);
+    broadcastLS(S.lsAc,form);
   },900);
 }
 function _cleanPresence(){
@@ -2151,27 +2152,43 @@ function _applyLsFlash(){
   _triggerFlash('flash-loadsheet');
 }
 function renderOperations(){
-  const LS_ACS=['SLA','SLB','SLD','SLQ','SDB'];
-  const sub=S.tab||'manifest';
-  const lsTabIds=LS_ACS.map(function(ac){return 'ls_'+ac;});
-  const validTabs=['manifest','seatmap','saved'].concat(lsTabIds);
-  const opsTab=validTabs.includes(sub)?sub:'manifest';
-  const subTabs=[{id:'manifest',lbl:'Manifest'},{id:'seatmap',lbl:'Seatmap'}]
-    .concat(LS_ACS.map(function(ac){return{id:'ls_'+ac,lbl:ac};}))
-    .concat([{id:'saved',lbl:'Saved ('+S.saved.length+')'}]);
-  const bar='<div style="display:flex;gap:3px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none">'+
-    subTabs.map(function(t){
-      var _acId=t.id.startsWith('ls_')?'ZK-'+t.id.slice(3):null;
-      var _col=_acId?(AC_COL[_acId]||'#64748b'):null;
-      var _sel=opsTab===t.id;
-      var _cs=_col?(_sel?';border-bottom:3px solid '+_col+';color:'+_col+';background:'+_col+'22':';border-bottom:2px solid '+_col+'55;color:'+_col+'bb'):'';
-      return'<button class="sub-tab '+(_sel?'on':'')+'" onclick="window.switchOpsTab(\''+t.id+'\')" style="font-size:12px;padding:6px 12px;white-space:nowrap'+_cs+'">'+t.lbl+'</button>';
-    }).join('')+
-    '</div>';
-  if(opsTab==='seatmap'){ startPresenceBroadcast('seatmap');return bar+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>'; }
-  if(opsTab.startsWith('ls_')){ startPresenceBroadcast('loadsheet');try{return bar+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return bar+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';} }
-  if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return bar+renderSaved();}
-  startPresenceBroadcast('manifest');return bar+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
+  const opsTab=S.tab||'manifest';
+  var tabsH='<div style="display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center">';
+  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='manifest')?'on':'')+''" onclick="window.switchOpsTab(\'manifest\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0">Manifest</button>';
+  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='seatmap')?'on':'')+''" onclick="window.switchOpsTab(\'seatmap\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0">Seatmap</button>';
+  if(S.lsTabs.length>0){
+    tabsH+='<div style="width:1px;height:20px;background:var(--border);margin:0 2px;flex-shrink:0"></div>';
+    S.lsTabs.forEach(function(tab){
+      var acCode=tab.acId.replace('ZK-','');
+      var isActive=S.activeTabId===tab.id&&!S._newLsTab;
+      var col=AC_COL[tab.acId]||'#64748b';
+      var signed=tab.status==='complete';
+      tabsH+='<div style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1px solid '+(isActive?col:'var(--border)')+';flex-shrink:0">';
+      tabsH+='<button onclick="window.switchLsTab(\''+tab.id+'\')" style="padding:5px 10px;font-size:12px;font-weight:700;background:'+(isActive?col+'33':'var(--card2)')+';border:none;cursor:pointer;color:'+(isActive?col:'var(--text2)')+';white-space:nowrap">'+acCode+(signed?' &#x2713;':'')+'</button>';
+      tabsH+='<button onclick="window.closeLsTab(\''+tab.id+'\')" style="padding:5px 7px;font-size:14px;line-height:1;background:'+(isActive?col+'22':'var(--card2)')+';border:none;border-left:1px solid '+(isActive?col+'44':'var(--border)')+';cursor:pointer;color:'+(isActive?col:'var(--text3)')+';" title="Close">&#xd7;</button>';
+      tabsH+='</div>';
+    });
+  }
+  tabsH+='<button onclick="window.newLsTab()" style="padding:5px 10px;font-size:16px;line-height:1;font-weight:700;background:'+(S._newLsTab?'var(--acc)':'var(--card2)')+';border:1px solid '+(S._newLsTab?'var(--acc)':'var(--border)')+';border-radius:8px;cursor:pointer;color:'+(S._newLsTab?'#fff':'var(--text2)')+';flex-shrink:0" title="New Loadsheet">+</button>';
+  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='saved')?'on':'')+''" onclick="window.switchOpsTab(\'saved\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0;margin-left:auto">Saved ('+S.saved.length+')</button>';
+  tabsH+='</div>';
+  if(S.activeTabId&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return tabsH+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return tabsH+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
+  if(S._newLsTab){return tabsH+renderNewLsPanel();}
+  if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return tabsH+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
+  if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return tabsH+renderSaved();}
+  startPresenceBroadcast('manifest');return tabsH+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
+}
+function renderNewLsPanel(){
+  var aircraft=Object.values(S.aircraft);
+  var h='<div class="card"><div class="st">New Loadsheet</div>';
+  h+='<p style="font-size:13px;color:var(--text3);margin-bottom:14px">Select aircraft &mdash; seats and flight details pulled from the current manifest.</p>';
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
+  aircraft.forEach(function(a){
+    var col=AC_COL[a.id]||'#64748b';
+    h+='<button onclick="window.createLsTab(\''+a.id+'\')" style="padding:14px 22px;border-radius:12px;border:2px solid '+col+';background:'+col+'1a;color:'+col+';font-size:16px;font-weight:800;cursor:pointer;letter-spacing:.06em">'+a.id.replace('ZK-','')+'</button>';
+  });
+  h+='</div></div>';
+  return h;
 }
 
 function renderManifest(){
@@ -2579,8 +2596,8 @@ function renderStep2(){
           ${sr?`<span class="pill ${sr.towOk?'pill-green':sr.towFatal?'pill-red':'pill-warn'}">${sr.tow?.toFixed(0)}/${sr.mtow}kg</span>
             <span class="pill ${cogPillClass(sr.cog,sr.cogMin,sr.cogMax)}">CoG ${sr.cog?.toFixed(2)}"</span>`:''}
           <span class="pill pill-blue">${paxCount}/${paxTotal} pax</span>
-          <button onclick="window.openAcLoadsheet('${id}')" style="margin-left:auto;padding:5px 12px;border-radius:7px;border:none;background:${_ok?'linear-gradient(135deg,#7B9EC6,#4A6D96)':_warn?'#854d0e':'#7f1d1d'};color:#fff;font-size:12px;font-weight:700;cursor:pointer">
-            ${id.replace('ZK-','')} Loadsheet ${_ok?'✓':_warn?'⚠':'⛔'}
+          <button onclick="window.createLsTab('${id}')" style="margin-left:auto;padding:5px 12px;border-radius:7px;border:none;background:${_ok?'linear-gradient(135deg,#7B9EC6,#4A6D96)':_warn?'#854d0e':'#7f1d1d'};color:#fff;font-size:12px;font-weight:700;cursor:pointer">
+            Create Loadsheet ${_ok?'✓':_warn?'⚠':'⛔'}
           </button>
         </div>
         <div ondragover="event.preventDefault()" ondrop="dropOnPool(event,'${id}')">
@@ -2925,8 +2942,8 @@ function renderLoadsheet(){
     <div style="margin-bottom:10px;padding:8px 12px;background:#0c1a3a;border-radius:8px;border:1px solid #1e3a5f;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center">
       <div style="font-size:12px;color:#93c5fd;font-weight:600">ZK-${S.lsAc||f.ac.replace('ZK-','')} ${a?' &middot; '+a.type+' &middot; EW '+a.ew+'kg &middot; MTOW '+a.mtow+'kg':''}</div>
       <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">
-        <span style="font-size:11px;color:var(--text3)">Copy flight to:</span>
-        ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){return'<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="window.lsCopyFlight(\''+ac+'\')">'+ac+'</button>';}).join('')}
+        <span style="font-size:11px;color:var(--text3)">Change aircraft:</span>
+        ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){return'<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="window.changeLsAircraft('ZK-'+ac)">'+ac+'</button>';}).join('')}
       </div>
     </div>
     <div class="g2">
@@ -2974,6 +2991,8 @@ function renderSaved(){
         :mySheets.map(function(s){
             var col=AC_COL[s.form.ac]||'#64748b';
             var isSigned=s.status==='complete';
+            var _paxCnt=Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length;
+            var _savedStr=s.savedAt?(function(d){var x=new Date(d);var h=x.getHours();var mn=x.getMinutes();return x.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x.getMonth()]+' '+(h<10?'0':'')+h+':'+(mn<10?'0':'')+mn;})(s.savedAt):'';
             return'<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid '+col+'">'
               +'<div style="flex:1;min-width:0">'
               +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">'
@@ -2981,7 +3000,7 @@ function renderSaved(){
               +'<span class="pill pill-blue">'+(s.form.dep||'?')+' &#x2192; '+(s.form.dest||'?')+'</span>'
               +(isSigned?'<span class="pill pill-green">&#x2713; Signed</span>':'<span class="pill" style="background:#0c1a3a;color:#93c5fd">UNSIGNED</span>')
               +'</div>'
-              +'<div style="font-size:12px;color:var(--text3)">'+(s.form.date||'?')+(s.form.etd?' &#xb7; ETD: '+s.form.etd:'')+' &#xb7; '+(Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length)+' PAX &#xb7; PIC: '+(s.form.pic||'?')+' &#xb7; Saved: '+(s.savedAt?new Date(s.savedAt).toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}):'&mdash;')+'</div>'
+              +'<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">'+'<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">'+(s.form.date||'?')+'</span>'+(s.form.etd?'<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD '+s.form.etd+'</span>':'')+'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">'+_paxCnt+' PAX</span>'+(_savedStr?'<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved '+_savedStr+'</span>':'')+'</div>'
               +'</div>'
               +'<div style="display:flex;gap:5px;flex-shrink:0">'
               +'<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" data-sid="'+s.id+'" onclick="editSaved(this.dataset.sid)">Open</button>'
@@ -2998,7 +3017,7 @@ function renderSaved(){
       <input type="checkbox" ${S.savedSel[m.id]?'checked':''} onchange="window.toggleSavedSel('${m.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
       <div style="flex:1">
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
-        <div style="font-size:12px;color:var(--text3)">${m.savedAt?new Date(m.savedAt).toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}):''} · ${m.data?.pax?.length||0} pax</div>
+        <div style="font-size:12px;color:var(--text3)">${m.savedAt?(function(d){var x=new Date(d);var h=x.getHours();var mn=x.getMinutes();return x.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x.getMonth()]+' '+(h<10?'0':'')+h+':'+(mn<10?'0':'')+mn;})(m.savedAt):''} · ${m.data?.pax?.length||0} pax</div>
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-ghost" style="font-size:12px" onclick="loadManifest('${m.id}')">Load</button>
@@ -3017,6 +3036,8 @@ function renderSaved(){
       ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">✓ All loadsheets signed</div>`
       :unsigned.map(s=>{
         const col=AC_COL[s.form.ac]||'#64748b';
+        const _paxCnt=Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length;
+        const _savedStr=s.savedAt?(function(d){var x=new Date(d);var h=x.getHours();var mn=x.getMinutes();return x.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x.getMonth()]+' '+(h<10?'0':'')+h+':'+(mn<10?'0':'')+mn;})(s.savedAt):'';
         return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid #1e3a5f;margin-bottom:8px;background:var(--card);border-left:3px solid ${col}">
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
@@ -3024,7 +3045,7 @@ function renderSaved(){
               <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
               <span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 UNSIGNED</span>
             </div>
-            <div style="font-size:12px;color:var(--text3)">${s.form.date||'?'}${s.form.etd?' · ETD: '+s.form.etd:''} · ${Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length} PAX · PIC: ${s.form.pic||'?'} · Saved: ${s.savedAt?new Date(s.savedAt).toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}):'&mdash;'}</div>
+            <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${s.form.date||'?'}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span>${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}</div>
           </div>
           <div style="display:flex;gap:5px;flex-shrink:0">
             <button class="btn btn-sky" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>
@@ -3074,6 +3095,8 @@ function renderSaved(){
     ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">📋 ${S.saved.length?'No results for "'+search+'"':'No saved loadsheets'}</div>`
     :items.map(s=>{
       const col=AC_COL[s.form.ac]||'#64748b';
+      const _paxCnt=Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length;
+      const _savedStr=s.savedAt?(function(d){var x=new Date(d);var h=x.getHours();var mn=x.getMinutes();return x.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x.getMonth()]+' '+(h<10?'0':'')+h+':'+(mn<10?'0':'')+mn;})(s.savedAt):'';
       const r=calcFormWB(s.form);
       const ok=r&&r.towOk&&r.lwOk&&r.cogOk;
       const isSigned=s.status==='complete';
@@ -3092,7 +3115,7 @@ function renderSaved(){
             ${isSigned?(s.driveUploaded?'<span class="pill pill-green" style="font-size:10px">☁ Drive ✓</span>':'<span class="pill" style="background:rgba(100,116,139,.12);border:1px solid var(--border2);color:var(--text3);font-size:10px">☁ Not uploaded</span>'):''}
 
           </div>
-          <div style="font-size:12px;color:var(--text3)">${s.form.date||'?'}${s.form.etd?' · ETD: '+s.form.etd:''} · ${Object.values(s.form.names||{}).filter(function(n){return n&&n.trim();}).length} PAX · PIC: ${s.form.pic||'?'} · Saved: ${s.savedAt?new Date(s.savedAt).toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}):'&mdash;'}</div>
+          <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${s.form.date||'?'}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span>${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}</div>
         </div>
         <div style="display:flex;gap:5px;flex-shrink:0">
           ${isSigned?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${s.id}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${s.id}')">&#x21BA; Reopen</button>`:`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>`}
@@ -3803,14 +3826,8 @@ window.applyReset=async()=>{
 };
 
 window.switchOpsTab=function(tabId){
-  if(tabId.startsWith('ls_')){
-    const ac=tabId.slice(3);
-    if(S.lsAc&&S.lsAc!==ac) S.lsForms[S.lsAc]=S.form;
-    S.lsAc=ac;
-    if(!S.lsForms[ac]) S.lsForms[ac]=bF_ac('ZK-'+ac);
-    S.form=S.lsForms[ac];
-    S.tab=tabId;
-  } else if(tabId==='saved'){
+  S.activeTabId=null;S._newLsTab=false;
+  if(tabId==='saved'){
     S.tab=tabId;
     reloadTable('ts_loadsheets').then(function(){render();});
     window.scrollTo(0,0);
@@ -4260,11 +4277,13 @@ window.clearAllManifests=async function(){
   for(var i=0;i<ids.length;i++){try{await sbDel('ts_manifests',ids[i]);}catch(e){}}
 };
 window.viewSaved=function(id){
+  var existing=S.lsTabs.find(function(t){return t.id===id;});
+  if(existing){window.switchLsTab(id);return;}
   var s=S.saved.find(function(x){return x.id===id;});
   if(!s)return;
-  var _eAc=(s.form&&s.form.ac||'ZK-'+S.lsAc).replace('ZK-','');
-  if(S.lsAc&&S.lsAc!==_eAc)S.lsForms[S.lsAc]=S.form;
-  S.lsAc=_eAc;S.form=dc(s.form);S.editId=id;S.formDirty=false;S.tab='ls_'+_eAc;render();
+  var acFull=s.form&&s.form.ac?s.form.ac:'ZK-SLA';
+  S.lsTabs.push({id:s.id,acId:acFull,form:dc(s.form),status:s.status||'unsigned',savedAt:s.savedAt});
+  window.switchLsTab(s.id);
 };
 window.reopenSaved=async function(id){
   if(!confirm('Reopen this loadsheet for editing? The pilot signature will be cleared and they will need to re-sign.'))return;
@@ -4275,9 +4294,10 @@ window.reopenSaved=async function(id){
   s.form=form;s.status='unsigned';
   lsSet('ts_loadsheets_cache',S.saved);
   await sbU('ts_loadsheets',[{id:s.id,form:form,saved_at:s.savedAt,status:'unsigned'}]);
-  var _eAc=(form.ac||'ZK-'+S.lsAc).replace('ZK-','');
-  if(S.lsAc&&S.lsAc!==_eAc)S.lsForms[S.lsAc]=S.form;
-  S.lsAc=_eAc;S.form=form;S.editId=id;S.formDirty=false;S.tab='ls_'+_eAc;render();
+  var acFull=form.ac||'ZK-SLA';
+  var existing=S.lsTabs.find(function(t){return t.id===id;});
+  if(existing){existing.form=form;existing.status='unsigned';existing.acId=acFull;window.switchLsTab(id);}
+  else{S.lsTabs.push({id:s.id,acId:acFull,form:form,status:'unsigned',savedAt:s.savedAt});window.switchLsTab(s.id);}
   toast('Loadsheet reopened - signature cleared','ok');
 };
 window.deleteManifest=async id=>{if(!confirm('Delete this manifest?'))return;S.manifests=S.manifests.filter(m=>m.id!==id);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_manifests',id);};
@@ -4339,22 +4359,7 @@ window.clearManifest=()=>{
 };
 
 // ── Generate loadsheet from manifest ──
-window.openAcLoadsheet=async function(acId){
-  var ac=acId.replace('ZK-','');
-  var existing=S.lsForms[ac];
-  var hasFuel=existing&&existing.fuel&&String(existing.fuel)!=='0';
-  var hasNames=existing&&Object.values(existing.names||{}).some(function(v){return v&&v.trim();});
-  if(hasFuel||hasNames){
-    var _copyId='ls_copy_'+ac+'_'+Date.now();
-    var _copy={id:_copyId,savedAt:new Date().toISOString(),form:dc(existing),status:'unsigned'};
-    S.saved=S.saved.filter(function(s){return s.id!==_copyId;});
-    S.saved.unshift(_copy);
-    lsSet('ts_loadsheets_cache',S.saved);
-    try{await sbU('ts_loadsheets',[{id:_copy.id,form:_copy.form,saved_at:_copy.savedAt,status:'unsigned'}]);}catch(e){}
-    toast('Previous loadsheet saved as draft','ok');
-  }
-  generateLoadsheet(acId);
-};
+window.openAcLoadsheet=function(acId){generateLoadsheet(acId);};
 function generateLoadsheet(acId){
   const a=S.aircraft[acId];const d=S.dispatch;if(!a)return;
   const setup=d.acSetup.find(s=>s.acId===acId);const form=bF();
@@ -4368,7 +4373,13 @@ function generateLoadsheet(acId){
   const seatIdxs=paxSeatIdxs(acId)||[];seatIdxs.forEach(function(i){if(i<=1)return;const p=sm[i]?paxById(sm[i]):null;if(p){form.seats[i]=p.weight||'';form.bags[i]=p.bag||'';form.names[i]=p.name||'';if(p.infantName)form.infantNames[i]=p.infantName;}});
   // seat 1 infant (non-copilot)
   {const p=sm[1]?paxById(sm[1]):null;if(p&&p.infantName)form.infantNames[1]=p.infantName;}
-  const _lsAcCode=acId.replace('ZK-','');S.lsForms[_lsAcCode]=form;S.lsAc=_lsAcCode;S.form=form;S.editId=null;S.formDirty=false;S.tab='ls_'+_lsAcCode;render();
+  const _lsAcCode=acId.replace('ZK-','');
+  const _newTabId='ls_'+_lsAcCode+'_'+Date.now();
+  S.lsForms[_lsAcCode]=form;S.lsAc=_lsAcCode;S.form=form;S.editId=_newTabId;S.formDirty=false;
+  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:new Date().toISOString()});
+  S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
+  try{sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:new Date().toISOString(),status:'unsigned'}]);}catch(e){}
+  render();
 };
 
 // ── Loadsheet form handlers ──
@@ -4557,8 +4568,42 @@ window.handleSubmit=async()=>{
   toast('Loadsheet submitted and synced.','ok');
   render();
 };
-window.newSheet=()=>{S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;S.tab='ls_'+S.lsAc;render();};
-window.editSaved=id=>{const s=S.saved.find(x=>x.id===id);if(!s)return;const _eAc=(s.form?.ac||'ZK-'+S.lsAc).replace('ZK-','');S.lsAc=_eAc;S.lsForms[_eAc]=dc(s.form);S.form=S.lsForms[_eAc];S.editId=id;S.tab='ls_'+_eAc;render();};
+window.newSheet=function(){S._newLsTab=true;S.activeTabId=null;S.tab='manifest';render();};
+
+window.switchLsTab=function(id){
+  var tab=S.lsTabs.find(function(t){return t.id===id;});
+  if(!tab)return;
+  S.activeTabId=id;S.form=tab.form;S.lsAc=tab.acId.replace('ZK-','');S.editId=id;
+  S._newLsTab=false;S.tab='loadsheet';render();
+};
+window.closeLsTab=function(id){
+  var idx=S.lsTabs.findIndex(function(t){return t.id===id;});
+  if(idx===-1)return;
+  if(S.activeTabId===id){
+    if(S.lsTabs.length>1){var next=S.lsTabs[idx>0?idx-1:1];S.activeTabId=next.id;S.form=next.form;S.lsAc=next.acId.replace('ZK-','');S.editId=next.id;}
+    else{S.activeTabId=null;S.editId=null;S._newLsTab=false;S.tab='manifest';}
+  }
+  S.lsTabs.splice(idx,1);render();
+};
+window.newLsTab=function(){S._newLsTab=true;S.activeTabId=null;S.tab='manifest';render();};
+window.createLsTab=function(acId){S._newLsTab=false;generateLoadsheet(acId);};
+window.changeLsAircraft=function(targetAcFull){
+  var tab=S.lsTabs.find(function(t){return t.id===S.activeTabId;});
+  if(tab)tab.acId=targetAcFull;
+  S.lsAc=targetAcFull.replace('ZK-','');
+  window.lsAc(targetAcFull);
+  if(tab)tab.form=S.form;
+  autoSaveLS();
+};
+window.editSaved=function(id){
+  var existing=S.lsTabs.find(function(t){return t.id===id;});
+  if(existing){window.switchLsTab(id);return;}
+  var s=S.saved.find(function(x){return x.id===id;});
+  if(!s)return;
+  var acFull=s.form&&s.form.ac?s.form.ac:'ZK-SLA';
+  S.lsTabs.push({id:s.id,acId:acFull,form:dc(s.form),status:s.status||'unsigned',savedAt:s.savedAt});
+  window.switchLsTab(s.id);
+};
 window.delSaved=async id=>{if(!confirm('Delete this loadsheet?'))return;S.saved=S.saved.filter(s=>s.id!==id);lsSet('ts_loadsheets_cache',S.saved);render();await sbDel('ts_loadsheets',id);};
 
 // ── Charter ──
