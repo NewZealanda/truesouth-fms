@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.14';
+const APP_VER='v22.17';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1074,7 +1074,7 @@ async function loadAll(){
     // ── Manifests ──
     const ms=await sbF('ts_manifests');
     if(ms){
-      S.manifests=ms.filter(r=>r.id!=='live_draft').map(r=>({id:r.id,name:r.name,savedAt:r.saved_at,data:r.data}));
+      S.manifests=ms.filter(r=>r.id!=='live_draft').map(r=>({id:r.id,name:r.name,savedAt:r.saved_at,data:r.data,_deleted:!!(r.data&&r.data._deleted)}));
       lsSet('ts_manifests_cache',S.manifests);
       const liveDraft=ms.find(r=>r.id==='live_draft');
       if(liveDraft&&liveDraft.data&&typeof liveDraft.data==='object'){
@@ -1373,7 +1373,7 @@ async function reloadTable(table){
         if(live.data._updatedBy===S.user?.id){_ownEcho=true;}
         else{mergeDispatch(live.data);}
       }
-      S.manifests=ms.filter(function(r){return r.id!=='live_draft'&&!r.id.startsWith('ls_live_');}).map(function(r){return{id:r.id,name:r.name,savedAt:r.saved_at,data:r.data};});
+      S.manifests=ms.filter(function(r){return r.id!=='live_draft'&&!r.id.startsWith('ls_live_');}).map(function(r){return{id:r.id,name:r.name,savedAt:r.saved_at,data:r.data,_deleted:!!(r.data&&r.data._deleted)};});
       lsSet('ts_manifests_cache',S.manifests);return !_ownEcho||_lsForeignChange;
     }
   } else if(table==='ts_crew'){
@@ -1861,6 +1861,9 @@ function render(){
   const r=document.getElementById('root');
   if(!r)return;
   document.body.classList.toggle('wide-mode',!!S.wideMode);
+  // Auto-detect mobile on first render
+  if(typeof S._mobileInit==='undefined'){S._mobileInit=true;if(typeof S.mobileView==='undefined')S.mobileView=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)&&window.innerWidth<800;}
+  document.body.classList.toggle('mobile-view',!!S.mobileView);
   // ── Preserve focused input across re-renders ──
   const _ae=document.activeElement;
   const _aeId=_ae?.id||null;
@@ -2151,7 +2154,8 @@ function renderApp(){
         <div style="display:flex;align-items:center;gap:10px">
           <span title="${S.rtStatus==='live'?'Live — real-time sync active':S.rtStatus==='connecting'?'Connecting to live sync...':'Offline — reconnecting...'}" class="sync-dot ${S.rtStatus==='live'?'dot-live':S.rtStatus==='connecting'?'dot-connecting':''}" style="width:8px;height:8px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'};flex-shrink:0"></span>
           <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">${APP_VER}</div>
-          <button tabindex="-1" title="${S.wideMode?'Switch to compact width':'Switch to full width'}" onclick="event.stopPropagation();S.wideMode=!S.wideMode;lsSet('ts_wide_mode',S.wideMode);render()" style="background:var(--border);border:none;padding:3px 7px;border-radius:5px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1" title="Toggle width">${S.wideMode?'⇤⇥':'↔'}</button>
+          <button tabindex="-1" title="${S.wideMode?'Switch to compact width':'Switch to full width'}" onclick="event.stopPropagation();S.wideMode=!S.wideMode;lsSet('ts_wide_mode',S.wideMode);render()" style="background:var(--border);border:none;padding:3px 7px;border-radius:5px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1">${S.wideMode?'⇤⇥':'↔'}</button>
+          <button tabindex="-1" title="${S.mobileView?'Switch to desktop layout':'Switch to mobile layout'}" onclick="event.stopPropagation();S.mobileView=!S.mobileView;lsSet('ts_mobile_view',S.mobileView);render()" style="background:${S.mobileView?'rgba(124,58,237,.3)':'var(--border)'};border:${S.mobileView?'1px solid rgba(124,58,237,.6)':'none'};padding:3px 7px;border-radius:5px;font-size:12px;color:${S.mobileView?'#c084fc':'var(--text2)'};cursor:pointer;line-height:1">📱</button>
           <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:var(--border);border:none;padding:3px 7px;border-radius:5px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1" title="Help">?</button>
           <div style="display:flex;align-items:center;gap:4px">
             <button tabindex="-1" onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
@@ -2412,7 +2416,11 @@ function renderStep1(){
   return`
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
     <input class="fi" type="text" placeholder="Manifest name (e.g. NZQN-NZMF 9 Jun)" value="${d.name||''}" style="flex:1;font-size:13px" tabindex="-1" onblur="S.dispatch.name=this.value;autoSaveDispatch()">
-    <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="saveManifest()">💾 Save</button>
+    ${S._loadedManifestId
+      ?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="saveManifest()">💾 Update</button>
+        <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="window.saveManifestAs()">+ Save As New</button>
+        <button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(239,68,68,.4);color:#ef4444" onclick="window.deleteCurrentManifest()">🗑 Delete</button>`
+      :`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="saveManifest()">💾 Save</button>`}
     <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="S.tab='saved';S.savedTab='manifests';render()">📂 Load</button>
     <button tabindex="-1" class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>${S._undoLabel?'<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(245,158,11,.5);color:#f59e0b" onclick="undoManifest()">&#x21A9; Undo '+S._undoLabel+'</button>':''}
   </div>
@@ -2464,7 +2472,10 @@ function renderStep1(){
     </div>
   </div>
   <div style="display:flex;gap:8px;margin-bottom:8px">
-    <button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="saveManifest()">💾 Save Manifest</button>
+    ${S._loadedManifestId
+      ?`<button tabindex="-1" class="btn btn-ghost" style="flex:2;font-size:13px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="saveManifest()">💾 Update Manifest</button>
+        <button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:12px" onclick="window.saveManifestAs()">+ Save As New</button>`
+      :`<button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="saveManifest()">💾 Save Manifest</button>`}
   </div>
   <button tabindex="-1" class="btn-full ${canNext?'btn-primary':'btn-disabled'}" onclick="${canNext?'autoAllocate()':''}"
     ${!canNext?'disabled':''}>Auto-Allocate & Open Seat Map →</button>`;
@@ -2775,6 +2786,183 @@ function _fmtLsDate(iso){
   var d=new Date(iso+'T00:00:00');
   return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()]+' '+d.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+String(d.getFullYear()).slice(-2);
 }
+
+// ── Large interactive seat grid for loadsheet ──
+function renderLsSeatGrid(f,a){
+  if(!a||!a.seats)return'';
+  var layout=acLayout(f.ac);
+  var _isCpCrew=!!f.coPilot;
+  var isMob=window.innerWidth<=600;
+  var sW=isMob?68:86;
+  var sH=isMob?62:76;
+  var html='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0">';
+  layout.forEach(function(row){
+    if(row==='spacer'){
+      html+='<div style="height:10px;width:90%;border-top:1px dashed var(--border2);margin:2px auto"></div>';
+      return;
+    }
+    html+='<div style="display:flex;gap:8px">';
+    row.forEach(function(cell){
+      var idx=cell.i;
+      var isPIC=idx===0;
+      var isCoPilot=idx===1&&_isCpCrew;
+      var nm=f.names[idx]||'';
+      var wt=f.seats[idx]||'';
+      var bg=f.bags[idx]||'';
+      var grp=(!isPIC&&!isCoPilot&&f.paxGroups)?f.paxGroups[idx]||'':'';
+      var gc=grp?groupColor(grp):null;
+      var paxType=(!isPIC&&!isCoPilot&&f.paxType)?f.paxType[idx]||'A':'A';
+      var hasInfant=!!(f.infantNames&&f.infantNames[idx]);
+      var payReq=!!(f.paxPaymentReq&&f.paxPaymentReq[idx]);
+      // Last name display
+      var rawNm=nm;
+      var displayNm=rawNm?(rawNm.trim().includes(' ')?rawNm.trim().split(' ').pop():rawNm.trim()):'';
+      if(isPIC){
+        var picNm=f.names[0]||f.pic||'';
+        displayNm=picNm?(picNm.trim().includes(' ')?picNm.trim().split(' ').pop():picNm.trim()):'';
+      } else if(isCoPilot){
+        var cpNm=f.coPilot||'';
+        displayNm=cpNm?(cpNm.trim().includes(' ')?cpNm.trim().split(' ').pop():cpNm.trim()):'';
+      }
+      var isOccupied=!!nm||parseFloat(wt)>0;
+      var bgCol=isPIC?'rgba(59,130,246,.18)':isCoPilot?'rgba(100,116,139,.12)':
+        isOccupied?(gc?gc+'30':'rgba(124,58,237,.14)'):'var(--card2)';
+      var borderCol=isPIC?'#3b82f6':isCoPilot?'#64748b':
+        isOccupied?(gc||'var(--accent)'):'var(--border2)';
+      var nameCol=gc?gc:(isPIC?'#93c5fd':isCoPilot?'#94a3b8':'var(--text1)');
+      var clickable=!isPIC&&!isCoPilot;
+      html+='<div onclick="'+(clickable?'window.lsSeatEditPopup('+idx+')':'')+'" style="'
+        +'width:'+sW+'px;height:'+sH+'px;border-radius:10px;border:2px solid '+borderCol+';'
+        +'background:'+bgCol+';cursor:'+(clickable?'pointer':'default')+';'
+        +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+        +'position:relative;padding:3px 5px;text-align:center;flex-shrink:0;'
+        +'transition:box-shadow .12s'
+        +'"'+(clickable?' onmouseover="this.style.boxShadow=\'0 0 0 2px var(--acc)\'" onmouseout="this.style.boxShadow=\'\'"':'')+' >';
+      // Seat label (top-left corner)
+      html+='<div style="position:absolute;top:3px;left:4px;font-size:9px;font-weight:700;color:'
+        +(isPIC?'#3b82f6':isCoPilot?'#64748b':'var(--text3)')+';line-height:1">'
+        +(isPIC?'PIC':isCoPilot?'CP':cell.lbl)+'</div>';
+      // Name
+      if(displayNm){
+        html+='<div style="font-size:'+(isMob?'10':'12')+'px;font-weight:800;color:'+nameCol+';'
+          +'line-height:1.1;max-width:'+(sW-10)+'px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'
+          +'margin-top:'+(isPIC||isCoPilot?'2':'6')+'px">'+(displayNm.toUpperCase())+'</div>';
+      } else if(!isPIC&&!isCoPilot){
+        html+='<div style="font-size:11px;color:var(--border2);margin-top:8px">+</div>';
+      }
+      // Weight
+      if(isOccupied&&!isPIC&&!isCoPilot&&parseFloat(wt)>0){
+        html+='<div style="font-size:'+(isMob?'8':'9')+'px;color:'+(gc?gc:'var(--text3)')+';margin-top:2px;opacity:.9">'+(wt)+'kg'+(parseFloat(bg)>0?' +🎒':'')+'</div>';
+      }
+      // Child badge (bottom-right)
+      if(!isPIC&&!isCoPilot&&isOccupied&&paxType==='C'){
+        html+='<div style="position:absolute;bottom:3px;right:3px;font-size:7px;font-weight:900;background:rgba(251,146,60,.7);color:#7c2d12;border-radius:3px;padding:0 3px;line-height:1.6">C</div>';
+      }
+      // Infant badge (top-right)
+      if(hasInfant){
+        html+='<div style="position:absolute;top:2px;right:3px;font-size:7px;font-weight:900;background:rgba(236,72,153,.7);color:#831843;border-radius:3px;padding:0 3px;line-height:1.6">i</div>';
+      }
+      // Payment required (top-right if no infant)
+      if(!hasInfant&&payReq&&!isPIC){
+        html+='<div style="position:absolute;top:2px;right:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.6);color:#fff;border-radius:3px;padding:0 3px;line-height:1.6">$</div>';
+      }
+      html+='</div>';
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+// ── Seat editor popup ──
+window.lsSeatEditPopup=function(idx){
+  var f=S.form;if(!f)return;
+  var a=S.aircraft[f.ac];if(!a||!a.seats[idx])return;
+  var isCoPilot=idx===1&&!!f.coPilot;if(isCoPilot)return;
+  var nm=f.names[idx]||'';
+  var wt=String(f.seats[idx]||'');
+  var bg=String(f.bags[idx]||'');
+  var grp=(f.paxGroups&&f.paxGroups[idx])||'';
+  var _pType=(f.paxType&&f.paxType[idx])||'A';
+  var seatLbl=a.seats[idx].lbl||String(idx);
+  var isOccupied=!!nm||parseFloat(wt)>0;
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+  var inner=document.createElement('div');
+  inner.style.cssText='background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:20px;max-width:360px;width:100%;max-height:90vh;overflow-y:auto';
+  inner.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+    +'<div style="font-size:16px;font-weight:700">Seat '+seatLbl+'</div>'
+    +'<button id="lsSpClose" style="background:none;border:none;color:var(--text3);font-size:22px;cursor:pointer;padding:0 4px;line-height:1">&times;</button>'
+    +'</div>'
+    +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Passenger Name</label>'
+    +'<input id="lsSpName" class="fi" type="text" placeholder="First Last" value="'+nm.replace(/"/g,'&quot;')+'" style="font-size:15px;font-weight:600;width:100%"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Weight (kg)</label>'
+    +'<input id="lsSpWt" class="fi" type="number" inputmode="decimal" min="0" step="1" placeholder="kg" value="'+wt+'" style="font-size:15px;font-weight:600"></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Bag (kg)</label>'
+    +'<input id="lsSpBag" class="fi" type="number" inputmode="decimal" min="0" step="1" placeholder="0" value="'+bg+'" style="font-size:15px;font-weight:600"></div>'
+    +'</div>'
+    +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Type</label>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button id="lsSpTA" style="flex:1;padding:10px;border-radius:8px;border:2px solid '+(_pType==='A'?'#3b82f6':'var(--border2)')+';background:'+(_pType==='A'?'rgba(59,130,246,.22)':'transparent')+';color:var(--text1);font-size:13px;font-weight:700;cursor:pointer">Adult</button>'
+    +'<button id="lsSpTC" style="flex:1;padding:10px;border-radius:8px;border:2px solid '+(_pType==='C'?'#fb923c':'var(--border2)')+';background:'+(_pType==='C'?'rgba(251,146,60,.22)':'transparent')+';color:var(--text1);font-size:13px;font-weight:700;cursor:pointer">Child</button>'
+    +'</div></div>'
+    +'<div style="margin-bottom:18px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Group</label>'
+    +'<input id="lsSpGrp" class="fi" type="text" placeholder="Group name (optional)" value="'+grp.replace(/"/g,'&quot;')+'" style="font-size:13px;width:100%"></div>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button id="lsSpSave" style="flex:2;padding:12px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Save</button>'
+    +(isOccupied?'<button id="lsSpClear" style="flex:1;padding:12px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Clear</button>':'')
+    +'</div>';
+  ov.appendChild(inner);
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
+  document.getElementById('lsSpClose').onclick=function(){ov.remove();};
+  // Type toggle logic via closure
+  function setType(t){
+    _pType=t;
+    var ta=document.getElementById('lsSpTA'),tc=document.getElementById('lsSpTC');
+    if(!ta||!tc)return;
+    if(t==='A'){ta.style.borderColor='#3b82f6';ta.style.background='rgba(59,130,246,.22)';tc.style.borderColor='var(--border2)';tc.style.background='transparent';}
+    else{tc.style.borderColor='#fb923c';tc.style.background='rgba(251,146,60,.22)';ta.style.borderColor='var(--border2)';ta.style.background='transparent';}
+  }
+  document.getElementById('lsSpTA').onclick=function(){setType('A');};
+  document.getElementById('lsSpTC').onclick=function(){setType('C');};
+  // Save
+  document.getElementById('lsSpSave').onclick=function(){
+    var newNm=document.getElementById('lsSpName').value.trim();
+    var newWt=document.getElementById('lsSpWt').value.trim();
+    var newBg=document.getElementById('lsSpBag').value.trim();
+    var newGrp=document.getElementById('lsSpGrp').value.trim();
+    if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
+    S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
+    if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();
+    f.names[idx]=newNm;
+    f.seats[idx]=newWt||'';
+    f.bags[idx]=newBg||'';
+    if(!f.paxGroups)f.paxGroups={};
+    if(newGrp)f.paxGroups[idx]=newGrp;else delete f.paxGroups[idx];
+    if(!f.paxType)f.paxType={};
+    if(newNm||parseFloat(newWt)){f.paxType[idx]=_pType;}else{delete f.paxType[idx];}
+    S.formDirty=true;autoSaveLS();
+    ov.remove();render();
+  };
+  // Clear
+  var clearEl=document.getElementById('lsSpClear');
+  if(clearEl){
+    clearEl.onclick=function(){
+      if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
+      S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
+      if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();
+      f.names[idx]='';f.seats[idx]='';f.bags[idx]='';
+      if(f.paxGroups)delete f.paxGroups[idx];
+      if(f.paxType)delete f.paxType[idx];
+      S.formDirty=true;autoSaveLS();
+      ov.remove();render();
+    };
+  }
+  setTimeout(function(){var el=document.getElementById('lsSpName');if(el){el.focus();try{el.select();}catch(e){}}},80);
+};
+
 function renderLoadsheet(){
   const f=S.form,a=S.aircraft[f.ac],r=a?calcFormWB(f):null,allOk=r&&r.towOk&&r.lwOk&&r.cogOk;
   const picCrew=pilotCrewList().find(c=>c.n===f.pic);
@@ -2897,18 +3085,13 @@ function renderLoadsheet(){
     seatsH=`<div class="card" id="lsf-seats" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
       <div class="st" style="display:flex;align-items:center;justify-content:space-between">Passengers${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}</div>
       ${wbSummary}
-      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-        <div style="flex-shrink:0">
-          ${renderCabinSVG(f.ac,false,f,window.innerWidth<=520?40:52,window.innerWidth<=520?34:44)}
-        </div>
-        <div style="flex:1;min-width:200px">
-          ${picCard}
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">${paxCards}</div>
-          <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:6px;border-top:1px solid var(--border)">
-            <span style="font-size:12px;font-weight:700;color:var(--text3)">Total Pax</span>
-            <span style="font-size:13px;font-weight:700">${r?r.paxW.toFixed(1):'—'} kg</span>
-          </div>
-        </div>
+      ${picCard}
+      <div style="margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+        ${renderLsSeatGrid(f,a)}
+      </div>
+      <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:8px;border-top:1px solid var(--border)">
+        <span style="font-size:12px;font-weight:700;color:var(--text3)">Total Pax Weight</span>
+        <span style="font-size:13px;font-weight:700">${r?r.paxW.toFixed(1):'—'} kg</span>
       </div>
     </div>`;
 
@@ -3637,27 +3820,79 @@ function renderSaved(){
   const search=(S.savedSearch||'').toLowerCase();
   const sort=S.savedSort||'newest';
   const _myName=(S.user?.linkedCrew||S.user?.name||'').trim();
-  const mySheets=_myName?S.saved.filter(function(s){return(s.form&&s.form.pic||'').trim()===_myName;}):[];
+  // Exclude deleted from mine/counts
+  const mySheets=_myName?S.saved.filter(function(s){return(s.form&&s.form.pic||'').trim()===_myName&&s.status!=='deleted';}):[];
+
+  // Bin contents
+  const binLs=S.saved.filter(s=>s.status==='deleted');
+  const binMs=S.manifests.filter(m=>m._deleted);
+  const binCount=binLs.length+binMs.length;
+  const activeManifests=S.manifests.filter(m=>!m._deleted);
+  const allCount=S.saved.filter(s=>s.status!=='deleted').length;
 
   const driveStatusHTML=''; // handled by appMsg banner
   const _selCount=Object.keys(S.savedSel).length;
   const _selSignedCount=Object.keys(S.savedSel).filter(id=>{const s=S.saved.find(x=>x.id===id);return s&&s.status==='complete';}).length;
-  const _bulkBar=_selCount>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
+  const _bulkBar=_selCount>0&&tab!=='bin'?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
     <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_selCount} item(s) selected</span>
     <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
     <button onclick="window.printMultiSheet(Object.keys(S.savedSel))" style="padding:5px 12px;border-radius:6px;border:none;background:#374151;color:#fff;font-size:16px;font-weight:700;cursor:pointer" title="Print selected">&#x1F5A8;</button>
     ${_selSignedCount>0?`<button onclick="window.bulkUploadSaved()" style="padding:5px 14px;border-radius:6px;border:none;background:#1a73e8;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;box-shadow:0 1px 4px rgba(26,115,232,.4)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>Upload to Drive (${_selSignedCount})</button>`:''}
-    <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Delete ${_selCount}</button>
+    <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_selCount})</button>
   </div>`:'';
   const tabBar=`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
     <button class="sub-tab ${tab==='unsigned'?'on':''}" onclick="S.savedTab='unsigned';render()">Active — Unsigned (${S.saved.filter(s=>s.status==='unsigned').length})</button>
-    <button class="sub-tab ${tab==='loadsheets'?'on':''}" onclick="S.savedTab='loadsheets';render()">All (${S.saved.length})</button>
+    <button class="sub-tab ${tab==='loadsheets'?'on':''}" onclick="S.savedTab='loadsheets';render()">All (${allCount})</button>
     <button class="sub-tab ${tab==='archived'?'on':''}" onclick="S.savedTab='archived';render()">📦 Archived — Signed (${S.saved.filter(s=>s.status==='complete').length})</button>
     ${_myName?`<button class="sub-tab ${tab==='mine'?'on':''}" onclick="S.savedTab='mine';render()">Mine (${mySheets.length})</button>`:''}
-    <button class="sub-tab ${tab==='manifests'?'on':''}" onclick="S.savedTab='manifests';render()">Manifests (${S.manifests.length})</button>
+    <button class="sub-tab ${tab==='manifests'?'on':''}" onclick="S.savedTab='manifests';render()">Manifests (${activeManifests.length})</button>
+    <button class="sub-tab ${tab==='bin'?'on':''}" onclick="S.savedTab='bin';render()">🗑️ Bin${binCount>0?' ('+binCount+')':''}</button>
   </div>`;
 
-  // ── Manifests tab ──
+  // ── Bin tab ──
+  if(tab==='bin'){
+    return tabBar+`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:13px;color:var(--text3)">Items here can be restored or permanently deleted.</span>
+      ${binCount>0?`<button class="btn btn-red" style="font-size:12px" onclick="window.emptyBin()">🗑️ Empty Bin</button>`:''}
+    </div>`+
+    (!binCount
+      ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">🗑️ Bin is empty</div>`
+      :(binLs.map(s=>{
+          const col=AC_COL[s.form.ac]||'#64748b';
+          const _savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
+          return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid #ef444488;opacity:.85">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
+                <span style="padding:2px 8px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px">${s.form.ac||'?'}</span>
+                <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
+                ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
+                <span class="pill pill-warn" style="font-size:10px">Loadsheet</span>
+              </div>
+              <div style="font-size:11px;color:var(--text3)">${_savedStr?'Saved '+_savedStr:''}</div>
+            </div>
+            <div style="display:flex;gap:5px;flex-shrink:0">
+              <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.restoreFromBin('${s.id}')">↩ Restore</button>
+              <button class="btn btn-red" style="font-size:12px;padding:6px 10px" onclick="window.permDeleteFromBin('${s.id}')">🗑 Delete</button>
+            </div></div>`;
+        }).join('')+
+        binMs.map(m=>{
+          const _savedStr=m.savedAt?_lsRelTime(m.savedAt):'';
+          return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid #ef444488;opacity:.85">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                <span style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</span>
+                <span class="pill pill-warn" style="font-size:10px">Manifest</span>
+              </div>
+              <div style="font-size:11px;color:var(--text3)">${_savedStr?_savedStr+' · ':''} ${m.data?.pax?.length||0} pax</div>
+            </div>
+            <div style="display:flex;gap:5px;flex-shrink:0">
+              <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.restoreFromBin('${m.id}')">↩ Restore</button>
+              <button class="btn btn-red" style="font-size:12px;padding:6px 10px" onclick="window.permDeleteFromBin('${m.id}')">🗑 Delete</button>
+            </div></div>`;
+        }).join('')));
+  }
+
+  // ── Mine tab ──
   if(tab==='mine'){
     return tabBar+(_myName
       ?(!mySheets.length
@@ -3686,10 +3921,10 @@ function renderSaved(){
       :'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">No crew name linked to your account.</div>');
   }
   if(tab==='manifests'){
-    return tabBar+_bulkBar+(S.manifests.length?'<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-red" style="font-size:12px" onclick="window.clearAllManifests()">&#x1f5d1; Clear All Manifests</button></div>':'')+`
-    ${!S.manifests.length
+    return tabBar+_bulkBar+(activeManifests.length?'<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-red" style="font-size:12px" onclick="window.clearAllManifests()">&#x1f5d1; Clear All Manifests</button></div>':'')+`
+    ${!activeManifests.length
       ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">📋 No saved manifests</div>`
-      :S.manifests.map(m=>`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid ${S.savedSel[m.id]?'#3b82f6':'var(--border)'};margin-bottom:8px;background:${S.savedSel[m.id]?'rgba(59,130,246,.08)':'var(--card)'}">
+      :activeManifests.map(m=>`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid ${S.savedSel[m.id]?'#3b82f6':'var(--border)'};margin-bottom:8px;background:${S.savedSel[m.id]?'rgba(59,130,246,.08)':'var(--card)'}">
       <input type="checkbox" ${S.savedSel[m.id]?'checked':''} onchange="window.toggleSavedSel('${m.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
       <div style="flex:1">
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
@@ -3708,7 +3943,7 @@ function renderSaved(){
     const _unsignedBulkBar=_unsignedSelCount>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
       <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_unsignedSelCount} selected</span>
       <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
-      <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Delete ${_unsignedSelCount}</button>
+      <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_unsignedSelCount})</button>
     </div>`:'';
     return tabBar+`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:10px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px">
@@ -3742,12 +3977,11 @@ function renderSaved(){
       }).join('')}`;
   }
 
-  // ── All loadsheets tab ──
-  let items=[...S.saved];
-  // Tab filter for archived
+  // ── All loadsheets tab (and archived) ──
+  let items=S.saved.filter(s=>s.status!=='deleted');
   if(tab==='archived') items=items.filter(s=>s.status==='complete');
-  else if(tab==='loadsheets') {} // show all
-  else if(tab!=='manifests') items=items.filter(s=>s.status!=='complete'); // unsigned = active only
+  else if(tab==='loadsheets') {} // show all non-deleted
+  else if(tab!=='manifests') items=items.filter(s=>s.status!=='complete');
   if(search){
     items=items.filter(s=>{
       const f=s.form;
@@ -3780,7 +4014,7 @@ function renderSaved(){
   </div>
   ${_bulkBar}
   ${!items.length
-    ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">📋 ${S.saved.length?'No results for "'+search+'"':'No saved loadsheets'}</div>`
+    ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">📋 ${allCount?'No results for "'+search+'"':'No saved loadsheets'}</div>`
     :items.map(s=>{
       const col=AC_COL[s.form.ac]||'#64748b';
       const _paxCnt=Object.keys(s.form.names||{}).filter(function(k){var ki=parseInt(k);if(ki===0)return false;var nm=s.form.names[k];return nm&&nm.trim();}).length;
@@ -5040,13 +5274,34 @@ window.saveManifest=async()=>{
     else if(etdSel.value==='custom'){const etdInp=document.getElementById('etd_dispatch');if(etdInp&&etdInp.value)S.dispatch.etd=etdInp.value;}
   }
   const d=S.dispatch,name=d.name||`Manifest ${new Date().toLocaleDateString('en-NZ')}`;
-  const id='mn_'+Date.now();
+  // If we have a loaded manifest ID, UPDATE it; otherwise create new
+  const id=S._loadedManifestId||('mn_'+Date.now());
+  const savedAt=new Date().toISOString();
   const data={dep:d.dep,dest:d.dest,date:d.date,etd:d.etd,acSetup:d.acSetup,pax:d.pax,name};
-  S.manifests=S.manifests.filter(m=>m.name!==name);
-  S.manifests.unshift({id,name,savedAt:new Date().toISOString(),data});
+  S.manifests=S.manifests.filter(m=>m.id!==id&&m.name!==name);
+  S.manifests.unshift({id,name,savedAt,data});
+  S._loadedManifestId=id;
   lsSet('ts_manifests_cache',S.manifests);render();
-  await sbU('ts_manifests',[{id,name,saved_at:new Date().toISOString(),data}]);
-  auditLog('manifest_save',{name,pax:d.pax.length,aircraft:d.acSetup.map(s=>s.acId).join(',')});S.appMsg={type:'ok',text:'Manifest "'+name+'" saved.'};
+  await sbU('ts_manifests',[{id,name,saved_at:savedAt,data}]);
+  auditLog('manifest_save',{name,pax:d.pax.length,aircraft:d.acSetup.map(s=>s.acId).join(',')});
+  S.appMsg={type:'ok',text:'Manifest "'+name+'" saved.'};
+};
+window.saveManifestAs=async function(){
+  S._loadedManifestId=null;
+  await window.saveManifest();
+};
+window.deleteCurrentManifest=async function(){
+  if(!S._loadedManifestId)return;
+  const id=S._loadedManifestId;
+  const m=S.manifests.find(function(x){return x.id===id;});
+  if(!m){S._loadedManifestId=null;render();return;}
+  if(!confirm('Move this manifest to Bin?'))return;
+  if(!m.data)m.data={};
+  m.data._deleted=true;m._deleted=true;
+  S._loadedManifestId=null;
+  lsSet('ts_manifests_cache',S.manifests);render();
+  await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);
+  S.appMsg={type:'ok',text:'Manifest moved to Bin.'};
 };
 
 function _autoSaveCurrent(reason){
@@ -5066,7 +5321,6 @@ function _autoSaveCurrent(reason){
 }
 window.loadManifest=id=>{
   const m=S.manifests.find(x=>x.id===id);if(!m)return;
-  _autoSaveCurrent('before_load');
   S._dispatchUndo=JSON.parse(JSON.stringify(S.dispatch));
   const now=Date.now();
   const data={...bD(),...m.data,seatMap:{},step:1};
@@ -5075,6 +5329,7 @@ window.loadManifest=id=>{
   data._updateTs=now;
   data._loadedAt=now;
   S.dispatch=data;
+  S._loadedManifestId=m.id;
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
   auditLog('manifest_load',{name:m.name,pax:(m.data&&m.data.pax?m.data.pax.length:0)});
   S._undoLabel='Load "'+m.name+'"';
@@ -5135,20 +5390,23 @@ window.reopenSaved=async function(id){
   else{S.lsTabs.push({id:s.id,acId:acFull,form:form,status:'unsigned',savedAt:s.savedAt});window.switchLsTab(s.id);}
   toast('Loadsheet reopened - signature cleared','ok');
 };
-window.deleteManifest=async id=>{if(!confirm('Delete this manifest?'))return;S.manifests=S.manifests.filter(m=>m.id!==id);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_manifests',id);};
+window.deleteManifest=async function(id){if(!confirm('Move this manifest to Bin?'))return;var m=S.manifests.find(function(x){return x.id===id;});if(!m)return;if(!m.data)m.data={};m.data._deleted=true;m._deleted=true;lsSet('ts_manifests_cache',S.manifests);render();await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);};
 window.toggleSavedSel=id=>{if(S.savedSel[id])delete S.savedSel[id];else S.savedSel[id]=true;render();};
 window.selectAllSaved=ids=>{ids.forEach(id=>S.savedSel[id]=true);render();};
 window.clearSavedSel=()=>{S.savedSel={};render();};
-window.bulkDeleteSaved=async()=>{
+window.bulkDeleteSaved=async function(){
   const ids=Object.keys(S.savedSel);
   if(!ids.length)return;
-  if(!confirm('Delete '+ids.length+' selected item(s)? This cannot be undone.'))return;
-  S.saved=S.saved.filter(s=>!S.savedSel[s.id]);
-  S.manifests=S.manifests.filter(m=>!S.savedSel[m.id]);
+  if(!confirm('Move '+ids.length+' item(s) to Bin?'))return;
+  const lsIds=ids.filter(function(id){return S.saved.find(function(s){return s.id===id;});});
+  const mIds=ids.filter(function(id){return S.manifests.find(function(m){return m.id===id;});});
+  S.saved.forEach(function(s){if(lsIds.indexOf(s.id)>=0){s.form._prevStatus=s.status;s.status='deleted';}});
+  S.manifests.forEach(function(m){if(mIds.indexOf(m.id)>=0){if(!m.data)m.data={};m.data._deleted=true;m._deleted=true;}});
   lsSet('ts_loadsheets_cache',S.saved);
   lsSet('ts_manifests_cache',S.manifests);
   S.savedSel={};render();
-  for(const id of ids){await sbDel('ts_loadsheets',id).catch(()=>{});await sbDel('ts_manifests',id).catch(()=>{});}
+  for(var i=0;i<lsIds.length;i++){var s2=S.saved.find(function(x){return x.id===lsIds[i];});if(s2)await sbU('ts_loadsheets',[{id:s2.id,form:s2.form,saved_at:s2.savedAt,status:'deleted'}]).catch(function(){});}
+  for(var j=0;j<mIds.length;j++){var m2=S.manifests.find(function(x){return x.id===mIds[j];});if(m2)await sbU('ts_manifests',[{id:m2.id,name:m2.name,data:m2.data,saved_at:m2.savedAt}]).catch(function(){});}
 };
 window.bulkUploadSaved=async function(){
   const ids=Object.keys(S.savedSel);
@@ -5180,10 +5438,10 @@ window.bulkUploadSaved=async function(){
 
 window.clearManifest=()=>{
   if(!confirm('Clear all passengers and aircraft?'))return;
-  _autoSaveCurrent('before_clear');
   S._dispatchUndo=JSON.parse(JSON.stringify(S.dispatch));
   auditLog('manifest_clear',{pax:(S.dispatch.pax||[]).length});
   S._undoLabel='Clear';
+  S._loadedManifestId=null;
   S.dispatch=bD();S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
   autoSaveDispatch();render();
 };
@@ -5466,26 +5724,62 @@ window.closeLsTab=function(id){
   var idx=S.lsTabs.findIndex(function(t){return t.id===id;});
   if(idx===-1)return;
   var tab=S.lsTabs[idx];
+  var acCode=tab.acId?tab.acId.replace('ZK-',''):id;
+  // Build custom dialog
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:22px;max-width:360px;width:100%';
+  var title=acCode+' loadsheet';
   if(tab.isNew){
-    // Was saved to DB on creation -- delete it on close
-    sbDel('ts_loadsheets',id).catch(function(){});
-    S._lsFormUndo=null;
+    box.innerHTML='<div style="font-size:16px;font-weight:700;margin-bottom:8px">Close '+title+'?</div>'
+      +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px">This is a new loadsheet. Keep it in Saved for later, or delete it now.</div>'
+      +'<div style="display:flex;gap:8px;margin-bottom:8px">'
+      +'<button id="_lsCloseKeep" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Keep</button>'
+      +'<button id="_lsCloseDelete" style="flex:1;padding:11px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Delete</button>'
+      +'</div>'
+      +'<button id="_lsCloseCancel" style="width:100%;padding:10px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>';
   } else {
-    // Revert to original saved version in DB
+    box.innerHTML='<div style="font-size:16px;font-weight:700;margin-bottom:8px">Close '+title+'?</div>'
+      +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px">Your changes have been auto-saved. Close now, or revert to the original version.</div>'
+      +'<div style="display:flex;gap:8px;margin-bottom:8px">'
+      +'<button id="_lsCloseKeep" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Close</button>'
+      +'<button id="_lsCloseDelete" style="flex:1;padding:11px;background:transparent;color:#f59e0b;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Revert &amp; Close</button>'
+      +'</div>'
+      +'<button id="_lsCloseCancel" style="width:100%;padding:10px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>';
+  }
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  function _doClose(action){
+    ov.remove();
+    _execCloseLsTab(id,idx,tab,action);
+  }
+  document.getElementById('_lsCloseKeep').onclick=function(){_doClose('keep');};
+  document.getElementById('_lsCloseDelete').onclick=function(){_doClose(tab.isNew?'delete':'revert');};
+  document.getElementById('_lsCloseCancel').onclick=function(){ov.remove();};
+};
+function _execCloseLsTab(id,idx,tab,action){
+  if(action==='delete'){
+    sbDel('ts_loadsheets',id).catch(function(){});
+    S.saved=S.saved.filter(function(s){return s.id!==id;});
+    lsSet('ts_loadsheets_cache',S.saved);
+    S._lsFormUndo=null;
+  } else if(action==='revert'){
     if(tab.originalForm){
       try{sbU('ts_loadsheets',[{id:id,form:tab.originalForm,saved_at:tab.savedAt||new Date().toISOString(),status:tab.status||'unsigned'}]);}catch(e){}
       S.saved=S.saved.map(function(s){return s.id===id?Object.assign({},s,{form:tab.originalForm}):s;});
       lsSet('ts_loadsheets_cache',S.saved);
     }
   }
-  // Broadcast close to all users
+  // action==='keep': edits already auto-saved, nothing to do
+  // Broadcast close
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_close',payload:{id:id}},ref:String(_rtRef)}));}
   if(S.activeTabId===id){
     if(S.lsTabs.length>1){var next=S.lsTabs[idx>0?idx-1:1];S.activeTabId=next.id;S.form=next.form;S.lsAc=next.acId.replace('ZK-','');S.editId=next.id;}
     else{S.activeTabId=null;S.editId=null;S._newLsTab=false;S.tab='manifest';}
   }
   S.lsTabs.splice(idx,1);render();
-};
+}
 window.newLsTab=function(){S._newLsTab=true;S.activeTabId=null;S.tab='manifest';render();};
 window.toggleLsManage=function(){S._lsManageMode=!S._lsManageMode;S._lsTabSel={};render();};
 window.toggleLsTabSel=function(id){S._lsTabSel[id]=!S._lsTabSel[id];render();};
@@ -5657,7 +5951,15 @@ window.editSaved=function(id){
   S.lsTabs.push({id:s.id,acId:acFull,form:dc(s.form),status:s.status||'unsigned',savedAt:s.savedAt,originalForm:dc(s.form)});
   window.switchLsTab(s.id);
 };
-window.delSaved=async id=>{if(!confirm('Delete this loadsheet?'))return;S.saved=S.saved.filter(s=>s.id!==id);lsSet('ts_loadsheets_cache',S.saved);render();await sbDel('ts_loadsheets',id);};
+window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted'}]);};
+window.restoreFromBin=async function(id){
+  var s=S.saved.find(function(x){return x.id===id;});
+  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status}]);return;}
+  var m=S.manifests.find(function(x){return x.id===id;});
+  if(m){if(m.data)delete m.data._deleted;m._deleted=false;lsSet('ts_manifests_cache',S.manifests);render();await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);}
+};
+window.permDeleteFromBin=async function(id){if(!confirm('Permanently delete? This cannot be undone.'))return;S.saved=S.saved.filter(function(s){return s.id!==id;});S.manifests=S.manifests.filter(function(m){return m.id!==id;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_loadsheets',id).catch(function(){});await sbDel('ts_manifests',id).catch(function(){});};
+window.emptyBin=async function(){var bLs=S.saved.filter(function(s){return s.status==='deleted';});var bMs=S.manifests.filter(function(m){return m._deleted;});if(!bLs.length&&!bMs.length){toast('Bin is already empty','info');return;}if(!confirm('Permanently delete all '+(bLs.length+bMs.length)+' item(s)? This cannot be undone.'))return;S.saved=S.saved.filter(function(s){return s.status!=='deleted';});S.manifests=S.manifests.filter(function(m){return!m._deleted;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();for(var i=0;i<bLs.length;i++)await sbDel('ts_loadsheets',bLs[i].id).catch(function(){});for(var j=0;j<bMs.length;j++)await sbDel('ts_manifests',bMs[j].id).catch(function(){});};
 window.restoreLsOriginal=function(){
   if(!confirm('Restore to the version loaded from saved? Any unsaved edits will be lost.'))return;
   var tab=S.lsTabs.find(function(t){return t.id===S.activeTabId;});
