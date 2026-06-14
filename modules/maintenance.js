@@ -6,7 +6,7 @@ function renderMaintenance(){
   if(m._loading){return'<div style="display:flex;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:var(--text3)"><div style="width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--acc);border-radius:50%;animation:spin 0.7s linear infinite"></div><span style="font-size:14px">Loading maintenance data…</span></div>';}
   if(m._loadFailed){return'<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:var(--text3)"><div style="font-size:28px">&#9888;</div><div style="font-size:14px">Could not load maintenance data from cloud.</div><button onclick="window.retryMaintenance()" style="margin-top:8px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Retry</button></div>';}
   const ms=S.admin||{};
-  const isAdmin=S.user?.role==='admin';
+  const isAdmin=hasRolePerm('maint_bookings');
   const sub=S.maintTab||'overview';
 
   // Sub tabs
@@ -57,7 +57,7 @@ function _lastUpdatedLabel(ac){
 function renderMaintOverview(){
   const m=S.maintenance||{};
   const acs=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'];
-  const isAdmin=S.user?.role==='admin'||S.user?.superAdmin;
+  const isAdmin=hasRolePerm('maint_bookings');
 
   const cards=acs.map(ac=>{
     const latest=maintGetLatest(ac);

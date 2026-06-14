@@ -76,8 +76,8 @@ function renderSaved(){
           return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid #ef444488;opacity:.85">
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-                <span style="padding:2px 8px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px">${s.form.ac||'?'}</span>
-                <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
+                <span style="padding:2px 8px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px">${(s.form.ac||'?').replace('ZK-','')}</span>
+                <span class="pill pill-blue">${(s.form.dep||'?').replace(/^NZ/,'')} → ${(s.form.dest||'?').replace(/^NZ/,'')}</span>
                 ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
                 <span class="pill pill-warn" style="font-size:10px">Loadsheet</span>
               </div>
@@ -119,14 +119,15 @@ function renderSaved(){
             return'<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid '+col+'">'
               +'<div style="flex:1;min-width:0">'
               +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">'
-              +'<span style="padding:2px 10px;border-radius:20px;background:'+col+'22;border:1px solid '+col+'55;color:'+col+';font-weight:700;font-size:12px;white-space:nowrap">'+(s.form.ac||'?')+'</span>'
-              +'<span class="pill pill-blue">'+(s.form.dep||'?')+' &#x2192; '+(s.form.dest||'?')+'</span>'
+              +'<span style="padding:2px 10px;border-radius:20px;background:'+col+'22;border:1px solid '+col+'55;color:'+col+';font-weight:700;font-size:12px;white-space:nowrap">'+(s.form.ac||'?').replace('ZK-','')+'</span>'
+              +'<span class="pill pill-blue">'+((s.form.dep||'?').replace(/^NZ/,''))+' &#x2192; '+((s.form.dest||'?').replace(/^NZ/,''))+'</span>'
               +(s.form.pic?'<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">&#x2708; '+s.form.pic+'</span>':'')
               +(isSigned?'<span class="pill pill-green">&#x2713; Signed</span>':'<span class="pill" style="background:#0c1a3a;color:#93c5fd">UNSIGNED</span>')
               +'</div>'
-              +'<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">'+'<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">'+_fmtFlightDate(s.form.date)+'</span>'+(s.form.etd?'<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD '+s.form.etd+'</span>':'')+'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">'+_paxCnt+' PAX</span>'+(_savedStr?'<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved '+_savedStr+'</span>':'')+'</div>'
+              +'<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">'+'<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">'+_fmtFlightDate(s.form.date)+'</span>'+(s.form.etd?'<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD '+s.form.etd+'</span>':'')+'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">'+_paxCnt+' PAX</span>'+'</div>'
               +'</div>'
-              +'<div style="display:flex;gap:5px;flex-shrink:0">'
+              +'<div style="display:flex;gap:5px;flex-shrink:0;align-items:center">'
+              +(_savedStr?'<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved '+_savedStr+'</span>':'')
               +'<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" data-sid="'+s.id+'" onclick="editSaved(this.dataset.sid)">Open</button>'
               +'<button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" data-sid="'+s.id+'" onclick="delSaved(this.dataset.sid)" title="Delete">&#x1F5D1;</button>'
               +'</div></div>';
@@ -141,7 +142,10 @@ function renderSaved(){
       <input type="checkbox" ${S.savedSel[m.id]?'checked':''} onchange="window.toggleSavedSel('${m.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
       <div style="flex:1">
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
-        <div style="font-size:12px;color:var(--text3)">${m.savedAt?_lsRelTime(m.savedAt):''} · ${m.data?.pax?.length||0} pax</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
+          ${(m.data?.acSetup||[]).map(s=>{const col=AC_COL[s.acId]||'#64748b';return`<span style="padding:1px 7px;border-radius:12px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:11px">${s.acId||'?'}</span>`;}).join('')}
+          <span style="font-size:11px;color:var(--text3)">${m.savedAt?_lsRelTime(m.savedAt):''} · ${m.data?.pax?.length||0} pax</span>
+        </div>
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-ghost" style="font-size:12px" onclick="loadManifest('${m.id}')">Load</button>
@@ -175,14 +179,15 @@ function renderSaved(){
           <input type="checkbox" ${S.savedSel[s.id]?'checked':''} onchange="window.toggleSavedSel('${s.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-              <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${s.form.ac||'?'}</span>
-              <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
+              <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${(s.form.ac||'?').replace('ZK-','')}</span>
+              <span class="pill pill-blue">${(s.form.dep||'?').replace(/^NZ/,'')} → ${(s.form.dest||'?').replace(/^NZ/,'')}</span>
               ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
               <span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 UNSIGNED</span>
             </div>
-            <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span>${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}</div>
+            <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span></div>
           </div>
-          <div style="display:flex;gap:5px;flex-shrink:0">
+          <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
+            ${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}
             <button class="btn btn-sky" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>
             <button class="btn" style="font-size:12px;padding:6px 10px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;cursor:pointer;color:var(--text2)" onclick="window.duplicateSaved('${s.id}')">&#x2398; Dup</button>
             <button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" onclick="delSaved('${s.id}')" title="Delete">&#x1F5D1;</button>
@@ -240,8 +245,8 @@ function renderSaved(){
         <input type="checkbox" ${S.savedSel[s.id]?'checked':''} onchange="window.toggleSavedSel('${s.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-            <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${s.form.ac||'?'}</span>
-            <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
+            <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${(s.form.ac||'?').replace('ZK-','')}</span>
+            <span class="pill pill-blue">${(s.form.dep||'?').replace(/^NZ/,'')} → ${(s.form.dest||'?').replace(/^NZ/,'')}</span>
             ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
             ${isUnsigned
               ?`<span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 Unsigned</span>`
@@ -251,9 +256,10 @@ function renderSaved(){
             ${isSigned?(s.driveUploaded?'<span class="pill pill-green" style="font-size:10px">☁ Drive ✓</span>':'<span class="pill" style="background:rgba(100,116,139,.12);border:1px solid var(--border2);color:var(--text3);font-size:10px">☁ Not uploaded</span>'):''}
 
           </div>
-          <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span>${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}</div>
+          <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span></div>
         </div>
-        <div style="display:flex;gap:5px;flex-shrink:0">
+        <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
+          ${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}
           ${isSigned?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${s.id}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${s.id}')">&#x21BA; Reopen</button>`:`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>`}
           ${isSigned&&(S.gdriveEnabled||S.gdriveClientId)?`<button class="btn" title="${s.driveUploaded?'Re-upload to Drive':'Upload to Drive'}" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${s.id}')">&#x2601;</button>`:''}
           <button class="btn" title="Print" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer" onclick="window.printSingleSheet('${s.id}')">&#x1F5A8;</button>

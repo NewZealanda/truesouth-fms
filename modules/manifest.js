@@ -6,9 +6,36 @@ function renderSeatmap(){
   return renderStep2();
 }
 
+function _initManifestTabs(){
+  if(!S.manifestTabs||!S.manifestTabs.length){
+    const id='mt_'+Date.now();
+    S.manifestTabs=[{id,savedId:S._loadedManifestId||null}];
+    S.activeManifestTabId=id;
+    if(!S._manifestDispatches)S._manifestDispatches={};
+    S._manifestDispatches[id]=JSON.parse(JSON.stringify(S.dispatch));
+  }
+}
+function _manifestTabLabel(tab){
+  const d=tab.id===S.activeManifestTabId?S.dispatch:((S._manifestDispatches||{})[tab.id]||{});
+  if(d.name)return d.name;
+  const ac=(d.acSetup||[]).map(function(s){return s.acId.replace('ZK-','');}).filter(Boolean);
+  return ac.length?ac.join('+'):'New';
+}
 function renderStep1(){
+  _initManifestTabs();
   const d=S.dispatch;
   // Airport options via aptOpts()
+  const _tabBar=`<div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px">
+    ${S.manifestTabs.map(function(tab){
+      const active=tab.id===S.activeManifestTabId;
+      const lbl=_manifestTabLabel(tab);
+      return`<div onclick="window.switchManifestTab('${tab.id}')" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid ${active?'var(--acc)':'var(--border2)'};background:${active?'rgba(124,58,237,.15)':'var(--card2)'};cursor:pointer;white-space:nowrap;flex-shrink:0;font-size:12px;font-weight:${active?'700':'500'};color:${active?'var(--acc)':'var(--text2)'}">
+        <span style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${lbl}</span>
+        ${S.manifestTabs.length>1?`<span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>`:''}
+      </div>`;
+    }).join('')}
+    <button onclick="window.newManifestTab()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text3);font-size:12px;cursor:pointer;flex-shrink:0;white-space:nowrap">+ New</button>
+  </div>`;
 
   const AC_ORDER_M=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'];
   const acCards=AC_ORDER_M.filter(id=>S.aircraft[id]).map(id=>{const a=S.aircraft[id];
@@ -82,17 +109,15 @@ function renderStep1(){
     const groupCol=p.group?.trim()
       ?`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="${_pillStyle};background:${gc};color:#fff;user-select:none;max-width:80px;overflow:hidden;text-overflow:ellipsis">${p.group}</div>`
       :`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text3)">🏷️</div>`;
-    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${rowBg}">
+    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 72px 56px 56px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${rowBg}">
       <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-width:0">${acBtns}</div>
       <div style="display:flex;gap:2px;align-items:center;min-width:0">
         <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>
       </div>
       ${nameCol}
-      <div style="display:flex;flex-direction:row;gap:4px;align-items:center;flex-wrap:wrap;min-width:0">
-        ${groupCol}
-        <div id="wt-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'weight',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">⚖️ ${p.weight?p.weight+'kg':'—'}</div>
-        <div id="bag-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'bag',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">🎒 ${p.bag?p.bag+'kg':'—'}</div>
-      </div>
+      <div style="min-width:0;overflow:hidden">${groupCol}</div>
+      <div id="wt-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'weight',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">⚖️ ${p.weight?p.weight+'kg':'—'}</div>
+      <div id="bag-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'bag',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">🎒 ${p.bag?p.bag+'kg':'—'}</div>
       <button tabindex="-1" class="icon-btn red" onclick="rmPax(${oi})" style="width:28px;height:28px;font-size:13px">✕</button>
     </div>`;
   });
@@ -101,7 +126,7 @@ function renderStep1(){
 
   const canNext=d.acSetup.length>0&&d.acSetup.every(s=>s.pic)&&d.pax.length>0;
 
-  return`
+  return _tabBar+`
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
     <input class="fi" type="text" placeholder="Manifest name (e.g. NZQN-NZMF 9 Jun)" value="${d.name||''}" style="flex:1;font-size:13px" tabindex="-1" onblur="S.dispatch.name=this.value;autoSaveDispatch()">
     ${S._loadedManifestId
@@ -149,8 +174,8 @@ function renderStep1(){
       ${(()=>{const nonInf=d.pax.filter(p=>!p.infant).length;return nonInf>totalSeats&&totalSeats>0?`<span style="color:#ef4444;font-weight:700">⚠ ${nonInf-totalSeats} over capacity</span>`:'';})()} 
     </div>
   </div>
-    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 28px;gap:5px;padding:4px 0 6px;border-bottom:2px solid var(--border);margin-bottom:2px">
-      ${['AC','TYPE','NAME','INFO',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
+    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 72px 56px 56px 28px;gap:5px;padding:4px 0 6px;border-bottom:2px solid var(--border);margin-bottom:2px">
+      ${['AC','TYPE','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
     </div></div>
     ${paxRows}
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
@@ -360,7 +385,19 @@ window.applySwapFix=function(acId,fromIdx,toIdx){
 function renderStep2(){
   const d=S.dispatch;
   const setups=d.acSetup||[];
-  if(!setups.length){S.tab='manifest';render();return'';}
+  // Find open loadsheet tabs not yet in the seatmap
+  const _lsTabs=S.lsTabs||[];
+  const _inSeatmap=new Set((setups).map(s=>s.acId));
+  const _notInSeatmap=_lsTabs.filter(t=>t.form&&t.form.ac&&!_inSeatmap.has(t.form.ac));
+  const _lsBanner=_notInSeatmap.length?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;margin-bottom:12px;flex-wrap:wrap">
+    <span style="font-size:13px;font-weight:600;color:#93c5fd;flex:1">📋 ${_notInSeatmap.length} open loadsheet${_notInSeatmap.length!==1?'s':''} not yet in seatmap: ${_notInSeatmap.map(t=>t.form.ac).join(', ')}</span>
+    <button onclick="window.pushAllLsToSeatmap()" style="padding:5px 12px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Pull all into Seatmap</button>
+  </div>`:'';
+  if(!setups.length){
+    // No aircraft in seatmap — if we have open loadsheets, show pull prompt; otherwise go to manifest
+    if(_notInSeatmap.length) return _lsBanner+`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Click "Pull all into Seatmap" above to get started, or <button class="btn btn-ghost" style="font-size:13px" onclick="S.opsTab='manifest';render()">go to Manifest</button> to set up aircraft.</div>`;
+    S.tab='manifest';render();return'';
+  }
 
   const solverHTML=setups.map(function(setup){
     const id=setup.acId;const smKey=setup._seatmapKey||id;
@@ -439,6 +476,7 @@ function renderStep2(){
   const hasLsTabs=S.lsTabs&&S.lsTabs.length>0;
 
   return`
+  ${_lsBanner}
   ${solverHTML?`<div style="margin-bottom:12px">${solverHTML}</div>`:''}
   ${poolHTML}
   <div class="card" style="padding:12px">

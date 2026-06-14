@@ -59,14 +59,16 @@ const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true},
-  admin:       {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false},
-  pilot:       {operations:true, charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false},
-  desk:        {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false},
-  maint:       {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false},
-  maintenance: {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false},
+  superadmin:  {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true},
+  admin:       {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true},
+  pilot:       {operations:true, charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true},
+  desk:        {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
+  maint:       {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
+  maintenance: {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
   ground_staff:{operations:false,charter:false,maintenance:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false}
 };
+function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
+
 const GRP_COLOURS=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];
 // Airport map: ICAO → full name
 var APTS={};var APT_COORDS={};var APS=[];
@@ -98,7 +100,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.17';
+const APP_VER='v22.23';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -153,7 +155,7 @@ function calcAcWB(acId,paxList,fuelKgOverride){
   const sm=S.dispatch.seatMap[acId]||{};
   paxSeatIdxs(acId).forEach(i=>{const p=sm[i]?paxById(sm[i]):null;if(p){const w=parseFloat(p.weight||0)+parseFloat(p.bag||0);wt+=w;mom+=w*a.seats[i].arm;}});
   const fW=fuelKgOverride!=null?fuelKgOverride:fuelKgForSetup(acId);
-  wt+=fW;mom+=fW*a.fuelArm;wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
+  wt+=fW;mom+=fW*a.fuelArm;const _gndBurn=parseFloat(form.gndBurn!=null?form.gndBurn:a.gndBurn)||0;wt-=_gndBurn;mom-=_gndBurn*a.fuelArm;
   const tow=wt,cog=mom/wt,burnKg=burnToKg(a.burnDef,acId);
   wt-=burnKg;mom-=burnKg*a.fuelArm;
   return{tow,cog,lw:wt,lwCog:mom/wt,
@@ -169,7 +171,7 @@ function calcFormWB(form){
   const cpW=form.coPilot?(parseFloat(form.seats[1]||0))+(parseFloat(form.bags[1]||0)):0;
   let wt=a.ew+cW,mom=a.em+cW*a.seats[0].arm,pW=0;
   for(let i=1;i<a.seats.length;i++){const w=(parseFloat(form.seats[i]||0))+(parseFloat(form.bags[i]||0));if(i===1&&form.coPilot){/* crew */}else{pW+=w;}wt+=w;mom+=w*a.seats[i].arm;}
-  let cg=0;for(let i=0;i<a.cargo.length;i++){const w=parseFloat(form.cargo[i]||0);cg+=w;wt+=w;mom+=w*a.cargo[i].arm;}
+  let cg=0;for(let i=0;i<a.cargo.length;i++){const w=parseFloat((form.cargo&&form.cargo[i])||0);cg+=w;wt+=w;mom+=w*a.cargo[i].arm;}
   const zfw=wt,fW=parseFloat(form.fuel||a.fuelKg);wt+=fW;mom+=fW*a.fuelArm;const rW=wt;
   wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
   const tow=wt,towCog=mom/wt;
@@ -730,7 +732,7 @@ function runSolver(){
 
 // ── State ──
 function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
-function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},fuel:'',burnOff:'',_unallocated:[],paxType:{},paxGroups:{},sig:null};}
+function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',_unallocated:[],paxType:{},paxGroups:{},sig:null};}
 function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
 let S={
@@ -746,7 +748,7 @@ let S={
   // Drive
   driveQueue:[],
   // Manifest / Dispatch
-  dispatch:bD(),viewAc:null,viewAc2:null,selectedPax:null,solverRes:{},
+  dispatch:bD(),manifestTabs:[],activeManifestTabId:null,_manifestDispatches:{},viewAc:null,viewAc2:null,selectedPax:null,solverRes:{},
   // Loadsheet form
   form:bF(),editId:null,lsForms:{},lsAc:'SLA',
   lsTabs:[],activeTabId:null,_newLsTab:false,_lsManageMode:false,_lsTabSel:{},_lsFormUndo:null,_lsFormUndoStack:[],

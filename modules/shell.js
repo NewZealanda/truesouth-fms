@@ -320,7 +320,6 @@ function renderApp(){
   // Dynamic tab visibility — admin tab always shown; others controlled by rolePerms
   const _allTabs=[
     {id:'operations',lbl:'Operations'},
-    {id:'scratchpad',lbl:'Scratch'},
     {id:'charter',lbl:'Charter'},
     {id:'maintenance',lbl:'Maintenance'},
     {id:'admin',lbl:role==='admin'?'Admin':'Crew & Profile'},
@@ -328,7 +327,6 @@ function renderApp(){
   const tabs=_allTabs.filter(t=>{
     if(role==='admin') return true;
     if(t.id==='admin') return true;
-    if(t.id==='scratchpad') return true; // always visible
     const perms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
     return perms[t.id]===true;
   });
@@ -350,7 +348,7 @@ function renderApp(){
           <button tabindex="-1" title="${S.mobileView?'Switch to desktop layout':'Switch to mobile layout'}" onclick="event.stopPropagation();S.mobileView=!S.mobileView;lsSet('ts_mobile_view',S.mobileView);render()" style="background:${S.mobileView?'rgba(124,58,237,.3)':'var(--border)'};border:${S.mobileView?'1px solid rgba(124,58,237,.6)':'none'};padding:3px 7px;border-radius:5px;font-size:12px;color:${S.mobileView?'#c084fc':'var(--text2)'};cursor:pointer;line-height:1">📱</button>
           <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:var(--border);border:none;padding:3px 7px;border-radius:5px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1" title="Help">?</button>
           <div style="display:flex;align-items:center;gap:4px">
-            <button tabindex="-1" onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
+            <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button tabindex="-1" onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
           </div>
         </div>
@@ -396,7 +394,6 @@ function renderApp(){
         if(S.tab==='charter')return'<div id="flash-charter">'+renderCharter()+'</div>';
         if(S.tab==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';
         if(S.tab==='admin')return'<div id="flash-admin">'+renderAdmin()+'</div>';
-        if(S.tab==='scratchpad')return renderScratchpadPage();
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
@@ -471,23 +468,6 @@ function renderOperations(){
   if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return tabsH+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
   if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return tabsH+renderSaved();}
   startPresenceBroadcast('manifest');return tabsH+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
-}
-function renderScratchpadPage(){
-  if(S._presSection&&S._presSection!=='scratchpad')broadcastPresence(null);
-  var _padTabsH='';
-  if(S.padTabs.length>0){
-    _padTabsH='<div style="display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
-    _padTabsH+='<button onclick="window.newPad()" style="padding:4px 10px;font-size:12px;background:var(--card2);border:1px solid var(--border2);border-radius:7px;cursor:pointer;color:var(--acc)">+ New</button>';
-    S.padTabs.forEach(function(pt){
-      var isAct=S.activePadId===pt.id;
-      _padTabsH+='<div style="display:inline-flex;align-items:stretch;border-radius:7px;overflow:hidden;border:1px solid '+(isAct?'var(--acc)':'var(--border2)')+'">'; 
-      _padTabsH+='<button onclick="window.switchPad(\''+pt.id+'\')" style="padding:4px 10px;font-size:12px;font-weight:'+(isAct?'700':'400')+';background:'+(isAct?'var(--acc)':'var(--card2)')+';border:none;color:'+(isAct?'#fff':'var(--text1)')+';cursor:pointer">'+((pt.title||'Untitled').slice(0,16))+'</button>';
-      _padTabsH+='<button onclick="window.closePad(\''+pt.id+'\')" style="padding:4px 6px;font-size:12px;background:'+(isAct?'var(--acc)':'var(--card2)')+';border:none;color:'+(isAct?'#fff':'var(--text3)')+';cursor:pointer">&#x00D7;</button>';
-      _padTabsH+='</div>';
-    });
-    _padTabsH+='</div>';
-  }
-  return _padTabsH+renderScratchpad();
 }
 
 function renderNewLsPanel(){

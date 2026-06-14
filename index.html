@@ -284,14 +284,16 @@ const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true},
-  admin:       {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false},
-  pilot:       {operations:true, charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false},
-  desk:        {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false},
-  maint:       {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false},
-  maintenance: {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false},
+  superadmin:  {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true},
+  admin:       {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true},
+  pilot:       {operations:true, charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true},
+  desk:        {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
+  maint:       {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
+  maintenance: {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
   ground_staff:{operations:false,charter:false,maintenance:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false}
 };
+function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
+
 const GRP_COLOURS=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];
 // Airport map: ICAO → full name
 var APTS={};var APT_COORDS={};var APS=[];
@@ -323,7 +325,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.20';
+const APP_VER='v22.23';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -971,7 +973,7 @@ let S={
   // Drive
   driveQueue:[],
   // Manifest / Dispatch
-  dispatch:bD(),viewAc:null,viewAc2:null,selectedPax:null,solverRes:{},
+  dispatch:bD(),manifestTabs:[],activeManifestTabId:null,_manifestDispatches:{},viewAc:null,viewAc2:null,selectedPax:null,solverRes:{},
   // Loadsheet form
   form:bF(),editId:null,lsForms:{},lsAc:'SLA',
   lsTabs:[],activeTabId:null,_newLsTab:false,_lsManageMode:false,_lsTabSel:{},_lsFormUndo:null,_lsFormUndoStack:[],
@@ -2156,7 +2158,7 @@ function renderApp(){
           <button tabindex="-1" title="${S.mobileView?'Switch to desktop layout':'Switch to mobile layout'}" onclick="event.stopPropagation();S.mobileView=!S.mobileView;lsSet('ts_mobile_view',S.mobileView);render()" style="background:${S.mobileView?'rgba(124,58,237,.3)':'var(--border)'};border:${S.mobileView?'1px solid rgba(124,58,237,.6)':'none'};padding:3px 7px;border-radius:5px;font-size:12px;color:${S.mobileView?'#c084fc':'var(--text2)'};cursor:pointer;line-height:1">📱</button>
           <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:var(--border);border:none;padding:3px 7px;border-radius:5px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1" title="Help">?</button>
           <div style="display:flex;align-items:center;gap:4px">
-            <button tabindex="-1" onclick="event.stopPropagation();window.goToMyProfile()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
+            <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
             <button tabindex="-1" onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
           </div>
         </div>
@@ -2298,9 +2300,36 @@ function renderSeatmap(){
   return renderStep2();
 }
 
+function _initManifestTabs(){
+  if(!S.manifestTabs||!S.manifestTabs.length){
+    const id='mt_'+Date.now();
+    S.manifestTabs=[{id,savedId:S._loadedManifestId||null}];
+    S.activeManifestTabId=id;
+    if(!S._manifestDispatches)S._manifestDispatches={};
+    S._manifestDispatches[id]=JSON.parse(JSON.stringify(S.dispatch));
+  }
+}
+function _manifestTabLabel(tab){
+  const d=tab.id===S.activeManifestTabId?S.dispatch:((S._manifestDispatches||{})[tab.id]||{});
+  if(d.name)return d.name;
+  const ac=(d.acSetup||[]).map(function(s){return s.acId.replace('ZK-','');}).filter(Boolean);
+  return ac.length?ac.join('+'):'New';
+}
 function renderStep1(){
+  _initManifestTabs();
   const d=S.dispatch;
   // Airport options via aptOpts()
+  const _tabBar=`<div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px">
+    ${S.manifestTabs.map(function(tab){
+      const active=tab.id===S.activeManifestTabId;
+      const lbl=_manifestTabLabel(tab);
+      return`<div onclick="window.switchManifestTab('${tab.id}')" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid ${active?'var(--acc)':'var(--border2)'};background:${active?'rgba(124,58,237,.15)':'var(--card2)'};cursor:pointer;white-space:nowrap;flex-shrink:0;font-size:12px;font-weight:${active?'700':'500'};color:${active?'var(--acc)':'var(--text2)'}">
+        <span style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${lbl}</span>
+        ${S.manifestTabs.length>1?`<span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>`:''}
+      </div>`;
+    }).join('')}
+    <button onclick="window.newManifestTab()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text3);font-size:12px;cursor:pointer;flex-shrink:0;white-space:nowrap">+ New</button>
+  </div>`;
 
   const AC_ORDER_M=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'];
   const acCards=AC_ORDER_M.filter(id=>S.aircraft[id]).map(id=>{const a=S.aircraft[id];
@@ -2374,17 +2403,15 @@ function renderStep1(){
     const groupCol=p.group?.trim()
       ?`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="${_pillStyle};background:${gc};color:#fff;user-select:none;max-width:80px;overflow:hidden;text-overflow:ellipsis">${p.group}</div>`
       :`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text3)">🏷️</div>`;
-    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${rowBg}">
+    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 72px 56px 56px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${rowBg}">
       <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-width:0">${acBtns}</div>
       <div style="display:flex;gap:2px;align-items:center;min-width:0">
         <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>
       </div>
       ${nameCol}
-      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
-        ${groupCol}
-        <div id="wt-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'weight',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">⚖️ ${p.weight?p.weight+'kg':'—'}</div>
-        <div id="bag-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'bag',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">🎒 ${p.bag?p.bag+'kg':'—'}</div>
-      </div>
+      <div style="min-width:0;overflow:hidden">${groupCol}</div>
+      <div id="wt-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'weight',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">⚖️ ${p.weight?p.weight+'kg':'—'}</div>
+      <div id="bag-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'bag',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">🎒 ${p.bag?p.bag+'kg':'—'}</div>
       <button tabindex="-1" class="icon-btn red" onclick="rmPax(${oi})" style="width:28px;height:28px;font-size:13px">✕</button>
     </div>`;
   });
@@ -2393,7 +2420,7 @@ function renderStep1(){
 
   const canNext=d.acSetup.length>0&&d.acSetup.every(s=>s.pic)&&d.pax.length>0;
 
-  return`
+  return _tabBar+`
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
     <input class="fi" type="text" placeholder="Manifest name (e.g. NZQN-NZMF 9 Jun)" value="${d.name||''}" style="flex:1;font-size:13px" tabindex="-1" onblur="S.dispatch.name=this.value;autoSaveDispatch()">
     ${S._loadedManifestId
@@ -2441,8 +2468,8 @@ function renderStep1(){
       ${(()=>{const nonInf=d.pax.filter(p=>!p.infant).length;return nonInf>totalSeats&&totalSeats>0?`<span style="color:#ef4444;font-weight:700">⚠ ${nonInf-totalSeats} over capacity</span>`:'';})()} 
     </div>
   </div>
-    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 28px;gap:5px;padding:4px 0 6px;border-bottom:2px solid var(--border);margin-bottom:2px">
-      ${['AC','TYPE','NAME','INFO',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
+    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 72px 56px 56px 28px;gap:5px;padding:4px 0 6px;border-bottom:2px solid var(--border);margin-bottom:2px">
+      ${['AC','TYPE','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
     </div></div>
     ${paxRows}
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
@@ -2851,42 +2878,7 @@ function renderLsSeatGrid(f,a){
     });
     seatsCol+='</div>';
   });
-  // Airvan: cargo shelf row at the bottom
-  if(isGa8&&a.cargo&&a.cargo.length){
-    seatsCol+='<div style="height:4px"></div>';
-    var shelfW=(sW*2)+8;
-    a.cargo.forEach(function(zn,zi){
-      var w=(f.cargo&&f.cargo[zi])||'';
-      seatsCol+='<div style="width:'+shelfW+'px;background:rgba(59,130,246,.10);border:1px dashed rgba(59,130,246,.40);border-radius:8px;padding:5px 10px;display:flex;align-items:center;gap:8px">'
-        +'<div style="font-size:9px;font-weight:700;color:#60a5fa;text-transform:uppercase;letter-spacing:.05em;flex-shrink:0">'+zn.lbl+'</div>'
-        +'<input class="fi ls-no-spin" type="number" placeholder="0" value="'+w+'" style="font-size:13px;font-weight:700;width:50px;padding:1px 4px;background:transparent;border:none;color:var(--text)" onblur="lsC('+zi+',this.value)">'
-        +'<span style="font-size:10px;color:#60a5fa">kg</span>'
-        +(zn.maxKg?'<span style="font-size:9px;color:var(--text3);margin-left:auto">max '+zn.maxKg+'kg</span>':'')
-        +'</div>';
-    });
-  }
   seatsCol+='</div>';
-  // Caravan (pod): zones as side column
-  if(isPod){
-    var podColors=['rgba(59,130,246,.15)','rgba(16,185,129,.15)','rgba(245,158,11,.15)','rgba(168,85,247,.15)'];
-    var podBorders=['rgba(59,130,246,.5)','rgba(16,185,129,.5)','rgba(245,158,11,.5)','rgba(168,85,247,.5)'];
-    var podTextColors=['#60a5fa','#34d399','#fbbf24','#c084fc'];
-    var colW=isMob?60:76;
-    var podCol='<div style="display:flex;flex-direction:column;gap:6px;justify-content:space-between;align-self:stretch;min-width:'+colW+'px;margin-top:4px">';
-    a.cargo.forEach(function(zn,zi){
-      var w=(f.cargo&&f.cargo[zi])||'';
-      podCol+='<div style="flex:1;background:'+podColors[zi%4]+';border:1px solid '+podBorders[zi%4]+';border-radius:8px;padding:5px 7px;display:flex;flex-direction:column;justify-content:center">'
-        +'<div style="font-size:8px;font-weight:700;color:'+podTextColors[zi%4]+';text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">'+zn.lbl.replace('Pod Zone ','Z')+'</div>'
-        +'<div style="display:flex;align-items:baseline;gap:2px">'
-        +'<input class="fi ls-no-spin" type="number" placeholder="0" value="'+w+'" style="font-size:13px;font-weight:800;width:40px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC('+zi+',this.value)">'
-        +'<span style="font-size:9px;color:'+podTextColors[zi%4]+'">kg</span>'
-        +'</div>'
-        +(zn.maxKg?'<div style="font-size:8px;color:'+podTextColors[zi%4]+';opacity:.7">max '+zn.maxKg+'</div>':'')
-        +'</div>';
-    });
-    podCol+='</div>';
-    return '<div style="display:flex;gap:10px;align-items:flex-start">'+seatsCol+podCol+'</div>';
-  }
   return seatsCol;
 }
 
@@ -3112,20 +3104,7 @@ function renderLoadsheet(){
     const podColors=['rgba(59,130,246,.15)','rgba(16,185,129,.15)','rgba(245,158,11,.15)','rgba(168,85,247,.15)'];
     const podBorders=['rgba(59,130,246,.5)','rgba(16,185,129,.5)','rgba(245,158,11,.5)','rgba(168,85,247,.5)'];
     const podTextColors=['#60a5fa','#34d399','#fbbf24','#c084fc'];
-    seatsH=`<div class="card" id="lsf-seats" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
-      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Passengers<div style="display:flex;gap:6px;align-items:center">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()" title="Push this loadsheet to the seatmap">🗺 Seatmap</button></div></div>
-      ${wbSummary}
-      <div style="margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch">
-        ${renderLsSeatGrid(f,a)}
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;margin-top:8px;border-top:1px solid var(--border)">
-        <span style="font-size:12px;font-weight:700;color:var(--text3)">Total Pax Weight</span>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:13px;font-weight:700">${r?r.paxW.toFixed(1):'—'} kg</span>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()">🗺 Send to Seatmap</button>
-        </div>
-      </div>
-    </div>`;
+    seatsH='';
 
     // -- Compute ground burn (use form override if set)
     const gndBurnKg=parseFloat(f.gndBurn!=null?f.gndBurn:a.gndBurn)||0;
@@ -3161,7 +3140,7 @@ function renderLoadsheet(){
           <div style="font-size:11px;color:${podTextColors[zi%4]};margin-top:4px">${w?'mom '+(((parseFloat(w)||0)*zn.arm).toFixed(0)):''}</div>
         </div>`;
       }).join('');
-      cargoSection=`${fusSVG}<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">${zoneBoxes}</div>`;
+      cargoSection=`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${zoneBoxes}</div>`;
     } else if(a.cargo&&a.cargo.length){
       // Non-pod cargo (e.g. Airvan baggage shelf)
       const shelfBoxes=a.cargo.map(function(zn,zi){
@@ -3180,47 +3159,57 @@ function renderLoadsheet(){
           ${w?`<div style="font-size:11px;color:${lc};margin-top:4px">mom ${((parseFloat(w)||0)*zn.arm).toFixed(0)}</div>`:''}
         </div>`;
       }).join('');
-      cargoSection=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:12px">${shelfBoxes}</div>`;
+      cargoSection=`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${shelfBoxes}</div>`;
     }
-    // -- 5 stacked fuel boxes
+    // -- Combined Passengers & Loading card
     const _lwDisplay=r?r.lw.toFixed(1):null;
-    loadingH=`<div class="card" id="lsf-loading" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};display:flex;flex-direction:column"><div class="st">Loading &#x2013; Passengers, Cargo and Fuel</div>
-      ${cargoSection}
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:8px;padding:8px 10px">
-          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:4px">Fuel Loaded</div>
-          <div style="display:flex;align-items:baseline;gap:4px">
-            <input class="fi ls-no-spin" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsFuel(this.value,'${f.ac}')">
-            <span style="font-size:11px;color:#60a5fa">${fuelUnit_}</span>
-          </div>
-          <div style="font-size:10px;color:#60a5fa;margin-top:2px">${fuelKgVal.toFixed(1)} kg</div>
+    const _fuelPanel=`<div style="display:flex;flex-direction:column;gap:8px">
+      <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:4px">Fuel Loaded</div>
+        <div style="display:flex;align-items:baseline;gap:4px">
+          <input class="fi ls-no-spin" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsFuel(this.value,'${f.ac}')">
+          <span style="font-size:11px;color:#60a5fa">${fuelUnit_}</span>
         </div>
-        <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30);border-radius:8px;padding:8px 10px">
-          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f59e0b;text-transform:uppercase;margin-bottom:4px">Gnd Burn</div>
-          <div style="display:flex;align-items:baseline;gap:4px">
-            <input class="fi ls-no-spin" type="number" placeholder="${gndBurnDisplay}" value="${gndBurnDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsGndBurn(this.value,'${f.ac}')">
-            <span style="font-size:11px;color:#f59e0b">${fuelUnit_}</span>
-          </div>
-          <div style="font-size:10px;color:#f59e0b;margin-top:2px">${gndBurnKg.toFixed(1)} kg</div>
+        <div style="font-size:10px;color:#60a5fa;margin-top:2px">${fuelKgVal.toFixed(1)} kg</div>
+      </div>
+      <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30);border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f59e0b;text-transform:uppercase;margin-bottom:4px">Gnd Burn</div>
+        <div style="display:flex;align-items:baseline;gap:4px">
+          <input class="fi ls-no-spin" type="number" placeholder="${gndBurnDisplay}" value="${gndBurnDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsGndBurn(this.value,'${f.ac}')">
+          <span style="font-size:11px;color:#f59e0b">${fuelUnit_}</span>
         </div>
-        <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.30);border-radius:8px;padding:8px 10px">
-          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f87171;text-transform:uppercase;margin-bottom:4px">Flt Burn</div>
-          <div style="display:flex;align-items:baseline;gap:4px">
-            <input class="fi ls-no-spin" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
-            <span style="font-size:11px;color:#f87171">${a?.layout==='ga8'?'L':burnUnit_}</span>
-          </div>
-          <div style="font-size:10px;color:#f87171;margin-top:2px">&#x2248; ${flightMin} min</div>
+        <div style="font-size:10px;color:#f59e0b;margin-top:2px">${gndBurnKg.toFixed(1)} kg</div>
+      </div>
+      <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.30);border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f87171;text-transform:uppercase;margin-bottom:4px">Flt Burn</div>
+        <div style="display:flex;align-items:baseline;gap:4px">
+          <input class="fi ls-no-spin" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
+          <span style="font-size:11px;color:#f87171">${a?.layout==='ga8'?'L':burnUnit_}</span>
         </div>
-        <div style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:8px;padding:8px 10px">
-          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:4px">@ Dest</div>
-          <div style="font-size:16px;font-weight:800;color:var(--text)">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
-          <div style="font-size:10px;color:#4ade80;margin-top:2px">${a?.layout==='ga8'?'litres':'lbs'}</div>
+        <div style="font-size:10px;color:#f87171;margin-top:2px">&#x2248; ${flightMin} min</div>
+      </div>
+      <div style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:4px">@ Dest</div>
+        <div style="font-size:16px;font-weight:800;color:var(--text)">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
+        <div style="font-size:10px;color:#4ade80;margin-top:2px">${a?.layout==='ga8'?'litres':'lbs'}</div>
+      </div>
+      ${_lwDisplay!==null?`<div style="background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.30);border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#c084fc;text-transform:uppercase;margin-bottom:4px">Landing Weight</div>
+        <div style="font-size:16px;font-weight:800;color:${r.lwOk?'var(--text)':'#f87171'}">${_lwDisplay}</div>
+        <div style="font-size:10px;color:#c084fc;margin-top:2px">kg (max ${r.mlw})</div>
+      </div>`:''}
+    </div>`;
+    loadingH=`<div class="card" id="lsf-loading" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
+      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Passengers &amp; Loading<div style="display:flex;gap:6px;align-items:center">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button></div></div>
+      ${wbSummary}
+      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+        <div style="flex:1;min-width:180px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+          ${renderLsSeatGrid(f,a)}
+          ${r?`<div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;margin-top:8px;border-top:1px solid var(--border)"><span style="font-size:12px;font-weight:700;color:var(--text3)">Total Pax Weight</span><span style="font-size:13px;font-weight:700">${r.paxW.toFixed(1)} kg</span></div>`:''}
         </div>
-        ${_lwDisplay!==null?`<div style="background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.30);border-radius:8px;padding:8px 10px">
-          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#c084fc;text-transform:uppercase;margin-bottom:4px">Landing Weight</div>
-          <div style="font-size:16px;font-weight:800;color:${r.lwOk?'var(--text)':'#f87171'}">${_lwDisplay}</div>
-          <div style="font-size:10px;color:#c084fc;margin-top:2px">kg (max ${r.mlw})</div>
-        </div>`:''}
+        <div style="flex:0 0 195px;min-width:160px">
+          ${cargoSection}${_fuelPanel}
+        </div>
       </div>
     </div>`;
 
@@ -3260,7 +3249,7 @@ function renderLoadsheet(){
           `<div style="margin-top:12px;padding:10px;background:var(--ok-bg);border:1px solid var(--ok-border);border-radius:8px;color:var(--ok-text);font-size:13px;font-weight:600">✓ All weights and C of G within limits</div>`}
       </div>`;
 
-      const canSign=S.user?.role==='pilot'||S.user?.role==='admin';
+      const canSign=hasRolePerm('sign_loadsheet');
       sigH=`<div class="card" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};opacity:.9"><div class="st">PIC Certification</div>
         <p style="font-size:13px;color:var(--text3);margin-bottom:12px;line-height:1.6">I hereby certify that the particulars recorded on the above load sheet are correct${a.type.includes('208')?' and Part 125 security measures have been followed':''}.</p>
         ${canSign?`<div style="margin-bottom:6px;display:flex;gap:6px">
@@ -3346,7 +3335,7 @@ function renderLoadsheet(){
         ${a?`<div style="font-size:11px;color:var(--text3);background:var(--card2);padding:3px 10px;border-radius:20px;border:1px solid var(--border2)">${a.type} &middot; EW ${a.ew}kg &middot; MTOW ${a.mtow}kg</div>`:''}
       </div>
       <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-        ${f.ac?`<button style="font-size:10px;padding:3px 9px;border-radius:6px;border:1.5px solid var(--acc);background:transparent;color:var(--acc);font-weight:700;cursor:pointer" onclick="window.pushLsToSeatmap()">&#x2191; Push to Seatmap</button>`:''}
+        ${f.ac?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button>`:''}
         <span style="font-size:10px;color:var(--text3)">Change:</span>
         ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){var col=AC_COL['ZK-'+ac]||'#64748b';return'<button style="font-size:10px;padding:3px 9px;border-radius:6px;border:1.5px solid '+col+';background:transparent;color:'+col+';font-weight:700;cursor:pointer" onclick="window.changeLsAircraft(\'ZK-'+ac+'\')">'+ac+'</button>';}).join('')}
       </div>
@@ -3384,7 +3373,7 @@ function renderLoadsheet(){
       </div>
     </div>
   </div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px;border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
-  ${seatsH}${unallocH}${(a&&loadingH&&calcH)?`<div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap"><div style="flex:1;min-width:240px;display:flex;flex-direction:column">${loadingH}</div><div style="flex:2;min-width:280px;display:flex;flex-direction:column">${calcH}</div></div>`:(a?loadingH:'')+calcH}${sigH}`;
+  ${unallocH}${loadingH}${calcH}${sigH}`;
 }
 window.lsCheckChildWt=function(idx){
   const f=S.form;if(!f)return;
@@ -3923,8 +3912,8 @@ function renderSaved(){
           return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid #ef444488;opacity:.85">
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-                <span style="padding:2px 8px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px">${s.form.ac||'?'}</span>
-                <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
+                <span style="padding:2px 8px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px">${(s.form.ac||'?').replace('ZK-','')}</span>
+                <span class="pill pill-blue">${(s.form.dep||'?').replace(/^NZ/,'')} → ${(s.form.dest||'?').replace(/^NZ/,'')}</span>
                 ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
                 <span class="pill pill-warn" style="font-size:10px">Loadsheet</span>
               </div>
@@ -3966,8 +3955,8 @@ function renderSaved(){
             return'<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid '+col+'">'
               +'<div style="flex:1;min-width:0">'
               +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">'
-              +'<span style="padding:2px 10px;border-radius:20px;background:'+col+'22;border:1px solid '+col+'55;color:'+col+';font-weight:700;font-size:12px;white-space:nowrap">'+(s.form.ac||'?')+'</span>'
-              +'<span class="pill pill-blue">'+(s.form.dep||'?')+' &#x2192; '+(s.form.dest||'?')+'</span>'
+              +'<span style="padding:2px 10px;border-radius:20px;background:'+col+'22;border:1px solid '+col+'55;color:'+col+';font-weight:700;font-size:12px;white-space:nowrap">'+(s.form.ac||'?').replace('ZK-','')+'</span>'
+              +'<span class="pill pill-blue">'+((s.form.dep||'?').replace(/^NZ/,''))+' &#x2192; '+((s.form.dest||'?').replace(/^NZ/,''))+'</span>'
               +(s.form.pic?'<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">&#x2708; '+s.form.pic+'</span>':'')
               +(isSigned?'<span class="pill pill-green">&#x2713; Signed</span>':'<span class="pill" style="background:#0c1a3a;color:#93c5fd">UNSIGNED</span>')
               +'</div>'
@@ -4026,8 +4015,8 @@ function renderSaved(){
           <input type="checkbox" ${S.savedSel[s.id]?'checked':''} onchange="window.toggleSavedSel('${s.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-              <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${s.form.ac||'?'}</span>
-              <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
+              <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${(s.form.ac||'?').replace('ZK-','')}</span>
+              <span class="pill pill-blue">${(s.form.dep||'?').replace(/^NZ/,'')} → ${(s.form.dest||'?').replace(/^NZ/,'')}</span>
               ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
               <span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 UNSIGNED</span>
             </div>
@@ -4092,8 +4081,8 @@ function renderSaved(){
         <input type="checkbox" ${S.savedSel[s.id]?'checked':''} onchange="window.toggleSavedSel('${s.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-            <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${s.form.ac||'?'}</span>
-            <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
+            <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${(s.form.ac||'?').replace('ZK-','')}</span>
+            <span class="pill pill-blue">${(s.form.dep||'?').replace(/^NZ/,'')} → ${(s.form.dest||'?').replace(/^NZ/,'')}</span>
             ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
             ${isUnsigned
               ?`<span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 Unsigned</span>`
@@ -4365,9 +4354,11 @@ function renderAdminPerms(){
   const roles=['superadmin','admin','pilot','desk','maint','ground_staff'];
   const roleLabels={superadmin:'Superadmin',admin:'Admin',pilot:'Pilot',desk:'Desk',maint:'Maintenance',ground_staff:'Ground Staff'};
   const mainPages=[
-    {id:'operations', lbl:'Operations', icon:'✈️', desc:'Manifest, Seatmap & Loadsheet'},
-    {id:'charter',    lbl:'Charter',    icon:'💰', desc:'Charter pricing & bookings'},
-    {id:'maintenance',lbl:'Maintenance',icon:'🔧', desc:'Aircraft logs & scheduling'},
+    {id:'operations',     lbl:'Operations',         icon:'✈️', desc:'Manifest, Seatmap & Loadsheet'},
+    {id:'charter',        lbl:'Charter',            icon:'💰', desc:'Charter pricing & bookings'},
+    {id:'maintenance',    lbl:'Maintenance',        icon:'🔧', desc:'Aircraft logs & scheduling'},
+    {id:'maint_bookings', lbl:'Maint Bookings',     icon:'🗓', desc:'Edit maintenance checks & bookings'},
+    {id:'sign_loadsheet', lbl:'Sign Loadsheets',    icon:'✍️', desc:'PIC certification signature on loadsheets'},
   ];
   const adminPages=[
     {id:'admin_crew',  lbl:'Crew & Profile', icon:'👤', desc:'View crew list and edit own profile'},
@@ -4433,10 +4424,6 @@ function renderAdminPerms(){
         </tbody>
       </table>
     </div>
-    <div style="margin-top:16px;padding:10px 14px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;font-size:11px;color:var(--text3)">
-      <strong style="color:var(--accent)">💡 Note:</strong> To persist permissions across all devices, ensure your Supabase has:<br>
-      <code style="font-size:10px;color:#a5b4fc">CREATE TABLE IF NOT EXISTS ts_settings (key text PRIMARY KEY, value text);</code>
-    </div>
   </div>`;
 }
 
@@ -4471,51 +4458,227 @@ function renderAdmin(){
 }
 
 function renderAdminStatistics(){
-  const signed=S.saved.filter(function(s){return s.status==='complete'&&s.form;});
-  // Collect per-seat weights from signed loadsheets, split adult/child, ignoring infant seats
-  var adultWts=[],childWts=[],paxCount=0;
+  // ── Filter state ─────────────────────────────────────────────────────────
+  if(!S._sf)S._sf={ac:'',acType:'',dep:'',dest:'',dateFrom:'',dateTo:'',paxType:'',preset:'all'};
+  const sf=S._sf;
+
+  // ── Date preset logic ────────────────────────────────────────────────────
+  const now=new Date();
+  let _from='',_to='';
+  if(sf.preset==='month'){
+    _from=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
+    const lastDay=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+    _to=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+lastDay;
+  } else if(sf.preset==='lastmonth'){
+    const lm=new Date(now.getFullYear(),now.getMonth()-1,1);
+    _from=lm.getFullYear()+'-'+String(lm.getMonth()+1).padStart(2,'0')+'-01';
+    const lastDay=new Date(lm.getFullYear(),lm.getMonth()+1,0).getDate();
+    _to=lm.getFullYear()+'-'+String(lm.getMonth()+1).padStart(2,'0')+'-'+lastDay;
+  } else if(sf.preset==='year'){
+    _from=now.getFullYear()+'-01-01';_to=now.getFullYear()+'-12-31';
+  } else if(sf.preset==='custom'){
+    _from=sf.dateFrom||'';_to=sf.dateTo||'';
+  }
+
+  // ── Build aircraft type map ───────────────────────────────────────────────
+  const AC_TYPE={};
+  Object.values(S.aircraft||{}).forEach(function(a){
+    // Classify: ga8=Airvan, 208=C208B, else other
+    if(a.layout==='ga8')AC_TYPE[a.id]='Airvan';
+    else if((a.type||'').includes('208'))AC_TYPE[a.id]='C208B';
+    else AC_TYPE[a.id]='Other';
+  });
+
+  // ── Filter signed loadsheets ──────────────────────────────────────────────
+  const allSigned=S.saved.filter(function(s){return s.status==='complete'&&s.form;});
+  const signed=allSigned.filter(function(s){
+    const f=s.form;
+    if(sf.ac&&f.ac!==sf.ac&&f.ac!=='ZK-'+sf.ac)return false;
+    if(sf.acType&&AC_TYPE[f.ac]!==sf.acType)return false;
+    if(sf.dep&&(f.dep||'')!==sf.dep)return false;
+    if(sf.dest&&(f.dest||'')!==sf.dest)return false;
+    if(_from&&f.date&&f.date<_from)return false;
+    if(_to&&f.date&&f.date>_to)return false;
+    return true;
+  });
+
+  // ── Collect pax stats ────────────────────────────────────────────────────
+  var adultWts=[],childWts=[];
+  var totalFuel=0,totalTow=0,towCount=0;
+  var routeCounts={},acCounts={};
   signed.forEach(function(s){
     const f=s.form;
     const a=S.aircraft[f.ac];
     if(!a)return;
     const isCpCrew=!!f.coPilot;
+    // Route tally
+    const rk=(f.dep||'?')+' → '+(f.dest||'?');
+    routeCounts[rk]=(routeCounts[rk]||0)+1;
+    // Aircraft tally
+    const ack=(f.ac||'?').replace('ZK-','');
+    acCounts[ack]=(acCounts[ack]||0)+1;
+    // Fuel
+    totalFuel+=parseFloat(f.fuel||a.fuelKg||0);
+    // TOW
+    const r=calcFormWB(f);
+    if(r&&r.tow){totalTow+=r.tow;towCount++;}
+    // Per-seat weights
     for(var i=1;i<a.seats.length;i++){
       const nm=(f.names||{})[i]||'';
       if(!nm.trim())continue;
-      if(i===1&&isCpCrew)continue; // skip co-pilot
+      if(i===1&&isCpCrew)continue;
       const hasInfant=!!(f.infantNames||{})[i];
-      if(hasInfant)continue; // ignore seats with attached infants
+      if(hasInfant)continue;
       const wt=parseFloat((f.seats||{})[i]||0);
       if(!wt)continue;
-      paxCount++;
       const typ=(f.paxType||{})[i]||'A';
+      // paxType filter
+      if(sf.paxType==='A'&&typ!=='A')continue;
+      if(sf.paxType==='C'&&typ!=='C')continue;
       if(typ==='C') childWts.push(wt);
       else adultWts.push(wt);
     }
   });
   const avg=function(arr){return arr.length?arr.reduce(function(a,b){return a+b;},0)/arr.length:0;};
   const aAvg=avg(adultWts),cAvg=avg(childWts);
-  const statCard=function(label,val,sub){
-    return '<div style="background:var(--card2);border-radius:12px;padding:16px 18px;border:1px solid var(--border2);text-align:center">'
-      +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:700;margin-bottom:6px">'+label+'</div>'
-      +'<div style="font-size:28px;font-weight:900;color:var(--text)">'+val+'</div>'
-      +(sub?'<div style="font-size:11px;color:var(--text3);margin-top:3px">'+sub+'</div>':'')
+  const paxCount=adultWts.length+childWts.length;
+  const avgPax=signed.length?((paxCount)/signed.length).toFixed(1):0;
+
+  // ── Build option lists for dropdowns ─────────────────────────────────────
+  const allAc=Object.values(S.aircraft||{}).map(function(a){return a.id;});
+  const allDeps=[...new Set(allSigned.map(function(s){return s.form.dep||'';}).filter(Boolean))].sort();
+  const allDests=[...new Set(allSigned.map(function(s){return s.form.dest||'';}).filter(Boolean))].sort();
+  const aptLbl=function(code){return code?(code.replace(/^NZ/,'')):code;};
+
+  // ── Top routes ────────────────────────────────────────────────────────────
+  const topRoutes=Object.entries(routeCounts).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
+  const topAc=Object.entries(acCounts).sort(function(a,b){return b[1]-a[1];});
+
+  // ── Helper: stat card ─────────────────────────────────────────────────────
+  const statCard=function(label,val,sub,col){
+    return '<div style="background:var(--card2);border-radius:10px;padding:14px 16px;border:1px solid var(--border2);text-align:center">'
+      +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:'+(col||'var(--text3)')+';font-weight:700;margin-bottom:5px">'+label+'</div>'
+      +'<div style="font-size:24px;font-weight:900;color:var(--text)">'+val+'</div>'
+      +(sub?'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+sub+'</div>':'')
       +'</div>';
   };
-  return '<div class="card"><div class="st">Passenger Weight Statistics</div>'
-    +'<p style="font-size:12px;color:var(--text3);margin-bottom:14px">Calculated from '+signed.length+' signed loadsheet(s). Excludes infant-attached seats and co-pilot.</p>'
-    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">'
-    +statCard('Total PAX (signed)',paxCount,'all signed loadsheets')
-    +statCard('Adults',adultWts.length,'pax')
-    +statCard('Avg Adult Wt',adultWts.length?aAvg.toFixed(1)+'kg':'N/A',adultWts.length?'from '+adultWts.length+' records':'')
-    +statCard('Children',childWts.length,'pax')
-    +statCard('Avg Child Wt',childWts.length?cAvg.toFixed(1)+'kg':'N/A',childWts.length?'from '+childWts.length+' records':'')
-    +'</div>'
-    +(adultWts.length||childWts.length?'<div style="margin-top:16px;padding:12px;background:var(--card2);border-radius:8px;border:1px solid var(--border2)">'
-      +'<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px">Distribution</div>'
-      +(adultWts.length?'<div style="font-size:12px;margin-bottom:4px"><span style="color:#4ade80;font-weight:700">Adults:</span> min '+Math.min(...adultWts)+'kg, max '+Math.max(...adultWts)+'kg, avg '+aAvg.toFixed(1)+'kg</div>':'')
-      +(childWts.length?'<div style="font-size:12px"><span style="color:#fb923c;font-weight:700">Children:</span> min '+Math.min(...childWts)+'kg, max '+Math.max(...childWts)+'kg, avg '+cAvg.toFixed(1)+'kg</div>':'')
-      +'</div>':'')
+
+  // ── Filter bar HTML ───────────────────────────────────────────────────────
+  const presets=[['all','All Time'],['year','This Year'],['month','This Month'],['lastmonth','Last Month'],['custom','Custom']];
+  const filterBar='<div class="card" style="margin-bottom:0">'
+    +'<div class="st" style="margin-bottom:10px">Filters</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">'
+
+    // Date preset
+    +'<div style="min-width:130px"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Period</div>'
+    +'<select class="fi" style="font-size:12px" onchange="S._sf=S._sf||{};S._sf.preset=this.value;render()">'
+    +presets.map(function(p){return'<option value="'+p[0]+'"'+(sf.preset===p[0]?' selected':'')+'>'+p[1]+'</option>';}).join('')
+    +'</select></div>'
+
+    // Custom date range (only if preset=custom)
+    +(sf.preset==='custom'?
+      '<div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">From</div>'
+      +'<input class="fi" type="date" value="'+(_from||'')+'" style="font-size:12px;width:130px" onchange="S._sf.dateFrom=this.value;render()"></div>'
+      +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">To</div>'
+      +'<input class="fi" type="date" value="'+(_to||'')+'" style="font-size:12px;width:130px" onchange="S._sf.dateTo=this.value;render()"></div>'
+    :'')
+
+    // Aircraft
+    +'<div style="min-width:100px"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Aircraft</div>'
+    +'<select class="fi" style="font-size:12px" onchange="S._sf=S._sf||{};S._sf.ac=this.value;render()">'
+    +'<option value="">All</option>'
+    +allAc.map(function(id){var lbl=id.replace('ZK-','');return'<option value="'+id+'"'+(sf.ac===id?' selected':'')+'>'+lbl+'</option>';}).join('')
+    +'</select></div>'
+
+    // Aircraft type
+    +'<div style="min-width:100px"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Type</div>'
+    +'<select class="fi" style="font-size:12px" onchange="S._sf=S._sf||{};S._sf.acType=this.value;render()">'
+    +'<option value="">All</option>'
+    +'<option value="Airvan"'+(sf.acType==='Airvan'?' selected':'')+'>Airvan (GA8)</option>'
+    +'<option value="C208B"'+(sf.acType==='C208B'?' selected':'')+'>C208B</option>'
+    +'</select></div>'
+
+    // Departure
+    +'<div style="min-width:100px"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Departure</div>'
+    +'<select class="fi" style="font-size:12px" onchange="S._sf=S._sf||{};S._sf.dep=this.value;render()">'
+    +'<option value="">All</option>'
+    +allDeps.map(function(d){return'<option value="'+d+'"'+(sf.dep===d?' selected':'')+'>'+aptLbl(d)+'</option>';}).join('')
+    +'</select></div>'
+
+    // Destination
+    +'<div style="min-width:100px"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Destination</div>'
+    +'<select class="fi" style="font-size:12px" onchange="S._sf=S._sf||{};S._sf.dest=this.value;render()">'
+    +'<option value="">All</option>'
+    +allDests.map(function(d){return'<option value="'+d+'"'+(sf.dest===d?' selected':'')+'>'+aptLbl(d)+'</option>';}).join('')
+    +'</select></div>'
+
+    // Pax type
+    +'<div style="min-width:90px"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Pax Type</div>'
+    +'<select class="fi" style="font-size:12px" onchange="S._sf=S._sf||{};S._sf.paxType=this.value;render()">'
+    +'<option value="">Adults + Children</option>'
+    +'<option value="A"'+(sf.paxType==='A'?' selected':'')+'>Adults only</option>'
+    +'<option value="C"'+(sf.paxType==='C'?' selected':'')+'>Children only</option>'
+    +'</select></div>'
+
+    // Reset
+    +'<button onclick="S._sf={ac:\'\',acType:\'\',dep:\'\',dest:\'\',dateFrom:\'\',dateTo:\'\',paxType:\'\',preset:\'all\'};render()" style="padding:6px 14px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:12px;cursor:pointer;white-space:nowrap;align-self:flex-end">✕ Reset</button>'
+    +'</div></div>';
+
+  // ── Stats grid ────────────────────────────────────────────────────────────
+  const activeFilters=(sf.ac?1:0)+(sf.acType?1:0)+(sf.dep?1:0)+(sf.dest?1:0)+(sf.paxType?1:0)+(sf.preset!=='all'?1:0);
+  const sourceLine='<p style="font-size:12px;color:var(--text3);margin-bottom:14px">Showing <strong style="color:var(--text1)">'+signed.length+' of '+allSigned.length+'</strong> signed loadsheets'+(activeFilters?' ('+activeFilters+' filter'+(activeFilters>1?'s':'')+' active)':'')+'. Excludes infant-attached seats &amp; co-pilot.</p>';
+
+  const statsGrid='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px">'
+    +statCard('Flights',signed.length,'signed loadsheets')
+    +statCard('Total PAX',paxCount,'all filtered')
+    +statCard('Avg PAX / Flight',signed.length?avgPax:'—','pax per flight')
+    +statCard('Adults',adultWts.length,'pax','#4ade80')
+    +statCard('Avg Adult Wt',adultWts.length?aAvg.toFixed(1)+'kg':'N/A',adultWts.length?'from '+adultWts.length:'','#4ade80')
+    +statCard('Children',childWts.length,'pax','#fb923c')
+    +statCard('Avg Child Wt',childWts.length?cAvg.toFixed(1)+'kg':'N/A',childWts.length?'from '+childWts.length:'','#fb923c')
+    +statCard('Avg TOW',towCount?(totalTow/towCount).toFixed(0)+'kg':'—','at takeoff','#60a5fa')
+    +'</div>';
+
+  // Weight distribution
+  const distH=(adultWts.length||childWts.length)?'<div style="padding:12px;background:var(--card2);border-radius:8px;border:1px solid var(--border2);margin-bottom:14px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Weight Distribution</div>'
+    +(adultWts.length?'<div style="font-size:12px;margin-bottom:4px"><span style="color:#4ade80;font-weight:700">Adults:</span> min '+Math.min(...adultWts)+'kg &nbsp;·&nbsp; max '+Math.max(...adultWts)+'kg &nbsp;·&nbsp; avg '+aAvg.toFixed(1)+'kg &nbsp;·&nbsp; <span style="color:var(--text3)">'+adultWts.length+' records</span></div>':'')
+    +(childWts.length?'<div style="font-size:12px"><span style="color:#fb923c;font-weight:700">Children:</span> min '+Math.min(...childWts)+'kg &nbsp;·&nbsp; max '+Math.max(...childWts)+'kg &nbsp;·&nbsp; avg '+cAvg.toFixed(1)+'kg &nbsp;·&nbsp; <span style="color:var(--text3)">'+childWts.length+' records</span></div>':'')
+    +'</div>':'';
+
+  // Flights per aircraft
+  const acBarH=topAc.length?'<div style="padding:12px;background:var(--card2);border-radius:8px;border:1px solid var(--border2);margin-bottom:14px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Flights by Aircraft</div>'
+    +topAc.map(function(e){
+      var pct=Math.round(e[1]/signed.length*100);
+      var col=AC_COL['ZK-'+e[0]]||'var(--accent)';
+      return'<div style="margin-bottom:6px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span style="font-weight:700;color:'+col+'">'+e[0]+'</span><span style="color:var(--text3)">'+e[1]+' flight'+(e[1]!==1?'s':'')+' ('+pct+'%)</span></div>'
+        +'<div style="height:5px;border-radius:3px;background:var(--border2)"><div style="height:100%;width:'+pct+'%;border-radius:3px;background:'+col+'"></div></div>'
+        +'</div>';
+    }).join('')
+    +'</div>':'';
+
+  // Top routes
+  const routeH=topRoutes.length?'<div style="padding:12px;background:var(--card2);border-radius:8px;border:1px solid var(--border2)">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Top Routes</div>'
+    +topRoutes.map(function(e,i){
+      var pct=Math.round(e[1]/signed.length*100);
+      return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
+        +'<span style="font-size:10px;color:var(--text3);width:14px;text-align:right">'+(i+1)+'.</span>'
+        +'<span style="font-size:12px;font-weight:700;flex:1">'+e[0].split(' → ').map(function(c){return aptLbl(c);}).join(' → ')+'</span>'
+        +'<span style="font-size:11px;color:var(--text3)">'+e[1]+'×</span>'
+        +'<div style="width:60px;height:4px;border-radius:2px;background:var(--border2)"><div style="height:100%;width:'+pct+'%;border-radius:2px;background:var(--accent)"></div></div>'
+        +'</div>';
+    }).join('')
+    +'</div>':'';
+
+  return filterBar
+    +'<div class="card"><div class="st">Statistics</div>'
+    +sourceLine
+    +statsGrid
+    +distH
+    +(acBarH||routeH?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;flex-wrap:wrap">'+(acBarH||'')+(routeH||'')+'</div>':'')
     +'</div>';
 }
 function renderAdminGDrive(){
@@ -4540,10 +4703,6 @@ function renderAdminGDrive(){
 
     <div style="padding:10px 14px;background:${enabled?'var(--ok-bg)':'var(--warn-bg)'};border:1px solid ${enabled?'var(--ok-border)':'var(--warn-border)'};border-radius:8px;color:${enabled?'var(--ok-text)':'var(--warn-text)'};font-size:13px;font-weight:600">
       ${enabled?'✓ Drive upload ENABLED — signed loadsheets will upload automatically':'⚠ Testing mode — loadsheets save to Supabase only, not Drive'}
-    </div>
-    <div style="margin-top:12px;padding:10px 14px;background:var(--card2);border-radius:8px;border:1px solid var(--border)">
-      <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--text2)">Scope required in Google Cloud Console</div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.6">Make sure your OAuth consent screen has the scope <strong style="color:#e2e8f0">https://www.googleapis.com/auth/drive</strong> added under <strong style="color:#e2e8f0">APIs &amp; Services → OAuth consent screen → Scopes</strong>. Without this the upload will silently fail.</div>
     </div>
     <div style="margin-top:12px;padding:12px 14px;background:var(--card2);border-radius:8px;border:1px solid var(--border)">
       <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text2)">Scheduled &amp; Manual Upload</div>
@@ -5347,6 +5506,9 @@ window.saveManifest=async()=>{
   S.manifests=S.manifests.filter(m=>m.id!==id&&m.name!==name);
   S.manifests.unshift({id,name,savedAt,data});
   S._loadedManifestId=id;
+  // Update active tab's savedId
+  const _curTab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
+  if(_curTab)_curTab.savedId=id;
   lsSet('ts_manifests_cache',S.manifests);render();
   await sbU('ts_manifests',[{id,name,saved_at:savedAt,data}]);
   auditLog('manifest_save',{name,pax:d.pax.length,aircraft:d.acSetup.map(s=>s.acId).join(',')});
@@ -5354,6 +5516,8 @@ window.saveManifest=async()=>{
 };
 window.saveManifestAs=async function(){
   S._loadedManifestId=null;
+  const _curTab2=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
+  if(_curTab2)_curTab2.savedId=null;
   await window.saveManifest();
 };
 window.deleteCurrentManifest=async function(){
@@ -5365,6 +5529,8 @@ window.deleteCurrentManifest=async function(){
   if(!m.data)m.data={};
   m.data._deleted=true;m._deleted=true;
   S._loadedManifestId=null;
+  const _delTab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
+  if(_delTab)_delTab.savedId=null;
   lsSet('ts_manifests_cache',S.manifests);render();
   await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);
   S.appMsg={type:'ok',text:'Manifest moved to Bin.'};
@@ -5387,15 +5553,32 @@ function _autoSaveCurrent(reason){
 }
 window.loadManifest=id=>{
   const m=S.manifests.find(x=>x.id===id);if(!m)return;
-  S._dispatchUndo=JSON.parse(JSON.stringify(S.dispatch));
   const now=Date.now();
   const data={...bD(),...m.data,seatMap:{},step:1};
   (data.pax||[]).forEach(function(p){p._ts=now;});
   (data.acSetup||[]).forEach(function(s){s._ts=now;});
-  data._updateTs=now;
-  data._loadedAt=now;
-  S.dispatch=data;
-  S._loadedManifestId=m.id;
+  data._updateTs=now;data._loadedAt=now;
+  // Tab-aware load: if current tab is blank replace it, otherwise open new tab
+  if(!S._manifestDispatches)S._manifestDispatches={};
+  const _curIsBlank=!S.dispatch.pax?.length&&!S.dispatch.acSetup?.length;
+  if(_curIsBlank){
+    // Replace current tab
+    S.dispatch=data;
+    S._loadedManifestId=m.id;
+    const _lt=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
+    if(_lt)_lt.savedId=m.id;
+    S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(data));
+  } else {
+    // Save current dispatch, open new tab
+    S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+    const newId='mt_'+Date.now();
+    S._manifestDispatches[newId]=JSON.parse(JSON.stringify(data));
+    if(!S.manifestTabs)S.manifestTabs=[];
+    S.manifestTabs.push({id:newId,savedId:m.id});
+    S.activeManifestTabId=newId;
+    S.dispatch=JSON.parse(JSON.stringify(data));
+    S._loadedManifestId=m.id;
+  }
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
   auditLog('manifest_load',{name:m.name,pax:(m.data&&m.data.pax?m.data.pax.length:0)});
   S._undoLabel='Load "'+m.name+'"';
@@ -5508,8 +5691,73 @@ window.clearManifest=()=>{
   auditLog('manifest_clear',{pax:(S.dispatch.pax||[]).length});
   S._undoLabel='Clear';
   S._loadedManifestId=null;
-  S.dispatch=bD();S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
+  const _clrTab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
+  if(_clrTab)_clrTab.savedId=null;
+  S.dispatch=bD();
+  if(!S._manifestDispatches)S._manifestDispatches={};
+  S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+  S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
   autoSaveDispatch();render();
+};
+
+// ── Manifest tab management ──
+window.switchManifestTab=function(id){
+  if(!id||id===S.activeManifestTabId)return;
+  if(!S._manifestDispatches)S._manifestDispatches={};
+  // Save current dispatch
+  S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+  // Switch
+  S.activeManifestTabId=id;
+  S.dispatch=JSON.parse(JSON.stringify(S._manifestDispatches[id]||bD()));
+  const tab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===id;});
+  S._loadedManifestId=(tab&&tab.savedId)||null;
+  S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
+  render();
+};
+window.newManifestTab=function(){
+  if(!S._manifestDispatches)S._manifestDispatches={};
+  if(!S.manifestTabs)S.manifestTabs=[];
+  // Save current
+  S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+  // Create new blank tab
+  const newId='mt_'+Date.now();
+  const newDisp=bD();
+  S._manifestDispatches[newId]=JSON.parse(JSON.stringify(newDisp));
+  S.manifestTabs.push({id:newId,savedId:null});
+  S.activeManifestTabId=newId;
+  S.dispatch=newDisp;
+  S._loadedManifestId=null;
+  S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
+  render();
+};
+window.closeManifestTab=function(id){
+  if(!S.manifestTabs)return;
+  const tabIdx=S.manifestTabs.findIndex(function(t){return t.id===id;});
+  if(tabIdx<0)return;
+  const d=id===S.activeManifestTabId?S.dispatch:((S._manifestDispatches||{})[id]||{});
+  const hasData=(d.pax&&d.pax.length>0)||(d.acSetup&&d.acSetup.length>0);
+  if(hasData&&!confirm('Close this manifest tab? Unsaved changes will be lost.'))return;
+  S.manifestTabs.splice(tabIdx,1);
+  if(S._manifestDispatches)delete S._manifestDispatches[id];
+  // If closing active tab, switch to adjacent
+  if(id===S.activeManifestTabId){
+    if(S.manifestTabs.length===0){
+      const fallbackId='mt_'+Date.now();
+      S.manifestTabs=[{id:fallbackId,savedId:null}];
+      S.activeManifestTabId=fallbackId;
+      S.dispatch=bD();
+      if(!S._manifestDispatches)S._manifestDispatches={};
+      S._manifestDispatches[fallbackId]=JSON.parse(JSON.stringify(S.dispatch));
+      S._loadedManifestId=null;
+    } else {
+      const nextTab=S.manifestTabs[Math.min(tabIdx,S.manifestTabs.length-1)];
+      S.activeManifestTabId=nextTab.id;
+      S.dispatch=JSON.parse(JSON.stringify((S._manifestDispatches||{})[nextTab.id]||bD()));
+      S._loadedManifestId=(nextTab.savedId)||null;
+    }
+  }
+  S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
+  render();
 };
 
 // ── Generate loadsheet from manifest ──
@@ -6977,7 +7225,7 @@ function renderMaintenance(){
   if(m._loading){return'<div style="display:flex;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:var(--text3)"><div style="width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--acc);border-radius:50%;animation:spin 0.7s linear infinite"></div><span style="font-size:14px">Loading maintenance data…</span></div>';}
   if(m._loadFailed){return'<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:var(--text3)"><div style="font-size:28px">&#9888;</div><div style="font-size:14px">Could not load maintenance data from cloud.</div><button onclick="window.retryMaintenance()" style="margin-top:8px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Retry</button></div>';}
   const ms=S.admin||{};
-  const isAdmin=S.user?.role==='admin';
+  const isAdmin=hasRolePerm('maint_bookings');
   const sub=S.maintTab||'overview';
 
   // Sub tabs
@@ -7028,7 +7276,7 @@ function _lastUpdatedLabel(ac){
 function renderMaintOverview(){
   const m=S.maintenance||{};
   const acs=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'];
-  const isAdmin=S.user?.role==='admin'||S.user?.superAdmin;
+  const isAdmin=hasRolePerm('maint_bookings');
 
   const cards=acs.map(ac=>{
     const latest=maintGetLatest(ac);
