@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.01';
+const APP_VER='v22.07';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -913,7 +913,7 @@ function runSolver(){
           const opid=newSm[si]; if(!opid) return;
           const op=S.dispatch.pax.find(x=>x.id===opid); if(!op) return;
           const w=parseFloat(op.weight||0)+parseFloat(op.bag||0);
-          wt+=w; mom+=w*a.seats[si]?.arm||100;
+          wt+=w; mom+=w*(a.seats[si]?.arm??0);
         });
         wt+=fW; mom+=fW*a.fuelArm; wt-=a.gndBurn; mom-=a.gndBurn*a.fuelArm;
         const newCog=mom/wt;
@@ -2370,7 +2370,7 @@ function renderStep1(){
   const ri=realPax.map((p,i)=>{
     const oi=d.pax.indexOf(p);
     const gc=p.group?.trim()?groupColor(p.group.trim()):null;
-    const rowBg=gc?gc+'22':p.pinAc?AC_COL[p.pinAc]+'15':'';
+    const rowBg=p.pinAc?AC_COL[p.pinAc]+'2e':'';
     // Aircraft assignment buttons
     const acBtns=d.acSetup.length?d.acSetup.map(s=>{
       const id=s.acId,lbl=id.replace('ZK-',''),col=AC_COL[id]||'#64748b',sel=p.pinAc===id;
@@ -2390,7 +2390,7 @@ function renderStep1(){
         </div>`;
     // Group column: coloured pill (click-to-edit) when set, input otherwise
     const groupCol=p.group?.trim()
-      ?`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="padding:4px 10px;border-radius:20px;background:${gc};color:#fff;font-size:12px;font-weight:700;cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.group}</div>`
+      ?`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="padding:4px 10px;border-radius:20px;background:${gc};color:#fff;font-size:12px;font-weight:700;cursor:pointer;user-select:none;white-space:nowrap;width:fit-content;max-width:100%">${p.group}</div>`
       :`<input class="fi" type="text" placeholder="Group" value="" style="font-size:13px" data-row="${i}" data-field="group" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'group');}" onblur="window.setPaxField(${oi},'group',this.value)">`;
     return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 48px 48px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${rowBg}">
       <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-width:0">${acBtns}</div>
@@ -2546,7 +2546,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,seatmapKey){
           <span class="seat-lbl" style="${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
-            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:3px;padding:0 3px;line-height:1.4">C</div>':''}${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?'<span style="font-size:7px;font-weight:900;background:rgba(236,72,153,.25);color:#f472b6;border-radius:2px;padding:0 2px;margin-left:2px">i</span>':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
+            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:3px;padding:0 3px;line-height:1.4">C</div>':''}${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}${p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.25);color:#f472b6;border-radius:3px;padding:0 3px;line-height:1.4">i</div>':''}<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
         </div>`;
       }
     });
@@ -2714,13 +2714,22 @@ function renderStep2(){
   const _hasSel=!!S.selectedPax;
   const poolHTML=`<div class="card" style="padding:10px 12px;margin-bottom:12px;${_hasSel&&!unassigned.length?'border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)':''}" ondragover="event.preventDefault()" ondrop="dropOnPool(event)" onclick="window.tapPool(event)">
     <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Unassigned${unassigned.length?' ('+unassigned.length+')':''}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;min-height:30px;align-items:center">
+    <div style="display:flex;flex-wrap:wrap;gap:6px;min-height:54px;align-items:flex-start">
       ${unassigned.length?unassigned.map(p=>{
         const gc=p.group?.trim()?groupColor(p.group.trim()):null;
         const isSel=S.selectedPax===p.id;
         const wt=parseFloat(p.weight||0)+parseFloat(p.bag||0);
-        return`<div style="padding:5px 10px;border-radius:8px;background:${isSel?'var(--acc)':gc?gc+'28':'var(--card2)'};border:1.5px solid ${isSel?'var(--acc)':gc||'var(--border)'};color:${isSel?'#fff':'var(--text1)'};cursor:pointer;font-size:12px;font-weight:600;user-select:none;display:flex;align-items:center;gap:5px" onclick="event.stopPropagation();tapPax('${p.id}')" draggable="true" ondragstart="startDrag(event,'${p.id}','pool',null)"><span>${p.name||'?'}${p._pushedFrom?`<span style="font-size:9px;font-weight:500;opacity:.65;margin-left:4px">via ${p._pushedFrom}</span>`:''}${wt>0?` <span style="font-size:10px;opacity:.7">${wt}kg</span>`:''}</span>${p.paymentReq?`<span style="font-size:8px;font-weight:800;padding:1px 5px;border-radius:10px;background:rgba(239,68,68,.25);color:#ef4444;letter-spacing:.04em;flex-shrink:0">$ PAY</span>`:''}</div>`;
-      }).join(''):`<div style="font-size:12px;color:var(--text3);font-style:italic">${_hasSel?'Tap here to unallocate selected passenger':'—'}</div>`}
+        const borderCol=p._pushedFrom?(AC_COL[p._pushedFrom]||gc||'#64748b'):gc||'#64748b';
+        const cardStyle=isSel?'background:var(--acc);border:2px solid var(--acc);box-shadow:0 0 0 2px var(--acc)':`background:rgba(255,255,255,.93);border-left:4px solid ${borderCol}`;
+        return`<div class="seat filled" style="${cardStyle};flex-shrink:0" onclick="event.stopPropagation();tapPax('${p.id}')" draggable="true" ondragstart="startDrag(event,'${p.id}','pool',null)">
+          ${!isSel&&gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
+          ${!isSel&&p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}
+          ${!isSel&&p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:3px;padding:0 3px;line-height:1.4">C</div>':''}
+          ${!isSel&&p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.25);color:#f472b6;border-radius:3px;padding:0 3px;line-height:1.4">i</div>':''}
+          <div class="seat-name" style="${isSel?'color:#fff':'color:#1e293b'};font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div>
+          <div class="seat-wt" style="${isSel?'color:rgba(255,255,255,.8)':'color:#334155'}">${wt>0?wt+'kg':''}</div>
+        </div>`;
+      }).join(''):`<div style="font-size:12px;color:var(--text3);font-style:italic">${_hasSel?'Tap here or drop seat card here to unallocate':'—'}</div>`}
     </div>
   </div>`;
 
@@ -4689,7 +4698,7 @@ window.savePaxFieldPopup=function(){
 };
 
 ;
-window.rmInfant=function(i){S.dispatch.pax[i].infantName=null;if(S.dispatch.pax[i])S.dispatch.pax[i]._ts=Date.now();autoSaveDispatch();render();};
+window.rmInfant=function(i){if(!S.dispatch.pax[i])return;S.dispatch.pax[i].infantName=null;S.dispatch.pax[i]._ts=Date.now();autoSaveDispatch();render();};
 window.lsRmInfant=function(idx){if(S.form.infantNames)delete S.form.infantNames[idx];// also clear from name field if encoded there
 var nm=S.form.names&&S.form.names[idx]||'';if(nm.includes(' + '))S.form.names[idx]=nm.split(' + ')[0].trim();render();};
 window.rmPax=i=>{S._paxUndo=S._paxUndo||[];var removed=S.dispatch.pax.splice(i,1)[0];if(removed)S._paxUndo.push(removed);autoSaveDispatch();render();};
@@ -4724,9 +4733,9 @@ window.setPaxField=(i,k,v)=>{
 window.tapPax=pid=>{S.selectedPax=S.selectedPax===pid?null:pid;render();};
 window.tapPool=function(ev){
   if(ev)ev.stopPropagation();
-  if(!S.selectedPax)return;
+  if(!S.selectedPax||!S.dispatch)return;
   const pid=S.selectedPax;
-  const sm=S.dispatch.seatMap;
+  const sm=S.dispatch.seatMap||{};
   Object.keys(sm).forEach(function(ac){
     Object.keys(sm[ac]||{}).forEach(function(idx){if(sm[ac][idx]===pid)delete sm[ac][idx];});
   });
@@ -4735,6 +4744,7 @@ window.tapPool=function(ev){
   autoSaveDispatch();render();
 };
 window.tapSeat=(toIdx,toAc)=>{
+  if(!S.dispatch)return;S.dispatch.seatMap=S.dispatch.seatMap||{};
   const sm=S.dispatch.seatMap;if(!sm[toAc])sm[toAc]={};
   const displaced=sm[toAc][toIdx]||null;
   if(S.selectedPax){
@@ -4789,7 +4799,8 @@ window.dropOnSeat=function(ev,toIdx,toAc){
   const pid=S.dragState.pid;
   const fromAc=S.dragState.fromAc;
   const fromSeat=S.dragState.fromSeat;
-  if(!pid) return;
+  if(!pid||!S.dispatch) return;
+  S.dispatch.seatMap=S.dispatch.seatMap||{};
   const sm=S.dispatch.seatMap;
   if(!sm[toAc]) sm[toAc]={};
   if(fromAc&&fromAc!=='pool'&&!sm[fromAc]) sm[fromAc]={};
@@ -4947,7 +4958,7 @@ window.saveManifest=async()=>{
   S.manifests.unshift({id,name,savedAt:new Date().toISOString(),data});
   lsSet('ts_manifests_cache',S.manifests);render();
   await sbU('ts_manifests',[{id,name,saved_at:new Date().toISOString(),data}]);
-  auditLog('manifest_save',{name,pax:d.pax.length,aircraft:acs.join(',')});S.appMsg={type:'ok',text:'Manifest "'+name+'" saved.'};
+  auditLog('manifest_save',{name,pax:d.pax.length,aircraft:d.acSetup.map(s=>s.acId).join(',')});S.appMsg={type:'ok',text:'Manifest "'+name+'" saved.'};
 };
 
 function _autoSaveCurrent(reason){
@@ -5267,7 +5278,7 @@ window.lsGrp=function(idx,val){
     var _dp=S.dispatch.pax.find(function(px){return(px.name||'').trim().toLowerCase()===nm.toLowerCase();});
     if(_dp)_dp.group=val;
   }
-  autoSaveLS();
+  autoSaveLS();_lsSafeRender();
 };
 window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;setTimeout(_lsSafeRender,150);};window.lsB=(i,v)=>{S.form.bags[i]=v;setTimeout(_lsSafeRender,150);};window.lsC=(i,v)=>{S.form.cargo[i]=v;setTimeout(_lsSafeRender,150);};
 window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));setTimeout(_lsSafeRender,150);};
