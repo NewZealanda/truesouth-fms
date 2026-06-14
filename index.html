@@ -35,7 +35,7 @@ label{font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bot
 
 /* ── Cards ── */
 .card{background:var(--card);border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:12px;}
-.st{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:12px;}
+.st{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text2);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:12px;}
 
 /* ── Grids ── */
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v21.92';
+const APP_VER='v21.93';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2498,7 +2498,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,seatmapKey){
         seatRowsHTML+=`<div class="seat ${isCrew?'crew':nm?'filled':''} ${S._selFormSeat===cell.i?'sel-src':''}" style="width:${seatSz}px;height:${seatHt}px;${lsSeatStyle}${S._selFormSeat===cell.i?';box-shadow:0 0 0 2px #f59e0b':''}" onclick="${!isCrew?`tapFormSeat(${cell.i},'${acId}')`:''}" draggable="${!isCrew&&nm?'true':'false'}" ondragstart="if(${!isCrew&&!!nm})startDragForm(event,${cell.i},'${acId}')" ondragover="event.preventDefault()" ondrop="dropFormSeat(event,${cell.i},'${acId}')">
           <span class="seat-lbl" style="${nm&&!isCrew?'color:#475569;opacity:.7':''}font-size:9px">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc};top:3px;right:3px"></div>`:''}
-          ${nm?`<div class="seat-name" style="${lsTextCol};font-weight:700;font-size:${seatSz<52?'7px':'9px'}">${nm.split(' ')[0].slice(0,seatSz<52?5:9)}${(form?.infantNames?.[cell.i])?' 👶':''}${(form?.paxType||{})[cell.i]==='C'?'<span style="font-size:7px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:2px;padding:0 2px;margin-left:2px">C</span>':''}</div><div class="seat-wt" style="${lsTextCol};font-size:${seatSz<52?'7px':'8px'}">${wt>0?wt+'kg':''}</div>`:isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.85);font-weight:700">${isPIC?'PIC':'CP'}</div>`:''}
+          ${nm?`<div class="seat-name" style="${lsTextCol};font-weight:700;font-size:${seatSz<52?'7px':'9px'}">${nm.split(' ')[0].slice(0,seatSz<52?5:9)}${(form?.infantNames?.[cell.i])?'<span style="font-size:7px;font-weight:900;background:rgba(236,72,153,.25);color:#f472b6;border-radius:2px;padding:0 2px;margin-left:2px">i</span>':''}${(form?.paxType||{})[cell.i]==='C'?'<span style="font-size:7px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:2px;padding:0 2px;margin-left:2px">C</span>':''}</div><div class="seat-wt" style="${lsTextCol};font-size:${seatSz<52?'7px':'8px'}">${wt>0?wt+'kg':''}</div>`:isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.85);font-weight:700">${isPIC?'PIC':'CP'}</div>`:''}
         </div>`;
       } else {
         // Manifest seat map view
@@ -2525,7 +2525,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,seatmapKey){
           <span class="seat-lbl" style="${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
-            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:3px;padding:0 3px;line-height:1.4">C</div>':''}'<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?' 👶':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
+            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:3px;padding:0 3px;line-height:1.4">C</div>':''}'<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?'<span style="font-size:7px;font-weight:900;background:rgba(236,72,153,.25);color:#f472b6;border-radius:2px;padding:0 2px;margin-left:2px">i</span>':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
         </div>`;
       }
     });
@@ -2686,16 +2686,17 @@ function renderStep2(){
     </div>`;
   }).join('');
 
-  const poolHTML=unassigned.length?`<div class="card" style="padding:10px 12px;margin-bottom:12px" ondragover="event.preventDefault()" ondrop="dropOnPool(event)">
-    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Unassigned (${unassigned.length})</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px">
-      ${unassigned.map(p=>{
+  const _hasSel=!!S.selectedPax;
+  const poolHTML=`<div class="card" style="padding:10px 12px;margin-bottom:12px;${_hasSel&&!unassigned.length?'border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)':''}" ondragover="event.preventDefault()" ondrop="dropOnPool(event)" onclick="window.tapPool(event)">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Unassigned${unassigned.length?' ('+unassigned.length+')':''}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;min-height:30px;align-items:center">
+      ${unassigned.length?unassigned.map(p=>{
         const gc=p.group?.trim()?groupColor(p.group.trim()):null;
         const isSel=S.selectedPax===p.id;
-        return`<div style="padding:5px 10px;border-radius:8px;background:${isSel?'var(--acc)':'var(--card2)'};border:1.5px solid ${isSel?'var(--acc)':gc||'var(--border)'};color:${isSel?'#fff':'var(--text1)'};cursor:pointer;font-size:12px;font-weight:600;user-select:none" onclick="tapPax('${p.id}')" draggable="true" ondragstart="startDrag(event,'${p.id}','pool',null)">${p.name||'?'} ${parseFloat(p.weight||0)+parseFloat(p.bag||0)>0?'<span style="font-size:10px;opacity:.7">'+(parseFloat(p.weight||0)+parseFloat(p.bag||0))+'kg</span>':''}</div>`;
-      }).join('')}
+        return`<div style="padding:5px 10px;border-radius:8px;background:${isSel?'var(--acc)':'var(--card2)'};border:1.5px solid ${isSel?'var(--acc)':gc||'var(--border)'};color:${isSel?'#fff':'var(--text1)'};cursor:pointer;font-size:12px;font-weight:600;user-select:none" onclick="event.stopPropagation();tapPax('${p.id}')" draggable="true" ondragstart="startDrag(event,'${p.id}','pool',null)">${p.name||'?'} ${parseFloat(p.weight||0)+parseFloat(p.bag||0)>0?'<span style="font-size:10px;opacity:.7">'+(parseFloat(p.weight||0)+parseFloat(p.bag||0))+'kg</span>':''}</div>`;
+      }).join(''):`<div style="font-size:12px;color:var(--text3);font-style:italic">${_hasSel?'Tap here to unallocate selected passenger':'—'}</div>`}
     </div>
-  </div>`:'';
+  </div>`;
 
   const hasLsTabs=S.lsTabs&&S.lsTabs.length>0;
 
@@ -4694,6 +4695,17 @@ window.setPaxField=(i,k,v)=>{
 
 // ── Seat map handlers ──
 window.tapPax=pid=>{S.selectedPax=S.selectedPax===pid?null:pid;render();};
+window.tapPool=function(ev){
+  if(ev)ev.stopPropagation();
+  if(!S.selectedPax)return;
+  const pid=S.selectedPax;
+  const sm=S.dispatch.seatMap;
+  Object.keys(sm).forEach(function(ac){
+    Object.keys(sm[ac]||{}).forEach(function(idx){if(sm[ac][idx]===pid)delete sm[ac][idx];});
+  });
+  S.selectedPax=null;
+  runSolver();autoSaveDispatch();render();
+};
 window.tapSeat=(toIdx,toAc)=>{
   const sm=S.dispatch.seatMap;if(!sm[toAc])sm[toAc]={};
   const displaced=sm[toAc][toIdx]||null;
