@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v21.78';
+const APP_VER='v21.79';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2187,11 +2187,13 @@ function renderApp(){
         <span>${S.appMsg.text}</span>
         <button onclick="S.appMsg=null;render()" style="padding:2px 8px;border-radius:4px;border:1px solid currentColor;background:transparent;cursor:pointer;font-size:11px;color:inherit">✕</button>
       </div>`:''}
-      ${S.tab==='charter'?'<div id="flash-charter">'+renderCharter()+'</div>':
-        S.tab==='maintenance'?'<div id="flash-maintenance">'+renderMaintenance()+'</div>':
-        S.tab==='admin'?'<div id="flash-admin">'+renderAdmin()+'</div>':
-        S.tab==='scratchpad'?renderScratchpadPage():
-        renderOperations()}
+      ${(function(){try{
+        if(S.tab==='charter')return'<div id="flash-charter">'+renderCharter()+'</div>';
+        if(S.tab==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';
+        if(S.tab==='admin')return'<div id="flash-admin">'+renderAdmin()+'</div>';
+        if(S.tab==='scratchpad')return renderScratchpadPage();
+        return renderOperations();
+      }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
   </div>`;
 }
