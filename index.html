@@ -17,7 +17,7 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
   --bg:#1a1f2e;--card:#0f172a;--card2:#080d14;--border:#1e293b;--border2:#334155;
-  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --text:#f1f5f9;--text2:#cbd5e1;--text3:#94a3b8;
   --sky:#7B9EC6;--sky2:#4A6D96;
   --ok-bg:#052e16;--ok-border:#166534;--ok-text:#86efac;
   --warn-bg:#1c1003;--warn-border:#854d0e;--warn-text:#fcd34d;
@@ -72,7 +72,7 @@ label{font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bot
 /* ── Tabs ── */
 .nav-tab{padding:6px 12px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;transition:all .15s;}
 .nav-tab.on{background:var(--sky);color:#fff;}
-.nav-tab.off{background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);}
+.nav-tab.off{background:rgba(255,255,255,.07);color:rgba(255,255,255,.75);}
 .nav-tab.off:hover{background:rgba(255,255,255,.12);}
 
 .sub-tab{padding:5px 12px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;font-size:12px;font-weight:600;background:transparent;color:var(--text2);}
@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v21.93';
+const APP_VER='v22.01';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -678,50 +678,59 @@ function autoAllocate(){
     toast('Select aircraft with a PIC and add passengers first.','warn');return;
   }
 
-  // ── Assign each pax to their pinned aircraft (or leave unassigned) ──
+  d.seatMap=d.seatMap||{};d.origAcMap=d.origAcMap||{};
+
+  // Only seat pax without a seat already
+  const alreadySeated=new Set(Object.values(d.seatMap).flatMap(sm=>Object.values(sm||{})));
+  const unseated=d.pax.filter(p=>!alreadySeated.has(p.id));
+
+  // ── Assign each unseated pax to aircraft ──
   const acPax={};
   acs.forEach(id=>{acPax[id]=[];});
 
-  // Separate pinned and unpinned pax
-  const pinned=d.pax.filter(p=>p.pinAc&&acs.includes(p.pinAc));
-  const unpinned=d.pax.filter(p=>!p.pinAc||!acs.includes(p.pinAc));
-
-  // Add pinned pax to their aircraft
+  const pinned=unseated.filter(p=>p.pinAc&&acs.includes(p.pinAc));
+  const unpinned=unseated.filter(p=>!p.pinAc||!acs.includes(p.pinAc));
   pinned.forEach(p=>acPax[p.pinAc].push(p));
 
-  // Distribute unpinned pax proportionally by remaining capacity
-  const caps={};acs.forEach(id=>{caps[id]=paxSeatIdxs(id).length;});
+  // Capacity = available empty seats per aircraft
+  const caps={};
+  acs.forEach(id=>{
+    const occupied=Object.keys(d.seatMap[id]||{}).length;
+    caps[id]=Math.max(0,paxSeatIdxs(id).length-occupied);
+  });
+
   const remaining=[...unpinned];
-  // Sort unpinned by group then weight
   remaining.sort((a,b)=>{
     if((a.group||'')!==(b.group||'')) return (a.group||'').localeCompare(b.group||'');
     return (parseFloat(b.weight||0)+parseFloat(b.bag||0))-(parseFloat(a.weight||0)+parseFloat(a.bag||0));
   });
-  // Fill each aircraft up to capacity in proportion
   remaining.forEach(p=>{
-    // Find aircraft with most remaining space
     const best=acs.filter(id=>acPax[id].length<caps[id])
       .sort((a,b)=>(caps[b]-acPax[b].length)-(caps[a]-acPax[a].length))[0];
     if(best) acPax[best].push(p);
   });
 
-  // ── Assign seats within each aircraft (heaviest forward) ──
-  d.seatMap={};d.origAcMap={};
+  // ── Assign seats, merging with existing (existing takes priority) ──
   acs.forEach(id=>{
-    d.seatMap[id]=assignSeatsHeavyFront(id, acPax[id]||[]);
+    const existing=d.seatMap[id]||{};
+    const toSeat=acPax[id]||[];
+    if(!toSeat.length){d.seatMap[id]=existing;return;}
+    const newAssignment=assignSeatsHeavyFront(id,toSeat);
+    // Only fill empty seats
+    Object.entries(newAssignment).forEach(([idx,pid])=>{
+      const i=parseInt(idx);if(!existing[i])existing[i]=pid;
+    });
+    d.seatMap[id]=existing;
   });
 
   // ── Check W&B and flag issues ──
   S.tab='seatmap';S.lockedAcs=[];S.mobileAcIdx=0;S.viewAcs=[...acs];window.scrollTo(0,0);
-  runSolver(); // updates solverRes for W&B display only (no auto-swaps)
+  runSolver();
 
-  // Warn if any aircraft has W&B issues
   const issues=[];
   acs.forEach(id=>{
-    const r=S.solverRes[id];
-    if(!r) return;
+    const r=S.solverRes[id];if(!r) return;
     const a=S.aircraft[id];
-    const tol=a?.layout==='c208'?50:20;
     if(r.towOver>0) issues.push(id+' overweight by '+r.towOver.toFixed(0)+'kg');
     if(!r.cogOk) issues.push(id+' CoG out of limits ('+r.cog?.toFixed(1)+'")');
   });
@@ -2359,25 +2368,37 @@ function renderStep1(){
   // Filter out legacy infant rows; new infants stored as p.infantName on parent
   const realPax=d.pax.filter(p=>!p.infant);
   const ri=realPax.map((p,i)=>{
-    // Find the original index in d.pax for setPaxField
     const oi=d.pax.indexOf(p);
-    // Aircraft assignment buttons (one per selected AC, toggle-style)
+    const gc=p.group?.trim()?groupColor(p.group.trim()):null;
+    const rowBg=gc?gc+'22':p.pinAc?AC_COL[p.pinAc]+'15':'';
+    // Aircraft assignment buttons
     const acBtns=d.acSetup.length?d.acSetup.map(s=>{
       const id=s.acId,lbl=id.replace('ZK-',''),col=AC_COL[id]||'#64748b',sel=p.pinAc===id;
       return`<button tabindex="-1" onclick="setPaxField(${oi},'pinAc','${id}')" style="padding:2px 8px;border-radius:20px;border:1px solid ${col}${sel?'cc':'33'};background:${sel?col+'28':'transparent'};color:${sel?col:'var(--text3)'};font-size:10px;font-weight:800;cursor:pointer;line-height:1.6;white-space:nowrap">${lbl}</button>`;
     }).join(''):'';
-    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 48px 48px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${p.pinAc?AC_COL[p.pinAc]+'15':''}">
-      <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-width:0">
-        ${acBtns}
-      </div>
+    // Name column: pill (click-to-edit) when name set, input otherwise
+    const nameCol=p.name
+      ?`<div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+          <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+            <div onclick="window.openPaxFieldPopup(${oi},'name')" style="padding:4px 12px;border-radius:20px;background:${gc||'var(--card2)'};${gc?'':'border:1px solid var(--border2);'}color:${gc?'#fff':'var(--text1)'};font-size:13px;font-weight:700;cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${p.name}</div>
+            <button tabindex="-1" onclick="setPaxField(${oi},'paymentReq',${!p.paymentReq})" style="padding:2px 7px;border-radius:20px;border:1px solid ${p.paymentReq?'#ef4444':'var(--border)'};background:${p.paymentReq?'rgba(239,68,68,.2)':'transparent'};color:${p.paymentReq?'#ef4444':'var(--text3)'};font-size:9px;font-weight:800;cursor:pointer;letter-spacing:.04em;flex-shrink:0">${p.paymentReq?'$ PAY REQ':'$'}</button>
+          </div>
+          ${p.infantName?`<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#ec4899;font-weight:600;padding:0 4px">👶 ${p.infantName}<button tabindex="-1" onclick="window.rmInfant(${oi})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7">×</button></span>`:''}
+        </div>`
+      :`<div style="display:flex;flex-direction:column;gap:2px">
+          <input class="fi" type="text" placeholder="Tap to enter name" value="" style="font-size:13px;width:100%" data-row="${i}" data-field="name" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'name');}" onblur="window.paxNameBlur(${oi},this.value)">
+        </div>`;
+    // Group column: coloured pill (click-to-edit) when set, input otherwise
+    const groupCol=p.group?.trim()
+      ?`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="padding:4px 10px;border-radius:20px;background:${gc};color:#fff;font-size:12px;font-weight:700;cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.group}</div>`
+      :`<input class="fi" type="text" placeholder="Group" value="" style="font-size:13px" data-row="${i}" data-field="group" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'group');}" onblur="window.setPaxField(${oi},'group',this.value)">`;
+    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 48px 48px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${rowBg}">
+      <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-width:0">${acBtns}</div>
       <div style="display:flex;gap:2px;align-items:center;min-width:0">
         <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>
       </div>
-      <div style="display:flex;flex-direction:column;gap:2px">
-        <input class="fi" type="text" placeholder="Tap to enter name" value="${p.name||''}" style="font-size:13px;width:100%" data-row="${i}" data-field="name" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'name');}" onblur="window.paxNameBlur(${oi},this.value)">
-        ${p.infantName?`<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#ec4899;font-weight:600;padding:0 4px">👶 ${p.infantName}<button tabindex="-1" onclick="window.rmInfant(${oi})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></span>`:''}
-      </div>
-      <input class="fi" type="text" placeholder="Group" value="${p.group||''}" style="font-size:13px" data-row="${i}" data-field="group" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'group');}" onblur="window.setPaxField(${oi},'group',this.value)">
+      ${nameCol}
+      ${groupCol}
       <input class="fi" type="text" inputmode="decimal" placeholder="kg" value="${p.weight||''}" style="font-size:13px;-moz-appearance:textfield" data-row="${i}" data-field="weight" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'weight');}" onblur="window.setPaxField(${oi},'weight',this.value)">
       <input class="fi" type="text" inputmode="decimal" placeholder="bag" value="${p.bag||''}" style="font-size:13px;-moz-appearance:textfield" data-row="${i}" data-field="bag" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'bag');}" onblur="window.setPaxField(${oi},'bag',this.value)">
       <button tabindex="-1" class="icon-btn red" onclick="rmPax(${oi})" style="width:28px;height:28px;font-size:13px">✕</button>
@@ -2408,10 +2429,10 @@ function renderStep1(){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative">
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;pointer-events:none">Date</div>
-        <div style="font-size:13px;font-weight:600;color:var(--text1);pointer-events:none">${_fmtLsDate(d.date)}</div>
-        <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:none;background:transparent">
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative" onclick="var i=this.querySelector('input[type=date]');try{i.showPicker&&i.showPicker()}catch(e){i.click()}">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Date</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text1)">${_fmtLsDate(d.date)}</div>
+        <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" onclick="event.stopPropagation()" style="position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;border:none;background:transparent">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">ETD</div>
@@ -2525,7 +2546,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,seatmapKey){
           <span class="seat-lbl" style="${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
-            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:3px;padding:0 3px;line-height:1.4">C</div>':''}'<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?'<span style="font-size:7px;font-weight:900;background:rgba(236,72,153,.25);color:#f472b6;border-radius:2px;padding:0 2px;margin-left:2px">i</span>':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
+            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:3px;padding:0 3px;line-height:1.4">C</div>':''}${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?'<span style="font-size:7px;font-weight:900;background:rgba(236,72,153,.25);color:#f472b6;border-radius:2px;padding:0 2px;margin-left:2px">i</span>':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
         </div>`;
       }
     });
@@ -2593,32 +2614,35 @@ window.toggleLockAc=function(acId){
 window.reAllocate=function(){
   const d=S.dispatch;
   const locked=S.lockedAcs||[];
-  // Keep locked aircraft pax in place; re-run autoAllocate for unlocked
   if(locked.length===0){
-    // Simple full re-allocation
+    // Full re-allocation: clear all seats first, then auto-allocate
+    d.seatMap={};d.origAcMap={};
     autoAllocate();
     return;
   }
-  // Remove locked pax from the free pool and re-run
+  // Partial re-allocation: keep locked aircraft seats, clear unlocked, then fill
   const lockedPaxIds=new Set();
   locked.forEach(function(id){
     Object.values(d.seatMap[id]||{}).forEach(function(pid){lockedPaxIds.add(pid);});
   });
-  // Temporarily pin locked pax to their aircraft
+  // Clear only the unlocked aircraft seats
+  const acs=d.acSetup.map(function(s){return s._seatmapKey||s.acId;});
+  acs.forEach(function(id){
+    if(!locked.includes(id))delete d.seatMap[id];
+  });
+  // Temporarily pin locked pax so autoAllocate leaves them alone
   const origPins={};
   d.pax.forEach(function(p){
     origPins[p.id]=p.pinAc;
     if(lockedPaxIds.has(p.id)){
-      // Find which locked ac they're on
       locked.forEach(function(id){
-        if(Object.values(d.seatMap[id]||{}).includes(p.id)) p.pinAc=id;
+        if(Object.values(d.seatMap[id]||{}).includes(p.id))p.pinAc=id;
       });
     } else {
-      p.pinAc=null; // free to reallocate
+      p.pinAc=null;
     }
   });
   autoAllocate();
-  // Restore original pins
   d.pax.forEach(function(p){p.pinAc=origPins[p.id];});
 };
 
@@ -2676,6 +2700,7 @@ function renderStep2(){
         ${sr?`<span class="pill ${sr.towOk?'pill-green':sr.towFatal?'pill-red':'pill-warn'}">${sr.tow?.toFixed(0)}/${sr.mtow}kg</span>
           <span class="pill ${cogPillClass(sr.cog,sr.cogMin,sr.cogMax)}">CoG ${sr.cog?.toFixed(2)}"</span>`:''}
         <span class="pill pill-blue">${paxCount}/${paxTotal} pax</span>
+        <button onclick="window.removeAcFromSeatmap('${smKey}')" style="margin-left:auto;padding:2px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.1);color:#ef4444;font-size:11px;cursor:pointer" title="Remove from seatmap">&#x2715; Remove</button>
       </div>
       <div style="display:inline-flex;flex-direction:column" ondragover="event.preventDefault()" ondrop="dropOnPool(event,'${smKey}')">
         ${renderCabinSVG(id,true,null,undefined,undefined,smKey)}
@@ -2693,7 +2718,8 @@ function renderStep2(){
       ${unassigned.length?unassigned.map(p=>{
         const gc=p.group?.trim()?groupColor(p.group.trim()):null;
         const isSel=S.selectedPax===p.id;
-        return`<div style="padding:5px 10px;border-radius:8px;background:${isSel?'var(--acc)':'var(--card2)'};border:1.5px solid ${isSel?'var(--acc)':gc||'var(--border)'};color:${isSel?'#fff':'var(--text1)'};cursor:pointer;font-size:12px;font-weight:600;user-select:none" onclick="event.stopPropagation();tapPax('${p.id}')" draggable="true" ondragstart="startDrag(event,'${p.id}','pool',null)">${p.name||'?'} ${parseFloat(p.weight||0)+parseFloat(p.bag||0)>0?'<span style="font-size:10px;opacity:.7">'+(parseFloat(p.weight||0)+parseFloat(p.bag||0))+'kg</span>':''}</div>`;
+        const wt=parseFloat(p.weight||0)+parseFloat(p.bag||0);
+        return`<div style="padding:5px 10px;border-radius:8px;background:${isSel?'var(--acc)':gc?gc+'28':'var(--card2)'};border:1.5px solid ${isSel?'var(--acc)':gc||'var(--border)'};color:${isSel?'#fff':'var(--text1)'};cursor:pointer;font-size:12px;font-weight:600;user-select:none;display:flex;align-items:center;gap:5px" onclick="event.stopPropagation();tapPax('${p.id}')" draggable="true" ondragstart="startDrag(event,'${p.id}','pool',null)"><span>${p.name||'?'}${p._pushedFrom?`<span style="font-size:9px;font-weight:500;opacity:.65;margin-left:4px">via ${p._pushedFrom}</span>`:''}${wt>0?` <span style="font-size:10px;opacity:.7">${wt}kg</span>`:''}</span>${p.paymentReq?`<span style="font-size:8px;font-weight:800;padding:1px 5px;border-radius:10px;background:rgba(239,68,68,.25);color:#ef4444;letter-spacing:.04em;flex-shrink:0">$ PAY</span>`:''}</div>`;
       }).join(''):`<div style="font-size:12px;color:var(--text3);font-style:italic">${_hasSel?'Tap here to unallocate selected passenger':'—'}</div>`}
     </div>
   </div>`;
@@ -2716,7 +2742,8 @@ function renderStep2(){
   </div>`:''}
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
     <button class="btn btn-ghost" onclick="S.tab='manifest';window.scrollTo(0,0);render()">&#x2190; Back to Manifest</button>
-    ${hasLsTabs?`<button class="btn btn-primary" onclick="window.pushAllLsToSeatmap()" style="flex:1">&#x2191; Push All Loadsheets to Seatmap</button>`:''}
+    ${hasLsTabs?`<button class="btn btn-primary" onclick="window.pushAllLsToSeatmap()" style="flex:1">&#x2191; Merge All Loadsheets</button>`:''}
+    <button class="btn btn-ghost" onclick="window.clearSeatmap()" style="border-color:rgba(239,68,68,.4);color:#ef4444">&#x2715; Clear Seats</button>
   </div>`;
 }
 
@@ -2815,7 +2842,7 @@ function renderLoadsheet(){
       const gc=grp?groupColor(grp):null;
       const hasPerson=nm||parseFloat(wt);
       const selUnalloc=S._selUnalloc!=null;const selSeat=S._selFormSeat===idx;
-      return`<div onclick="window.tapFormSeat(${idx},'${f.ac}')" draggable="${nm?'true':'false'}" ondragstart="window.lsSeatDragStart(${idx},event)" ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'" ondragleave="event.currentTarget.style.outline=''}" ondrop="window.lsDropOnSeat(${idx},event)" style="position:relative;cursor:${selUnalloc||nm?'pointer':'default'};background:${selSeat?'rgba(245,158,11,.15)':selUnalloc&&!nm?'rgba(124,58,237,.1)':'var(--card2)'};border-radius:7px;padding:6px 8px;border-left:3px solid ${hasPerson?(gc||'var(--accent)'):selUnalloc?'var(--accent)':'var(--border2)'};transition:outline .1s">
+      return`<div onclick="window.tapFormSeat(${idx},'${f.ac}',event)" draggable="${nm?'true':'false'}" ondragstart="window.lsSeatDragStart(${idx},event)" ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'" ondragleave="event.currentTarget.style.outline=''}" ondrop="window.lsDropOnSeat(${idx},event)" style="position:relative;cursor:${selUnalloc||nm?'pointer':'default'};background:${selSeat?'rgba(245,158,11,.15)':selUnalloc&&!nm?'rgba(124,58,237,.1)':'var(--card2)'};border-radius:7px;padding:6px 8px;border-left:3px solid ${hasPerson?(gc||'var(--accent)'):selUnalloc?'var(--accent)':'var(--border2)'};transition:outline .1s">
         ${hasPerson?`<button onclick="window.lsDelPax(${idx})" title="Remove" style="position:absolute;top:3px;right:3px;width:12px;height:12px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:8px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;z-index:1;opacity:0.45" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.45'">×</button>`:''}
         <div style="display:flex;align-items:center;gap:4px;margin-bottom:${infantNm?'2px':'4px'}">
           <span style="font-size:9px;font-weight:700;color:var(--text3);min-width:18px">${s.lbl}</span>
@@ -3045,7 +3072,7 @@ function renderLoadsheet(){
         ${a?`<div style="font-size:11px;color:var(--text3);background:var(--card2);padding:3px 10px;border-radius:20px;border:1px solid var(--border2)">${a.type} &middot; EW ${a.ew}kg &middot; MTOW ${a.mtow}kg</div>`:''}
       </div>
       <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-        ${S.dispatch&&S.dispatch.acSetup.find(s=>s.acId===f.ac)?`<button style="font-size:10px;padding:3px 9px;border-radius:6px;border:1.5px solid var(--acc);background:transparent;color:var(--acc);font-weight:700;cursor:pointer" onclick="window.pushLsToSeatmap()">&#x2191; Push to Seatmap</button>`:''}
+        ${f.ac?`<button style="font-size:10px;padding:3px 9px;border-radius:6px;border:1.5px solid var(--acc);background:transparent;color:var(--acc);font-weight:700;cursor:pointer" onclick="window.pushLsToSeatmap()">&#x2191; Push to Seatmap</button>`:''}
         <span style="font-size:10px;color:var(--text3)">Change:</span>
         ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){var col=AC_COL['ZK-'+ac]||'#64748b';return'<button style="font-size:10px;padding:3px 9px;border-radius:6px;border:1.5px solid '+col+';background:transparent;color:'+col+';font-weight:700;cursor:pointer" onclick="window.changeLsAircraft(\'ZK-'+ac+'\')">'+ac+'</button>';}).join('')}
       </div>
@@ -3072,10 +3099,10 @@ function renderLoadsheet(){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative">
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;pointer-events:none">Date</div>
-        <div style="font-size:13px;font-weight:600;color:var(--text1);pointer-events:none">${_fmtLsDate(f.date)}</div>
-        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();safeRender()" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:none;background:transparent">
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative" onclick="var i=this.querySelector('input[type=date]');try{i.showPicker&&i.showPicker()}catch(e){i.click()}">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Date</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text1)">${_fmtLsDate(f.date)}</div>
+        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();safeRender()" onclick="event.stopPropagation()" style="position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;border:none;background:transparent">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">ETD</div>
@@ -4704,7 +4731,8 @@ window.tapPool=function(ev){
     Object.keys(sm[ac]||{}).forEach(function(idx){if(sm[ac][idx]===pid)delete sm[ac][idx];});
   });
   S.selectedPax=null;
-  runSolver();autoSaveDispatch();render();
+  S.solverAutoApply=false;runSolver();S.solverAutoApply=true;
+  autoSaveDispatch();render();
 };
 window.tapSeat=(toIdx,toAc)=>{
   const sm=S.dispatch.seatMap;if(!sm[toAc])sm[toAc]={};
@@ -4794,7 +4822,8 @@ window.dropOnPool=(ev,forceAc)=>{
 };
 
 // Loadsheet form seat map drag
-window.tapFormSeat=(seatIdx,acId)=>{
+window.tapFormSeat=(seatIdx,acId,ev)=>{
+  if(ev&&ev.target&&(ev.target.tagName==='INPUT'||ev.target.tagName==='TEXTAREA'||ev.target.tagName==='SELECT'))return;
   const f=S.form;
   const nm=f.names[seatIdx]||'';
   if(S._selUnalloc!=null){
@@ -5372,20 +5401,40 @@ window.createLsTab=function(acId){S._newLsTab=false;generateLoadsheet(acId);};
 window.pushLsToSeatmap=function(){
   const f=S.form;if(!f||!f.ac)return;
   const acId=f.ac;
-  if(!S.dispatch||!S.dispatch.acSetup.find(s=>s.acId===acId)){toast('This aircraft is not in the current manifest.','warn');return;}
-  const nameMap={};
-  (S.dispatch.pax||[]).forEach(function(p){if(p.name)nameMap[p.name.trim().toLowerCase()]=p.id;});
-  const sm={};
-  Object.keys(f.names||{}).forEach(function(idx){
-    const nm=f.names[idx];if(!nm)return;
-    const pid=nameMap[nm.trim().toLowerCase()];
-    if(pid){
-      sm[parseInt(idx)]=pid;
-      var grpVal=(f.paxGroups||{})[idx];
-      if(grpVal!=null){var _dp=S.dispatch.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
-    }
-  });
+  if(!S.dispatch)S.dispatch=bD();
+  S.dispatch.acSetup=S.dispatch.acSetup||[];
   S.dispatch.seatMap=S.dispatch.seatMap||{};
+  S.dispatch.pax=S.dispatch.pax||[];
+  // Auto-add aircraft to seatmap setup if not already present
+  if(!S.dispatch.acSetup.find(function(s){return s.acId===acId;})){
+    S.dispatch.acSetup.push({acId:acId,pic:f.pic||'',coPilot:f.coPilot||''});
+  }
+  // Build name→id map from existing pax
+  const nameMap={};
+  S.dispatch.pax.forEach(function(p){if(p.name)nameMap[p.name.trim().toLowerCase()]=p.id;});
+  // Merge loadsheet seats on top of existing seatmap for this aircraft
+  const sm=Object.assign({},S.dispatch.seatMap[acId]||{});
+  Object.keys(f.names||{}).forEach(function(idx){
+    const nm=(f.names[idx]||'').trim();if(!nm)return;
+    const key=nm.toLowerCase();
+    let pid=nameMap[key];
+    if(!pid){
+      // Pax in loadsheet but not in manifest — add them tagged
+      pid='_ls_'+key.replace(/[^a-z0-9]/g,'_');
+      if(!S.dispatch.pax.find(function(p){return p.id===pid;})){
+        S.dispatch.pax.push({id:pid,name:nm,
+          weight:parseFloat((f.seats||{})[idx]||0)||0,
+          bag:parseFloat((f.bags||{})[idx]||0)||0,
+          type:((f.paxType||{})[idx]==='C'?'child':'adult'),
+          group:(f.paxGroups||{})[idx]||'',
+          _pushedFrom:acId});
+      }
+      nameMap[key]=pid;
+    }
+    sm[parseInt(idx)]=pid;
+    var grpVal=(f.paxGroups||{})[idx];
+    if(grpVal!=null){var _dp=S.dispatch.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
+  });
   S.dispatch.seatMap[acId]=sm;
   autoSaveDispatch();
   S.tab='seatmap';render();
@@ -5394,20 +5443,13 @@ window.pushLsToSeatmap=function(){
 window.pushAllLsToSeatmap=function(){
   const tabs=S.lsTabs||[];
   if(!tabs.length){toast('No open loadsheets to push.','warn');return;}
-  // Collect unique pax from all loadsheet forms
-  const paxMap={}; // name.lower -> pax object
-  tabs.forEach(function(tab){
-    const f=tab.form;if(!f)return;
-    Object.keys(f.names||{}).forEach(function(idx){
-      const nm=(f.names[idx]||'').trim();if(!nm)return;
-      const key=nm.toLowerCase();
-      if(!paxMap[key]){
-        const existing=(S.dispatch?.pax||[]).find(function(p){return(p.name||'').trim().toLowerCase()===key;});
-        paxMap[key]=existing||{id:'_ls_'+key.replace(/[^a-z0-9]/g,'_'),name:nm,weight:f.seats?.[idx]||'',bag:f.bags?.[idx]||'',type:((f.paxType||{})[idx]==='C'?'child':'adult'),group:(f.paxGroups||{})[idx]||''};
-      }
-    });
-  });
-  const paxList=Object.values(paxMap);
+  if(!S.dispatch)S.dispatch=bD();
+  S.dispatch.pax=S.dispatch.pax||[];
+  S.dispatch.seatMap=S.dispatch.seatMap||{};
+  S.dispatch.acSetup=S.dispatch.acSetup||[];
+  // Build name→id map from existing pax
+  const nameMap={};
+  S.dispatch.pax.forEach(function(p){if(p.name)nameMap[p.name.trim().toLowerCase()]=p.id;});
   // Group tabs by physical aircraft
   const acGroups={};
   tabs.forEach(function(tab){
@@ -5415,40 +5457,60 @@ window.pushAllLsToSeatmap=function(){
     if(!acGroups[ac])acGroups[ac]=[];
     acGroups[ac].push(tab);
   });
-  // Build acSetup entries and seatMap
-  const newSetup=[];
-  const newSeatMap={};
+  // Merge each loadsheet into dispatch
   Object.keys(acGroups).forEach(function(phyId){
     const group=acGroups[phyId];
     group.forEach(function(tab,i){
       const multi=group.length>1;
       const smKey=multi?(phyId+'_'+(i+1)):phyId;
       const suffix=multi?'('+(i+1)+')':null;
-      const existingSetup=(S.dispatch?.acSetup||[]).find(function(s){return s.acId===phyId;});
-      newSetup.push(Object.assign({},existingSetup||{acId:phyId},{acId:phyId,_seatmapKey:smKey,_displaySuffix:suffix}));
-      const sm={};
-      const f=tab.form;
-      if(f){
-        Object.keys(f.names||{}).forEach(function(idx){
-          const nm=(f.names[idx]||'').trim();if(!nm)return;
-          const p=paxMap[nm.toLowerCase()];
-          if(p)sm[parseInt(idx)]=p.id;
-        });
+      // Add to acSetup only if not already present
+      if(!S.dispatch.acSetup.find(function(s){return(s._seatmapKey||s.acId)===smKey;})){
+        const existingPhySetup=S.dispatch.acSetup.find(function(s){return s.acId===phyId;});
+        S.dispatch.acSetup.push(Object.assign({},existingPhySetup||{acId:phyId},{acId:phyId,_seatmapKey:smKey,_displaySuffix:suffix}));
       }
-      newSeatMap[smKey]=sm;
+      // Merge seat assignments (loadsheet takes priority for assigned seats)
+      const sm=Object.assign({},S.dispatch.seatMap[smKey]||{});
+      const f=tab.form;if(!f)return;
+      Object.keys(f.names||{}).forEach(function(idx){
+        const nm=(f.names[idx]||'').trim();if(!nm)return;
+        const key=nm.toLowerCase();
+        let pid=nameMap[key];
+        if(!pid){
+          pid='_ls_'+key.replace(/[^a-z0-9]/g,'_');
+          if(!S.dispatch.pax.find(function(p){return p.id===pid;})){
+            S.dispatch.pax.push({id:pid,name:nm,
+              weight:parseFloat((f.seats||{})[idx]||0)||0,
+              bag:parseFloat((f.bags||{})[idx]||0)||0,
+              type:((f.paxType||{})[idx]==='C'?'child':'adult'),
+              group:(f.paxGroups||{})[idx]||'',
+              _pushedFrom:phyId});
+          }
+          nameMap[key]=pid;
+        }
+        sm[parseInt(idx)]=pid;
+        var grpVal=(f.paxGroups||{})[idx];
+        if(grpVal!=null){var _dp=S.dispatch.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
+      });
+      S.dispatch.seatMap[smKey]=sm;
     });
   });
-  // Replace dispatch with loadsheet data
-  if(!S.dispatch)S.dispatch={date:new Date().toISOString().slice(0,10),etd:'',dep:'',arr:'',pax:[],cargo:{},acSetup:[],seatMap:{},origAcMap:{}};
-  S.dispatch.acSetup=newSetup;
-  S.dispatch.seatMap=newSeatMap;
-  S.dispatch.origAcMap={};
-  S.dispatch.pax=paxList;
-  S.lockedAcs=[];
   S.tab='seatmap';
-  autoSaveDispatch();
-  render();
-  toast('All loadsheets pushed to seatmap &#x2713;','ok');
+  autoSaveDispatch();render();
+  toast('Loadsheets merged to seatmap &#x2713;','ok');
+};
+window.clearSeatmap=function(){
+  S.dispatch.seatMap={};
+  S.selectedPax=null;
+  autoSaveDispatch();render();
+  toast('Seatmap cleared','ok');
+};
+window.removeAcFromSeatmap=function(smKey){
+  S.dispatch.acSetup=(S.dispatch.acSetup||[]).filter(function(s){return(s._seatmapKey||s.acId)!==smKey;});
+  if(S.dispatch.seatMap)delete S.dispatch.seatMap[smKey];
+  // If no aircraft left, go back to manifest
+  if(!(S.dispatch.acSetup||[]).length){S.tab='manifest';}
+  autoSaveDispatch();render();
 };
 window.createBlankLsTab=function(acId){
   const a=S.aircraft[acId];if(!a)return;
@@ -6451,9 +6513,14 @@ function renderMaintAircraftData(){
 }
 
 function _lastUpdatedLabel(ac){
-  const hist=(S.maintenance?.hist||[]).filter(function(e){return e[ac]!=null;});
-  if(!hist.length) return null;
-  const lastDate=hist[hist.length-1].date;
+  // Include hist entries, comp wash dates, and ADAS dates
+  const histDates=(S.maintenance?.hist||[]).filter(function(e){return e[ac]!=null;}).map(function(e){return e.date;});
+  var cwArr=S.maintenance?.compwash?.[ac]||[];if(!Array.isArray(cwArr))cwArr=cwArr?[cwArr]:[];
+  var adArr=S.maintenance?.adas?.[ac]||[];if(!Array.isArray(adArr))adArr=adArr?[adArr]:[];
+  const allDates=[...histDates,...cwArr,...adArr].filter(Boolean);
+  if(!allDates.length) return null;
+  allDates.sort();
+  const lastDate=allDates[allDates.length-1];
   const today=new Date();today.setHours(0,0,0,0);
   const d=new Date(lastDate+'T00:00:00');
   const diff=Math.round((today-d)/(1000*60*60*24));
