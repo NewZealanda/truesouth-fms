@@ -318,12 +318,12 @@ function aptOpts(sel){
   var rest=all.filter(function(a){return _APT_PINNED.indexOf(a.icao)<0;});
   var south=rest.filter(function(a){return a.lat<=-41.35;}).sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});
   var north=rest.filter(function(a){return a.lat>-41.35;}).sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});
-  function opt(a){var lbl=(a.icao==='NZQN'?'\U0001f3e0 ':'')+a.name+' ('+a.icao+')';return '<option value="'+a.icao+'"'+(sel===a.icao?' selected':'')+'>'+lbl+'</option>';}
+  function opt(a){var lbl=(a.icao==='NZQN'?'\uD83C\uDFE0 ':'')+a.name+' ('+a.icao+')';return '<option value="'+a.icao+'"'+(sel===a.icao?' selected':'')+'>'+lbl+'</option>';}
   return '<optgroup label="* Featured">'+pinned.map(opt).join('')+'</optgroup>'
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v21.83';
+const APP_VER='v21.85';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2051,6 +2051,7 @@ function renderAccountModal(){
   </div>`;
 }
 
+window.switchOpsTab=function(t){S.tab=t;S.activeTabId=null;S._newLsTab=false;render();};
 window.changePasswordFromModal=async function(){
   const m=S.admin.personModal;if(!m||!m.userId)return;
   const isOwnAccount=m.userId===S.user?.id;
@@ -3834,7 +3835,649 @@ function renderCharterRates(){
 
 
 // ── ADMIN ──
+function renderAdminAudit(){
+  if(!S.user?.superAdmin) return '<div class="card"><div style="color:var(--err-text)">Super admin access only.</div></div>';
+
+  // Action label/colour helpers
+  function actCol(a){return a==='session_restore'?'#34d399':a==='login'?'#22c55e':a==='login_fail'?'#ef4444':a==='loadsheet_submit'?'#3b82f6':a==='loadsheet_create'||a==='loadsheet_save'?'#a78bfa':a==='maint_entry'||a==='maint_edit'?'#f59e0b':a==='manifest_save'||a==='manifest_autosave'?'#10b981':a==='manifest_load'?'#06b6d4':a==='manifest_clear'?'#f97316':a==='crew_update'?'#8b5cf6':'#64748b';}
+  function actLbl(a){return a==='session_restore'?'Reopened':a==='login'?'Login':a==='login_fail'?'⚠ Login Fail':a==='loadsheet_submit'?'LS Signed':a==='loadsheet_save'||a==='loadsheet_create'?'LS Saved':a==='loadsheet_edit'?'LS Edit':a==='maint_entry'?'Maint Entry':a==='maint_edit'?'Maint Edit':a==='manifest_save'?'Manifest Saved':a==='manifest_autosave'?'Auto-saved':a==='manifest_load'?'Manifest Loaded':a==='manifest_clear'?'Manifest Cleared':a==='crew_update'?'Crew Updated':a==='password_change'?'Password Changed':a==='password_reset'?'Password Reset':a||'—';}
+
+  const filterAct=S.auditFilter||'';
+  const filterUser=S.auditFilterUser||'';
+  const pageSize=50;
+  const page=S.auditPage||0;
+
+  // Get unique users from log for filter dropdown
+  const allUsers=[...new Set((S.auditLog||[]).map(e=>e.user).filter(Boolean))].sort();
+
+  // Apply filters
+  let filtered=(S.auditLog||[]);
+  if(filterAct) filtered=filtered.filter(e=>e.action===filterAct);
+  if(filterUser) filtered=filtered.filter(e=>e.user===filterUser||e.name===filterUser);
+
+  const totalFiltered=filtered.length;
+  const pageItems=filtered.slice(page*pageSize,(page+1)*pageSize);
+
+  const actionTypes=['login','session_restore','login_fail','loadsheet_save','loadsheet_edit','loadsheet_submit','maint_entry','maint_edit','manifest_save','manifest_autosave','manifest_load','manifest_clear','crew_update','password_change','password_reset'];
+
+  const rows=pageItems.map(function(e){
+    const ac=actCol(e.action);
+    const shortDev=e.device?(e.device.includes('iPhone')||e.device.includes('iPad')?'📱 iOS':e.device.includes('Android')?'📱 Android':'🖥 '+e.device.slice(0,25)):'—';
+    return'<tr style="border-bottom:1px solid var(--border)">'+
+      '<td style="padding:5px 8px;font-size:11px;white-space:nowrap;color:var(--text3)">'+(e.time?new Date(e.time).toLocaleString('en-NZ',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'—')+'</td>'+
+      '<td style="padding:5px 8px;font-size:12px;font-weight:600">'+e.name+'</td>'+
+      '<td style="padding:5px 8px;font-size:11px;color:var(--text3)">'+e.user+'</td>'+
+      '<td style="padding:5px 8px"><span style="padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;background:var(--card2)">'+e.role+'</span></td>'+
+      '<td style="padding:5px 8px"><span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:'+ac+'22;color:'+ac+'">'+actLbl(e.action)+'</span></td>'+
+      '<td style="padding:5px 8px;font-size:11px;color:var(--text3);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+((e.detail||'').slice(0,60))+'</td>'+
+      '<td style="padding:5px 8px;font-size:10px;color:var(--text3)">'+shortDev+'</td>'+
+    '</tr>';
+  }).join('');
+
+  const paginationHTML=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+    <button onclick="S.auditPage=Math.max(0,(S.auditPage||0)-1);render()"
+      style="padding:5px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;color:var(--text);${page===0?'opacity:.3;pointer-events:none':''}">‹ Prev</button>
+    <span style="font-size:12px;color:var(--text3)">Page ${page+1} of ${Math.max(1,Math.ceil(totalFiltered/pageSize))} · ${totalFiltered} events</span>
+    <button onclick="S.auditPage=(S.auditPage||0)+1;render()"
+      style="padding:5px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;color:var(--text);${(page+1)*pageSize>=totalFiltered?'opacity:.3;pointer-events:none':''}">Next ›</button>
+    <button onclick="window.loadMoreAudit()" style="padding:5px 12px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;color:var(--text);margin-left:4px">↓ Load more from DB</button>
+  </div>`;
+
+  return`<div class="card" style="overflow-x:auto">
+    <div class="st" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <span>Audit Log <span style="font-size:11px;font-weight:400;color:var(--text3)">${totalFiltered} of ${(S.auditLog||[]).length} events shown</span></span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+      <select style="font-size:11px;padding:4px 8px;background:var(--card2);border:1px solid var(--border);border-radius:6px;color:var(--text)"
+        onchange="S.auditFilter=this.value;S.auditPage=0;safeRender()">
+        <option value="">All Actions</option>
+        ${actionTypes.map(a=>`<option value="${a}"${filterAct===a?' selected':''}>${actLbl(a)}</option>`).join('')}
+      </select>
+      <select style="font-size:11px;padding:4px 8px;background:var(--card2);border:1px solid var(--border);border-radius:6px;color:var(--text)"
+        onchange="S.auditFilterUser=this.value;S.auditPage=0;safeRender()">
+        <option value="">All Users</option>
+        ${allUsers.map(u=>`<option value="${u}"${filterUser===u?' selected':''}>${u}</option>`).join('')}
+      </select>
+      <button onclick="S.auditFilter='';S.auditFilterUser='';S.auditPage=0;render()"
+        style="padding:4px 10px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;color:var(--text3)">Clear</button>
+    </div>
+    ${pageItems.length?`<table style="width:100%;border-collapse:collapse;min-width:600px">
+      <thead><tr style="border-bottom:2px solid var(--border)">
+        <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text3)">Time</th>
+        <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text3)">Name</th>
+        <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text3)">Email</th>
+        <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text3)">Role</th>
+        <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text3)">Action</th>
+        <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text3)">Detail</th>
+        <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text3)">Device</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>${paginationHTML}`:'<div style="color:var(--text3);padding:16px;text-align:center">No events match the current filters</div>'}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button onclick="lsSet('ts_audit_log',[]);S.auditLog=[];render()" style="padding:5px 12px;background:var(--err-bg);border:1px solid var(--err-border);border-radius:6px;font-size:11px;cursor:pointer;color:var(--err-text)">Clear Local Log</button>
+      <span style="font-size:11px;color:var(--text3);align-self:center">Full history in Supabase · ts_audit_log</span>
+    </div>
+  </div>`;
+}
+
+// Load more audit events from Supabase
+window.loadMoreAudit=async function(){
+  try{
+    const currentCount=(S.auditLog||[]).length;
+    const resp=await fetch(SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit=50&offset='+currentCount,{
+      headers:{'apikey':SK,'Authorization':'Bearer '+SK}
+    });
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const rows=await resp.json();
+    if(!rows.length){toast('No more events to load.','info');return;}
+    // Map DB columns to our format
+    const newEntries=rows.map(r=>({
+      time:r.created_at,user:r.user_email,name:r.user_name||r.user_email,
+      role:r.role,action:r.action,detail:r.detail,device:r.device
+    }));
+    // Merge avoiding duplicates
+    const existing=new Set((S.auditLog||[]).map(e=>e.time+e.user+e.action));
+    const fresh=newEntries.filter(e=>!existing.has(e.time+e.user+e.action));
+    S.auditLog=[...(S.auditLog||[]),...fresh];
+    lsSet('ts_audit_log',S.auditLog.slice(0,1000));
+    toast('Loaded '+fresh.length+' more events.','ok');
+    render();
+  }catch(e){toast('Failed to load from DB: '+e.message,'err');}
+};
+
+
+function renderAdminPerms(){
+  const roles=['superadmin','admin','pilot','desk','maint','ground_staff'];
+  const roleLabels={superadmin:'Superadmin',admin:'Admin',pilot:'Pilot',desk:'Desk',maint:'Maintenance',ground_staff:'Ground Staff'};
+  const mainPages=[
+    {id:'operations', lbl:'Operations', icon:'✈️', desc:'Manifest, Seatmap & Loadsheet'},
+    {id:'charter',    lbl:'Charter',    icon:'💰', desc:'Charter pricing & bookings'},
+    {id:'maintenance',lbl:'Maintenance',icon:'🔧', desc:'Aircraft logs & scheduling'},
+  ];
+  const adminPages=[
+    {id:'admin_crew',  lbl:'Crew & Profile', icon:'👤', desc:'View crew list and edit own profile'},
+    {id:'admin_users', lbl:'User Accounts',  icon:'🔐', desc:'Manage user logins and roles (admin-only)'},
+    {id:'scratchpad',  lbl:'Scratchpad',     icon:'📝', desc:'Shared notes & drawing board'},
+    {id:'audit',       lbl:'Audit Log',      icon:'🔍', desc:'System audit log (superadmin only)'}
+  ];
+  const rp=S.rolePerms||{};
+  const ROLE_LEVEL={superadmin:1,admin:2,pilot:3,desk:3,maint:3,ground_staff:4};
+
+  function togStyle(on){
+    return on
+      ?'display:inline-flex;align-items:center;width:44px;height:26px;border-radius:13px;background:#22c55e;cursor:pointer;transition:background .2s;border:none;padding:0;flex-shrink:0'
+      :'display:inline-flex;align-items:center;width:44px;height:26px;border-radius:13px;background:#64748b;cursor:pointer;transition:background .2s;border:none;padding:0;flex-shrink:0';
+  }
+  function togKnob(on){
+    return`<div style="width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .2s;transform:translateX(${on?'21px':'3px'});pointer-events:none"></div>`;
+  }
+  function makeRow(pg, extra){
+    const cells=roles.map(role=>{
+      const def=(DEFAULT_ROLE_PERMS[role]||{})[pg.id]||false;
+      const val=(rp[role]!==undefined&&rp[role][pg.id]!==undefined)?rp[role][pg.id]:def;
+      return`<td style="padding:12px 16px;text-align:center;border-bottom:1px solid var(--border)">
+        <button style="${togStyle(val)}" onclick="window.toggleRolePerm('${role}','${pg.id}')" title="${val?'ON — click to disable':'OFF — click to enable'}">
+          ${togKnob(val)}
+        </button>
+      </td>`;
+    }).join('');
+    return`<tr${extra||''}>
+      <td style="padding:12px 16px;border-bottom:1px solid var(--border)">
+        <div style="font-weight:700;font-size:13px">${pg.icon} ${pg.lbl}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${pg.desc}</div>
+      </td>
+      ${cells}
+    </tr>`;
+  }
+
+  const mainRows=mainPages.map(pg=>makeRow(pg)).join('');
+  const adminRows=adminPages.map(pg=>makeRow(pg)).join('');
+
+  const thead=`<thead>
+    <tr style="border-bottom:2px solid var(--border)">
+      <th style="padding:10px 16px;text-align:left;font-size:11px;color:var(--text3);font-weight:700">PAGE / SECTION</th>
+      ${roles.map(r=>`<th style="padding:10px 16px;text-align:center;font-size:11px;color:var(--text3);font-weight:700">${roleLabels[r]}</th>`).join('')}
+    </tr>
+  </thead>`;
+
+  return`<div class="card">
+    <div class="st">Role Permissions</div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:16px">Superadmin (L1) &gt; Admin (L2) &gt; Pilot/Desk/Maint (L3) &gt; Ground (L4). Admins can only edit lower-level accounts. Changes sync across devices. Admin accounts always see everything.</p>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:480px">
+        ${thead}
+        <tbody>
+          <tr><td colspan="${roles.length+1}" style="padding:8px 16px 4px;background:rgba(99,102,241,.06);border-bottom:1px solid var(--border)">
+            <span style="font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--accent);text-transform:uppercase">Main Pages</span>
+          </td></tr>
+          ${mainRows}
+          <tr><td colspan="${roles.length+1}" style="padding:10px 16px 4px;background:rgba(34,197,94,.06);border-bottom:1px solid var(--border)">
+            <span style="font-size:10px;font-weight:800;letter-spacing:.08em;color:#22c55e;text-transform:uppercase">Admin Sub-sections</span>
+          </td></tr>
+          ${adminRows}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:16px;padding:10px 14px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;font-size:11px;color:var(--text3)">
+      <strong style="color:var(--accent)">💡 Note:</strong> To persist permissions across all devices, ensure your Supabase has:<br>
+      <code style="font-size:10px;color:#a5b4fc">CREATE TABLE IF NOT EXISTS ts_settings (key text PRIMARY KEY, value text);</code>
+    </div>
+  </div>`;
+}
+
+window.toggleRolePerm=function(role,page){
+  if(!S.rolePerms) S.rolePerms={};
+  if(!S.rolePerms[role]) S.rolePerms[role]=Object.assign({},DEFAULT_ROLE_PERMS[role]||{});
+  const current=S.rolePerms[role][page];
+  const def=(DEFAULT_ROLE_PERMS[role]||{})[page]||false;
+  S.rolePerms[role][page]=!(current!==undefined?current:def);
+  lsSet('ts_role_perms',S.rolePerms);
+  // Persist to Supabase (fire-and-forget — ts_settings table may not exist yet)
+  sbU('ts_settings',[{key:'role_perms',value:JSON.stringify(S.rolePerms)}]).catch(()=>{});
+  render();
+};
+
+function renderAdmin(){
+  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
+  // Non-admin: show sub-tabs based on their role permissions
+  if(!isAdmin){
+    const _role=S.user?.role||'desk';
+    const _rp=S.rolePerms?.[_role]||DEFAULT_ROLE_PERMS[_role]||{};
+    if(_rp.admin_crew!==false) return renderAdminPeople();
+    return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
+  }
+  const ad=S.admin;
+  const sections=['people','perms','gdrive','aerodromes','statistics',...(S.user?.superAdmin?['audit']:[])];
+  const sectionLabels={people:'People',perms:'Permissions',gdrive:'Google Drive PDF',aerodromes:'Aerodromes',statistics:'Statistics',audit:'Audit Log'};
+  const tabBar=`<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
+    ${sections.map(s=>`<button class="sub-tab ${ad.section===s?'on':''}" onclick="S.admin.section='${s}';render()">${sectionLabels[s]}</button>`).join('')}
+  </div>`;
+  return tabBar+{people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad.section]?.()||renderAdminPeople();
+}
+
+function renderAdminStatistics(){
+  const signed=S.saved.filter(function(s){return s.status==='complete'&&s.form;});
+  // Collect per-seat weights from signed loadsheets, split adult/child, ignoring infant seats
+  var adultWts=[],childWts=[],paxCount=0;
+  signed.forEach(function(s){
+    const f=s.form;
+    const a=S.aircraft[f.ac];
+    if(!a)return;
+    const isCpCrew=!!f.coPilot;
+    for(var i=1;i<a.seats.length;i++){
+      const nm=(f.names||{})[i]||'';
+      if(!nm.trim())continue;
+      if(i===1&&isCpCrew)continue; // skip co-pilot
+      const hasInfant=!!(f.infantNames||{})[i];
+      if(hasInfant)continue; // ignore seats with attached infants
+      const wt=parseFloat((f.seats||{})[i]||0);
+      if(!wt)continue;
+      paxCount++;
+      const typ=(f.paxType||{})[i]||'A';
+      if(typ==='C') childWts.push(wt);
+      else adultWts.push(wt);
+    }
+  });
+  const avg=function(arr){return arr.length?arr.reduce(function(a,b){return a+b;},0)/arr.length:0;};
+  const aAvg=avg(adultWts),cAvg=avg(childWts);
+  const statCard=function(label,val,sub){
+    return '<div style="background:var(--card2);border-radius:12px;padding:16px 18px;border:1px solid var(--border2);text-align:center">'
+      +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:700;margin-bottom:6px">'+label+'</div>'
+      +'<div style="font-size:28px;font-weight:900;color:var(--text)">'+val+'</div>'
+      +(sub?'<div style="font-size:11px;color:var(--text3);margin-top:3px">'+sub+'</div>':'')
+      +'</div>';
+  };
+  return '<div class="card"><div class="st">Passenger Weight Statistics</div>'
+    +'<p style="font-size:12px;color:var(--text3);margin-bottom:14px">Calculated from '+signed.length+' signed loadsheet(s). Excludes infant-attached seats and co-pilot.</p>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">'
+    +statCard('Total PAX (signed)',paxCount,'all signed loadsheets')
+    +statCard('Adults',adultWts.length,'pax')
+    +statCard('Avg Adult Wt',adultWts.length?aAvg.toFixed(1)+'kg':'N/A',adultWts.length?'from '+adultWts.length+' records':'')
+    +statCard('Children',childWts.length,'pax')
+    +statCard('Avg Child Wt',childWts.length?cAvg.toFixed(1)+'kg':'N/A',childWts.length?'from '+childWts.length+' records':'')
+    +'</div>'
+    +(adultWts.length||childWts.length?'<div style="margin-top:16px;padding:12px;background:var(--card2);border-radius:8px;border:1px solid var(--border2)">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px">Distribution</div>'
+      +(adultWts.length?'<div style="font-size:12px;margin-bottom:4px"><span style="color:#4ade80;font-weight:700">Adults:</span> min '+Math.min(...adultWts)+'kg, max '+Math.max(...adultWts)+'kg, avg '+aAvg.toFixed(1)+'kg</div>':'')
+      +(childWts.length?'<div style="font-size:12px"><span style="color:#fb923c;font-weight:700">Children:</span> min '+Math.min(...childWts)+'kg, max '+Math.max(...childWts)+'kg, avg '+cAvg.toFixed(1)+'kg</div>':'')
+      +'</div>':'')
+    +'</div>';
+}
+function renderAdminGDrive(){
+  const enabled=S.gdriveEnabled;
+  return `<div class="card"><div class="st">Google Drive PDF Upload</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:12px;background:var(--card2);border-radius:8px">
+      <div style="flex:1"><div style="font-weight:600;margin-bottom:2px">Upload to Google Drive</div>
+        <div style="font-size:12px;color:var(--text3)">Toggle off for testing</div></div>
+      <div onclick="S.gdriveEnabled=!S.gdriveEnabled;lsSet('gdrive_enabled',S.gdriveEnabled);render()"
+        style="width:48px;height:26px;border-radius:13px;background:${enabled?'#7B9EC6':'#334155'};cursor:pointer;position:relative;transition:background .2s">
+        <div style="width:22px;height:22px;border-radius:50%;background:#fff;position:absolute;top:2px;left:${enabled?'24px':'2px'};transition:left .2s"></div>
+      </div>
+    </div>
+    <div style="margin-bottom:12px"><label>Google OAuth Client ID</label>
+      <input class="fi" type="text" placeholder="xxxxxxx.apps.googleusercontent.com"
+        value="${S.gdriveClientId||''}" onblur="S.gdriveClientId=this.value;lsSet('gdrive_client_id',this.value)">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">From Google Cloud Console → APIs &amp; Services → Credentials. Add your Netlify URL as an authorised origin.</div></div>
+    <div style="margin-bottom:12px"><label>Existing Folder ID <span style="font-weight:400;color:var(--text3);font-size:10px">(recommended — paste from Drive URL)</span></label>
+      <input class="fi" type="text" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs"
+        value="${S.gdriveFolderId||''}" onblur="S.gdriveFolderId=this.value;lsSet('gdrive_folder_id',this.value)">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">Copy the folder ID from the Drive URL after <strong>/folders/</strong>.</div></div>
+
+    <div style="padding:10px 14px;background:${enabled?'var(--ok-bg)':'var(--warn-bg)'};border:1px solid ${enabled?'var(--ok-border)':'var(--warn-border)'};border-radius:8px;color:${enabled?'var(--ok-text)':'var(--warn-text)'};font-size:13px;font-weight:600">
+      ${enabled?'✓ Drive upload ENABLED — signed loadsheets will upload automatically':'⚠ Testing mode — loadsheets save to Supabase only, not Drive'}
+    </div>
+    <div style="margin-top:12px;padding:10px 14px;background:var(--card2);border-radius:8px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--text2)">Scope required in Google Cloud Console</div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.6">Make sure your OAuth consent screen has the scope <strong style="color:#e2e8f0">https://www.googleapis.com/auth/drive</strong> added under <strong style="color:#e2e8f0">APIs &amp; Services → OAuth consent screen → Scopes</strong>. Without this the upload will silently fail.</div>
+    </div>
+    <div style="margin-top:12px;padding:12px 14px;background:var(--card2);border-radius:8px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text2)">Scheduled &amp; Manual Upload</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">Signed loadsheets upload automatically at <strong style="color:var(--text)">11:59 PM</strong> daily. Only loadsheets not yet uploaded are sent.</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="window.forceUploadAll()" style="padding:8px 16px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">⬆ Force Upload Now</button>
+        <span style="font-size:11px;color:var(--text3)">${S.driveLastUpload?'Last: '+S.driveLastUpload:S.driveQueue&&S.driveQueue.length?S.driveQueue.length+' queued':''}</span>
+      </div>
+      ${S.uploadProgress?`<div style="margin-top:8px;font-size:12px;color:var(--ok-text)">${S.uploadProgress}</div>`:''}
+    </div>
+  </div>`;
+}
+function renderAdminPeople(){
+  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
+  const ad=S.admin;
+  const today=new Date();today.setHours(0,0,0,0);
+  const ROLE_LEVEL={superadmin:1,admin:2,pilot:3,desk:3,maint:3,ground_staff:4};
+const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10b981',maint:'#a78bfa',ground_staff:'#64748b'};
+  function expiryCol(v){if(!v)return'var(--text3)';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'#ef4444':dy<30?'#f59e0b':'#22c55e';}
+  function expiryBg(v){if(!v)return'transparent';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'rgba(239,68,68,.08)':dy<30?'rgba(245,158,11,.08)':'transparent';}
+  function fmt(v){if(!v)return'—';const p=v.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:v;}
+  function daysLabel(v){if(!v)return'';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);if(dy<0)return' (expired)';if(dy<30)return' ('+dy+'d)';return'';}
+
+  // ── Build merged people list ──────────────────────────────────
+  const people=[];
+  const matchedUserIds=new Set();
+  const sortedCrew=[...S.crew].sort((a,b)=>(a.n||'').localeCompare(b.n||''));
+  sortedCrew.forEach(function(cr){
+    const user=S.users.find(function(u){return u.linkedCrew&&(u.linkedCrew||'').trim().toLowerCase()===(cr.n||'').trim().toLowerCase();});
+    if(user)matchedUserIds.add(user.id);
+    people.push({crewId:cr.id,userId:user?user.id:null,cr:cr,user:user||null});
+  });
+  S.users.forEach(function(u){
+    if(!matchedUserIds.has(u.id)) people.push({crewId:null,userId:u.id,cr:null,user:u});
+  });
+
+  // ── Determine current user's person entry ────────────────────
+  const myEntry=people.find(function(p){return p.userId===S.user?.id;});
+
+  // ── Modal ────────────────────────────────────────────────────
+  const m=ad.personModal;
+  let modalHtml='';
+  if(m){
+    const d=m.draft;
+    const tab=m.tab||'profile';
+    const canSeeLogin=isAdmin||(m.userId===S.user?.id);
+
+    // Tab bar
+    const tabBar='<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:0 0 16px">'
+      +'<button onclick="S.admin.personModal.tab=\'profile\';render()" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid '+(tab==='profile'?'var(--accent)':'transparent')+';color:'+(tab==='profile'?'var(--accent)':'var(--text3)')+';font-size:13px;font-weight:700;cursor:pointer">👤 Profile</button>'
+      +(canSeeLogin?'<button onclick="S.admin.personModal.tab=\'login\';render()" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid '+(tab==='login'?'var(--accent)':'transparent')+';color:'+(tab==='login'?'var(--accent)':'var(--text3)')+';font-size:13px;font-weight:700;cursor:pointer">🔐 Login</button>':'')
+      +'</div>';
+
+    // Profile tab
+    let bodyHtml='';
+    if(tab==='profile'){
+      const expiryRows=[['medExpiry','Medical Expiry','#22c55e'],['ocaDue','OCA Due','#7B9EC6'],['firstAid','First Aid','#f59e0b'],['avsecExpiry','AVSEC Expiry','#a78bfa']].map(function(t){
+        const k=t[0],lbl=t[1],col=t[2];
+        const v=d[k]||'';const ec=v?expiryCol(v):'var(--text3)';const eb=v?expiryBg(v):'transparent';
+        return'<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:'+eb+';border-radius:6px;padding:4px 6px">'
+          +'<label style="font-size:11px;color:'+col+';font-weight:600">'+lbl.toUpperCase()+'</label>'
+          +'<div style="display:flex;align-items:center;gap:6px">'
+          +(v?'<span style="font-size:11px;color:'+ec+';font-weight:600">'+fmt(v)+daysLabel(v)+'</span>':'')
+          +'<input type="date" class="fi" value="'+v+'" style="font-size:12px;max-width:140px" onchange="S.admin.personModal.draft[\''+k+'\']=this.value">'
+          +'</div></div>';
+      }).join('');
+      const endorseButtons=['C208B','GA8'].map(function(e){
+        const on=(d.endorse||[]).includes(e);
+        return'<button onclick="(function(){var en=S.admin.personModal.draft.endorse||[];var ix=en.indexOf(\''+e+'\');if(ix>=0)en.splice(ix,1);else en.push(\''+e+'\');S.admin.personModal.draft.endorse=en;render();})()" style="padding:5px 12px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'rgba(99,102,241,.15)':'var(--card)')+';color:'+(on?'var(--accent)':'var(--text2)')+'">'+e+'</button>';
+      }).join('');
+      bodyHtml='<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">'
+        +'<div onclick="document.getElementById(\'person_photo_inp\').click()" style="width:72px;height:72px;border-radius:50%;border:2px solid var(--border2);background:var(--card2);overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+        +(d.photo?'<img src="'+d.photo+'" style="width:100%;height:100%;object-fit:cover">':'<span style="font-size:28px;color:var(--text3)">👤</span>')
+        +'</div>'
+        +'<div><div style="font-size:13px;font-weight:600;color:var(--text2)">Photo</div>'
+        +'<div style="font-size:11px;color:var(--text3)">Tap to upload</div>'
+        +(d.photo?'<button onclick="S.admin.personModal.draft.photo=\'\';render()" style="margin-top:4px;background:none;border:none;color:#ef4444;font-size:11px;cursor:pointer;padding:0">Remove</button>':'')
+        +'</div>'
+        +'<input type="file" id="person_photo_inp" accept="image/*" style="display:none" onchange="window.personPhotoUpload(this)">'
+        +'</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 90px;gap:8px;margin-bottom:8px">'
+        +'<div><label style="font-size:11px;color:var(--text3)">FULL NAME</label>'
+        +'<input class="fi" type="text" value="'+(d.n||'')+'" placeholder="Full name" style="font-size:14px" oninput="S.admin.personModal.draft.n=this.value"></div>'
+        +'<div><label style="font-size:11px;color:var(--text3)">CODE</label>'
+        +'<input class="fi" type="text" value="'+(d.code||'')+'" placeholder="e.g. PD" style="font-size:13px;text-transform:uppercase" oninput="S.admin.personModal.draft.code=this.value.toUpperCase()"></div>'
+        +'</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+        +'<div><label style="font-size:11px;color:var(--text3)">WEIGHT (kg)</label>'
+        +'<input class="fi" type="number" value="'+(d.w||'')+'" placeholder="kg" style="font-size:13px" oninput="S.admin.personModal.draft.w=this.value"></div>'
+        +'<div><label style="font-size:11px;color:var(--text3)">DL NUMBER</label>'
+        +'<input class="fi" type="text" value="'+(d.dlNum||'')+'" placeholder="Driver licence #" style="font-size:13px" oninput="S.admin.personModal.draft.dlNum=this.value"></div>'
+        +'</div>'
+        +'<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--text3)">CAA LICENSE NUMBER</label>'
+        +'<input class="fi" type="text" value="'+(d.caaNum||'')+'" placeholder="CAA pilot licence #" style="font-size:14px" oninput="S.admin.personModal.draft.caaNum=this.value"></div>'
+        +'<div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px;margin-bottom:10px">'
+        +'<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em">EXPIRY DATES</div>'
+        +expiryRows+'</div>'
+        +'<div><label style="font-size:11px;color:var(--text3)">TYPE RATINGS</label>'
+        +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'+endorseButtons+'</div></div>';
+    } else if(tab==='login'){
+      const isOwnAccount=m.userId===S.user?.id;
+      bodyHtml='<div style="display:flex;flex-direction:column;gap:12px">'
+        +'<div><label style="font-size:11px;color:var(--text3)">EMAIL ADDRESS</label>'
+        +'<input class="fi" type="email" value="'+(d.email||'')+'" placeholder="email@truesouth.co.nz" style="font-size:14px" oninput="S.admin.personModal.draft.email=this.value"></div>'
+        +(isAdmin?'<div><label style="font-size:11px;color:var(--text3)">ROLE</label>'
+        +'<select class="fi" style="font-size:13px" onchange="S.admin.personModal.draft.role=this.value">'
+        +(S.user?.superAdmin?'<option value="superadmin"'+(d.role==='superadmin'?' selected':'')+'>Superadmin</option>':'')
+        +'<option value="admin"'+(d.role==='admin'?' selected':'')+'>Admin</option>'
+        +'<option value="pilot"'+(d.role==='pilot'?' selected':'')+'>Pilot</option>'
+        +'<option value="desk"'+(d.role==='desk'?' selected':'')+'>Desk</option>'
+        +'<option value="maint"'+(d.role==='maint'?' selected':'')+'>Maintenance</option>'
+        +'<option value="ground_staff"'+(d.role==='ground_staff'?' selected':'')+'>Ground Staff</option>'
+        +'</select></div>':'')
+        +(isAdmin?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0">'
+        +'<label style="font-size:11px;color:var(--text3)">PIC ELIGIBLE (appears in pilot dropdowns)</label>'
+        +'<button onclick="S.admin.personModal.draft.isPilot=!S.admin.personModal.draft.isPilot;render()" '
+        +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
+        +'background:'+(d.isPilot?'rgba(59,130,246,.3)':'rgba(255,255,255,.06)')+';'
+        +'color:'+(d.isPilot?'#60a5fa':'var(--text3)')+'">✈ '+(d.isPilot?'Yes — PIC':'No')+'</button>'
+        +'</div>':'')
+        +(m.userId?'<div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px">'
+        +'<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em">CHANGE PASSWORD</div>'
+        +(isOwnAccount?'<input class="fi" id="pm_curpw" type="password" placeholder="Current password" autocomplete="current-password" style="font-size:13px">':'')
+        +'<input class="fi" id="pm_newpw" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="font-size:13px">'
+        +'<input class="fi" id="pm_confpw" type="password" placeholder="Confirm new password" autocomplete="new-password" style="font-size:13px">'
+        +'<button onclick="window.changePasswordFromModal()" style="padding:9px;background:var(--accent);border:none;border-radius:7px;color:#fff;font-size:13px;font-weight:700;cursor:pointer">🔑 Update Password</button>'
+        +(ad.pwMsg?'<div style="font-size:12px;font-weight:600;padding:4px 0;color:'+(ad.pwMsg.ok?'var(--ok-text)':'var(--err-text)')+'">'+ad.pwMsg.text+'</div>':'')
+        +'</div>':'')
+        +(!m.userId?'<div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px">'
+        +'<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em">SET PASSWORD</div>'
+        +'<input class="fi" id="pm_newpw" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password" style="font-size:13px" oninput="S.admin.personModal.draft.password=this.value">'
+        +'<input class="fi" id="pm_confpw" type="password" placeholder="Confirm password" autocomplete="new-password" style="font-size:13px">'
+        +'<div style="font-size:11px;color:var(--text3)">💡 Leave blank for crew-only (no login). Email required if setting a password.</div>'
+        +'</div>':'')
+        +'</div>';
+    }
+
+    // Footer
+    const canDelete=isAdmin&&(m.crewId||m.userId);
+    const saveBtn='<button onclick="window.savePerson()" style="flex:1;padding:11px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">💾 Save</button>';
+    const _dc=m.crewId?("'"+m.crewId+"'"):'null';const _du=m.userId?("'"+m.userId+"'"):'null';
+    const delBtn=canDelete?'<button onclick="window.deletePerson('+_dc+','+_du+')" style="padding:11px 14px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#ef4444;font-size:13px;cursor:pointer">🗑</button>':'';
+
+    modalHtml='<div id="person-modal" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 12px">'
+      +'<div style="background:var(--card);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:440px;padding:0 0 24px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;border-bottom:1px solid var(--border)">'
+      +'<span style="font-size:16px;font-weight:700">'+(m.crewId||m.userId?'Edit Person':'New Person')+'</span>'
+      +'<button onclick="S.admin.personModal=null;S.admin.err=\'\';S.admin.pwMsg=null;render()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1">×</button>'
+      +'</div>'
+      +tabBar
+      +'<div style="padding:0 20px">'+bodyHtml+'</div>'
+      +(ad.err?'<div style="margin:8px 20px 0;padding:8px;background:var(--err-bg);border-radius:7px;color:var(--err-text);font-size:13px">'+ad.err+'</div>':'')
+      +'<div style="padding:16px 20px 0;display:flex;gap:8px">'+saveBtn+delBtn+'</div>'
+      +'</div>'
+      +'</div>';
+  }
+
+  // ── People list ──────────────────────────────────────────────
+  const expiryKeys=['medExpiry','ocaDue','firstAid','avsecExpiry'];
+  const expiryLabels={medExpiry:'Med',ocaDue:'OCA',firstAid:'Aid',avsecExpiry:'AVSEC'};
+  const expiryColors={medExpiry:'#22c55e',ocaDue:'#7B9EC6',firstAid:'#f59e0b',avsecExpiry:'#a78bfa'};
+
+  const personCards=people.map(function(p){
+    const cr=p.cr;const u=p.user;
+    const name=(cr?cr.n:u?u.name:'')||'Unknown';
+    const photo=cr?cr.photo:'';
+    const code=cr?cr.code:'';
+    const caaNum=cr?cr.caaNum:'';
+    const endorses=cr?cr.endorse||[]:[];
+    const role=u?u.role:'';
+    const email=u?u.email:'';
+    const isMe=p.userId===S.user?.id;
+    const myLevel=ROLE_LEVEL[S.user?.role||'']||99;
+    const theirLevel=ROLE_LEVEL[role||'']||3;
+    const canEdit=isMe||S.user?.superAdmin||(isAdmin&&theirLevel>myLevel);
+
+    // Worst expiry bg
+    let worstBg='transparent';
+    if(cr){
+      expiryKeys.forEach(function(k){
+        const v=cr[k];if(!v)return;
+        const dy=Math.round((new Date(v+'T00:00:00')-today)/86400000);
+        if(dy<0)worstBg='rgba(239,68,68,.06)';
+        else if(dy<30&&worstBg!=='rgba(239,68,68,.06)')worstBg='rgba(245,158,11,.06)';
+      });
+    }
+
+    // Expiry pills (only show if expired or within 30 days)
+    const pills=cr?expiryKeys.map(function(k){
+      const v=cr[k];if(!v)return'';
+      const dy=Math.round((new Date(v+'T00:00:00')-today)/86400000);
+      if(dy>=30)return'';
+      const col=dy<0?'#ef4444':'#f59e0b';
+      const bg=dy<0?'rgba(239,68,68,.15)':'rgba(245,158,11,.12)';
+      return'<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;background:'+bg+';color:'+col+'">'+expiryLabels[k]+(dy<0?' EXP':' '+dy+'d')+'</span>';
+    }).join(''):'' ;
+
+    // Opener
+    let opener='';
+    if(canEdit){
+      const endStr='['+(endorses.map(function(e){return"'"+e+"'";}).join(','))+']';
+      const safeN=(name||'').replace(/'/g,"\\'");
+      opener='window.openPersonModal(\''+p.crewId+'\',\''+p.userId+'\')';
+    }
+
+    return'<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);background:'+worstBg+';cursor:'+(canEdit?'pointer':'default')+'" onclick="'+opener+'">'
+      +'<div style="width:38px;height:38px;border-radius:50%;background:var(--card2);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1px solid var(--border2)">'
+      +(photo?'<img src="'+photo+'" style="width:100%;height:100%;object-fit:cover">':'<span style="font-size:17px">👤</span>')
+      +'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;overflow:hidden">'
+      +(code?'<span style="font-size:10px;background:var(--card2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;flex-shrink:0">'+code+'</span>':'')
+      +'<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+name+'</span>'
+      +(isMe?'<span style="font-size:10px;color:var(--text3);flex-shrink:0;white-space:nowrap">(you)</span>':'')
+      +'</div>'
+      +'<div style="font-size:11px;color:var(--text3);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+      +(role?'<span style="color:'+(roleColour[role]||'#64748b')+';font-weight:600">'+role+'</span>':'')
+      +(email?'<span>'+email+'</span>':'')
+      +(endorses.length?'<span>'+endorses.join(' · ')+'</span>':'')
+      +(caaNum?'<span>CAA '+caaNum+'</span>':'')
+      +'</div>'
+      +(pills?'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">'+pills+'</div>':'')
+      +'</div>'
+      +(canEdit?'<span style="font-size:11px;color:var(--text3)">✎</span>':'')
+      +'</div>';
+  }).join('');
+
+  const addBtn=isAdmin?'<button onclick="window.openPersonModal(null,null)" style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">+ Add Person</button>':'';
+
+  return modalHtml
+    +'<div class="card">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+    +'<div class="st" style="margin-bottom:0">People</div>'
+    +addBtn
+    +'</div>'
+    +personCards
+    +'</div>';
+}
+
+
+function renderAdminAircraft(){
+  const ad=S.admin;
+  const chips=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(k=>S.aircraft[k]).map(k=>`<button style="padding:6px 12px;border-radius:7px;border:2px solid ${ad.acSel===k?AC_COL[k]||'#7B9EC6':'var(--border2)'};background:${ad.acSel===k?'#0c1a3a':'transparent'};color:${ad.acSel===k?AC_COL[k]||'#7B9EC6':'var(--text2)'};font-size:12px;font-weight:700;cursor:pointer;margin:3px" onclick="S.admin.acSel='${k}';S.admin.acDraft=null;S.admin.acSaved=false;render()">${k}</button>`).join('');
+  const d=ad.acDraft||S.aircraft[ad.acSel];if(!d)return`<div class="card"><p style="color:var(--text3)">Select aircraft.</p></div>`;
+  const ed=!!ad.acDraft;const ro=!ed?'readonly style="opacity:.5"':'';
+  const sR=d.seats.map((s,i)=>`<div class="seat-row-edit">
+    <input class="fi" type="text" value="${s.lbl}" ${i===0?'readonly style="opacity:.5;font-weight:700"':''} onblur="if(${ed})S.admin.acDraft.seats[${i}].lbl=this.value" style="font-size:13px">
+    <input class="fi" type="number" value="${s.arm}" onblur="if(${ed})S.admin.acDraft.seats[${i}].arm=parseFloat(this.value)||0" style="font-size:13px" ${ro}>
+    ${i>0&&!s.crew?`<input class="fi" type="number" value="${s.maxKg||''}" onblur="if(${ed})S.admin.acDraft.seats[${i}].maxKg=parseFloat(this.value)||null" style="font-size:13px" ${ro}>`:`<span style="font-size:11px;color:var(--text3)">${s.crew?'Crew':''}</span>`}
+    ${ed&&i>0&&!s.crew?`<button class="icon-btn red" onclick="S.admin.acDraft.seats.splice(${i},1);render()">✕</button>`:`<span></span>`}
+  </div>`).join('');
+  return`<div class="card"><div class="st">Select Aircraft</div><div style="display:flex;flex-wrap:wrap;margin:-3px">${chips}</div></div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800">${d.name}</span>
+      ${!ed?`<button class="btn btn-ghost" style="border-color:var(--sky);color:var(--sky);font-size:12px" onclick="S.admin.acDraft=JSON.parse(JSON.stringify(S.aircraft[S.admin.acSel]));render()">Edit</button>`
+        :`<div style="display:flex;gap:6px"><button class="btn btn-ghost" style="font-size:12px" onclick="S.admin.acDraft=null;render()">Cancel</button><button class="btn btn-sky" style="font-size:12px" onclick="saveAircraftDraft()">Save & Sync</button></div>`}
+    </div>
+    <div class="g3" style="margin-bottom:10px">
+      <div><label>Empty Wt (kg)</label><input class="fi" type="number" value="${d.ew}" onblur="if(${ed}){S.admin.acDraft.ew=parseFloat(this.value)||0}" ${ro}></div>
+      <div><label>Empty Arm (in)</label><input class="fi" type="number" value="${d.ea}" onblur="if(${ed}){S.admin.acDraft.ea=parseFloat(this.value)||0}" ${ro}></div>
+      <div><label>Empty Moment</label><input class="fi" type="number" value="${d.em}" onblur="if(${ed}){S.admin.acDraft.em=parseFloat(this.value)||0}" ${ro}></div>
+    </div>
+    <div class="g3" style="margin-bottom:10px">
+      <div><label>Max T/O (kg)</label><input class="fi" type="number" value="${d.mtow}" onblur="if(${ed}){S.admin.acDraft.mtow=parseFloat(this.value)||0}" ${ro}></div>
+      <div><label>Max Ldg (kg)</label><input class="fi" type="number" value="${d.mlw}" onblur="if(${ed}){S.admin.acDraft.mlw=parseFloat(this.value)||0}" ${ro}></div>
+      <div><label>Fuel Over Tolerance (kg)</label><input class="fi" type="number" value="${d.fuelOver||50}" onblur="if(${ed}){S.admin.acDraft.fuelOver=parseFloat(this.value)||50}" ${ro}></div>
+    </div>
+    <div class="g2" style="margin-bottom:10px">
+      <div><label>C of G Min (in)</label><input class="fi" type="number" value="${d.cogMin}" onblur="if(${ed}){S.admin.acDraft.cogMin=parseFloat(this.value)||0}" ${ro}></div>
+      <div><label>C of G Max (in)</label><input class="fi" type="number" value="${d.cogMax}" onblur="if(${ed}){S.admin.acDraft.cogMax=parseFloat(this.value)||0}" ${ro}></div>
+      <div><label>Fuel (kg)</label><input class="fi" type="number" value="${d.fuelKg}" onblur="if(${ed}){S.admin.acDraft.fuelKg=parseFloat(this.value)||0}" ${ro}></div>
+      <div><label>Fuel Arm (in)</label><input class="fi" type="number" value="${d.fuelArm}" onblur="if(${ed}){S.admin.acDraft.fuelArm=parseFloat(this.value)||0}" ${ro}></div>
+    </div>
+    <div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Seats</div>
+      <div style="display:grid;grid-template-columns:1.5fr 90px 90px 32px;gap:8px;margin-bottom:4px">${['Label','Arm (in)','Max (kg)',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}</div>
+      ${sR}${ed?`<button class="btn btn-ghost" style="margin-top:8px;font-size:12px" onclick="S.admin.acDraft.seats.push({lbl:'Seat '+S.admin.acDraft.seats.length,arm:0});render()">+ Add Seat</button>`:''}
+    </div>
+    ${ad.acErr?`<div style="padding:8px;background:var(--err-bg);border-radius:7px;color:var(--err-text);font-size:13px;margin-top:8px">${ad.acErr}</div>`:''}
+    ${ad.acSaved?`<div style="padding:8px;background:var(--ok-bg);border-radius:7px;color:var(--ok-text);font-size:13px;font-weight:600;margin-top:8px">✓ Saved & synced</div>`:''}
+  </div>`;
+}
+
+function renderAdminCharterRates(){
+  return`<div class="card"><div class="st">Charter Rates</div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:12px">Set hourly rates for each aircraft. Changes apply immediately to new charter quotes.</p>
+    ${Object.entries(S.charterRates).map(([acId,r])=>{
+      const col=AC_COL[acId]||'#64748b';
+      return`<div style="display:grid;grid-template-columns:140px 1fr 100px;gap:10px;align-items:end;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:${col}"></div><span style="font-weight:600;font-size:13px">${acId}</span></div>
+        <div><label>$/hr (NZD)</label><input class="fi" type="number" value="${r.perHour||0}" onblur="S.charterRates['${acId}'].perHour=parseFloat(this.value)||0;saveCharterRates()"></div>
+        <div><label>Min hrs</label><input class="fi" type="number" step="0.25" value="${r.minHours||1}" onblur="S.charterRates['${acId}'].minHours=parseFloat(this.value)||1;saveCharterRates()"></div>
+      </div>`;}).join('')}
+  </div>`;
+}
+
+
+// ═══════════════════════ EVENT HANDLERS ═══════════════════════
+
+// ── Password Reset ──
+window.requestReset=async()=>{
+  const email=(document.getElementById('resetEmail')?.value||'').toLowerCase().trim();
+  const u=S.users.find(x=>x.email.toLowerCase()===email);
+  if(!u){S.resetMsg={ok:false,text:'No account found with that email.'};render();return;}
+  const code=String(Math.floor(100000+Math.random()*900000));
+  const expires=Date.now()+30*60*1000; // 30 min
+  // Store reset token in Supabase (ts_users password_hash temporarily stores token)
+  u.resetToken=code;u.resetExpires=expires;
+  lsSet('ts_users_cache',S.users);
+  await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,
+    linked_crew:u.linkedCrew,password_hash:u.passwordHash,
+    reset_token:code,reset_expires:String(expires)}]);
+  // Show code (in production this would email it - for now show in app since no email service)
+  S.resetMsg={ok:true,text:'Reset code: '+code+' (valid 30 min). In production this would be emailed. Note it down and give it to the user.'};
+  render();
+};
+window.applyReset=async()=>{
+  const code=(document.getElementById('resetCode')?.value||'').trim();
+  const newPw=(document.getElementById('resetNewPw')?.value||'').trim();
+  if(!code||!newPw){S.resetMsg={ok:false,text:'Enter both the code and new password.'};render();return;}
+  const u=S.users.find(x=>x.resetToken===code&&x.resetExpires&&Date.now()<x.resetExpires);
+  if(!u){S.resetMsg={ok:false,text:'Invalid or expired code.'};render();return;}
+  u.passwordHash=await hashPw(newPw);delete u.resetToken;delete u.resetExpires;
+  lsSet('ts_users_cache',S.users);
+  await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,linked_crew:u.linkedCrew,password_hash:u.passwordHash,reset_token:null,reset_expires:null}]);
+  S.resetMsg={ok:true,text:'Password updated. You can now log in.'};
+  S.showReset=false;render();
+};
+
+window.switchOpsTab=function(tabId){
+  S.activeTabId=null;S._newLsTab=false;
+  if(tabId==='saved'){
+    S.tab=tabId;
+    reloadTable('ts_loadsheets').then(function(){render();});
+    window.scrollTo(0,0);return;
+  }
+  if(tabId==='scratchpad'){
+    S.tab=tabId;
+    if(S.pads.length===0&&S.padTabs.length===0){
+      reloadTable('ts_scratchpads').then(function(){render();});
+    } else {render();}
+    window.scrollTo(0,0);return;
+  }
+  S.tab=tabId;
+  window.scrollTo(0,0);
+  render();
+};
 window.setTab=function(t){
+  if(t=window.setTab=function(t){
   if(t==='operations'){
     if(!['manifest','seatmap','saved','loadsheet','ls_SLA','ls_SLB','ls_SLD','ls_SLQ','ls_SDB'].includes(S.tab)) S.tab='manifest';
   } else if(t==='scratchpad'){
