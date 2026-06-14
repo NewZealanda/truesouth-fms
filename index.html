@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v21.85';
+const APP_VER='v21.89';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2435,7 +2435,11 @@ function renderStep1(){
       ${['AC','TYPE','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
     </div></div>
     ${paxRows}
-    <div style="display:flex;gap:8px;margin-top:10px"><button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="addPax()">+ Add Passenger</button>${(S._paxUndo&&S._paxUndo.length)?`<button tabindex="-1" class="btn btn-ghost" style="font-size:13px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.undoPax()">&#x21A9; Undo Delete (${S._paxUndo.length})</button>`:""}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="addPax()">+ Add Passenger</button>
+      ${(()=>{const empty=d.pax.filter(p=>!p.infant&&!p.name&&!p.infantName&&(!p.weight||p.weight===0)&&(!p.bag||p.bag===0));return empty.length?`<button tabindex="-1" class="btn btn-ghost" style="font-size:13px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.removeEmptyPax()">&#x2715; Remove ${empty.length} Empty</button>`:''})()}
+      ${(S._paxUndo&&S._paxUndo.length)?`<button tabindex="-1" class="btn btn-ghost" style="font-size:13px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.undoPax()">&#x21A9; Undo Delete (${S._paxUndo.length})</button>`:""}
+    </div>
   </div>
   <div style="display:flex;gap:8px;margin-bottom:8px">
     <button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="saveManifest()">💾 Save Manifest</button>
@@ -3561,6 +3565,7 @@ function renderSaved(){
               +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">'
               +'<span style="font-weight:700;font-size:14px">'+(s.form.ac||'?')+'</span>'
               +'<span class="pill pill-blue">'+(s.form.dep||'?')+' &#x2192; '+(s.form.dest||'?')+'</span>'
+              +(s.form.pic?'<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">&#x2708; '+s.form.pic+'</span>':'')
               +(isSigned?'<span class="pill pill-green">&#x2713; Signed</span>':'<span class="pill" style="background:#0c1a3a;color:#93c5fd">UNSIGNED</span>')
               +'</div>'
               +'<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">'+'<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">'+(s.form.date||'?')+'</span>'+(s.form.etd?'<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD '+s.form.etd+'</span>':'')+'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">'+_paxCnt+' PAX</span>'+(_savedStr?'<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved '+_savedStr+'</span>':'')+'</div>'
@@ -3616,6 +3621,7 @@ function renderSaved(){
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
               <span style="font-weight:700;font-size:14px">${s.form.ac||'?'}</span>
               <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
+              ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
               <span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 UNSIGNED</span>
             </div>
             <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${s.form.date||'?'}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span>${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}</div>
@@ -3681,6 +3687,7 @@ function renderSaved(){
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
             <span style="font-weight:700;font-size:14px">${s.form.ac||'?'}</span>
             <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
+            ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
             ${isUnsigned
               ?`<span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 Unsigned</span>`
               :isSigned
@@ -4460,24 +4467,19 @@ window.applyReset=async()=>{
 
 window.switchOpsTab=function(tabId){
   S.activeTabId=null;S._newLsTab=false;
+  S.tab=tabId;
+  render();
   if(tabId==='saved'){
-    S.tab=tabId;
     reloadTable('ts_loadsheets').then(function(){render();});
-    window.scrollTo(0,0);return;
   }
   if(tabId==='scratchpad'){
-    S.tab=tabId;
     if(S.pads.length===0&&S.padTabs.length===0){
       reloadTable('ts_scratchpads').then(function(){render();});
-    } else {render();}
-    window.scrollTo(0,0);return;
+    }
   }
-  S.tab=tabId;
   window.scrollTo(0,0);
-  render();
 };
 window.setTab=function(t){
-  if(t=window.setTab=function(t){
   if(t==='operations'){
     if(!['manifest','seatmap','saved','loadsheet','ls_SLA','ls_SLB','ls_SLD','ls_SLQ','ls_SDB'].includes(S.tab)) S.tab='manifest';
   } else if(t==='scratchpad'){
@@ -4662,6 +4664,18 @@ window.lsRmInfant=function(idx){if(S.form.infantNames)delete S.form.infantNames[
 var nm=S.form.names&&S.form.names[idx]||'';if(nm.includes(' + '))S.form.names[idx]=nm.split(' + ')[0].trim();render();};
 window.rmPax=i=>{S._paxUndo=S._paxUndo||[];var removed=S.dispatch.pax.splice(i,1)[0];if(removed)S._paxUndo.push(removed);autoSaveDispatch();render();};
 window.undoPax=function(){if(!S._paxUndo||!S._paxUndo.length)return;var p=S._paxUndo.pop();p._ts=Date.now();S.dispatch.pax.push(p);autoSaveDispatch();render();};
+window.removeEmptyPax=function(){
+  S._paxUndo=S._paxUndo||[];
+  var kept=[],removed=[];
+  S.dispatch.pax.forEach(function(p){
+    if(!p.infant&&!p.name&&!p.infantName&&(!p.weight||p.weight===0)&&(!p.bag||p.bag===0)){removed.push(p);}
+    else{kept.push(p);}
+  });
+  if(!removed.length)return;
+  removed.forEach(function(p){S._paxUndo.push(p);});
+  S.dispatch.pax=kept;
+  autoSaveDispatch();render();
+};
 window.setPaxField=(i,k,v)=>{
   if(!S.dispatch.pax[i])return;
   S.dispatch.pax[i][k]=v;S.dispatch.pax[i]._ts=Date.now();
@@ -6429,11 +6443,12 @@ function _lastUpdatedLabel(ac){
   const today=new Date();today.setHours(0,0,0,0);
   const d=new Date(lastDate+'T00:00:00');
   const diff=Math.round((today-d)/(1000*60*60*24));
-  if(diff===0) return 'Updated today';
-  if(diff===1) return 'Updated yesterday';
-  if(diff<7){const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];return 'Updated '+days[d.getDay()];}
-  if(diff<14) return 'Updated last week';
-  return 'Updated '+d.toLocaleDateString('en-NZ',{day:'numeric',month:'short'});
+  const dateStr=d.toLocaleDateString('en-NZ',{day:'numeric',month:'short'});
+  if(diff===0) return 'Updated today ('+dateStr+')';
+  if(diff===1) return 'Updated yesterday ('+dateStr+')';
+  if(diff<7){const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];return 'Updated '+days[d.getDay()]+' ('+dateStr+')';}
+  if(diff<14) return 'Updated last week ('+dateStr+')';
+  return 'Updated '+dateStr+' ('+diff+' days ago)';
 }
 
 function renderMaintOverview(){
@@ -6530,7 +6545,7 @@ function renderMaintOverview(){
       ${isAdmin?`<div style="margin-top:10px">
         <button onclick="event.stopPropagation();S.maintEditAc='${ac}';S.maintTab='bookings';window.scrollTo(0,0);render()" style="width:100%;padding:5px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;color:var(--text2)">Edit Check / Bookings</button>
       </div>`:''}
-      ${(function(){const lbl=_lastUpdatedLabel(ac);return lbl?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--text3);opacity:.7">${lbl}</div>`:'';})()}
+      ${(function(){const lbl=_lastUpdatedLabel(ac);return lbl?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;font-size:12px;font-weight:600;color:var(--text2)">${lbl}</div>`:'';})()}
     </div>`;
   }).join('');
 
