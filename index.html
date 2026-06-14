@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.17';
+const APP_VER='v22.19';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2128,7 +2128,6 @@ function renderApp(){
   // Dynamic tab visibility — admin tab always shown; others controlled by rolePerms
   const _allTabs=[
     {id:'operations',lbl:'Operations'},
-    {id:'scratchpad',lbl:'Scratch'},
     {id:'charter',lbl:'Charter'},
     {id:'maintenance',lbl:'Maintenance'},
     {id:'admin',lbl:role==='admin'?'Admin':'Crew & Profile'},
@@ -2136,7 +2135,6 @@ function renderApp(){
   const tabs=_allTabs.filter(t=>{
     if(role==='admin') return true;
     if(t.id==='admin') return true;
-    if(t.id==='scratchpad') return true; // always visible
     const perms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
     return perms[t.id]===true;
   });
@@ -2204,7 +2202,6 @@ function renderApp(){
         if(S.tab==='charter')return'<div id="flash-charter">'+renderCharter()+'</div>';
         if(S.tab==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';
         if(S.tab==='admin')return'<div id="flash-admin">'+renderAdmin()+'</div>';
-        if(S.tab==='scratchpad')return renderScratchpadPage();
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
@@ -2279,23 +2276,6 @@ function renderOperations(){
   if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return tabsH+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
   if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return tabsH+renderSaved();}
   startPresenceBroadcast('manifest');return tabsH+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
-}
-function renderScratchpadPage(){
-  if(S._presSection&&S._presSection!=='scratchpad')broadcastPresence(null);
-  var _padTabsH='';
-  if(S.padTabs.length>0){
-    _padTabsH='<div style="display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
-    _padTabsH+='<button onclick="window.newPad()" style="padding:4px 10px;font-size:12px;background:var(--card2);border:1px solid var(--border2);border-radius:7px;cursor:pointer;color:var(--acc)">+ New</button>';
-    S.padTabs.forEach(function(pt){
-      var isAct=S.activePadId===pt.id;
-      _padTabsH+='<div style="display:inline-flex;align-items:stretch;border-radius:7px;overflow:hidden;border:1px solid '+(isAct?'var(--acc)':'var(--border2)')+'">'; 
-      _padTabsH+='<button onclick="window.switchPad(\''+pt.id+'\')" style="padding:4px 10px;font-size:12px;font-weight:'+(isAct?'700':'400')+';background:'+(isAct?'var(--acc)':'var(--card2)')+';border:none;color:'+(isAct?'#fff':'var(--text1)')+';cursor:pointer">'+((pt.title||'Untitled').slice(0,16))+'</button>';
-      _padTabsH+='<button onclick="window.closePad(\''+pt.id+'\')" style="padding:4px 6px;font-size:12px;background:'+(isAct?'var(--acc)':'var(--card2)')+';border:none;color:'+(isAct?'#fff':'var(--text3)')+';cursor:pointer">&#x00D7;</button>';
-      _padTabsH+='</div>';
-    });
-    _padTabsH+='</div>';
-  }
-  return _padTabsH+renderScratchpad();
 }
 
 function renderNewLsPanel(){
@@ -2672,7 +2652,19 @@ window.applySwapFix=function(acId,fromIdx,toIdx){
 function renderStep2(){
   const d=S.dispatch;
   const setups=d.acSetup||[];
-  if(!setups.length){S.tab='manifest';render();return'';}
+  // Find open loadsheet tabs not yet in the seatmap
+  const _lsTabs=S.lsTabs||[];
+  const _inSeatmap=new Set((setups).map(s=>s.acId));
+  const _notInSeatmap=_lsTabs.filter(t=>t.form&&t.form.ac&&!_inSeatmap.has(t.form.ac));
+  const _lsBanner=_notInSeatmap.length?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;margin-bottom:12px;flex-wrap:wrap">
+    <span style="font-size:13px;font-weight:600;color:#93c5fd;flex:1">📋 ${_notInSeatmap.length} open loadsheet${_notInSeatmap.length!==1?'s':''} not yet in seatmap: ${_notInSeatmap.map(t=>t.form.ac).join(', ')}</span>
+    <button onclick="window.pushAllLsToSeatmap()" style="padding:5px 12px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Pull all into Seatmap</button>
+  </div>`:'';
+  if(!setups.length){
+    // No aircraft in seatmap — if we have open loadsheets, show pull prompt; otherwise go to manifest
+    if(_notInSeatmap.length) return _lsBanner+`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Click "Pull all into Seatmap" above to get started, or <button class="btn btn-ghost" style="font-size:13px" onclick="S.opsTab='manifest';render()">go to Manifest</button> to set up aircraft.</div>`;
+    S.tab='manifest';render();return'';
+  }
 
   const solverHTML=setups.map(function(setup){
     const id=setup.acId;const smKey=setup._seatmapKey||id;
@@ -2751,6 +2743,7 @@ function renderStep2(){
   const hasLsTabs=S.lsTabs&&S.lsTabs.length>0;
 
   return`
+  ${_lsBanner}
   ${solverHTML?`<div style="margin-bottom:12px">${solverHTML}</div>`:''}
   ${poolHTML}
   <div class="card" style="padding:12px">
@@ -2795,13 +2788,13 @@ function renderLsSeatGrid(f,a){
   var isMob=window.innerWidth<=600;
   var sW=isMob?68:86;
   var sH=isMob?62:76;
-  var html='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0">';
+  var isGa8=a.layout==='ga8';
+  var isPod=!!(a.cargo&&a.cargo.length>1&&a.cargo[0]&&a.cargo[0].lbl&&a.cargo[0].lbl.startsWith('Pod'));
+  // Build the seat rows column
+  var seatsCol='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0">';
   layout.forEach(function(row){
-    if(row==='spacer'){
-      html+='<div style="height:10px;width:90%;border-top:1px dashed var(--border2);margin:2px auto"></div>';
-      return;
-    }
-    html+='<div style="display:flex;gap:8px">';
+    if(row==='spacer'){seatsCol+='<div style="height:6px"></div>';return;}
+    seatsCol+='<div style="display:flex;gap:8px">';
     row.forEach(function(cell){
       var idx=cell.i;
       var isPIC=idx===0;
@@ -2814,16 +2807,10 @@ function renderLsSeatGrid(f,a){
       var paxType=(!isPIC&&!isCoPilot&&f.paxType)?f.paxType[idx]||'A':'A';
       var hasInfant=!!(f.infantNames&&f.infantNames[idx]);
       var payReq=!!(f.paxPaymentReq&&f.paxPaymentReq[idx]);
-      // Last name display
-      var rawNm=nm;
-      var displayNm=rawNm?(rawNm.trim().includes(' ')?rawNm.trim().split(' ').pop():rawNm.trim()):'';
-      if(isPIC){
-        var picNm=f.names[0]||f.pic||'';
-        displayNm=picNm?(picNm.trim().includes(' ')?picNm.trim().split(' ').pop():picNm.trim()):'';
-      } else if(isCoPilot){
-        var cpNm=f.coPilot||'';
-        displayNm=cpNm?(cpNm.trim().includes(' ')?cpNm.trim().split(' ').pop():cpNm.trim()):'';
-      }
+      // Full name display
+      var displayNm=nm?nm.trim():'';
+      if(isPIC){displayNm=(f.names[0]||f.pic||'').trim();}
+      else if(isCoPilot){displayNm=(f.coPilot||'').trim();}
       var isOccupied=!!nm||parseFloat(wt)>0;
       var bgCol=isPIC?'rgba(59,130,246,.18)':isCoPilot?'rgba(100,116,139,.12)':
         isOccupied?(gc?gc+'30':'rgba(124,58,237,.14)'):'var(--card2)';
@@ -2831,47 +2818,76 @@ function renderLsSeatGrid(f,a){
         isOccupied?(gc||'var(--accent)'):'var(--border2)';
       var nameCol=gc?gc:(isPIC?'#93c5fd':isCoPilot?'#94a3b8':'var(--text1)');
       var clickable=!isPIC&&!isCoPilot;
-      html+='<div onclick="'+(clickable?'window.lsSeatEditPopup('+idx+')':'')+'" style="'
+      seatsCol+='<div onclick="'+(clickable?'window.lsSeatEditPopup('+idx+')':'')+'" style="'
         +'width:'+sW+'px;height:'+sH+'px;border-radius:10px;border:2px solid '+borderCol+';'
         +'background:'+bgCol+';cursor:'+(clickable?'pointer':'default')+';'
         +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
         +'position:relative;padding:3px 5px;text-align:center;flex-shrink:0;'
         +'transition:box-shadow .12s'
         +'"'+(clickable?' onmouseover="this.style.boxShadow=\'0 0 0 2px var(--acc)\'" onmouseout="this.style.boxShadow=\'\'"':'')+' >';
-      // Seat label (top-left corner)
-      html+='<div style="position:absolute;top:3px;left:4px;font-size:9px;font-weight:700;color:'
+      seatsCol+='<div style="position:absolute;top:3px;left:4px;font-size:9px;font-weight:700;color:'
         +(isPIC?'#3b82f6':isCoPilot?'#64748b':'var(--text3)')+';line-height:1">'
         +(isPIC?'PIC':isCoPilot?'CP':cell.lbl)+'</div>';
-      // Name
       if(displayNm){
-        html+='<div style="font-size:'+(isMob?'10':'12')+'px;font-weight:800;color:'+nameCol+';'
+        seatsCol+='<div style="font-size:'+(isMob?'10':'12')+'px;font-weight:800;color:'+nameCol+';'
           +'line-height:1.1;max-width:'+(sW-10)+'px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'
-          +'margin-top:'+(isPIC||isCoPilot?'2':'6')+'px">'+(displayNm.toUpperCase())+'</div>';
+          +'margin-top:'+(isPIC||isCoPilot?'2':'6')+'px">'+displayNm.toUpperCase()+'</div>';
       } else if(!isPIC&&!isCoPilot){
-        html+='<div style="font-size:11px;color:var(--border2);margin-top:8px">+</div>';
+        seatsCol+='<div style="font-size:11px;color:var(--border2);margin-top:8px">+</div>';
       }
-      // Weight
       if(isOccupied&&!isPIC&&!isCoPilot&&parseFloat(wt)>0){
-        html+='<div style="font-size:'+(isMob?'8':'9')+'px;color:'+(gc?gc:'var(--text3)')+';margin-top:2px;opacity:.9">'+(wt)+'kg'+(parseFloat(bg)>0?' +🎒':'')+'</div>';
+        seatsCol+='<div style="font-size:'+(isMob?'8':'9')+'px;color:'+(gc?gc:'var(--text3)')+';margin-top:2px;opacity:.9">'+wt+'kg'+(parseFloat(bg)>0?' +🎒':'')+'</div>';
       }
-      // Child badge (bottom-right)
       if(!isPIC&&!isCoPilot&&isOccupied&&paxType==='C'){
-        html+='<div style="position:absolute;bottom:3px;right:3px;font-size:7px;font-weight:900;background:rgba(251,146,60,.7);color:#7c2d12;border-radius:3px;padding:0 3px;line-height:1.6">C</div>';
+        seatsCol+='<div style="position:absolute;bottom:3px;right:3px;font-size:7px;font-weight:900;background:rgba(251,146,60,.7);color:#7c2d12;border-radius:3px;padding:0 3px;line-height:1.6">C</div>';
       }
-      // Infant badge (top-right)
       if(hasInfant){
-        html+='<div style="position:absolute;top:2px;right:3px;font-size:7px;font-weight:900;background:rgba(236,72,153,.7);color:#831843;border-radius:3px;padding:0 3px;line-height:1.6">i</div>';
+        seatsCol+='<div style="position:absolute;top:2px;right:3px;font-size:7px;font-weight:900;background:rgba(236,72,153,.7);color:#831843;border-radius:3px;padding:0 3px;line-height:1.6">i</div>';
       }
-      // Payment required (top-right if no infant)
       if(!hasInfant&&payReq&&!isPIC){
-        html+='<div style="position:absolute;top:2px;right:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.6);color:#fff;border-radius:3px;padding:0 3px;line-height:1.6">$</div>';
+        seatsCol+='<div style="position:absolute;top:2px;right:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.6);color:#fff;border-radius:3px;padding:0 3px;line-height:1.6">$</div>';
       }
-      html+='</div>';
+      seatsCol+='</div>';
     });
-    html+='</div>';
+    seatsCol+='</div>';
   });
-  html+='</div>';
-  return html;
+  // Airvan: cargo shelf row at the bottom
+  if(isGa8&&a.cargo&&a.cargo.length){
+    seatsCol+='<div style="height:4px"></div>';
+    var shelfW=(sW*2)+8;
+    a.cargo.forEach(function(zn,zi){
+      var w=f.cargo[zi]||'';
+      seatsCol+='<div style="width:'+shelfW+'px;background:rgba(59,130,246,.10);border:1px dashed rgba(59,130,246,.40);border-radius:8px;padding:5px 10px;display:flex;align-items:center;gap:8px">'
+        +'<div style="font-size:9px;font-weight:700;color:#60a5fa;text-transform:uppercase;letter-spacing:.05em;flex-shrink:0">'+zn.lbl+'</div>'
+        +'<input class="fi ls-no-spin" type="number" placeholder="0" value="'+w+'" style="font-size:13px;font-weight:700;width:50px;padding:1px 4px;background:transparent;border:none;color:var(--text)" onblur="lsC('+zi+',this.value)">'
+        +'<span style="font-size:10px;color:#60a5fa">kg</span>'
+        +(zn.maxKg?'<span style="font-size:9px;color:var(--text3);margin-left:auto">max '+zn.maxKg+'kg</span>':'')
+        +'</div>';
+    });
+  }
+  seatsCol+='</div>';
+  // Caravan (pod): zones as side column
+  if(isPod){
+    var podColors=['rgba(59,130,246,.15)','rgba(16,185,129,.15)','rgba(245,158,11,.15)','rgba(168,85,247,.15)'];
+    var podBorders=['rgba(59,130,246,.5)','rgba(16,185,129,.5)','rgba(245,158,11,.5)','rgba(168,85,247,.5)'];
+    var podTextColors=['#60a5fa','#34d399','#fbbf24','#c084fc'];
+    var colW=isMob?60:76;
+    var podCol='<div style="display:flex;flex-direction:column;gap:6px;justify-content:space-between;align-self:stretch;min-width:'+colW+'px;margin-top:4px">';
+    a.cargo.forEach(function(zn,zi){
+      var w=f.cargo[zi]||'';
+      podCol+='<div style="flex:1;background:'+podColors[zi%4]+';border:1px solid '+podBorders[zi%4]+';border-radius:8px;padding:5px 7px;display:flex;flex-direction:column;justify-content:center">'
+        +'<div style="font-size:8px;font-weight:700;color:'+podTextColors[zi%4]+';text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">'+zn.lbl.replace('Pod Zone ','Z')+'</div>'
+        +'<div style="display:flex;align-items:baseline;gap:2px">'
+        +'<input class="fi ls-no-spin" type="number" placeholder="0" value="'+w+'" style="font-size:13px;font-weight:800;width:40px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC('+zi+',this.value)">'
+        +'<span style="font-size:9px;color:'+podTextColors[zi%4]+'">kg</span>'
+        +'</div>'
+        +(zn.maxKg?'<div style="font-size:8px;color:'+podTextColors[zi%4]+';opacity:.7">max '+zn.maxKg+'</div>':'')
+        +'</div>';
+    });
+    podCol+='</div>';
+    return '<div style="display:flex;gap:10px;align-items:flex-start">'+seatsCol+podCol+'</div>';
+  }
+  return seatsCol;
 }
 
 // ── Seat editor popup ──
@@ -2884,6 +2900,7 @@ window.lsSeatEditPopup=function(idx){
   var bg=String(f.bags[idx]||'');
   var grp=(f.paxGroups&&f.paxGroups[idx])||'';
   var _pType=(f.paxType&&f.paxType[idx])||'A';
+  var _payReq=!!(f.paxPaymentReq&&f.paxPaymentReq[idx]);
   var seatLbl=a.seats[idx].lbl||String(idx);
   var isOccupied=!!nm||parseFloat(wt)>0;
   var ov=document.createElement('div');
@@ -2907,6 +2924,8 @@ window.lsSeatEditPopup=function(idx){
     +'<button id="lsSpTA" style="flex:1;padding:10px;border-radius:8px;border:2px solid '+(_pType==='A'?'#3b82f6':'var(--border2)')+';background:'+(_pType==='A'?'rgba(59,130,246,.22)':'transparent')+';color:var(--text1);font-size:13px;font-weight:700;cursor:pointer">Adult</button>'
     +'<button id="lsSpTC" style="flex:1;padding:10px;border-radius:8px;border:2px solid '+(_pType==='C'?'#fb923c':'var(--border2)')+';background:'+(_pType==='C'?'rgba(251,146,60,.22)':'transparent')+';color:var(--text1);font-size:13px;font-weight:700;cursor:pointer">Child</button>'
     +'</div></div>'
+    +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Payment</label>'
+    +'<button id="lsSpPay" style="width:100%;padding:10px;border-radius:8px;border:2px solid '+(_payReq?'#ef4444':'var(--border2)')+';background:'+(_payReq?'rgba(239,68,68,.22)':'transparent')+';color:'+(_payReq?'#ef4444':'var(--text3)')+';font-size:13px;font-weight:700;cursor:pointer">'+(_payReq?'$ Payment Required':'$ Mark as Needs Payment')+'</button></div>'
     +'<div style="margin-bottom:18px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Group</label>'
     +'<input id="lsSpGrp" class="fi" type="text" placeholder="Group name (optional)" value="'+grp.replace(/"/g,'&quot;')+'" style="font-size:13px;width:100%"></div>'
     +'<div style="display:flex;gap:8px">'
@@ -2927,6 +2946,16 @@ window.lsSeatEditPopup=function(idx){
   }
   document.getElementById('lsSpTA').onclick=function(){setType('A');};
   document.getElementById('lsSpTC').onclick=function(){setType('C');};
+  // Payment toggle
+  document.getElementById('lsSpPay').onclick=function(){
+    _payReq=!_payReq;
+    var btn=document.getElementById('lsSpPay');
+    if(!btn)return;
+    btn.style.borderColor=_payReq?'#ef4444':'var(--border2)';
+    btn.style.background=_payReq?'rgba(239,68,68,.22)':'transparent';
+    btn.style.color=_payReq?'#ef4444':'var(--text3)';
+    btn.textContent=_payReq?'$ Payment Required':'$ Mark as Needs Payment';
+  };
   // Save
   document.getElementById('lsSpSave').onclick=function(){
     var newNm=document.getElementById('lsSpName').value.trim();
@@ -2943,6 +2972,8 @@ window.lsSeatEditPopup=function(idx){
     if(newGrp)f.paxGroups[idx]=newGrp;else delete f.paxGroups[idx];
     if(!f.paxType)f.paxType={};
     if(newNm||parseFloat(newWt)){f.paxType[idx]=_pType;}else{delete f.paxType[idx];}
+    if(!f.paxPaymentReq)f.paxPaymentReq={};
+    if(_payReq)f.paxPaymentReq[idx]=true;else delete f.paxPaymentReq[idx];
     S.formDirty=true;autoSaveLS();
     ov.remove();render();
   };
@@ -2956,6 +2987,7 @@ window.lsSeatEditPopup=function(idx){
       f.names[idx]='';f.seats[idx]='';f.bags[idx]='';
       if(f.paxGroups)delete f.paxGroups[idx];
       if(f.paxType)delete f.paxType[idx];
+      if(f.paxPaymentReq)delete f.paxPaymentReq[idx];
       S.formDirty=true;autoSaveLS();
       ov.remove();render();
     };
@@ -3083,15 +3115,17 @@ function renderLoadsheet(){
     const podBorders=['rgba(59,130,246,.5)','rgba(16,185,129,.5)','rgba(245,158,11,.5)','rgba(168,85,247,.5)'];
     const podTextColors=['#60a5fa','#34d399','#fbbf24','#c084fc'];
     seatsH=`<div class="card" id="lsf-seats" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
-      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Passengers${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}</div>
+      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Passengers<div style="display:flex;gap:6px;align-items:center">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()" title="Push this loadsheet to the seatmap">🗺 Seatmap</button></div></div>
       ${wbSummary}
-      ${picCard}
       <div style="margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch">
         ${renderLsSeatGrid(f,a)}
       </div>
-      <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:8px;border-top:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;margin-top:8px;border-top:1px solid var(--border)">
         <span style="font-size:12px;font-weight:700;color:var(--text3)">Total Pax Weight</span>
-        <span style="font-size:13px;font-weight:700">${r?r.paxW.toFixed(1):'—'} kg</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:13px;font-weight:700">${r?r.paxW.toFixed(1):'—'} kg</span>
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()">🗺 Send to Seatmap</button>
+        </div>
       </div>
     </div>`;
 
@@ -3124,6 +3158,22 @@ function renderLoadsheet(){
       }).join('');
       cargoH=`<div class="card" id="lsf-cargo" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};display:flex;flex-direction:column"><div class="st">Cargo Pod Zones</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1">${zoneBoxes}</div>
+      </div>`;
+    } else if(a.cargo&&a.cargo.length){
+      // Non-pod cargo (e.g. Airvan baggage shelf)
+      const shelfBoxes=a.cargo.map(function(zn,zi){
+        const w=f.cargo[zi]||'';
+        return`<div style="background:rgba(59,130,246,.10);border:1px solid rgba(59,130,246,.30);border-radius:10px;padding:10px 12px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:6px">${zn.lbl}${zn.maxKg?' · max '+zn.maxKg+'kg':''}</div>
+          <div style="display:flex;align-items:baseline;gap:5px">
+            <input class="fi ls-no-spin" type="number" placeholder="0" value="${w}" style="font-size:20px;font-weight:800;width:70px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
+            <span style="font-size:12px;color:#60a5fa">kg</span>
+          </div>
+          ${w?`<div style="font-size:11px;color:#60a5fa;margin-top:4px">mom ${((parseFloat(w)||0)*zn.arm).toFixed(0)}</div>`:''}
+        </div>`;
+      }).join('');
+      cargoH=`<div class="card" id="lsf-cargo" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st">Cargo / Baggage</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">${shelfBoxes}</div>
       </div>`;
     } else {
       cargoH='';
@@ -3928,7 +3978,10 @@ function renderSaved(){
       <input type="checkbox" ${S.savedSel[m.id]?'checked':''} onchange="window.toggleSavedSel('${m.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
       <div style="flex:1">
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
-        <div style="font-size:12px;color:var(--text3)">${m.savedAt?_lsRelTime(m.savedAt):''} · ${m.data?.pax?.length||0} pax</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
+          ${(m.data?.acSetup||[]).map(s=>{const col=AC_COL[s.acId]||'#64748b';return`<span style="padding:1px 7px;border-radius:12px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:11px">${s.acId||'?'}</span>`;}).join('')}
+          <span style="font-size:11px;color:var(--text3)">${m.savedAt?_lsRelTime(m.savedAt):''} · ${m.data?.pax?.length||0} pax</span>
+        </div>
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-ghost" style="font-size:12px" onclick="loadManifest('${m.id}')">Load</button>
