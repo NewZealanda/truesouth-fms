@@ -2829,7 +2829,7 @@ function renderLoadsheet(){
             <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'C')" style="padding:1px 6px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.8)':'rgba(251,146,60,.3)'};background:${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.2)':'transparent'};color:#fb923c;font-size:10px;font-weight:700;cursor:pointer">C</button>
           </div>
         </div>
-        \${hasPerson?`<div style="margin-top:3px"><input class="fi" type="text" value="\${grp||''}" placeholder="Group" style="font-size:10px;padding:2px 5px;width:100%;\${gc?'color:'+gc+';font-weight:700':''}" onclick="event.stopPropagation()" onblur="window.lsGrp(\${idx},this.value)"></div>`:''}
+        ${hasPerson?('<div style="margin-top:3px"><input class="fi" type="text" value="'+(grp||'').replace(/"/g,'&quot;')+'" placeholder="Group" style="font-size:10px;padding:2px 5px;width:100%;'+(gc?'color:'+gc+';font-weight:700':'')+'" onclick=\'event.stopPropagation()\' onblur=\'window.lsGrp('+idx+',this.value)\'></div>'):''}
       </div>`;
     }).join('');
     isPod=a.cargo.length>1&&a.cargo[0]?.lbl?.startsWith('Pod');
