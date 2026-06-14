@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v21.89';
+const APP_VER='v21.92';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2336,12 +2336,12 @@ function renderStep1(){
           <div><label>PIC</label>
             <select tabindex="-1" class="fi" onchange="setAcField('${a.id}','pic',this.value)">
               <option value="">— select PIC —</option>
-              ${pilotCrewList().filter(c=>{const ac=S.aircraft[a.id];if(!ac)return true;const t=ac.layout==='c208'?'C208B':'GA8';return(c.endorse||[]).includes(t);}).map(c=>`<option value="${c.n}"${setup.pic===c.n?' selected':''}>${c.n} (${c.w}kg)</option>`).join('')}
+              ${pilotCrewList().filter(c=>{const ac=S.aircraft[a.id];if(!ac)return true;const t=ac.layout==='c208'?'C208B':'GA8';return(c.endorse||[]).includes(t);}).slice().sort((a,b)=>a.n.localeCompare(b.n)).map(c=>`<option value="${c.n}"${setup.pic===c.n?' selected':''}>${c.n} (${c.w}kg)</option>`).join('')}
             </select></div>
           <div><label>Co-Pilot (optional)</label>
             <select tabindex="-1" class="fi" onchange="setAcField('${a.id}','coPilot',this.value)">
               <option value="">None — Seat 1 = pax</option>
-              ${anyCrewList().map(c=>`<option value="${c.n}"${setup.coPilot===c.n?' selected':''}>${c.n}</option>`).join('')}
+              ${anyCrewList().slice().sort((a,b)=>a.n.localeCompare(b.n)).map(c=>`<option value="${c.n}"${setup.coPilot===c.n?' selected':''}>${c.n}</option>`).join('')}
             </select></div>
         </div>
         <div><label>Fuel at departure (${unit}) <span style="font-weight:400;color:var(--text3);font-size:10px">= ${fuelKgV.toFixed(1)}kg</span></label>
@@ -2408,9 +2408,10 @@ function renderStep1(){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').click()">
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Date</div>
-        <div style="position:relative"><div style="font-size:13px;font-weight:600;color:var(--text1)">${_fmtLsDate(d.date)}</div><input tabindex="-1" type="date" class="fi" value="${d.date}" onclick="event.stopPropagation()" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%"></div>
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;pointer-events:none">Date</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text1);pointer-events:none">${_fmtLsDate(d.date)}</div>
+        <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:none;background:transparent">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">ETD</div>
@@ -3070,9 +3071,10 @@ function renderLoadsheet(){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').click()">
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Date</div>
-        <div style="position:relative"><div style="font-size:13px;font-weight:600;color:var(--text1)">${_fmtLsDate(f.date)}</div><input type="date" class="fi" value="${f.date}" onclick="event.stopPropagation()" onchange="S.form.date=this.value;autoSaveLS();safeRender()" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%"></div>
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;pointer-events:none">Date</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text1);pointer-events:none">${_fmtLsDate(f.date)}</div>
+        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();safeRender()" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:none;background:transparent">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">ETD</div>
