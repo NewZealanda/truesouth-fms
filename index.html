@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.11';
+const APP_VER='v22.13';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1431,7 +1431,7 @@ function broadcastPresence(section){
   _rtRef++;
   _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
     payload:{type:'broadcast',event:'pres',payload:{
-      userId:S.user.id,name:S.user.name||S.user.email,
+      userId:S.user.id,name:S.user.name||S.user.email,code:(function(){var mc=(S.user.linkedCrew||'').trim().toLowerCase();var cr=(S.crew||[]).find(function(c){return(c.n||'').trim().toLowerCase()===mc;});return cr&&cr.code?cr.code:'';})(),
       section:section,color:presColor(S.user.id),ts:Date.now()
     }},ref:String(_rtRef)}));
 }
@@ -1457,7 +1457,7 @@ document.addEventListener('keydown',function(e){
   if(!pf||pr===undefined||pr===null)return;
   e.preventDefault();
   const rowIdx=parseInt(pr);
-  const fields=['name','group','weight','bag'];
+  const fields=['name','group'];
   const fi=fields.indexOf(pf);
   if(fi<0)return;
   let nextRow,nextField;
@@ -1514,9 +1514,10 @@ function autoSaveLS(){
   if(!S.user||!_id)return;
   const _tab=S.lsTabs.find(function(t){return t.id===_id;});
   if(_tab&&_tab.isNew)return; // never auto-save new unsaved tabs
+  const _formSnap=dc(S.form); // snapshot NOW before any tab switch can change S.form
   clearTimeout(_autoSaveLSTimer);
   _autoSaveLSTimer=setTimeout(async function(){
-    const form=dc(S.form);
+    const form=_formSnap;
     const tab=S.lsTabs.find(function(t){return t.id===_id;});
     if(tab){tab.form=form;}
     await sbU('ts_loadsheets',[{id:_id,form:form,saved_at:new Date().toISOString(),status:form.status||'unsigned'}]);
@@ -1782,7 +1783,7 @@ function presBarInner(section){
   return'<div style="display:flex;align-items:center;gap:6px;padding:4px 0 10px;flex-wrap:wrap">'
     +'<span style="font-size:11px;color:var(--text3);font-weight:600">Also viewing:</span>'
     +others.map(function(p){
-      const init=(p.name||'?').trim().split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
+      const init=p.code||(p.name||'?').trim().split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
       return'<div title="'+p.name+'" style="display:flex;align-items:center;gap:4px">'
         +'<div style="width:22px;height:22px;border-radius:50%;background:'+p.color+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">'+init+'</div>'
         +'</div>';
@@ -2386,19 +2387,21 @@ function renderStep1(){
       :`<div style="display:flex;flex-direction:column;gap:2px">
           <input class="fi" type="text" placeholder="Tap to enter name" value="" style="font-size:13px;width:100%" data-row="${i}" data-field="name" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'name');}" onblur="window.paxNameBlur(${oi},this.value)">
         </div>`;
-    // Group column: coloured pill (click-to-edit) when set, input otherwise
+    // Group column: coloured pill (click-to-edit) when set, 🏷️ button otherwise
     const groupCol=p.group?.trim()
       ?`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="padding:4px 10px;border-radius:20px;background:${gc};color:#fff;font-size:12px;font-weight:700;cursor:pointer;user-select:none;white-space:nowrap;width:fit-content;max-width:100%">${p.group}</div>`
-      :`<input class="fi" type="text" placeholder="Group" value="" style="font-size:13px" data-row="${i}" data-field="group" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'group');}" onblur="window.setPaxField(${oi},'group',this.value)">`;
-    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 48px 48px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${rowBg}">
+      :`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;background:var(--card2);border:1px solid var(--border2);cursor:pointer;font-size:11px;color:var(--text3);white-space:nowrap">🏷️</div>`;
+    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${rowBg}">
       <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-width:0">${acBtns}</div>
       <div style="display:flex;gap:2px;align-items:center;min-width:0">
         <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>
       </div>
       ${nameCol}
-      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">${groupCol}<div onclick="window.setPaxBagPrompt(${oi})" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;background:var(--card2);border:1px solid var(--border2);cursor:pointer;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap;margin-top:3px">🎒 ${p.bag?p.bag+'kg':'—'}</div></div>
-      <input class="fi" type="text" inputmode="decimal" placeholder="kg" value="${p.weight||''}" style="font-size:13px;-moz-appearance:textfield" data-row="${i}" data-field="weight" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'weight');}" onblur="window.setPaxField(${oi},'weight',this.value)">
-      <input class="fi" type="text" inputmode="decimal" placeholder="bag" value="${p.bag||''}" style="font-size:13px;-moz-appearance:textfield" data-row="${i}" data-field="bag" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'bag');}" onblur="window.setPaxField(${oi},'bag',this.value)">
+      <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+        ${groupCol}
+        <div id="wt-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'weight',this)" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;background:var(--card2);border:1px solid var(--border2);cursor:pointer;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap">⚖️ ${p.weight?p.weight+'kg':'—'}</div>
+        <div id="bag-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'bag',this)" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;background:var(--card2);border:1px solid var(--border2);cursor:pointer;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap">🎒 ${p.bag?p.bag+'kg':'—'}</div>
+      </div>
       <button tabindex="-1" class="icon-btn red" onclick="rmPax(${oi})" style="width:28px;height:28px;font-size:13px">✕</button>
     </div>`;
   });
@@ -2451,8 +2454,8 @@ function renderStep1(){
       ${(()=>{const nonInf=d.pax.filter(p=>!p.infant).length;return nonInf>totalSeats&&totalSeats>0?`<span style="color:#ef4444;font-weight:700">⚠ ${nonInf-totalSeats} over capacity</span>`:'';})()} 
     </div>
   </div>
-    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 48px 48px 28px;gap:5px;padding:4px 0 6px;border-bottom:2px solid var(--border);margin-bottom:2px">
-      ${['AC','TYPE','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
+    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 1fr 28px;gap:5px;padding:4px 0 6px;border-bottom:2px solid var(--border);margin-bottom:2px">
+      ${['AC','TYPE','NAME','INFO',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
     </div></div>
     ${paxRows}
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
@@ -2532,7 +2535,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,seatmapKey){
         const leftBorderCol=movedIn?(AC_COL[origAc]||col):col;
         // Filled: white bg + dark text. Empty: dark bg + light text. Crew: CSS handles.
         const seatStyle=isCrew?''
-          :p?('background:rgba(255,255,255,.93);border-left:4px solid '+leftBorderCol+';border-radius:8px')
+          :p?('background:rgba(255,255,255,'+(isSrcSel?'.97':'.93')+');'+(isSrcSel?'border:2px solid #ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.35);':'border-left:4px solid '+leftBorderCol+';')+'border-radius:8px')
           :'background:rgba(255,255,255,.05);border-radius:8px';
         // Text colour set per-seat based on background
         const textCol=p&&!isCrew?'color:#1a2035':'color:rgba(255,255,255,.7)';
@@ -2722,8 +2725,8 @@ function renderStep2(){
         const isSel=S.selectedPax===p.id;
         const wt=parseFloat(p.weight||0)+parseFloat(p.bag||0);
         const borderCol=p._pushedFrom?(AC_COL[p._pushedFrom]||gc||'#64748b'):gc||'#64748b';
-        const cardStyle=isSel?'background:rgba(255,255,255,.97);border:2px solid var(--acc);box-shadow:0 0 0 3px rgba(124,58,237,.3),0 2px 10px rgba(0,0,0,.25)':`background:rgba(255,255,255,.93);border-left:4px solid ${borderCol}`;
-        return`<div class="seat filled" style="${cardStyle};flex-shrink:0" onclick="event.stopPropagation();tapPax('${p.id}')" draggable="true" ondragstart="startDrag(event,'${p.id}','pool',null)">
+        const cardStyle=isSel?'background:rgba(255,255,255,.97);border:2px solid #ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.35),0 2px 10px rgba(0,0,0,.25)':`background:rgba(255,255,255,.93);border-left:4px solid ${borderCol}`;
+        return`<div class="seat filled" style="${cardStyle};flex-shrink:0" onclick="event.stopPropagation();tapPax('${p.id}')" draggable="true" ondragstart="startDrag(event,'${p.id}','pool',null)" ondragover="event.preventDefault();event.stopPropagation()" ondrop="event.stopPropagation();window.dropOnPoolPax('${p.id}',event)">
           ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
           ${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}
           ${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':''}
@@ -2758,7 +2761,15 @@ function renderStep2(){
   </div>`;
 }
 
-window.setPaxBagPrompt=function(i){const p=S.dispatch.pax[i];if(!p)return;const cur=p.bag||'';const w=window.prompt('Bag weight (kg):',cur);if(w!==null){setPaxField(i,'bag',w.trim());}};
+window.inlineEditPaxField=function(oi,field,el){
+  var cur=S.dispatch.pax[oi]?.[field]||'';
+  var inp=document.createElement('input');
+  inp.type='number';inp.inputMode='decimal';inp.value=cur;
+  inp.style.cssText='width:56px;font-size:11px;background:var(--card2);border:1px solid var(--acc);border-radius:6px;color:var(--text1);padding:2px 5px;outline:none;-moz-appearance:textfield';
+  inp.onblur=function(){setPaxField(oi,field,this.value.trim());};
+  inp.onkeydown=function(e){if(e.key==='Enter'||e.key==='Escape')this.blur();};
+  el.replaceWith(inp);inp.focus();inp.select();
+};
 
 function _fmtLsDate(iso){
   if(!iso) return '-';
@@ -2776,6 +2787,9 @@ function renderLoadsheet(){
   const cpOpts=`<option value="">None</option>`+pilotCrewList().filter(c=>c.n!==f.pic).map(c=>`<option value="${c.n}"${f.coPilot===c.n?' selected':''}>${c.n}</option>`).join('');
   const draftBanner=f.status==='unsigned'?`<div style="padding:9px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;margin-bottom:10px">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
   const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;render();}">Clear & Start Blank</button>`;
+  const _restoreTab=S.lsTabs?S.lsTabs.find(function(t){return t.id===S.activeTabId;}):null;
+  const _restoreBanner=(_restoreTab&&_restoreTab.originalForm)?`<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:#1c1400;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px"><span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">&#x21A9; Editing a saved loadsheet — restore original if you need to undo changes</span><button style="font-size:12px;padding:5px 12px;background:#ca8a04;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600" onclick="window.restoreLsOriginal()">Restore Original</button><button style="font-size:12px;padding:5px 8px;background:transparent;border:1px solid #ca8a04;color:#fde68a;border-radius:6px;cursor:pointer" onclick="window.dismissLsRestore()">&#x2715;</button></div>`:'';
+
 
   // Fuel display
   const fuelUnit_=a?fuelUnit(f.ac):'kg';
@@ -2867,9 +2881,8 @@ function renderLoadsheet(){
         </div>
         ${infantNm?`<div style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 20px">👶 ${infantNm}<button onclick="event.stopPropagation();window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7">×</button></div>`:''}
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-          <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:44px" onclick="event.stopPropagation()" onblur="lsS(${idx},this.value);window.lsCheckChildWt(${idx})">
-          <span style="font-size:9px;color:var(--text3)">kg</span>
-          <button onclick="event.stopPropagation();var w=window.prompt('Bag weight (kg):','${bg||''}');if(w!==null)lsB(${idx},w.trim())" style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:12px;border:1px solid var(--border2);background:${bg?'rgba(59,130,246,.12)':'transparent'};color:${bg?'#60a5fa':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">🎒 ${bg?bg+'kg':'—'}</button>
+          <button id="ls-wt-${idx}" onclick="event.stopPropagation();window.lsInlineWt(${idx},this)" style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:12px;border:1px solid var(--border2);background:${wt?'rgba(59,130,246,.12)':'transparent'};color:${wt?'#60a5fa':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">⚖️ ${wt?wt+'kg':'—'}</button>
+          <button id="ls-bag-${idx}" onclick="event.stopPropagation();window.lsInlineBag(${idx},this)" style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:12px;border:1px solid var(--border2);background:${bg?'rgba(59,130,246,.12)':'transparent'};color:${bg?'#60a5fa':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">🎒 ${bg?bg+'kg':'—'}</button>
           <div style="margin-left:auto;display:flex;gap:2px;align-items:center">
             <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'A')" style="padding:1px 5px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(74,222,128,.3)':'rgba(74,222,128,.8)'};background:${(f.paxType||{})[idx]==='C'?'transparent':'rgba(74,222,128,.2)'};color:#4ade80;font-size:9px;font-weight:700;cursor:pointer">A</button>
             <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'C')" style="padding:1px 5px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.8)':'rgba(251,146,60,.3)'};background:${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.2)':'transparent'};color:#fb923c;font-size:9px;font-weight:700;cursor:pointer">C</button>
@@ -3083,7 +3096,7 @@ function renderLoadsheet(){
       unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--acc)\'" ondragleave="event.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)"><div class="st">Passengers ('+ua.length+')</div>'+hint+'<div style="display:flex;flex-wrap:wrap;gap:6px;min-height:54px">'+cards+'</div></div>';
     }
   }
-  return`${draftBanner}${_overCapBanner}${clearBtn}
+  return`${_restoreBanner}${draftBanner}${_overCapBanner}${clearBtn}
   <div class="card" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};flex:1;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -3164,6 +3177,26 @@ window.lsTogglePayReq=function(idx){
   if(!f.paxPaymentReq)f.paxPaymentReq={};
   f.paxPaymentReq[idx]=!f.paxPaymentReq[idx];
   S.formDirty=true;autoSaveLS();safeRender();
+};
+window.lsInlineWt=function(idx,el){
+  var cur=S.form.seats[idx]||'';
+  var inp=document.createElement('input');
+  inp.type='number';inp.inputMode='decimal';inp.value=cur;
+  inp.style.cssText='width:52px;font-size:10px;background:var(--card2);border:1px solid var(--acc);border-radius:6px;color:var(--text1);padding:2px 5px;outline:none;-moz-appearance:textfield';
+  inp.onclick=function(e){e.stopPropagation();};
+  inp.onblur=function(){lsS(idx,this.value);window.lsCheckChildWt(idx);};
+  inp.onkeydown=function(e){if(e.key==='Enter'||e.key==='Escape')this.blur();};
+  el.replaceWith(inp);inp.focus();inp.select();
+};
+window.lsInlineBag=function(idx,el){
+  var cur=S.form.bags[idx]||'';
+  var inp=document.createElement('input');
+  inp.type='number';inp.inputMode='decimal';inp.value=cur;
+  inp.style.cssText='width:52px;font-size:10px;background:var(--card2);border:1px solid var(--acc);border-radius:6px;color:var(--text1);padding:2px 5px;outline:none;-moz-appearance:textfield';
+  inp.onclick=function(e){e.stopPropagation();};
+  inp.onblur=function(){lsB(idx,this.value);};
+  inp.onkeydown=function(e){if(e.key==='Enter'||e.key==='Escape')this.blur();};
+  el.replaceWith(inp);inp.focus();inp.select();
 };
 
 function renderSavedPadsList(){
@@ -3585,6 +3618,21 @@ function _lsRelTime(iso){
   var dd=d.getDate(),mm=d.getMonth()+1,yy=String(d.getFullYear()).slice(-2);
   return (dd<10?'0':'')+dd+'-'+(mm<10?'0':'')+mm+'-'+yy;
 }
+function _fmtFlightDate(iso){
+  if(!iso)return '?';
+  var d=new Date(iso+'T00:00:00');
+  var today=new Date();today.setHours(0,0,0,0);
+  var dd=new Date(iso+'T00:00:00');dd.setHours(0,0,0,0);
+  var diff=Math.round((today-dd)/86400000);
+  var mons=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  if(diff===0)return 'Today';
+  if(diff===1)return 'Yesterday';
+  if(diff>1&&diff<=6)return days[d.getDay()]+' '+d.getDate()+' '+mons[d.getMonth()];
+  if(diff===-1)return 'Tomorrow';
+  if(diff>=-6&&diff<0)return days[d.getDay()]+' '+d.getDate()+' '+mons[d.getMonth()];
+  return d.getDate()+' '+mons[d.getMonth()]+' '+d.getFullYear();
+}
 function renderSaved(){
   const tab=S.savedTab||'unsigned';
   const search=(S.savedSearch||'').toLowerCase();
@@ -3629,11 +3677,11 @@ function renderSaved(){
               +(s.form.pic?'<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">&#x2708; '+s.form.pic+'</span>':'')
               +(isSigned?'<span class="pill pill-green">&#x2713; Signed</span>':'<span class="pill" style="background:#0c1a3a;color:#93c5fd">UNSIGNED</span>')
               +'</div>'
-              +'<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">'+'<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">'+(s.form.date||'?')+'</span>'+(s.form.etd?'<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD '+s.form.etd+'</span>':'')+'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">'+_paxCnt+' PAX</span>'+(_savedStr?'<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved '+_savedStr+'</span>':'')+'</div>'
+              +'<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">'+'<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">'+_fmtFlightDate(s.form.date)+'</span>'+(s.form.etd?'<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD '+s.form.etd+'</span>':'')+'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">'+_paxCnt+' PAX</span>'+(_savedStr?'<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved '+_savedStr+'</span>':'')+'</div>'
               +'</div>'
               +'<div style="display:flex;gap:5px;flex-shrink:0">'
               +'<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" data-sid="'+s.id+'" onclick="editSaved(this.dataset.sid)">Open</button>'
-              +'<button class="btn btn-red" style="font-size:12px;padding:6px 10px" data-sid="'+s.id+'" onclick="delSaved(this.dataset.sid)">Delete</button>'
+              +'<button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" data-sid="'+s.id+'" onclick="delSaved(this.dataset.sid)" title="Delete">&#x1F5D1;</button>'
               +'</div></div>';
           }).join(''))
       :'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">No crew name linked to your account.</div>');
@@ -3650,7 +3698,7 @@ function renderSaved(){
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-ghost" style="font-size:12px" onclick="loadManifest('${m.id}')">Load</button>
-        <button class="btn btn-red" style="font-size:12px" onclick="deleteManifest('${m.id}')">Delete</button>
+        <button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" onclick="deleteManifest('${m.id}')" title="Delete">&#x1F5D1;</button>
       </div></div>`).join('')}`;
   }
 
@@ -3685,12 +3733,12 @@ function renderSaved(){
               ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
               <span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 UNSIGNED</span>
             </div>
-            <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${s.form.date||'?'}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span>${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}</div>
+            <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span>${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}</div>
           </div>
           <div style="display:flex;gap:5px;flex-shrink:0">
             <button class="btn btn-sky" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>
             <button class="btn" style="font-size:12px;padding:6px 10px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;cursor:pointer;color:var(--text2)" onclick="window.duplicateSaved('${s.id}')">&#x2398; Dup</button>
-            <button class="btn btn-red" style="font-size:12px;padding:6px 10px" onclick="delSaved('${s.id}')">Delete</button>
+            <button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" onclick="delSaved('${s.id}')" title="Delete">&#x1F5D1;</button>
           </div></div>`;
       }).join('')}`;
   }
@@ -3757,14 +3805,14 @@ function renderSaved(){
             ${isSigned?(s.driveUploaded?'<span class="pill pill-green" style="font-size:10px">☁ Drive ✓</span>':'<span class="pill" style="background:rgba(100,116,139,.12);border:1px solid var(--border2);color:var(--text3);font-size:10px">☁ Not uploaded</span>'):''}
 
           </div>
-          <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${s.form.date||'?'}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span>${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}</div>
+          <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span>${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}</div>
         </div>
         <div style="display:flex;gap:5px;flex-shrink:0">
           ${isSigned?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${s.id}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${s.id}')">&#x21BA; Reopen</button>`:`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>`}
           ${isSigned&&(S.gdriveEnabled||S.gdriveClientId)?`<button class="btn" title="${s.driveUploaded?'Re-upload to Drive':'Upload to Drive'}" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${s.id}')">&#x2601;</button>`:''}
           <button class="btn" title="Print" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer" onclick="window.printSingleSheet('${s.id}')">&#x1F5A8;</button>
           <button class="btn" title="Duplicate" style="font-size:12px;padding:5px 9px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer" onclick="window.duplicateSaved('${s.id}')">&#x2398; Dup</button>
-          <button class="btn btn-red" style="font-size:12px;padding:6px 10px" onclick="delSaved('${s.id}')">Delete</button>
+          <button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" onclick="delSaved('${s.id}')" title="Delete">&#x1F5D1;</button>
         </div></div>`;
     }).join('')}`;
 }
@@ -4419,7 +4467,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10
       +'<div style="font-size:11px;color:var(--text3);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
       +(role?'<span style="color:'+(roleColour[role]||'#64748b')+';font-weight:600">'+role+'</span>':'')
       +(email?'<span>'+email+'</span>':'')
-      +(endorses.length?endorses.filter(function(e){return e.startsWith('ZK-');}).map(function(e){var ec=AC_COL[e]||'#64748b';return'<span style="padding:1px 7px;border-radius:12px;background:'+ec+'22;border:1px solid '+ec+'55;color:'+ec+';font-size:9px;font-weight:700">'+e.replace('ZK-','')+'</span>';}).join('')+(endorses.filter(function(e){return!e.startsWith('ZK-');}).length?'<span style="font-size:11px;color:var(--text3)">'+endorses.filter(function(e){return!e.startsWith('ZK-');}).join(' · ')+'</span>':''):'')
+      +(endorses.length?endorses.filter(function(e){return e.startsWith('ZK-');}).map(function(e){var ec=AC_COL[e]||'#64748b';return'<span style="padding:1px 7px;border-radius:12px;background:'+ec+'22;border:1px solid '+ec+'55;color:'+ec+';font-size:9px;font-weight:700">'+e.replace('ZK-','')+'</span>';}).join(''):'')
       +(caaNum?'<span>CAA '+caaNum+'</span>':'')
       +'</div>'
       +(pills?'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">'+pills+'</div>':'')
@@ -4856,6 +4904,21 @@ window.dropOnPool=(ev,forceAc)=>{
   const{fromAc,fromSeat}=S.dragState;
   if(fromAc&&fromAc!=='pool'&&fromSeat!=null){const sm=S.dispatch.seatMap;if(sm[fromAc])delete sm[fromAc][fromSeat];}
   S.dragState=null;S.selectedPax=null;runSolver();autoSaveDispatch();render();
+};
+window.dropOnPoolPax=function(targetPaxId,ev){
+  ev.preventDefault();ev.stopPropagation();
+  if(!S.dragState)return;
+  const{pid,fromAc,fromSeat}=S.dragState;
+  if(!pid||pid===targetPaxId||!S.dispatch)return;
+  const sm=S.dispatch.seatMap||{};
+  if(fromAc&&fromAc!=='pool'&&fromSeat!=null){
+    // Seat pax dragged onto pool pax: put pool pax into source seat (swap)
+    if(!sm[fromAc])sm[fromAc]={};
+    sm[fromAc][fromSeat]=targetPaxId;
+  }
+  S.dragState=null;S.selectedPax=null;
+  S.solverAutoApply=false;runSolver();S.solverAutoApply=true;
+  autoSaveDispatch();render();
 };
 
 // Loadsheet form seat map drag
@@ -5344,6 +5407,9 @@ window.saveUnsigned=async()=>{
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'unsigned'};
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);
   S.editId=id;S.formDirty=false;
+  // Clear originalForm — user deliberately saved, so restore banner no longer needed
+  var _savingTab=S.lsTabs.find(function(t){return t.id===id;});
+  if(_savingTab)delete _savingTab.originalForm;
   lsSet('ts_loadsheets_cache',S.saved);
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned'}]);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
@@ -5370,6 +5436,8 @@ window.handleSubmit=async()=>{
   const id=S.editId||('ls_'+Date.now());
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'complete'};
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);lsSet('ts_loadsheets_cache',S.saved);
+  var _submitTab=S.lsTabs.find(function(t){return t.id===id;});
+  if(_submitTab)delete _submitTab.originalForm;
   // Google Drive upload happens via nightly scheduler only
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
@@ -5587,10 +5655,26 @@ window.editSaved=function(id){
   var s=S.saved.find(function(x){return x.id===id;});
   if(!s)return;
   var acFull=s.form&&s.form.ac?s.form.ac:'ZK-SLA';
-  S.lsTabs.push({id:s.id,acId:acFull,form:dc(s.form),status:s.status||'unsigned',savedAt:s.savedAt});
+  S.lsTabs.push({id:s.id,acId:acFull,form:dc(s.form),status:s.status||'unsigned',savedAt:s.savedAt,originalForm:dc(s.form)});
   window.switchLsTab(s.id);
 };
 window.delSaved=async id=>{if(!confirm('Delete this loadsheet?'))return;S.saved=S.saved.filter(s=>s.id!==id);lsSet('ts_loadsheets_cache',S.saved);render();await sbDel('ts_loadsheets',id);};
+window.restoreLsOriginal=function(){
+  if(!confirm('Restore to the version loaded from saved? Any unsaved edits will be lost.'))return;
+  var tab=S.lsTabs.find(function(t){return t.id===S.activeTabId;});
+  if(!tab||!tab.originalForm)return;
+  tab.form=dc(tab.originalForm);
+  S.form=tab.form;
+  delete tab.originalForm;
+  clearTimeout(_autoSaveLSTimer);
+  autoSaveLS(); // push the restored version to DB
+  render();
+};
+window.dismissLsRestore=function(){
+  var tab=S.lsTabs.find(function(t){return t.id===S.activeTabId;});
+  if(tab)delete tab.originalForm;
+  render();
+};
 
 // ── Charter ──
 // -- Pad (Scratchpad) management --
