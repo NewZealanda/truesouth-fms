@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.19';
+const APP_VER='v22.20';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -378,7 +378,7 @@ function calcAcWB(acId,paxList,fuelKgOverride){
   const sm=S.dispatch.seatMap[acId]||{};
   paxSeatIdxs(acId).forEach(i=>{const p=sm[i]?paxById(sm[i]):null;if(p){const w=parseFloat(p.weight||0)+parseFloat(p.bag||0);wt+=w;mom+=w*a.seats[i].arm;}});
   const fW=fuelKgOverride!=null?fuelKgOverride:fuelKgForSetup(acId);
-  wt+=fW;mom+=fW*a.fuelArm;wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
+  wt+=fW;mom+=fW*a.fuelArm;const _gndBurn=parseFloat(form.gndBurn!=null?form.gndBurn:a.gndBurn)||0;wt-=_gndBurn;mom-=_gndBurn*a.fuelArm;
   const tow=wt,cog=mom/wt,burnKg=burnToKg(a.burnDef,acId);
   wt-=burnKg;mom-=burnKg*a.fuelArm;
   return{tow,cog,lw:wt,lwCog:mom/wt,
@@ -394,7 +394,7 @@ function calcFormWB(form){
   const cpW=form.coPilot?(parseFloat(form.seats[1]||0))+(parseFloat(form.bags[1]||0)):0;
   let wt=a.ew+cW,mom=a.em+cW*a.seats[0].arm,pW=0;
   for(let i=1;i<a.seats.length;i++){const w=(parseFloat(form.seats[i]||0))+(parseFloat(form.bags[i]||0));if(i===1&&form.coPilot){/* crew */}else{pW+=w;}wt+=w;mom+=w*a.seats[i].arm;}
-  let cg=0;for(let i=0;i<a.cargo.length;i++){const w=parseFloat(form.cargo[i]||0);cg+=w;wt+=w;mom+=w*a.cargo[i].arm;}
+  let cg=0;for(let i=0;i<a.cargo.length;i++){const w=parseFloat((form.cargo&&form.cargo[i])||0);cg+=w;wt+=w;mom+=w*a.cargo[i].arm;}
   const zfw=wt,fW=parseFloat(form.fuel||a.fuelKg);wt+=fW;mom+=fW*a.fuelArm;const rW=wt;
   wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
   const tow=wt,towCog=mom/wt;
@@ -955,7 +955,7 @@ function runSolver(){
 
 // ── State ──
 function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
-function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},fuel:'',burnOff:'',_unallocated:[],paxType:{},paxGroups:{},sig:null};}
+function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',_unallocated:[],paxType:{},paxGroups:{},sig:null};}
 function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
 let S={
@@ -2380,7 +2380,7 @@ function renderStep1(){
         <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>
       </div>
       ${nameCol}
-      <div style="display:flex;flex-direction:row;gap:4px;align-items:center;flex-wrap:wrap;min-width:0">
+      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
         ${groupCol}
         <div id="wt-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'weight',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">⚖️ ${p.weight?p.weight+'kg':'—'}</div>
         <div id="bag-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'bag',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">🎒 ${p.bag?p.bag+'kg':'—'}</div>
@@ -2856,7 +2856,7 @@ function renderLsSeatGrid(f,a){
     seatsCol+='<div style="height:4px"></div>';
     var shelfW=(sW*2)+8;
     a.cargo.forEach(function(zn,zi){
-      var w=f.cargo[zi]||'';
+      var w=(f.cargo&&f.cargo[zi])||'';
       seatsCol+='<div style="width:'+shelfW+'px;background:rgba(59,130,246,.10);border:1px dashed rgba(59,130,246,.40);border-radius:8px;padding:5px 10px;display:flex;align-items:center;gap:8px">'
         +'<div style="font-size:9px;font-weight:700;color:#60a5fa;text-transform:uppercase;letter-spacing:.05em;flex-shrink:0">'+zn.lbl+'</div>'
         +'<input class="fi ls-no-spin" type="number" placeholder="0" value="'+w+'" style="font-size:13px;font-weight:700;width:50px;padding:1px 4px;background:transparent;border:none;color:var(--text)" onblur="lsC('+zi+',this.value)">'
@@ -2874,7 +2874,7 @@ function renderLsSeatGrid(f,a){
     var colW=isMob?60:76;
     var podCol='<div style="display:flex;flex-direction:column;gap:6px;justify-content:space-between;align-self:stretch;min-width:'+colW+'px;margin-top:4px">';
     a.cargo.forEach(function(zn,zi){
-      var w=f.cargo[zi]||'';
+      var w=(f.cargo&&f.cargo[zi])||'';
       podCol+='<div style="flex:1;background:'+podColors[zi%4]+';border:1px solid '+podBorders[zi%4]+';border-radius:8px;padding:5px 7px;display:flex;flex-direction:column;justify-content:center">'
         +'<div style="font-size:8px;font-weight:700;color:'+podTextColors[zi%4]+';text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">'+zn.lbl.replace('Pod Zone ','Z')+'</div>'
         +'<div style="display:flex;align-items:baseline;gap:2px">'
@@ -3006,8 +3006,6 @@ function renderLoadsheet(){
   const cpOpts=`<option value="">None</option>`+pilotCrewList().filter(c=>c.n!==f.pic).map(c=>`<option value="${c.n}"${f.coPilot===c.n?' selected':''}>${c.n}</option>`).join('');
   const draftBanner=f.status==='unsigned'?`<div style="padding:9px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;margin-bottom:10px">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
   const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;render();}">Clear & Start Blank</button>`;
-  const _restoreTab=S.lsTabs?S.lsTabs.find(function(t){return t.id===S.activeTabId;}):null;
-  const _restoreBanner=(_restoreTab&&_restoreTab.originalForm&&f.status!=='complete')?`<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:#1c1400;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px"><span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">&#x21A9; Editing a saved loadsheet — restore original if you need to undo changes</span><button style="font-size:12px;padding:5px 12px;background:#ca8a04;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600" onclick="window.restoreLsOriginal()">Restore Original</button><button style="font-size:12px;padding:5px 8px;background:transparent;border:1px solid #ca8a04;color:#fde68a;border-radius:6px;cursor:pointer" onclick="window.dismissLsRestore()">&#x2715;</button></div>`:'';
 
 
   // Fuel display
@@ -3021,7 +3019,7 @@ function renderLoadsheet(){
   const burnKgVal=f.burnOff?burnToKg(f.burnOff,f.ac):burnToKg(a?.burnDef||0,f.ac);
 
   // ── Unified Seats section (SVG seatmap + editable cards) ──
-  let seatsH='',cargoH='',fuelH='',calcH='',sigH='',unallocH='',isPod=false;
+  let seatsH='',cargoH='',fuelH='',loadingH='',calcH='',sigH='',unallocH='',isPod=false;
   if(a){
     const cW=parseFloat(f.seats[0]||0);
     const picMom=(cW*(a.seats[0]?.arm||0)).toFixed(0);
@@ -3129,6 +3127,13 @@ function renderLoadsheet(){
       </div>
     </div>`;
 
+    // -- Compute ground burn (use form override if set)
+    const gndBurnKg=parseFloat(f.gndBurn!=null?f.gndBurn:a.gndBurn)||0;
+    const gndBurnDisplay=String(Math.round(fromKg(gndBurnKg,f.ac)));
+    const fuelRemKg=fuelKgVal-gndBurnKg-burnKgVal;
+    const flightMin=a?.layout==='ga8'?(parseFloat(burnVal||a?.burnDef||35)/58*60).toFixed(0):(burnKgVal/136.1*60).toFixed(0);
+    // -- Build cargo section
+    let cargoSection='';
     if(isPod){
       const nz=a.cargo.length;
       const zoneW=Math.floor(100/nz);
@@ -3146,8 +3151,8 @@ function renderLoadsheet(){
         <text x="84%" y="18%" font-size="8" fill="rgba(255,255,255,.3)">REAR</text>
       </svg>`;
       const zoneBoxes=a.cargo.map((zn,zi)=>{
-        const w=f.cargo[zi]||'';
-        return`<div style="background:${podColors[zi%4]};border:1px solid ${podBorders[zi%4]};border-radius:10px;padding:10px 12px">
+        const w=(f.cargo&&f.cargo[zi])||'';
+        return`<div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:${podColors[zi%4]};border:1px solid ${podBorders[zi%4]};border-radius:10px;padding:10px 12px">
           <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:${podTextColors[zi%4]};text-transform:uppercase;margin-bottom:6px">${zn.lbl}${zn.maxKg?' · max '+zn.maxKg+'kg':''}</div>
           <div style="display:flex;align-items:baseline;gap:5px">
             <input class="fi ls-no-spin" type="number" placeholder="0" value="${w}" style="font-size:20px;font-weight:800;width:70px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
@@ -3156,63 +3161,68 @@ function renderLoadsheet(){
           <div style="font-size:11px;color:${podTextColors[zi%4]};margin-top:4px">${w?'mom '+(((parseFloat(w)||0)*zn.arm).toFixed(0)):''}</div>
         </div>`;
       }).join('');
-      cargoH=`<div class="card" id="lsf-cargo" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};display:flex;flex-direction:column"><div class="st">Cargo Pod Zones</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1">${zoneBoxes}</div>
-      </div>`;
+      cargoSection=`${fusSVG}<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">${zoneBoxes}</div>`;
     } else if(a.cargo&&a.cargo.length){
       // Non-pod cargo (e.g. Airvan baggage shelf)
       const shelfBoxes=a.cargo.map(function(zn,zi){
-        const w=f.cargo[zi]||'';
-        return`<div style="background:rgba(59,130,246,.10);border:1px solid rgba(59,130,246,.30);border-radius:10px;padding:10px 12px">
-          <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:6px">${zn.lbl}${zn.maxKg?' · max '+zn.maxKg+'kg':''}</div>
+        const w=(f.cargo&&f.cargo[zi])||'';
+        const wNum=parseFloat(w)||0;
+        const overLimit=!!(zn.maxKg&&wNum>zn.maxKg);
+        const lc=overLimit?'#ef4444':'#60a5fa';
+        const bg=overLimit?'rgba(239,68,68,.12)':'rgba(59,130,246,.10)';
+        const bdr=overLimit?'rgba(239,68,68,.45)':'rgba(59,130,246,.30)';
+        return`<div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:${bg};border:1px solid ${bdr};border-radius:10px;padding:10px 12px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:${lc};text-transform:uppercase;margin-bottom:6px">${zn.lbl}${zn.maxKg?' · max '+zn.maxKg+'kg':''}${overLimit?' ⚠ OVER':''}</div>
           <div style="display:flex;align-items:baseline;gap:5px">
-            <input class="fi ls-no-spin" type="number" placeholder="0" value="${w}" style="font-size:20px;font-weight:800;width:70px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
-            <span style="font-size:12px;color:#60a5fa">kg</span>
+            <input class="fi ls-no-spin" type="number" placeholder="0" value="${w}" style="font-size:20px;font-weight:800;width:70px;padding:0;background:transparent;border:none;color:${overLimit?'#ef4444':'var(--text)'}" onblur="lsC(${zi},this.value)">
+            <span style="font-size:12px;color:${lc}">kg</span>
           </div>
-          ${w?`<div style="font-size:11px;color:#60a5fa;margin-top:4px">mom ${((parseFloat(w)||0)*zn.arm).toFixed(0)}</div>`:''}
+          ${w?`<div style="font-size:11px;color:${lc};margin-top:4px">mom ${((parseFloat(w)||0)*zn.arm).toFixed(0)}</div>`:''}
         </div>`;
       }).join('');
-      cargoH=`<div class="card" id="lsf-cargo" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st">Cargo / Baggage</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">${shelfBoxes}</div>
-      </div>`;
-    } else {
-      cargoH='';
+      cargoSection=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:12px">${shelfBoxes}</div>`;
     }
-
-    const fuelRemKg=fuelKgVal-a.gndBurn-burnKgVal;
-    const flightMin=a?.layout==='ga8'?(parseFloat(burnVal||a?.burnDef||35)/58*60).toFixed(0):(burnKgVal/136.1*60).toFixed(0);
-    const fuelDestLbl=a?.layout==='ga8'
-      ?`${(fuelRemKg/AVGAS).toFixed(0)}L (${fuelRemKg.toFixed(0)}kg) remaining`
-      :`${(fuelRemKg/LB).toFixed(0)} lbs remaining`;
-    fuelH=`<div class="card" id="lsf-fuel" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};display:flex;flex-direction:column"><div class="st">Fuel & Burn</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1">
-      <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:8px;padding:8px 10px">
-        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:4px">Fuel Loaded</div>
-        <div style="display:flex;align-items:baseline;gap:4px">
-          <input class="fi ls-no-spin" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsFuel(this.value,'${f.ac}')">
-          <span style="font-size:11px;color:#60a5fa">${fuelUnit_}</span>
+    // -- 5 stacked fuel boxes
+    const _lwDisplay=r?r.lw.toFixed(1):null;
+    loadingH=`<div class="card" id="lsf-loading" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};display:flex;flex-direction:column"><div class="st">Loading &#x2013; Passengers, Cargo and Fuel</div>
+      ${cargoSection}
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:8px;padding:8px 10px">
+          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:4px">Fuel Loaded</div>
+          <div style="display:flex;align-items:baseline;gap:4px">
+            <input class="fi ls-no-spin" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsFuel(this.value,'${f.ac}')">
+            <span style="font-size:11px;color:#60a5fa">${fuelUnit_}</span>
+          </div>
+          <div style="font-size:10px;color:#60a5fa;margin-top:2px">${fuelKgVal.toFixed(1)} kg</div>
         </div>
-        <div style="font-size:10px;color:#60a5fa;margin-top:2px">${fuelKgVal.toFixed(1)} kg</div>
-      </div>
-      <div style="background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30);border-radius:8px;padding:8px 10px">
-        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f59e0b;text-transform:uppercase;margin-bottom:4px">Gnd Burn</div>
-        <div style="font-size:16px;font-weight:800;color:var(--text)">${a.gndBurn}</div>
-        <div style="font-size:10px;color:#f59e0b;margin-top:2px">kg</div>
-      </div>
-      <div style="background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.30);border-radius:8px;padding:8px 10px">
-        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f87171;text-transform:uppercase;margin-bottom:4px">Flt Burn</div>
-        <div style="display:flex;align-items:baseline;gap:4px">
-          <input class="fi ls-no-spin" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
-          <span style="font-size:11px;color:#f87171">${a?.layout==='ga8'?'L':burnUnit_}</span>
+        <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30);border-radius:8px;padding:8px 10px">
+          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f59e0b;text-transform:uppercase;margin-bottom:4px">Gnd Burn</div>
+          <div style="display:flex;align-items:baseline;gap:4px">
+            <input class="fi ls-no-spin" type="number" placeholder="${gndBurnDisplay}" value="${gndBurnDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsGndBurn(this.value,'${f.ac}')">
+            <span style="font-size:11px;color:#f59e0b">${fuelUnit_}</span>
+          </div>
+          <div style="font-size:10px;color:#f59e0b;margin-top:2px">${gndBurnKg.toFixed(1)} kg</div>
         </div>
-        <div style="font-size:10px;color:#f87171;margin-top:2px">≈ ${flightMin} min</div>
+        <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.30);border-radius:8px;padding:8px 10px">
+          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f87171;text-transform:uppercase;margin-bottom:4px">Flt Burn</div>
+          <div style="display:flex;align-items:baseline;gap:4px">
+            <input class="fi ls-no-spin" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
+            <span style="font-size:11px;color:#f87171">${a?.layout==='ga8'?'L':burnUnit_}</span>
+          </div>
+          <div style="font-size:10px;color:#f87171;margin-top:2px">&#x2248; ${flightMin} min</div>
+        </div>
+        <div style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:8px;padding:8px 10px">
+          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:4px">@ Dest</div>
+          <div style="font-size:16px;font-weight:800;color:var(--text)">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
+          <div style="font-size:10px;color:#4ade80;margin-top:2px">${a?.layout==='ga8'?'litres':'lbs'}</div>
+        </div>
+        ${_lwDisplay!==null?`<div style="background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.30);border-radius:8px;padding:8px 10px">
+          <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#c084fc;text-transform:uppercase;margin-bottom:4px">Landing Weight</div>
+          <div style="font-size:16px;font-weight:800;color:${r.lwOk?'var(--text)':'#f87171'}">${_lwDisplay}</div>
+          <div style="font-size:10px;color:#c084fc;margin-top:2px">kg (max ${r.mlw})</div>
+        </div>`:''}
       </div>
-      <div style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:8px;padding:8px 10px">
-        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:4px">@ Dest</div>
-        <div style="font-size:16px;font-weight:800;color:var(--text)">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
-        <div style="font-size:10px;color:#4ade80;margin-top:2px">${a?.layout==='ga8'?'litres':'lbs'}</div>
-      </div>
-    </div></div>`;
+    </div>`;
 
     if(r){
       const _wbSec=[
@@ -3328,7 +3338,7 @@ function renderLoadsheet(){
       unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--acc)\'" ondragleave="event.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)"><div class="st">Passengers ('+ua.length+')</div>'+hint+'<div style="display:flex;flex-wrap:wrap;gap:6px;min-height:54px">'+cards+'</div></div>';
     }
   }
-  return`${_restoreBanner}${draftBanner}${_overCapBanner}${clearBtn}
+  return`${draftBanner}${_overCapBanner}${clearBtn}
   <div class="card" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'};flex:1;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -3374,7 +3384,7 @@ function renderLoadsheet(){
       </div>
     </div>
   </div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px;border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
-  ${seatsH}${unallocH}${(a&&fuelH&&calcH)?`<div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">${isPod&&cargoH?`<div style="flex:1;min-width:220px;display:flex;flex-direction:column">${cargoH}</div>`:''}${fuelH?`<div style="flex:1;min-width:220px;display:flex;flex-direction:column">${fuelH}</div>`:''}${calcH?`<div style="flex:2;min-width:280px;display:flex;flex-direction:column">${calcH}</div>`:''}</div>`:(a?((isPod?cargoH:'')+fuelH):'')+calcH}${sigH}`;
+  ${seatsH}${unallocH}${(a&&loadingH&&calcH)?`<div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap"><div style="flex:1;min-width:240px;display:flex;flex-direction:column">${loadingH}</div><div style="flex:2;min-width:280px;display:flex;flex-direction:column">${calcH}</div></div>`:(a?loadingH:'')+calcH}${sigH}`;
 }
 window.lsCheckChildWt=function(idx){
   const f=S.form;if(!f)return;
@@ -3961,9 +3971,10 @@ function renderSaved(){
               +(s.form.pic?'<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">&#x2708; '+s.form.pic+'</span>':'')
               +(isSigned?'<span class="pill pill-green">&#x2713; Signed</span>':'<span class="pill" style="background:#0c1a3a;color:#93c5fd">UNSIGNED</span>')
               +'</div>'
-              +'<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">'+'<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">'+_fmtFlightDate(s.form.date)+'</span>'+(s.form.etd?'<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD '+s.form.etd+'</span>':'')+'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">'+_paxCnt+' PAX</span>'+(_savedStr?'<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved '+_savedStr+'</span>':'')+'</div>'
+              +'<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">'+'<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">'+_fmtFlightDate(s.form.date)+'</span>'+(s.form.etd?'<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD '+s.form.etd+'</span>':'')+'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">'+_paxCnt+' PAX</span>'+'</div>'
               +'</div>'
-              +'<div style="display:flex;gap:5px;flex-shrink:0">'
+              +'<div style="display:flex;gap:5px;flex-shrink:0;align-items:center">'
+              +(_savedStr?'<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved '+_savedStr+'</span>':'')
               +'<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" data-sid="'+s.id+'" onclick="editSaved(this.dataset.sid)">Open</button>'
               +'<button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" data-sid="'+s.id+'" onclick="delSaved(this.dataset.sid)" title="Delete">&#x1F5D1;</button>'
               +'</div></div>';
@@ -4020,9 +4031,10 @@ function renderSaved(){
               ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
               <span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 UNSIGNED</span>
             </div>
-            <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span>${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}</div>
+            <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span></div>
           </div>
-          <div style="display:flex;gap:5px;flex-shrink:0">
+          <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
+            ${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}
             <button class="btn btn-sky" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>
             <button class="btn" style="font-size:12px;padding:6px 10px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;cursor:pointer;color:var(--text2)" onclick="window.duplicateSaved('${s.id}')">&#x2398; Dup</button>
             <button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" onclick="delSaved('${s.id}')" title="Delete">&#x1F5D1;</button>
@@ -4091,9 +4103,10 @@ function renderSaved(){
             ${isSigned?(s.driveUploaded?'<span class="pill pill-green" style="font-size:10px">☁ Drive ✓</span>':'<span class="pill" style="background:rgba(100,116,139,.12);border:1px solid var(--border2);color:var(--text3);font-size:10px">☁ Not uploaded</span>'):''}
 
           </div>
-          <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span>${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}</div>
+          <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span></div>
         </div>
-        <div style="display:flex;gap:5px;flex-shrink:0">
+        <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
+          ${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}
           ${isSigned?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${s.id}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${s.id}')">&#x21BA; Reopen</button>`:`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>`}
           ${isSigned&&(S.gdriveEnabled||S.gdriveClientId)?`<button class="btn" title="${s.driveUploaded?'Re-upload to Drive':'Upload to Drive'}" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${s.id}')">&#x2601;</button>`:''}
           <button class="btn" title="Print" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer" onclick="window.printSingleSheet('${s.id}')">&#x1F5A8;</button>
@@ -5683,6 +5696,7 @@ window.lsGrp=function(idx,val){
 window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;setTimeout(_lsSafeRender,150);};window.lsB=(i,v)=>{S.form.bags[i]=v;setTimeout(_lsSafeRender,150);};window.lsC=(i,v)=>{S.form.cargo[i]=v;setTimeout(_lsSafeRender,150);};
 window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));setTimeout(_lsSafeRender,150);};
 window.lsBurn=(v,acId)=>{S.form.burnOff=v;setTimeout(_lsSafeRender,150);};
+window.lsGndBurn=(v,acId)=>{const n=parseFloat(v);S.form.gndBurn=isNaN(n)?null:String(toKg(n,acId));setTimeout(_lsSafeRender,150);};
 window.clearSig=()=>{S.form.sig=null;S.sigTypedName='';autoSaveLS();render();};
 
 // Apply typed name as a signature
