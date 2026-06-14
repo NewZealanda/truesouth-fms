@@ -323,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.07';
+const APP_VER='v22.11';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1740,13 +1740,11 @@ function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.
 
 // ── Pilot list: S.crew + any pilot/admin users without a linked crew record ──
 function pilotCrewList(){
-  // Return all crew who hold at least one type rating (GA8 or C208B).
-  // Weight falls back to linked user account if crew record lacks it.
-  const TYPES=['GA8','C208B'];
+  // Return all crew who hold at least one aircraft approval (ZK-xxx).
   const list=[];
   S.crew.forEach(function(cr){
     const endorse=cr.endorse||[];
-    if(!endorse.some(function(e){return TYPES.includes(e);})) return;
+    if(!endorse.some(function(e){return e.startsWith('ZK-');})) return;
     const crn=(cr.n||'').trim().toLowerCase();
     const lu=(S.users||[]).find(function(u){
       const lc=(u.linkedCrew||'').trim().toLowerCase();
@@ -2255,9 +2253,9 @@ function renderOperations(){
         tabsH+='<input type="checkbox" '+(isSel?'checked':'')+' onchange="window.toggleLsTabSel(\''+tab.id+'\')" style="cursor:pointer">';
         tabsH+=acCode+'</label>';
       } else {
-        tabsH+='<div style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1px solid '+(isActive?col:'var(--border)')+';flex-shrink:0">';
-        tabsH+='<button onclick="window.switchLsTab(\''+tab.id+'\')" style="padding:5px 10px;font-size:12px;font-weight:700;background:'+(isActive?col+'33':'var(--card2)')+';border:none;cursor:pointer;color:'+(isActive?col:'var(--text2)')+';white-space:nowrap">'+acCode+(signed?' &#x2713;':'')+'</button>';
-        tabsH+='<button onclick="window.closeLsTab(\''+tab.id+'\')" style="padding:5px 7px;font-size:14px;line-height:1;background:'+(isActive?col+'22':'var(--card2)')+';border:none;border-left:1px solid '+(isActive?col+'44':'var(--border)')+';cursor:pointer;color:'+(isActive?col:'var(--text3)')+'" title="Close">&#xd7;</button>';
+        tabsH+='<div style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1.5px solid '+(isActive?col:col+'55')+';flex-shrink:0">';
+        tabsH+='<button onclick="window.switchLsTab(\''+tab.id+'\')" style="padding:5px 10px;font-size:12px;font-weight:700;background:'+(isActive?col+'55':col+'18')+';border:none;cursor:pointer;color:'+(isActive?col:col+'cc')+';white-space:nowrap">'+acCode+(signed?' &#x2713;':'')+'</button>';
+        tabsH+='<button onclick="window.closeLsTab(\''+tab.id+'\')" style="padding:5px 7px;font-size:14px;line-height:1;background:'+(isActive?col+'33':col+'0f')+';border:none;border-left:1px solid '+(isActive?col:col+'44')+';cursor:pointer;color:'+(isActive?col:col+'99')+'" title="Close">&#xd7;</button>';
         tabsH+='</div>';
       }
     });
@@ -2345,7 +2343,7 @@ function renderStep1(){
           <div><label>PIC</label>
             <select tabindex="-1" class="fi" onchange="setAcField('${a.id}','pic',this.value)">
               <option value="">— select PIC —</option>
-              ${pilotCrewList().filter(c=>{const ac=S.aircraft[a.id];if(!ac)return true;const t=ac.layout==='c208'?'C208B':'GA8';return(c.endorse||[]).includes(t);}).slice().sort((a,b)=>a.n.localeCompare(b.n)).map(c=>`<option value="${c.n}"${setup.pic===c.n?' selected':''}>${c.n} (${c.w}kg)</option>`).join('')}
+              ${pilotCrewList().filter(c=>(c.endorse||[]).includes(a.id)).slice().sort((a,b)=>a.n.localeCompare(b.n)).map(c=>`<option value="${c.n}"${setup.pic===c.n?' selected':''}>${c.n} (${c.w}kg)</option>`).join('')}
             </select></div>
           <div><label>Co-Pilot (optional)</label>
             <select tabindex="-1" class="fi" onchange="setAcField('${a.id}','coPilot',this.value)">
@@ -2398,7 +2396,7 @@ function renderStep1(){
         <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>
       </div>
       ${nameCol}
-      ${groupCol}
+      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">${groupCol}<div onclick="window.setPaxBagPrompt(${oi})" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;background:var(--card2);border:1px solid var(--border2);cursor:pointer;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap;margin-top:3px">🎒 ${p.bag?p.bag+'kg':'—'}</div></div>
       <input class="fi" type="text" inputmode="decimal" placeholder="kg" value="${p.weight||''}" style="font-size:13px;-moz-appearance:textfield" data-row="${i}" data-field="weight" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'weight');}" onblur="window.setPaxField(${oi},'weight',this.value)">
       <input class="fi" type="text" inputmode="decimal" placeholder="bag" value="${p.bag||''}" style="font-size:13px;-moz-appearance:textfield" data-row="${i}" data-field="bag" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'bag');}" onblur="window.setPaxField(${oi},'bag',this.value)">
       <button tabindex="-1" class="icon-btn red" onclick="rmPax(${oi})" style="width:28px;height:28px;font-size:13px">✕</button>
@@ -2434,8 +2432,8 @@ function renderStep1(){
         <div style="font-size:13px;font-weight:600;color:var(--text1)">${_fmtLsDate(d.date)}</div>
         <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" onclick="event.stopPropagation()" style="position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;border:none;background:transparent">
       </div>
-      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">ETD</div>
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">ETD</div>
         ${etdSelect(d.etd,d.date,"dispatch")}
       </div>
     </div>
@@ -2546,7 +2544,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,seatmapKey){
           <span class="seat-lbl" style="${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
-            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:3px;padding:0 3px;line-height:1.4">C</div>':''}${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}${p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.25);color:#f472b6;border-radius:3px;padding:0 3px;line-height:1.4">i</div>':''}<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
+            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':''}${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}${p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':''}<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
         </div>`;
       }
     });
@@ -2693,14 +2691,18 @@ function renderStep2(){
     const paxCount=paxSeatIdxs(id).filter(i=>(d.seatMap[smKey]||{})[i]).length;
     const paxTotal=paxSeatIdxs(id).length;
     const _ok=sr?.towOk&&sr?.lwOk&&sr?.cogOk;const _warn=sr&&!_ok&&!sr?.towFatal&&!sr?.lwFatal;
-    return`<div style="margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
-        <div style="width:10px;height:10px;border-radius:50%;background:${col}"></div>
+    return`<div style="margin-bottom:16px;width:fit-content">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0"></div>
         <span style="font-weight:700;font-size:13px">${(a?.name||id)+dispSuffix}</span>
-        ${sr?`<span class="pill ${sr.towOk?'pill-green':sr.towFatal?'pill-red':'pill-warn'}">${sr.tow?.toFixed(0)}/${sr.mtow}kg</span>
-          <span class="pill ${cogPillClass(sr.cog,sr.cogMin,sr.cogMax)}">CoG ${sr.cog?.toFixed(2)}"</span>`:''}
-        <span class="pill pill-blue">${paxCount}/${paxTotal} pax</span>
         <button onclick="window.removeAcFromSeatmap('${smKey}')" style="margin-left:auto;padding:2px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.1);color:#ef4444;font-size:11px;cursor:pointer" title="Remove from seatmap">&#x2715; Remove</button>
+      </div>
+      ${sr?`<div style="display:flex;gap:6px;justify-content:center;margin-bottom:4px;flex-wrap:wrap">
+        <span class="pill ${sr.towOk?'pill-green':sr.towFatal?'pill-red':'pill-warn'}">${sr.tow?.toFixed(0)}/${sr.mtow}kg</span>
+        <span class="pill ${cogPillClass(sr.cog,sr.cogMin,sr.cogMax)}">CoG ${sr.cog?.toFixed(2)}"</span>
+      </div>`:''}
+      <div style="display:flex;justify-content:center;margin-bottom:8px">
+        <span class="pill pill-blue">${paxCount}/${paxTotal} pax</span>
       </div>
       <div style="display:inline-flex;flex-direction:column" ondragover="event.preventDefault()" ondrop="dropOnPool(event,'${smKey}')">
         ${renderCabinSVG(id,true,null,undefined,undefined,smKey)}
@@ -2720,14 +2722,14 @@ function renderStep2(){
         const isSel=S.selectedPax===p.id;
         const wt=parseFloat(p.weight||0)+parseFloat(p.bag||0);
         const borderCol=p._pushedFrom?(AC_COL[p._pushedFrom]||gc||'#64748b'):gc||'#64748b';
-        const cardStyle=isSel?'background:var(--acc);border:2px solid var(--acc);box-shadow:0 0 0 2px var(--acc)':`background:rgba(255,255,255,.93);border-left:4px solid ${borderCol}`;
+        const cardStyle=isSel?'background:rgba(255,255,255,.97);border:2px solid var(--acc);box-shadow:0 0 0 3px rgba(124,58,237,.3),0 2px 10px rgba(0,0,0,.25)':`background:rgba(255,255,255,.93);border-left:4px solid ${borderCol}`;
         return`<div class="seat filled" style="${cardStyle};flex-shrink:0" onclick="event.stopPropagation();tapPax('${p.id}')" draggable="true" ondragstart="startDrag(event,'${p.id}','pool',null)">
-          ${!isSel&&gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
-          ${!isSel&&p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}
-          ${!isSel&&p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:3px;padding:0 3px;line-height:1.4">C</div>':''}
-          ${!isSel&&p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.25);color:#f472b6;border-radius:3px;padding:0 3px;line-height:1.4">i</div>':''}
-          <div class="seat-name" style="${isSel?'color:#fff':'color:#1e293b'};font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div>
-          <div class="seat-wt" style="${isSel?'color:rgba(255,255,255,.8)':'color:#334155'}">${wt>0?wt+'kg':''}</div>
+          ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
+          ${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}
+          ${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':''}
+          ${p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':''}
+          <div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div>
+          <div class="seat-wt" style="color:#334155">${wt>0?wt+'kg':''}</div>
         </div>`;
       }).join(''):`<div style="font-size:12px;color:var(--text3);font-style:italic">${_hasSel?'Tap here or drop seat card here to unallocate':'—'}</div>`}
     </div>
@@ -2756,6 +2758,7 @@ function renderStep2(){
   </div>`;
 }
 
+window.setPaxBagPrompt=function(i){const p=S.dispatch.pax[i];if(!p)return;const cur=p.bag||'';const w=window.prompt('Bag weight (kg):',cur);if(w!==null){setPaxField(i,'bag',w.trim());}};
 
 function _fmtLsDate(iso){
   if(!iso) return '-';
@@ -2768,8 +2771,7 @@ function renderLoadsheet(){
   if(picCrew&&String(f.seats[0])!==String(picCrew.w))f.seats[0]=String(picCrew.w);
 
   const acOpts=Object.values(S.aircraft).map(x=>`<option value="${x.id}"${f.ac===x.id?' selected':''}>${x.name} — ${x.type}</option>`).join('');
-  const _lsAcType=(()=>{const ac=S.aircraft[f.ac];if(!ac)return null;return ac.layout==='c208'?'C208B':'GA8';})();
-  const _lsPilots=_lsAcType?pilotCrewList().filter(c=>(c.endorse||[]).includes(_lsAcType)):pilotCrewList();
+  const _lsPilots=f.ac?pilotCrewList().filter(c=>(c.endorse||[]).includes(f.ac)):pilotCrewList();
   const crewOpts=_lsPilots.map(c=>`<option value="${c.n}"${f.pic===c.n?' selected':''}>${c.n}${c.w?' ('+c.w+'kg)':''}</option>`).join('');
   const cpOpts=`<option value="">None</option>`+pilotCrewList().filter(c=>c.n!==f.pic).map(c=>`<option value="${c.n}"${f.coPilot===c.n?' selected':''}>${c.n}</option>`).join('');
   const draftBanner=f.status==='unsigned'?`<div style="padding:9px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;margin-bottom:10px">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
@@ -2849,30 +2851,31 @@ function renderLoadsheet(){
       const infantNm=rawInfant||(nameHasInfant?nm.split(' + ').slice(1).join(' + '):'');
       const grp=f.paxGroups?.[idx]||S.dispatch?.pax?.find(p=>p.name===nm||p.name===displayNm)?.group||'';
       const gc=grp?groupColor(grp):null;
+      const payReq=(f.paxPaymentReq||{})[idx]||false;
       const hasPerson=nm||parseFloat(wt);
       const selUnalloc=S._selUnalloc!=null;const selSeat=S._selFormSeat===idx;
-      return`<div onclick="window.tapFormSeat(${idx},'${f.ac}',event)" draggable="${nm?'true':'false'}" ondragstart="window.lsSeatDragStart(${idx},event)" ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'" ondragleave="event.currentTarget.style.outline=''}" ondrop="window.lsDropOnSeat(${idx},event)" style="position:relative;cursor:${selUnalloc||nm?'pointer':'default'};background:${selSeat?'rgba(245,158,11,.15)':selUnalloc&&!nm?'rgba(124,58,237,.1)':'var(--card2)'};border-radius:7px;padding:6px 8px;border-left:3px solid ${hasPerson?(gc||'var(--accent)'):selUnalloc?'var(--accent)':'var(--border2)'};transition:outline .1s">
-        ${hasPerson?`<button onclick="window.lsDelPax(${idx})" title="Remove" style="position:absolute;top:3px;right:3px;width:12px;height:12px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:8px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;z-index:1;opacity:0.45" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.45'">×</button>`:''}
-        <div style="display:flex;align-items:center;gap:4px;margin-bottom:${infantNm?'2px':'4px'}">
-          <span style="font-size:9px;font-weight:700;color:var(--text3);min-width:18px">${s.lbl}</span>
-          <input class="fi" type="text" value="${displayNm}" placeholder="Name" style="flex:1;font-size:12px;padding:2px 4px" onblur="lsN(${idx},this.value)">
+      const isCp=idx===1&&!!f.coPilot;
+      return`<div onclick="window.tapFormSeat(${idx},'${f.ac}',event)" draggable="${nm?'true':'false'}" ondragstart="window.lsSeatDragStart(${idx},event)" ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'" ondragleave="event.currentTarget.style.outline=''" ondrop="window.lsDropOnSeat(${idx},event)" style="position:relative;cursor:${selUnalloc||nm?'pointer':'default'};background:${selSeat?'rgba(245,158,11,.15)':selUnalloc&&!nm?'rgba(124,58,237,.1)':'var(--card2)'};border-radius:7px;padding:6px 8px;border-left:3px solid ${hasPerson?(gc||'var(--accent)'):selUnalloc?'var(--accent)':'var(--border2)'};transition:outline .1s">
+        <div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">
+          <span style="font-size:9px;font-weight:700;color:var(--text3);min-width:16px;flex-shrink:0">${s.lbl}</span>
+          ${nm
+            ?`<div onclick="event.stopPropagation();window.lsNamePopup(${idx})" style="padding:2px 9px;border-radius:20px;background:${gc||'var(--card)'};${gc?'':'border:1px solid var(--border2);'}color:${gc?'#fff':'var(--text1)'};font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px">${displayNm.split(' ')[0]}</div>`
+            :`<input class="fi" type="text" placeholder="Name" style="flex:1;font-size:11px;padding:2px 5px;min-width:0" onblur="lsN(${idx},this.value)" onclick="event.stopPropagation()">`
+          }
+          ${hasPerson?`<button onclick="event.stopPropagation();window.lsTogglePayReq(${idx})" style="padding:1px 5px;border-radius:12px;border:1px solid ${payReq?'#ef4444':'var(--border)'};background:${payReq?'rgba(239,68,68,.2)':'transparent'};color:${payReq?'#ef4444':'var(--text3)'};font-size:8px;font-weight:800;cursor:pointer;flex-shrink:0">${payReq?'$ PAY':'$'}</button>`:''}
+          ${hasPerson?`<button onclick="event.stopPropagation();window.lsDelPax(${idx})" style="margin-left:auto;width:14px;height:14px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:9px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;opacity:.5" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">×</button>`:''}
         </div>
-        ${infantNm?`<div style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 22px">👶 ${infantNm}<button onclick="window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7" title="Remove infant">×</button></div>`:''}
-        <div style="display:grid;grid-template-columns:50px 50px 1fr;gap:4px;align-items:end">
-          <div>
-            <div style="font-size:8px;color:var(--text3)">WT kg</div>
-            <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsS(${idx},this.value);window.lsCheckChildWt(${idx})">
-          </div>
-          <div>
-            <div style="font-size:8px;color:var(--text3)">BAG kg</div>
-            <input class="fi" type="number" value="${bg}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:46px" onblur="lsB(${idx},this.value)">
-          </div>
-          <div style="display:flex;gap:3px;padding-bottom:2px;justify-content:flex-end">
-            <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'A')" style="padding:1px 6px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(74,222,128,.3)':'rgba(74,222,128,.8)'};background:${(f.paxType||{})[idx]==='C'?'transparent':'rgba(74,222,128,.2)'};color:#4ade80;font-size:10px;font-weight:700;cursor:pointer">A</button>
-            <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'C')" style="padding:1px 6px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.8)':'rgba(251,146,60,.3)'};background:${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.2)':'transparent'};color:#fb923c;font-size:10px;font-weight:700;cursor:pointer">C</button>
+        ${infantNm?`<div style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#ec4899;font-weight:600;padding:0 0 3px 20px">👶 ${infantNm}<button onclick="event.stopPropagation();window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7">×</button></div>`:''}
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+          <input class="fi" type="number" value="${wt}" placeholder="kg" style="font-size:12px;padding:2px 4px;width:44px" onclick="event.stopPropagation()" onblur="lsS(${idx},this.value);window.lsCheckChildWt(${idx})">
+          <span style="font-size:9px;color:var(--text3)">kg</span>
+          <button onclick="event.stopPropagation();var w=window.prompt('Bag weight (kg):','${bg||''}');if(w!==null)lsB(${idx},w.trim())" style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:12px;border:1px solid var(--border2);background:${bg?'rgba(59,130,246,.12)':'transparent'};color:${bg?'#60a5fa':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">🎒 ${bg?bg+'kg':'—'}</button>
+          <div style="margin-left:auto;display:flex;gap:2px;align-items:center">
+            <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'A')" style="padding:1px 5px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(74,222,128,.3)':'rgba(74,222,128,.8)'};background:${(f.paxType||{})[idx]==='C'?'transparent':'rgba(74,222,128,.2)'};color:#4ade80;font-size:9px;font-weight:700;cursor:pointer">A</button>
+            <button onclick="event.stopPropagation();window.lsTogglePaxType(${idx},'C')" style="padding:1px 5px;border-radius:10px;border:1px solid ${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.8)':'rgba(251,146,60,.3)'};background:${(f.paxType||{})[idx]==='C'?'rgba(251,146,60,.2)':'transparent'};color:#fb923c;font-size:9px;font-weight:700;cursor:pointer">C</button>
           </div>
         </div>
-        ${hasPerson?('<div style="margin-top:3px"><input class="fi" type="text" value="'+(grp||'').replace(/"/g,'&quot;')+'" placeholder="Group" style="font-size:10px;padding:2px 5px;width:100%;'+(gc?'color:'+gc+';font-weight:700':'')+'" onclick=\'event.stopPropagation()\' onblur=\'window.lsGrp('+idx+',this.value)\'></div>'):''}
+        ${hasPerson?`<div style="display:flex;align-items:center;gap:3px;margin-top:3px">${gc?`<div style="width:6px;height:6px;border-radius:50%;background:${gc};flex-shrink:0"></div>`:'<div style="width:6px;height:6px;flex-shrink:0"></div>'}<input class="fi" type="text" value="${(grp||'').replace(/"/g,'&quot;')}" placeholder="group" style="font-size:9px;padding:1px 4px;width:60px;${gc?'color:'+gc+';font-weight:700':''}" onclick="event.stopPropagation()" onblur="window.lsGrp(${idx},this.value)"></div>`:''}
       </div>`;
     }).join('');
     isPod=a.cargo.length>1&&a.cargo[0]?.lbl?.startsWith('Pod');
@@ -2880,7 +2883,7 @@ function renderLoadsheet(){
     const podBorders=['rgba(59,130,246,.5)','rgba(16,185,129,.5)','rgba(245,158,11,.5)','rgba(168,85,247,.5)'];
     const podTextColors=['#60a5fa','#34d399','#fbbf24','#c084fc'];
     seatsH=`<div class="card" id="lsf-seats" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
-      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Seats &amp; Passengers${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}</div>
+      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Passengers${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}</div>
       ${wbSummary}
       <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex-shrink:0">
@@ -3059,18 +3062,25 @@ function renderLoadsheet(){
       const selIdx=S._selUnalloc;
       const cards=ua.map(function(p,i){
         const sel=selIdx===i;
-        return '<div onclick="window.tapUnallocated('+i+')" draggable="true" ondragstart="window.lsUnallocDragStart('+i+',event)" style="cursor:grab;padding:8px 10px;border-radius:8px;border:2px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'rgba(124,58,237,.15)':'var(--card2)')+';display:flex;align-items:center;gap:8px">'
-          +'<div style="flex:1;min-width:0">'
-          +'<div style="font-weight:600;font-size:13px;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(p.name||'(no name)')+'</div>'
-          +'<div style="font-size:11px;color:var(--text3)">'+(p.weight?p.weight+'kg':'')+(p.bag?' &middot; bag '+p.bag+'kg':'')+(p.infant?' &middot; +infant':'')+'</div>'
-          +'</div>'
-          +'<button onclick="event.stopPropagation();window.removeUnallocated('+i+')" style="padding:2px 7px;font-size:12px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--text3);cursor:pointer">&times;</button>'
+        const gc=p.group?.trim()?groupColor(p.group.trim()):null;
+        const wt=parseFloat(p.weight||0)+parseFloat(p.bag||0);
+        const borderCol=gc||'#64748b';
+        const cardStyle=sel
+          ?'background:rgba(255,255,255,.97);border:2px solid var(--acc);box-shadow:0 0 0 3px rgba(124,58,237,.3),0 2px 10px rgba(0,0,0,.25)'
+          :'background:rgba(255,255,255,.93);border-left:4px solid '+borderCol;
+        return '<div class="seat filled" style="'+cardStyle+';flex-shrink:0" onclick="window.tapUnallocated('+i+')" draggable="true" ondragstart="window.lsUnallocDragStart('+i+',event)">'
+          +(gc?'<div class="seat-dot" style="background:'+gc+'"></div>':'')
+          +(p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':'')
+          +(p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')
+          +((p.infant||p.infantName)?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')
+          +'<div class="seat-name" style="color:#1e293b;font-weight:700">'+(p.name?p.name.split(' ')[0]:'?')+'</div>'
+          +'<div class="seat-wt" style="color:#334155">'+(wt>0?wt+'kg':'')+'</div>'
           +'</div>';
       }).join('');
       const hint=selIdx!=null
-        ?'<div style="font-size:11px;color:var(--accent);font-weight:600;margin-bottom:6px">Passenger selected &mdash; tap an empty seat above to assign</div>'
+        ?'<div style="font-size:11px;color:var(--acc);font-weight:600;margin-bottom:6px">Passenger selected — tap an empty seat above to assign</div>'
         :'<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Tap a passenger, then tap an empty seat above to place them</div>';
-      unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--accent)\'" ondragleave="event.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)"><div class="st">Unallocated Passengers ('+ua.length+')</div>'+hint+'<div style="display:flex;flex-direction:column;gap:6px">'+cards+'</div></div>';
+      unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--acc)\'" ondragleave="event.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)"><div class="st">Passengers ('+ua.length+')</div>'+hint+'<div style="display:flex;flex-wrap:wrap;gap:6px;min-height:54px">'+cards+'</div></div>';
     }
   }
   return`${draftBanner}${_overCapBanner}${clearBtn}
@@ -3113,8 +3123,8 @@ function renderLoadsheet(){
         <div style="font-size:13px;font-weight:600;color:var(--text1)">${_fmtLsDate(f.date)}</div>
         <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();safeRender()" onclick="event.stopPropagation()" style="position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;border:none;background:transparent">
       </div>
-      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">ETD</div>
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">ETD</div>
         ${etdSelect(f.etd,f.date,"form")}
       </div>
     </div>
@@ -3141,6 +3151,18 @@ window.lsTogglePaxType=function(idx,type){
       if(confirm('Weight '+wt+'kg - is this passenger a child?')) f.paxType[idx]='C';
     }
   }
+  S.formDirty=true;autoSaveLS();safeRender();
+};
+window.lsNamePopup=function(idx){
+  const f=S.form;if(!f)return;
+  const cur=f.names[idx]||'';
+  const w=window.prompt('Passenger name:',cur);
+  if(w!==null){lsN(idx,w.trim());}
+};
+window.lsTogglePayReq=function(idx){
+  const f=S.form;if(!f)return;
+  if(!f.paxPaymentReq)f.paxPaymentReq={};
+  f.paxPaymentReq[idx]=!f.paxPaymentReq[idx];
   S.formDirty=true;autoSaveLS();safeRender();
 };
 
@@ -3602,7 +3624,7 @@ function renderSaved(){
             return'<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid '+col+'">'
               +'<div style="flex:1;min-width:0">'
               +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">'
-              +'<span style="font-weight:700;font-size:14px">'+(s.form.ac||'?')+'</span>'
+              +'<span style="padding:2px 10px;border-radius:20px;background:'+col+'22;border:1px solid '+col+'55;color:'+col+';font-weight:700;font-size:12px;white-space:nowrap">'+(s.form.ac||'?')+'</span>'
               +'<span class="pill pill-blue">'+(s.form.dep||'?')+' &#x2192; '+(s.form.dest||'?')+'</span>'
               +(s.form.pic?'<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">&#x2708; '+s.form.pic+'</span>':'')
               +(isSigned?'<span class="pill pill-green">&#x2713; Signed</span>':'<span class="pill" style="background:#0c1a3a;color:#93c5fd">UNSIGNED</span>')
@@ -3658,7 +3680,7 @@ function renderSaved(){
           <input type="checkbox" ${S.savedSel[s.id]?'checked':''} onchange="window.toggleSavedSel('${s.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-              <span style="font-weight:700;font-size:14px">${s.form.ac||'?'}</span>
+              <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${s.form.ac||'?'}</span>
               <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
               ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
               <span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 UNSIGNED</span>
@@ -3724,7 +3746,7 @@ function renderSaved(){
         <input type="checkbox" ${S.savedSel[s.id]?'checked':''} onchange="window.toggleSavedSel('${s.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-            <span style="font-weight:700;font-size:14px">${s.form.ac||'?'}</span>
+            <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${s.form.ac||'?'}</span>
             <span class="pill pill-blue">${s.form.dep||'?'} → ${s.form.dest||'?'}</span>
             ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
             ${isUnsigned
@@ -4231,7 +4253,9 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10
     // Profile tab
     let bodyHtml='';
     if(tab==='profile'){
-      const expiryRows=[['medExpiry','Medical Expiry','#22c55e'],['ocaDue','OCA Due','#7B9EC6'],['firstAid','First Aid','#f59e0b'],['avsecExpiry','AVSEC Expiry','#a78bfa']].map(function(t){
+      const isPilotOrAbove=['pilot','admin'].includes(d.role);
+      const _expiryDefs=isPilotOrAbove?[['medExpiry','Medical Expiry','#22c55e'],['ocaDue','OCA Due','#7B9EC6'],['firstAid','First Aid','#f59e0b'],['avsecExpiry','AVSEC Expiry','#a78bfa']]:[['firstAid','First Aid','#f59e0b'],['avsecExpiry','AVSEC Expiry','#a78bfa']];
+      const expiryRows=_expiryDefs.map(function(t){
         const k=t[0],lbl=t[1],col=t[2];
         const v=d[k]||'';const ec=v?expiryCol(v):'var(--text3)';const eb=v?expiryBg(v):'transparent';
         return'<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:'+eb+';border-radius:6px;padding:4px 6px">'
@@ -4241,9 +4265,11 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10
           +'<input type="date" class="fi" value="'+v+'" style="font-size:12px;max-width:140px" onchange="S.admin.personModal.draft[\''+k+'\']=this.value">'
           +'</div></div>';
       }).join('');
-      const endorseButtons=['C208B','GA8'].map(function(e){
-        const on=(d.endorse||[]).includes(e);
-        return'<button onclick="(function(){var en=S.admin.personModal.draft.endorse||[];var ix=en.indexOf(\''+e+'\');if(ix>=0)en.splice(ix,1);else en.push(\''+e+'\');S.admin.personModal.draft.endorse=en;render();})()" style="padding:5px 12px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'rgba(99,102,241,.15)':'var(--card)')+';color:'+(on?'var(--accent)':'var(--text2)')+'">'+e+'</button>';
+      const _AC_APPROVALS=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'];
+      const endorseButtons=_AC_APPROVALS.map(function(acId){
+        const on=(d.endorse||[]).includes(acId);
+        const acCol=AC_COL[acId]||'#64748b';
+        return'<button onclick="(function(){var en=S.admin.personModal.draft.endorse||[];var ix=en.indexOf(\''+acId+'\');if(ix>=0)en.splice(ix,1);else en.push(\''+acId+'\');S.admin.personModal.draft.endorse=en;render();})()" style="padding:5px 12px;border-radius:20px;font-size:11px;cursor:pointer;font-weight:700;border:1.5px solid '+(on?acCol:acCol+'55')+';background:'+(on?acCol+'28':'transparent')+';color:'+(on?acCol:'var(--text3)')+'">'+acId.replace('ZK-','')+'</button>';
       }).join('');
       bodyHtml='<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">'
         +'<div onclick="document.getElementById(\'person_photo_inp\').click()" style="width:72px;height:72px;border-radius:50%;border:2px solid var(--border2);background:var(--card2);overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">'
@@ -4272,7 +4298,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10
         +'<div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px;margin-bottom:10px">'
         +'<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em">EXPIRY DATES</div>'
         +expiryRows+'</div>'
-        +'<div><label style="font-size:11px;color:var(--text3)">TYPE RATINGS</label>'
+        +'<div><label style="font-size:11px;color:var(--text3)">AIRCRAFT APPROVALS</label>'
         +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'+endorseButtons+'</div></div>';
     } else if(tab==='login'){
       const isOwnAccount=m.userId===S.user?.id;
@@ -4393,7 +4419,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10
       +'<div style="font-size:11px;color:var(--text3);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
       +(role?'<span style="color:'+(roleColour[role]||'#64748b')+';font-weight:600">'+role+'</span>':'')
       +(email?'<span>'+email+'</span>':'')
-      +(endorses.length?'<span>'+endorses.join(' · ')+'</span>':'')
+      +(endorses.length?endorses.filter(function(e){return e.startsWith('ZK-');}).map(function(e){var ec=AC_COL[e]||'#64748b';return'<span style="padding:1px 7px;border-radius:12px;background:'+ec+'22;border:1px solid '+ec+'55;color:'+ec+';font-size:9px;font-weight:700">'+e.replace('ZK-','')+'</span>';}).join('')+(endorses.filter(function(e){return!e.startsWith('ZK-');}).length?'<span style="font-size:11px;color:var(--text3)">'+endorses.filter(function(e){return!e.startsWith('ZK-');}).join(' · ')+'</span>':''):'')
       +(caaNum?'<span>CAA '+caaNum+'</span>':'')
       +'</div>'
       +(pills?'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">'+pills+'</div>':'')
@@ -5106,13 +5132,14 @@ function generateLoadsheet(acId){
   const a=S.aircraft[acId];const d=S.dispatch;if(!a)return;
   const setup=d.acSetup.find(s=>s.acId===acId);const form=bF();
   form.ac=acId;form.dep=d.dep;form.dest=d.dest;form.date=d.date;form.etd=d.etd;form.etdCustom=d.etdCustom||false;
+  form.paxPaymentReq={};
   form.pic=setup?.pic||'';form.coPilot=setup?.coPilot||'';
   const picCrew=anyCrewList().find(c=>c.n===form.pic);if(picCrew&&picCrew.w){form.seats[0]=String(picCrew.w);form.names[0]=form.pic;}
   if(setup?.coPilot){const cp=anyCrewList().find(c=>c.n===setup.coPilot);if(cp&&cp.w){form.seats[1]=String(cp.w);form.names[1]=setup.coPilot;}}
-  else{const sm=d.seatMap[acId]||{};const p=sm[1]?paxById(sm[1]):null;if(p){form.seats[1]=p.weight||'';form.bags[1]=p.bag||'';form.names[1]=p.name||'';if(p.type==='child')form.paxType[1]='C';form.paxGroups[1]=p.group||'';}}
+  else{const sm=d.seatMap[acId]||{};const p=sm[1]?paxById(sm[1]):null;if(p){form.seats[1]=p.weight||'';form.bags[1]=p.bag||'';form.names[1]=p.name||'';if(p.type==='child')form.paxType[1]='C';form.paxGroups[1]=p.group||'';if(p.paymentReq)form.paxPaymentReq[1]=true;}}
   form.fuel=String(fuelKgForSetup(acId));
   const sm=d.seatMap[acId]||{};
-  const seatIdxs=paxSeatIdxs(acId)||[];seatIdxs.forEach(function(i){if(i<=1)return;const p=sm[i]?paxById(sm[i]):null;if(p){form.seats[i]=p.weight||'';form.bags[i]=p.bag||'';form.names[i]=p.name||'';if(p.infantName)form.infantNames[i]=p.infantName;if(p.type==='child')form.paxType[i]='C';form.paxGroups[i]=p.group||'';}});
+  const seatIdxs=paxSeatIdxs(acId)||[];seatIdxs.forEach(function(i){if(i<=1)return;const p=sm[i]?paxById(sm[i]):null;if(p){form.seats[i]=p.weight||'';form.bags[i]=p.bag||'';form.names[i]=p.name||'';if(p.infantName)form.infantNames[i]=p.infantName;if(p.type==='child')form.paxType[i]='C';form.paxGroups[i]=p.group||'';if(p.paymentReq)form.paxPaymentReq[i]=true;}});
   // seat 1 infant (non-copilot)
   {const p=sm[1]?paxById(sm[1]):null;if(p&&p.infantName)form.infantNames[1]=p.infantName;}
   const _lsAcCode=acId.replace('ZK-','');
@@ -5438,6 +5465,7 @@ window.pushLsToSeatmap=function(){
           bag:parseFloat((f.bags||{})[idx]||0)||0,
           type:((f.paxType||{})[idx]==='C'?'child':'adult'),
           group:(f.paxGroups||{})[idx]||'',
+          paymentReq:!!((f.paxPaymentReq||{})[idx]),
           _pushedFrom:acId});
       }
       nameMap[key]=pid;
@@ -5445,6 +5473,8 @@ window.pushLsToSeatmap=function(){
     sm[parseInt(idx)]=pid;
     var grpVal=(f.paxGroups||{})[idx];
     if(grpVal!=null){var _dp=S.dispatch.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
+    var payReqVal=(f.paxPaymentReq||{})[idx];
+    if(payReqVal!=null){var _dp2=S.dispatch.pax.find(function(px){return px.id===pid;});if(_dp2)_dp2.paymentReq=!!payReqVal;}
   });
   S.dispatch.seatMap[acId]=sm;
   autoSaveDispatch();
@@ -5678,34 +5708,29 @@ function etdOptions(dateStr){
 function etdSelect(val,dateStr,dispatchKey){
   var opts=etdOptions(dateStr);
   var stateObj=dispatchKey==='dispatch'?S.dispatch:(dispatchKey==='form'?S.form:null);
-  var isCustom=(val&&opts.indexOf(val)<0)||(stateObj&&stateObj.etdCustom);
-  var oc="handleEtdSel(this,'"+dispatchKey+"')";
-  var oc2="handleEtdCustom(this,'"+dispatchKey+"')";
-  var h='<div style="display:flex;gap:6px">';
-  h+='<select class="fi" id="etd_sel_'+dispatchKey+'" style="flex:1" onchange="'+oc+'">';
-  h+='<option value="">— ETD —</option>';
-  opts.forEach(function(t){h+='<option value="'+t+'"'+(val===t?' selected':'')+'>'+t+'</option>';});
-  h+='<option value="custom"'+(isCustom?' selected':'')+'>Other…</option>';
-  h+='</select>';
-  h+='<input type="text" class="fi" id="etd_'+dispatchKey+'" placeholder="e.g. 15:30" ';
-  h+='style="flex:1;display:'+(isCustom?'block':'none')+'" ';
-  h+='value="'+(isCustom?val:'')+'" oninput="'+oc2+'">';
+  var isCustom=!!(stateObj&&stateObj.etdCustom)||(!!val&&opts.indexOf(val)<0);
+  var h='<div style="display:flex;flex-wrap:wrap;gap:5px">';
+  opts.forEach(function(t){
+    var sel=val===t&&!isCustom;
+    h+='<button onclick="event.stopPropagation();window.handleEtdSel(\''+t+'\',\''+dispatchKey+'\')" style="padding:4px 10px;border-radius:20px;border:1.5px solid '+(sel?'var(--acc)':'var(--border2)')+';background:'+(sel?'rgba(124,58,237,.18)':'transparent')+';color:'+(sel?'var(--acc)':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:'+(sel?'0 0 0 2px rgba(124,58,237,.18)':'none')+'">'+t+'</button>';
+  });
+  var otherSel=isCustom;
+  h+='<button onclick="event.stopPropagation();window.handleEtdSel(\'other\',\''+dispatchKey+'\')" style="padding:4px 10px;border-radius:20px;border:1.5px solid '+(otherSel?'var(--acc)':'var(--border2)')+';background:'+(otherSel?'rgba(124,58,237,.18)':'transparent')+';color:'+(otherSel?'var(--acc)':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer;box-shadow:'+(otherSel?'0 0 0 2px rgba(124,58,237,.18)':'none')+'">Other</button>';
   h+='</div>';
+  if(isCustom){
+    h+='<input type="text" class="fi" id="etd_custom_'+dispatchKey+'" placeholder="e.g. 15:30" style="margin-top:6px;font-size:13px;font-weight:600" value="'+(val&&opts.indexOf(val)<0?val:'')+'" oninput="window.handleEtdCustom(this,\''+dispatchKey+'\')">';
+  }
   return h;
 }
-window.handleEtdSel=function(sel,key){
-  const v=sel.value;
+window.handleEtdSel=function(v,key){
   const obj=key==='dispatch'?S.dispatch:(key==='form'?S.form:null);
-  const inp=document.getElementById('etd_'+key);
-  if(v==='custom'){
+  if(v==='other'){
     if(obj){obj.etdCustom=true;obj.etd='';}
-    if(inp){inp.style.display='block';inp.value='';setTimeout(function(){inp.focus();},50);}
-    if(key==='dispatch')autoSaveDispatch();if(key==='form')autoSaveLS();
   } else {
     if(obj){obj.etd=v;obj.etdCustom=false;}
-    if(inp)inp.style.display='none';
-    if(key==='dispatch')autoSaveDispatch();if(key==='form')autoSaveLS();
   }
+  if(key==='dispatch'){autoSaveDispatch();render();}
+  else if(key==='form'){autoSaveLS();safeRender();}
 };
 window.handleEtdCustom=function(inp,key){
   const obj=key==='dispatch'?S.dispatch:(key==='form'?S.form:null);
