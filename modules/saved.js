@@ -119,17 +119,18 @@ function renderSaved(){
     var r=calcFormWB(s.form);
     var ok=r&&r.towOk&&r.lwOk&&r.cogOk;
     var sel=!!S.savedSel[s.id];
+    var _canUpload=(S.gdriveEnabled||S.gdriveClientId)&&opts.showUploadBtn;
     var rhsBadge=opts.showNotUploaded&&!s.driveUploaded
-      ?'<span style="padding:2px 7px;background:rgba(100,116,139,.1);border:1px solid var(--border2);border-radius:4px;font-size:10px;color:var(--text3)">☁ Not uploaded</span>'
+      ?(_canUpload
+        ?'<span onclick="event.stopPropagation();window.uploadSingleSheet(\''+sid+'\')" title="Upload to Drive" style="padding:2px 7px;background:rgba(100,116,139,.1);border:1px solid var(--border2);border-radius:4px;font-size:12px;color:var(--text3);cursor:pointer;user-select:none">☁</span>'
+        :'<span style="padding:2px 7px;background:rgba(100,116,139,.1);border:1px solid var(--border2);border-radius:4px;font-size:12px;color:var(--text3)">☁</span>')
       :opts.showUploaded&&s.driveUploaded
       ?'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:4px;font-size:10px;color:#4ade80">☁ Drive ✓</span>'
       :'';
     var limitWarn=isSigned&&!ok?'<span class="pill pill-warn" style="font-size:10px">⚠ check limits</span>':'';
     var sid=s.id;
     var byStr=(function(){var nm=s.form.createdBy||'';var at=s.form.createdAt;if(!nm&&!at)return '';var ini=nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase();var ts=at?(function(){var d=new Date(at);return ('0'+d.getHours()).slice(-2)+':'+( '0'+d.getMinutes()).slice(-2);}()):'';return 'By '+ini+(ts?' '+ts:'');})();
-    var uploadBtn=(S.gdriveEnabled||S.gdriveClientId)&&opts.showUploadBtn
-      ?`<button class="btn" title="${s.driveUploaded?'Re-upload':'Upload to Drive'}" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${sid}')">&#x2601;</button>`
-      :'';
+    var uploadBtn='';
     var actionBtns=isSigned
       ?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${sid}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${sid}')">&#x21BA; Reopen</button>`
       :`<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" onclick="editSaved('${sid}')">Edit</button>`;
@@ -150,8 +151,10 @@ function renderSaved(){
 
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
-        ${byStr?`<span onclick="event.stopPropagation();window._lsShowCreator('${sid}')" style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text2);cursor:pointer;text-decoration:underline;text-underline-offset:2px">${byStr}</span>`:''}
-        ${rhsBadge}
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+          ${byStr?`<span onclick="event.stopPropagation();window._lsShowCreator('${sid}')" style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text2);cursor:pointer;text-decoration:underline;text-underline-offset:2px">${byStr}</span>`:''}
+          ${rhsBadge}
+        </div>
         <div style="display:flex;gap:5px;align-items:center">
           ${actionBtns}${uploadBtn}
           <button class="btn" title="Print" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer" onclick="window.printSingleSheet('${sid}')">&#x1F5A8;</button>

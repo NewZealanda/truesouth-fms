@@ -4138,17 +4138,18 @@ function renderSaved(){
     var r=calcFormWB(s.form);
     var ok=r&&r.towOk&&r.lwOk&&r.cogOk;
     var sel=!!S.savedSel[s.id];
+    var _canUpload=(S.gdriveEnabled||S.gdriveClientId)&&opts.showUploadBtn;
     var rhsBadge=opts.showNotUploaded&&!s.driveUploaded
-      ?'<span style="padding:2px 7px;background:rgba(100,116,139,.1);border:1px solid var(--border2);border-radius:4px;font-size:10px;color:var(--text3)">☁ Not uploaded</span>'
+      ?(_canUpload
+        ?'<span onclick="event.stopPropagation();window.uploadSingleSheet(\''+sid+'\')" title="Upload to Drive" style="padding:2px 7px;background:rgba(100,116,139,.1);border:1px solid var(--border2);border-radius:4px;font-size:12px;color:var(--text3);cursor:pointer;user-select:none">☁</span>'
+        :'<span style="padding:2px 7px;background:rgba(100,116,139,.1);border:1px solid var(--border2);border-radius:4px;font-size:12px;color:var(--text3)">☁</span>')
       :opts.showUploaded&&s.driveUploaded
       ?'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:4px;font-size:10px;color:#4ade80">☁ Drive ✓</span>'
       :'';
     var limitWarn=isSigned&&!ok?'<span class="pill pill-warn" style="font-size:10px">⚠ check limits</span>':'';
     var sid=s.id;
     var byStr=(function(){var nm=s.form.createdBy||'';var at=s.form.createdAt;if(!nm&&!at)return '';var ini=nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase();var ts=at?(function(){var d=new Date(at);return ('0'+d.getHours()).slice(-2)+':'+( '0'+d.getMinutes()).slice(-2);}()):'';return 'By '+ini+(ts?' '+ts:'');})();
-    var uploadBtn=(S.gdriveEnabled||S.gdriveClientId)&&opts.showUploadBtn
-      ?`<button class="btn" title="${s.driveUploaded?'Re-upload':'Upload to Drive'}" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${sid}')">&#x2601;</button>`
-      :'';
+    var uploadBtn='';
     var actionBtns=isSigned
       ?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${sid}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${sid}')">&#x21BA; Reopen</button>`
       :`<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" onclick="editSaved('${sid}')">Edit</button>`;
@@ -4169,8 +4170,10 @@ function renderSaved(){
 
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
-        ${byStr?`<span onclick="event.stopPropagation();window._lsShowCreator('${sid}')" style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text2);cursor:pointer;text-decoration:underline;text-underline-offset:2px">${byStr}</span>`:''}
-        ${rhsBadge}
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+          ${byStr?`<span onclick="event.stopPropagation();window._lsShowCreator('${sid}')" style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text2);cursor:pointer;text-decoration:underline;text-underline-offset:2px">${byStr}</span>`:''}
+          ${rhsBadge}
+        </div>
         <div style="display:flex;gap:5px;align-items:center">
           ${actionBtns}${uploadBtn}
           <button class="btn" title="Print" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer" onclick="window.printSingleSheet('${sid}')">&#x1F5A8;</button>
@@ -6343,6 +6346,7 @@ window.closeLsTab=function(id){
   if(idx===-1)return;
   var tab=S.lsTabs[idx];
   var acCode=tab.acId?tab.acId.replace('ZK-',''):id;
+  var _isSigned=!!(tab.form&&tab.form.sig);
   // Build custom dialog
   var ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
@@ -6361,7 +6365,7 @@ window.closeLsTab=function(id){
     box.innerHTML='<div style="font-size:16px;font-weight:700;margin-bottom:8px">Close '+title+'?</div>'
       +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px">Save your changes to the folder, or close without saving.</div>'
       +'<div style="display:flex;gap:8px;margin-bottom:8px">'
-      +'<button id="_lsCloseKeep" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Save &amp; Close</button>'
+      +'<button id="_lsCloseKeep" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">'+(_isSigned?'&#x1f4be; Save &amp; Submit':'Save &amp; Close')+'</button>'
       +'<button id="_lsCloseDelete" style="flex:1;padding:11px;background:transparent;color:#f59e0b;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Discard Changes</button>'
       +'</div>'
       +'<button id="_lsClosePermDel" style="width:100%;margin-bottom:6px;padding:10px;background:transparent;color:#ef4444;border:1.5px solid #ef4444;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🗑 Delete Loadsheet</button>'
@@ -6392,8 +6396,13 @@ function _execCloseLsTab(id,idx,tab,action){
     // Discard: just close, DB unchanged (holds the original)
     S._lsFormUndo=null;
   } else if(action==='keep'){
-    // Save & Close: explicit DB write
+    // Save & Close / Save & Submit
     const _sf=tab.form||S.form;
+    if(_sf&&_sf.sig){
+      // Signed — run handleSubmit flow then bail (it closes the tab itself)
+      S.activeTabId=id;S.form=_sf;S.lsAc=(_sf.ac||'').replace('ZK-','');S.editId=id;
+      window.handleSubmit();return;
+    }
     if(_sf)saveLsToDb(id,_sf).catch(function(){});
   }
   // Broadcast close

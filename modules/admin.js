@@ -1838,6 +1838,7 @@ window.closeLsTab=function(id){
   if(idx===-1)return;
   var tab=S.lsTabs[idx];
   var acCode=tab.acId?tab.acId.replace('ZK-',''):id;
+  var _isSigned=!!(tab.form&&tab.form.sig);
   // Build custom dialog
   var ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
@@ -1856,7 +1857,7 @@ window.closeLsTab=function(id){
     box.innerHTML='<div style="font-size:16px;font-weight:700;margin-bottom:8px">Close '+title+'?</div>'
       +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px">Save your changes to the folder, or close without saving.</div>'
       +'<div style="display:flex;gap:8px;margin-bottom:8px">'
-      +'<button id="_lsCloseKeep" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Save &amp; Close</button>'
+      +'<button id="_lsCloseKeep" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">'+(_isSigned?'&#x1f4be; Save &amp; Submit':'Save &amp; Close')+'</button>'
       +'<button id="_lsCloseDelete" style="flex:1;padding:11px;background:transparent;color:#f59e0b;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Discard Changes</button>'
       +'</div>'
       +'<button id="_lsClosePermDel" style="width:100%;margin-bottom:6px;padding:10px;background:transparent;color:#ef4444;border:1.5px solid #ef4444;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🗑 Delete Loadsheet</button>'
@@ -1887,8 +1888,13 @@ function _execCloseLsTab(id,idx,tab,action){
     // Discard: just close, DB unchanged (holds the original)
     S._lsFormUndo=null;
   } else if(action==='keep'){
-    // Save & Close: explicit DB write
+    // Save & Close / Save & Submit
     const _sf=tab.form||S.form;
+    if(_sf&&_sf.sig){
+      // Signed — run handleSubmit flow then bail (it closes the tab itself)
+      S.activeTabId=id;S.form=_sf;S.lsAc=(_sf.ac||'').replace('ZK-','');S.editId=id;
+      window.handleSubmit();return;
+    }
     if(_sf)saveLsToDb(id,_sf).catch(function(){});
   }
   // Broadcast close
