@@ -128,7 +128,7 @@ window.lsSeatEditPopup=function(idx){
     +'</div>'
     +'<div style="margin-bottom:6px">'
     +'<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">'
-    +'<input id="lsSpName" class="fi" type="text" placeholder="Passenger name" value="'+_initVal.replace(/"/g,\'&quot;\')+\'" style="flex:1;font-size:15px;font-weight:600">'
+    +'<input id="lsSpName" class="fi" type="text" placeholder="Passenger name" value="'+_initVal.replace(/"/g,'&quot;')+'" style="flex:1;font-size:15px;font-weight:600">'
     +'<button id="lsSpAddInfant" title="Add infant" style="padding:6px 10px;border-radius:8px;border:1.5px solid rgba(236,72,153,.5);background:rgba(236,72,153,.1);color:#ec4899;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">+ 👶</button>'
     +'</div>'
     +'<div id="lsSpPills" style="display:flex;flex-wrap:wrap;gap:4px;min-height:0">'+_pillsHTML(_initVal)+'</div>'
