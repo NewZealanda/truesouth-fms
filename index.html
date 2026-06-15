@@ -3030,12 +3030,31 @@ window.lsSeatEditPopup=function(idx){
   var inner=document.createElement('div');
   inner.style.cssText='background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:20px;max-width:360px;width:100%;max-height:90vh;overflow-y:auto';
   var _hasInfant=!!infantNm;
+  // Build initial pill display
+  var _initNm=nm;var _initInfant=infantNm;
+  // If nm has ' + ' pattern, split it
+  if(!_initInfant&&_initNm.indexOf(' + ')>0){var _s=_initNm.split(' + ');_initNm=_s[0].trim();_initInfant=_s.slice(1).join(' + ').trim();}
+  function _pillsHTML(rawVal){
+    var plus=rawVal.indexOf(' + ');
+    var pNm=plus>0?rawVal.slice(0,plus).trim():rawVal.trim();
+    var iNm=plus>0?rawVal.slice(plus+3).trim():'';
+    var out='';
+    if(pNm)out+='<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.35);font-size:13px;font-weight:700;color:#c4b5fd;white-space:nowrap">'+pNm+'</span>';
+    if(iNm)out+='<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 10px;border-radius:20px;background:rgba(236,72,153,.15);border:1px solid rgba(236,72,153,.35);font-size:12px;font-weight:700;color:#ec4899;white-space:nowrap;margin-left:4px">👶 '+iNm+'</span>';
+    return out;
+  }
+  var _initVal=_initNm+(_initInfant?' + '+_initInfant:'');
   inner.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
     +'<div style="font-size:16px;font-weight:700">Seat '+seatLbl+'</div>'
     +'<button id="lsSpClose" style="background:none;border:none;color:var(--text3);font-size:22px;cursor:pointer;padding:0 4px;line-height:1">&times;</button>'
     +'</div>'
-    +'<div style="margin-bottom:10px">'
-    +'<input id="lsSpName" class="fi" type="text" placeholder="Passenger name" value="'+nm.replace(/"/g,'&quot;')+'" style="font-size:15px;font-weight:600;width:100%"></div>'
+    +'<div style="margin-bottom:6px">'
+    +'<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">'
+    +'<input id="lsSpName" class="fi" type="text" placeholder="Passenger name" value="'+_initVal.replace(/"/g,\'&quot;\')+\'" style="flex:1;font-size:15px;font-weight:600">'
+    +'<button id="lsSpAddInfant" title="Add infant" style="padding:6px 10px;border-radius:8px;border:1.5px solid rgba(236,72,153,.5);background:rgba(236,72,153,.1);color:#ec4899;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">+ 👶</button>'
+    +'</div>'
+    +'<div id="lsSpPills" style="display:flex;flex-wrap:wrap;gap:4px;min-height:0">'+_pillsHTML(_initVal)+'</div>'
+    +'</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'
     +'<div style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;cursor:pointer" onclick="this.querySelector(\'input\').focus()">'
     +'<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Weight</div>'
@@ -3049,10 +3068,7 @@ window.lsSeatEditPopup=function(idx){
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">'
     +'<button id="lsSpTA" style="padding:9px 4px;border-radius:8px;border:2px solid '+(_pType==='A'?'#3b82f6':'var(--border2)')+';background:'+(_pType==='A'?'rgba(59,130,246,.18)':'transparent')+';color:'+(_pType==='A'?'#60a5fa':'var(--text3)')+';font-size:12px;font-weight:700;cursor:pointer">Adult</button>'
     +'<button id="lsSpTC" style="padding:9px 4px;border-radius:8px;border:2px solid '+(_pType==='C'?'#fb923c':'var(--border2)')+';background:'+(_pType==='C'?'rgba(251,146,60,.18)':'transparent')+';color:'+(_pType==='C'?'#fb923c':'var(--text3)')+';font-size:12px;font-weight:700;cursor:pointer">Child</button>'
-    +'<button id="lsSpInfantToggle" style="padding:9px 4px;border-radius:8px;border:2px solid '+(_hasInfant?'#ec4899':'var(--border2)')+';background:'+(_hasInfant?'rgba(236,72,153,.18)':'transparent')+';color:'+(_hasInfant?'#ec4899':'var(--text3)')+';font-size:12px;font-weight:700;cursor:pointer">👶 Infant</button>'
     +'</div>'
-    +'<div id="lsSpInfantRow" style="margin-bottom:10px;display:'+(_hasInfant?'block':'none')+'">'
-    +'<input id="lsSpInfant" class="fi" type="text" placeholder="Infant name" value="'+infantNm.replace(/"/g,'&quot;')+'" style="font-size:13px;width:100%"></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'
     +'<button id="lsSpPay" style="padding:9px 4px;border-radius:8px;border:2px solid '+(_payReq?'#ef4444':'var(--border2)')+';background:'+(_payReq?'rgba(239,68,68,.18)':'transparent')+';color:'+(_payReq?'#ef4444':'var(--text3)')+';font-size:12px;font-weight:700;cursor:pointer">'+(_payReq?'$ Needs Pay':'$ Payment')+'</button>'
     +'<div style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:4px 8px;display:flex;align-items:center">'
@@ -3077,14 +3093,19 @@ window.lsSeatEditPopup=function(idx){
   }
   document.getElementById('lsSpTA').onclick=function(){setType('A');};
   document.getElementById('lsSpTC').onclick=function(){setType('C');};
-  // Infant toggle
-  document.getElementById('lsSpInfantToggle').onclick=function(){
-    _hasInfant=!_hasInfant;
-    var btn=document.getElementById('lsSpInfantToggle');
-    var row=document.getElementById('lsSpInfantRow');
-    if(btn){btn.style.borderColor=_hasInfant?'#ec4899':'var(--border2)';btn.style.background=_hasInfant?'rgba(236,72,153,.18)':'transparent';btn.style.color=_hasInfant?'#ec4899':'var(--text3)';}
-    if(row){row.style.display=_hasInfant?'block':'none';}
-    if(_hasInfant){var inp=document.getElementById('lsSpInfant');if(inp){inp.focus();try{inp.select();}catch(e){}}}
+  // Live pill preview as user types name
+  var _lsSpNameEl=document.getElementById('lsSpName');
+  var _lsSpPillsEl=document.getElementById('lsSpPills');
+  if(_lsSpNameEl&&_lsSpPillsEl){
+    _lsSpNameEl.addEventListener('input',function(){_lsSpPillsEl.innerHTML=_pillsHTML(this.value);});
+  }
+  // + 👶 button: append ' + ' and focus cursor after it
+  document.getElementById('lsSpAddInfant').onclick=function(){
+    var inp=document.getElementById('lsSpName');if(!inp)return;
+    var v=inp.value;var plusIdx=v.indexOf(' + ');
+    if(plusIdx<0){inp.value=v.trimEnd()+' + ';}
+    inp.focus();inp.selectionStart=inp.selectionEnd=inp.value.length;
+    _lsSpPillsEl.innerHTML=_pillsHTML(inp.value);
   };
   // Payment toggle
   document.getElementById('lsSpPay').onclick=function(){
@@ -3098,15 +3119,16 @@ window.lsSeatEditPopup=function(idx){
   };
   // Save
   document.getElementById('lsSpSave').onclick=function(){
-    var newNm=document.getElementById('lsSpName').value.trim();
+    var _rawNm=document.getElementById('lsSpName').value.trim();
+    var _plusIdx=_rawNm.indexOf(' + ');
+    var newNm=_plusIdx>0?_rawNm.slice(0,_plusIdx).trim():_rawNm;
+    var newInfant=_plusIdx>0?_rawNm.slice(_plusIdx+3).trim():'';
     var newWt=document.getElementById('lsSpWt').value.trim();
     var newBg=document.getElementById('lsSpBag').value.trim();
     var newGrp=document.getElementById('lsSpGrp').value.trim();
     if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
     S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
     if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();
-    var newInfant=_hasInfant?(document.getElementById('lsSpInfant')||{}).value||'':'';
-    newInfant=newInfant.trim();
     f.names[idx]=newNm;
     f.seats[idx]=newWt||'';
     f.bags[idx]=newBg||'';
@@ -3456,9 +3478,13 @@ function renderLoadsheet(){
 
   
   {
-    const ua=f._unallocated;
-    if((ua&&ua.length)||S._showUnalloc){
+    const ua=f._unallocated||[];
+    if(ua.length||S._showUnalloc){
       const selIdx=S._selUnalloc;
+      // Dynamic slot count: min 3, always 1 empty; shrink when removing
+      const _filled=ua.length;
+      const _totalSlots=Math.max(3,_filled+1);
+      const _emptySlots=_totalSlots-_filled;
       const cards=ua.map(function(p,i){
         const sel=selIdx===i;
         const gc=p.group?.trim()?groupColor(p.group.trim()):null;
@@ -3476,10 +3502,17 @@ function renderLoadsheet(){
           +'<div class="seat-wt" style="color:#334155">'+(wt>0?wt+'kg':'')+'</div>'
           +'</div>';
       }).join('');
+      // Placeholder empty slots — drop targets
+      var _placeholders='';
+      for(var _pi=0;_pi<_emptySlots;_pi++){
+        _placeholders+='<div class="seat" ondragover="event.preventDefault();this.style.outline=\'2px solid var(--acc)\'" ondragleave="this.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event);this.style.outline=\'\'" onclick="window.lsAddUnallocPax()" style="flex-shrink:0;border:2px dashed var(--border2);background:transparent;cursor:pointer;opacity:.5">'
+          +'<div style="font-size:18px;color:var(--border2)">+</div>'
+          +'</div>';
+      }
       const hint=selIdx!=null
         ?'<div style="font-size:11px;color:var(--acc);font-weight:600;margin-bottom:6px">Passenger selected — tap an empty seat above to assign</div>'
-        :'<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Tap a passenger, then tap an empty seat above to place them</div>';
-      unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--acc)\'" ondragleave="event.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)"><div class="st">Passengers ('+ua.length+')</div>'+hint+'<div style="display:flex;flex-wrap:wrap;gap:6px;min-height:54px">'+cards+'</div></div>';
+        :'<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Drag from seat or tap to add · drag to a seat above to assign</div>';
+      unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--acc)\'" ondragleave="if(e&&e.currentTarget)e.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)"><div class="st">Unallocated'+(ua.length?' ('+ua.length+')':'')+'</div>'+hint+'<div style="display:flex;flex-wrap:wrap;gap:6px">'+cards+_placeholders+'</div></div>';
     }
   }
   return`${draftBanner}${_overCapBanner}${clearBtn}
@@ -5711,8 +5744,9 @@ window.lsSeatDragStart=function(idx,e){
 };
 window.lsDropOnSeat=function(toIdx,e){
   e.preventDefault();
-  e.currentTarget.style.outline='';
-{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
+  if(e.currentTarget)e.currentTarget.style.outline='';
+  if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
+{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>20)_us.shift();S._lsFormUndo=null;}
   const f=S.form;
   if(S._dragUnalloc!=null){
     // Drop from unallocated onto seat
@@ -5741,8 +5775,9 @@ window.lsDropOnSeat=function(toIdx,e){
 };
 window.lsDropOnUnalloc=function(e){
   e.preventDefault();
-  e.currentTarget.style.outline='';
-{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
+  if(e.currentTarget)e.currentTarget.style.outline='';
+  if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
+{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>20)_us.shift();S._lsFormUndo=null;}
   const f=S.form;
   if(S._dragSeat!=null){
     const nm=f.names[S._dragSeat]||'';

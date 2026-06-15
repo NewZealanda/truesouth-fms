@@ -1192,8 +1192,9 @@ window.lsSeatDragStart=function(idx,e){
 };
 window.lsDropOnSeat=function(toIdx,e){
   e.preventDefault();
-  e.currentTarget.style.outline='';
-{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
+  if(e.currentTarget)e.currentTarget.style.outline='';
+  if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
+{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>20)_us.shift();S._lsFormUndo=null;}
   const f=S.form;
   if(S._dragUnalloc!=null){
     // Drop from unallocated onto seat
@@ -1222,8 +1223,9 @@ window.lsDropOnSeat=function(toIdx,e){
 };
 window.lsDropOnUnalloc=function(e){
   e.preventDefault();
-  e.currentTarget.style.outline='';
-{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
+  if(e.currentTarget)e.currentTarget.style.outline='';
+  if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
+{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>20)_us.shift();S._lsFormUndo=null;}
   const f=S.form;
   if(S._dragSeat!=null){
     const nm=f.names[S._dragSeat]||'';
