@@ -254,7 +254,7 @@ function renderAdminStatistics(){
   const signed=allSigned.filter(function(s){
     const f=s.form;
     if(sf.ac&&f.ac!==sf.ac&&f.ac!=='ZK-'+sf.ac)return false;
-    if(sf.acType&&AC_TYPE[f.ac]!==sf.acType)return false;
+    if(sf.acType&&(AC_TYPE[f.ac]||'Other')!==sf.acType)return false;
     if(sf.dep&&(f.dep||'')!==sf.dep)return false;
     if(sf.dest&&(f.dest||'')!==sf.dest)return false;
     if(_from&&f.date&&f.date<_from)return false;
@@ -802,11 +802,6 @@ window.switchOpsTab=function(tabId){
   render();
   if(tabId==='saved'){
     reloadTable('ts_loadsheets').then(function(){render();});
-  }
-  if(tabId==='scratchpad'){
-    if(S.pads.length===0&&S.padTabs.length===0){
-      reloadTable('ts_scratchpads').then(function(){render();});
-    }
   }
   window.scrollTo(0,0);
 };
@@ -1464,8 +1459,8 @@ window.clearManifest=()=>{
 window.switchManifestTab=function(id){
   if(!id||id===S.activeManifestTabId)return;
   if(!S._manifestDispatches)S._manifestDispatches={};
-  // Save current dispatch
-  S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+  // Save current dispatch (guard against null id before tabs are initialised)
+  if(S.activeManifestTabId)S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
   // Switch
   S.activeManifestTabId=id;
   S.dispatch=JSON.parse(JSON.stringify(S._manifestDispatches[id]||bD()));
@@ -1478,7 +1473,7 @@ window.newManifestTab=function(){
   if(!S._manifestDispatches)S._manifestDispatches={};
   if(!S.manifestTabs)S.manifestTabs=[];
   // Save current
-  S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+  if(S.activeManifestTabId)S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
   // Create new blank tab
   const newId='mt_'+Date.now();
   const newDisp=bD();

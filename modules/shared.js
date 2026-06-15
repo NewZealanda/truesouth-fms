@@ -100,7 +100,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.23';
+const APP_VER='v22.24';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -155,10 +155,10 @@ function calcAcWB(acId,paxList,fuelKgOverride){
   const sm=S.dispatch.seatMap[acId]||{};
   paxSeatIdxs(acId).forEach(i=>{const p=sm[i]?paxById(sm[i]):null;if(p){const w=parseFloat(p.weight||0)+parseFloat(p.bag||0);wt+=w;mom+=w*a.seats[i].arm;}});
   const fW=fuelKgOverride!=null?fuelKgOverride:fuelKgForSetup(acId);
-  wt+=fW;mom+=fW*a.fuelArm;const _gndBurn=parseFloat(form.gndBurn!=null?form.gndBurn:a.gndBurn)||0;wt-=_gndBurn;mom-=_gndBurn*a.fuelArm;
-  const tow=wt,cog=mom/wt,burnKg=burnToKg(a.burnDef,acId);
+  wt+=fW;mom+=fW*a.fuelArm;const _gndBurn=parseFloat(a.gndBurn)||0;wt-=_gndBurn;mom-=_gndBurn*a.fuelArm;
+  const tow=wt,cog=wt?mom/wt:0,burnKg=burnToKg(a.burnDef,acId);
   wt-=burnKg;mom-=burnKg*a.fuelArm;
-  return{tow,cog,lw:wt,lwCog:mom/wt,
+  return{tow,cog,lw:wt,lwCog:wt?mom/wt:0,
     towOk:tow<=a.mtow,lwOk:wt<=a.mlw,cogOk:cog>=a.cogMin&&cog<=a.cogMax,
     towOver:Math.max(0,tow-a.mtow),lwOver:Math.max(0,wt-a.mlw),
     mtow:a.mtow,mlw:a.mlw,cogMin:a.cogMin,cogMax:a.cogMax};
@@ -174,7 +174,7 @@ function calcFormWB(form){
   let cg=0;for(let i=0;i<a.cargo.length;i++){const w=parseFloat((form.cargo&&form.cargo[i])||0);cg+=w;wt+=w;mom+=w*a.cargo[i].arm;}
   const zfw=wt,fW=parseFloat(form.fuel||a.fuelKg);wt+=fW;mom+=fW*a.fuelArm;const rW=wt;
   wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
-  const tow=wt,towCog=mom/wt;
+  const tow=wt,towCog=wt?mom/wt:0;
   const burnKg=form.burnOff?burnToKg(parseFloat(form.burnOff)||0,form.ac):burnToKg(a.burnDef,form.ac);
   wt-=burnKg;mom-=burnKg*a.fuelArm;
   return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn:a.gndBurn,tow,towCog,burnKg,lw:wt,lwCog:mom/wt,

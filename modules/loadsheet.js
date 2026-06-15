@@ -298,7 +298,7 @@ function renderLoadsheet(){
         </div>
       </div>`;
     }).join('');
-    isPod=a.cargo.length>1&&a.cargo[0]?.lbl?.startsWith('Pod');
+    isPod=!!(a.cargo?.length>1&&a.cargo[0]?.lbl?.startsWith('Pod'));
     const podColors=['rgba(59,130,246,.15)','rgba(16,185,129,.15)','rgba(245,158,11,.15)','rgba(168,85,247,.15)'];
     const podBorders=['rgba(59,130,246,.5)','rgba(16,185,129,.5)','rgba(245,158,11,.5)','rgba(168,85,247,.5)'];
     const podTextColors=['#60a5fa','#34d399','#fbbf24','#c084fc'];

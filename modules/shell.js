@@ -254,7 +254,6 @@ function renderAccountModal(){
   </div>`;
 }
 
-window.switchOpsTab=function(t){S.tab=t;S.activeTabId=null;S._newLsTab=false;render();};
 window.changePasswordFromModal=async function(){
   const m=S.admin.personModal;if(!m||!m.userId)return;
   const isOwnAccount=m.userId===S.user?.id;
