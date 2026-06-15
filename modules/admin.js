@@ -1558,6 +1558,7 @@ window.switchManifestTab=function(id){
   const tab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===id;});
   S._loadedManifestId=(tab&&tab.savedId)||null;
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
+  autoSaveDispatch();broadcastManifestTabs();
   render();
 };
 window.newManifestTab=function(){
@@ -1575,6 +1576,7 @@ window.newManifestTab=function(){
   S._loadedManifestId=null;
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
   window.saveWorkspace&&window.saveWorkspace();
+  broadcastManifestTabs();
   render();
 };
 window.closeManifestTab=function(id){
@@ -1602,6 +1604,7 @@ window.closeManifestTab=function(id){
   }
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
   window.saveWorkspace&&window.saveWorkspace();
+  broadcastManifestTabs();
   render();
 };
 
@@ -1834,7 +1837,7 @@ window.saveUnsigned=async()=>{
   if(_savingTab)delete _savingTab.originalForm;
   lsSet('ts_loadsheets_cache',S.saved);
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned'}]);
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog(isEdit?'loadsheet_edit':'loadsheet_save',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Draft saved.','ok');
   // Close the tab
@@ -2043,6 +2046,7 @@ window.pushLsToSeatmap=function(){
     if(payReqVal!=null){var _dp2=S.dispatch.pax.find(function(px){return px.id===pid;});if(_dp2)_dp2.paymentReq=!!payReqVal;}
   });
   S.dispatch.seatMap[acId]=sm;
+  runSolver();
   autoSaveDispatch();
   render();
   toast('✅ Pushed to seatmap','ok');
@@ -2108,6 +2112,7 @@ window.pushAllLsToSeatmap=function(){
       S.dispatch.seatMap[smKey]=sm;
     });
   });
+  runSolver();
   autoSaveDispatch();render();
   toast('✅ All loadsheets pushed to seatmap','ok');
 };
@@ -2150,9 +2155,6 @@ window.createBlankLsTab=function(acId){
   const form=bF();
   form.ac=acId;
   form.dep=d.dep;form.dest=d.dest;form.date=d.date;form.etd=d.etd;form.etdCustom=d.etdCustom||false;
-  form.pic=setup?.pic||'';form.coPilot=setup?.coPilot||'';
-  const picCrew=anyCrewList().find(function(c){return c.n===form.pic;});
-  if(picCrew&&picCrew.w){form.seats[0]=String(picCrew.w);form.names[0]=form.pic;}
   const _lsAcCode=acId.replace('ZK-','');
   const _newTabId='ls_'+_lsAcCode+'_'+Date.now();
   S.lsForms[_lsAcCode]=form;S.lsAc=_lsAcCode;S.form=form;S.editId=_newTabId;S.formDirty=false;

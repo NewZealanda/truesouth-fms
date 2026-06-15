@@ -342,7 +342,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.41';
+const APP_VER='v22.42';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1307,6 +1307,29 @@ function initRealtime(){
           var _closeId=msg.payload.payload&&msg.payload.payload.id;
           if(_closeId){S.lsTabs=S.lsTabs.filter(function(t){return t.id!==_closeId;});if(S.activeTabId===_closeId){S.activeTabId=null;S.editId=null;S.tab='manifest';}safeRender();}
         }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='manifest_tabs'){
+          var _mtpl=msg.payload.payload;
+          if(_mtpl&&_mtpl.sessionId!==_sessionId){
+            S._manifestDispatches=S._manifestDispatches||{};
+            Object.entries(_mtpl.dispatches||{}).forEach(function(e){
+              if(e[0]!==_mtpl.activeTabId)S._manifestDispatches[e[0]]=e[1];
+            });
+            S.manifestTabs=_mtpl.tabs||[];
+            if(_mtpl.activeTabId!==S.activeManifestTabId){
+              if(S.activeManifestTabId)S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+              S.activeManifestTabId=_mtpl.activeTabId;
+              var _incomingDisp=(_mtpl.dispatches||{})[_mtpl.activeTabId];
+              if(_incomingDisp)mergeDispatch(_incomingDisp);
+            } else if(!_mtpl.activeTabId){
+              S.activeManifestTabId=null;
+            }
+            var _openIds=new Set((_mtpl.tabs||[]).map(function(t){return t.id;}));
+            Object.keys(S._manifestDispatches||{}).forEach(function(id){
+              if(!_openIds.has(id))delete S._manifestDispatches[id];
+            });
+            if(S.tab==='manifest'||S.tab==='seatmap')safeRender();
+          }
+        }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='workspace_update'){
           var _wupl=msg.payload.payload;
           if(_wupl&&_wupl.sessionId!==_sessionId&&_wupl.state){_applyWorkspace(_wupl.state);}
@@ -1533,6 +1556,23 @@ function broadcastDispatch(){
   _rtRef++;
   _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
     payload:{type:'broadcast',event:'dispatch',payload:S.dispatch},
+    ref:String(_rtRef)}));
+}
+function broadcastManifestTabs(){
+  if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
+  _rtRef++;
+  var allDisps={};
+  (S.manifestTabs||[]).forEach(function(t){
+    allDisps[t.id]=t.id===S.activeManifestTabId?S.dispatch:((S._manifestDispatches||{})[t.id]||{});
+  });
+  _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
+    payload:{type:'broadcast',event:'manifest_tabs',payload:{
+      tabs:S.manifestTabs||[],
+      activeTabId:S.activeManifestTabId,
+      dispatches:allDisps,
+      updatedBy:S.user.id,
+      sessionId:_sessionId
+    }},
     ref:String(_rtRef)}));
 }
 function broadcastCharter(){
@@ -2249,7 +2289,8 @@ function renderAccountModal(){
         <button onclick="S.showAccount=false;S.changePwMsg=null;render()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">×</button>
       </div>
       ${changePwMsg?`<div style="padding:8px 12px;border-radius:7px;margin-bottom:12px;font-size:13px;font-weight:600;background:${changePwMsg.ok?'var(--ok-bg)':'var(--err-bg)'};color:${changePwMsg.ok?'var(--ok-text)':'var(--err-text)'};border:1px solid ${changePwMsg.ok?'var(--ok-border)':'var(--err-border)'}">${changePwMsg.text}</div>`:''}
-      <button onclick="window.goToMyProfile()" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px">&#x270F; Edit My Profile</button>
+      <button onclick="window.goToMyProfile()" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">&#x270F; Edit My Profile</button>
+      <button onclick="logout();S.showAccount=false;" style="width:100%;padding:10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#f87171;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px">Sign Out</button>
       <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Change Password</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         <input id="acc_cur" type="password" placeholder="Current password" autocomplete="current-password"
@@ -2675,7 +2716,7 @@ function renderStep1(){
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative" onclick="var i=this.querySelector('input[type=date]');try{i.showPicker&&i.showPicker()}catch(e){i.click()}">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Date</div>
         <div style="font-size:13px;font-weight:600;color:var(--text1)">${_fmtLsDate(d.date)}</div>
-        <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" onclick="event.stopPropagation()" style="position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;border:none;background:transparent">
+        <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" onclick="event.stopPropagation()" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;touch-action:manipulation;cursor:pointer">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">ETD</div>
@@ -6266,6 +6307,7 @@ window.switchManifestTab=function(id){
   const tab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===id;});
   S._loadedManifestId=(tab&&tab.savedId)||null;
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
+  autoSaveDispatch();broadcastManifestTabs();
   render();
 };
 window.newManifestTab=function(){
@@ -6283,6 +6325,7 @@ window.newManifestTab=function(){
   S._loadedManifestId=null;
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
   window.saveWorkspace&&window.saveWorkspace();
+  broadcastManifestTabs();
   render();
 };
 window.closeManifestTab=function(id){
@@ -6310,6 +6353,7 @@ window.closeManifestTab=function(id){
   }
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
   window.saveWorkspace&&window.saveWorkspace();
+  broadcastManifestTabs();
   render();
 };
 

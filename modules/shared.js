@@ -100,7 +100,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.40';
+const APP_VER='v22.42';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1065,6 +1065,29 @@ function initRealtime(){
           var _closeId=msg.payload.payload&&msg.payload.payload.id;
           if(_closeId){S.lsTabs=S.lsTabs.filter(function(t){return t.id!==_closeId;});if(S.activeTabId===_closeId){S.activeTabId=null;S.editId=null;S.tab='manifest';}safeRender();}
         }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='manifest_tabs'){
+          var _mtpl=msg.payload.payload;
+          if(_mtpl&&_mtpl.sessionId!==_sessionId){
+            S._manifestDispatches=S._manifestDispatches||{};
+            Object.entries(_mtpl.dispatches||{}).forEach(function(e){
+              if(e[0]!==_mtpl.activeTabId)S._manifestDispatches[e[0]]=e[1];
+            });
+            S.manifestTabs=_mtpl.tabs||[];
+            if(_mtpl.activeTabId!==S.activeManifestTabId){
+              if(S.activeManifestTabId)S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+              S.activeManifestTabId=_mtpl.activeTabId;
+              var _incomingDisp=(_mtpl.dispatches||{})[_mtpl.activeTabId];
+              if(_incomingDisp)mergeDispatch(_incomingDisp);
+            } else if(!_mtpl.activeTabId){
+              S.activeManifestTabId=null;
+            }
+            var _openIds=new Set((_mtpl.tabs||[]).map(function(t){return t.id;}));
+            Object.keys(S._manifestDispatches||{}).forEach(function(id){
+              if(!_openIds.has(id))delete S._manifestDispatches[id];
+            });
+            if(S.tab==='manifest'||S.tab==='seatmap')safeRender();
+          }
+        }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='workspace_update'){
           var _wupl=msg.payload.payload;
           if(_wupl&&_wupl.sessionId!==_sessionId&&_wupl.state){_applyWorkspace(_wupl.state);}
@@ -1073,7 +1096,14 @@ function initRealtime(){
           var _sipl=msg.payload.payload;
           if(_sipl&&_sipl.sessionId!==_sessionId){
             if(_sipl.by&&S.user&&_sipl.by!==S.user.name)toast((_sipl.by||'Someone')+' signed '+(_sipl.acCode||'')+' loadsheet','ok');
-            reloadTable('ts_loadsheets').then(function(){safeRender();});
+            reloadTable('ts_loadsheets').then(function(){
+              // Update open tab form so signature shows live
+              if(_sipl.id){
+                var _sf=(S.saved||[]).find(function(s){return s.id===_sipl.id;});
+                if(_sf){var _st=(S.lsTabs||[]).find(function(t){return t.id===_sipl.id;});if(_st){_st.form=_sf.form;if(S.activeTabId===_sipl.id){S.form=_sf.form;}}}
+              }
+              safeRender();
+            });
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_deleted'){
@@ -1125,19 +1155,38 @@ function initRealtime(){
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_update'){
           const _lsp=msg.payload.payload;
-          if(_lsp&&_lsp.acCode&&_lsp.sessionId!==_sessionId){
-            if(S.lsAc===_lsp.acCode&&S.form&&_lsp.form){
-              S._lsFlash=S._lsFlash||{};var _fNow=Date.now();var _of=S.form;var _nf=_lsp.form;
-              if(String(_of.fuel||'')!==String(_nf.fuel||'')||String(_of.burnOff||'')!==String(_nf.burnOff||''))S._lsFlash.fuel=_fNow;
-              if(String(_of.dep||'')!==String(_nf.dep||'')||String(_of.dest||'')!==String(_nf.dest||'')||String(_of.pic||'')!==String(_nf.pic||'')||String(_of.coPilot||'')!==String(_nf.coPilot||''))S._lsFlash.route=_fNow;
-              var _oN=_of.names||{},_nN=_nf.names||{};
-              if(Object.keys(Object.assign({},_oN,_nN)).some(function(k){return String(_oN[k]||'')!==String(_nN[k]||'');}))S._lsFlash.seats=_fNow;
+          if(_lsp&&_lsp.sessionId!==_sessionId){
+            // Find tab by ID (most reliable for aircraft changes) then fall back to acCode
+            var _lsTF=null;
+            if(_lsp.tabId)_lsTF=(S.lsTabs||[]).find(function(t){return t.id===_lsp.tabId;});
+            if(!_lsTF&&_lsp.acCode)_lsTF=(S.lsTabs||[]).find(function(t){return t.acId&&t.acId.replace('ZK-','')===_lsp.acCode;});
+            if(_lsp.form){
+              // Flash detection on active form
+              if(S.lsAc===_lsp.acCode&&S.form&&_lsp.form){
+                S._lsFlash=S._lsFlash||{};var _fNow=Date.now();var _of=S.form;var _nf=_lsp.form;
+                if(String(_of.fuel||'')!==String(_nf.fuel||'')||String(_of.burnOff||'')!==String(_nf.burnOff||''))S._lsFlash.fuel=_fNow;
+                if(String(_of.dep||'')!==String(_nf.dep||'')||String(_of.dest||'')!==String(_nf.dest||'')||String(_of.pic||'')!==String(_nf.pic||'')||String(_of.coPilot||'')!==String(_nf.coPilot||''))S._lsFlash.route=_fNow;
+                var _oN=_of.names||{},_nN=_nf.names||{};
+                if(Object.keys(Object.assign({},_oN,_nN)).some(function(k){return String(_oN[k]||'')!==String(_nN[k]||'');}))S._lsFlash.seats=_fNow;
+              }
+              if(_lsp.acCode)S.lsForms[_lsp.acCode]=_lsp.form;
+              if(_lsTF){
+                _lsTF.form=_lsp.form;
+                // Update acId on tab if aircraft changed on other device
+                if(_lsp.form.ac&&_lsTF.acId!==_lsp.form.ac)_lsTF.acId=_lsp.form.ac;
+                if(S.activeTabId===_lsTF.id){
+                  S.form=_lsp.form;
+                  if(_lsp.form.ac)S.lsAc=_lsp.form.ac.replace('ZK-','');
+                }
+              } else if(_lsp.acCode&&S.lsAc===_lsp.acCode){
+                S.form=_lsp.form;
+              }
             }
-            S.lsForms[_lsp.acCode]=_lsp.form;
-            if(S.lsAc===_lsp.acCode){S.form=_lsp.form;}
-            // Update matching lsTab form so other tabs show latest
-            var _lsTF=(S.lsTabs||[]).find(function(t){return t.acId&&t.acId.replace('ZK-','')===_lsp.acCode;});
-            if(_lsTF)_lsTF.form=_lsp.form;
+            // Sync UI mode state from sender
+            if(_lsp.meta){
+              if(_lsp.meta._showUnalloc!=null)S._showUnalloc=!!_lsp.meta._showUnalloc;
+              if(_lsp.meta._lsSeatMode)S._lsSeatMode=_lsp.meta._lsSeatMode;
+            }
             if(S.tab==='saved')reloadTable('ts_loadsheets').then(function(){safeRender();});
             else safeRender();
           }
@@ -1267,6 +1316,23 @@ function broadcastDispatch(){
     payload:{type:'broadcast',event:'dispatch',payload:S.dispatch},
     ref:String(_rtRef)}));
 }
+function broadcastManifestTabs(){
+  if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
+  _rtRef++;
+  var allDisps={};
+  (S.manifestTabs||[]).forEach(function(t){
+    allDisps[t.id]=t.id===S.activeManifestTabId?S.dispatch:((S._manifestDispatches||{})[t.id]||{});
+  });
+  _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
+    payload:{type:'broadcast',event:'manifest_tabs',payload:{
+      tabs:S.manifestTabs||[],
+      activeTabId:S.activeManifestTabId,
+      dispatches:allDisps,
+      updatedBy:S.user.id,
+      sessionId:_sessionId
+    }},
+    ref:String(_rtRef)}));
+}
 function broadcastCharter(){
   if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
   const _cq=lsGet('ts_charter_quotes_cache')||[];
@@ -1361,7 +1427,7 @@ function autoSaveLS(){
     const form=_formSnap;
     const tab=S.lsTabs.find(function(t){return t.id===_id;});
     if(tab){tab.form=form;}
-    broadcastLS(S.lsAc,form);
+    broadcastLS(S.lsAc,form,_id);
   },900);
 }
 async function saveLsToDb(id,form){
@@ -1391,11 +1457,11 @@ document.addEventListener('visibilitychange',function(){
 window.addEventListener('beforeunload',function(){if(S._presSection)broadcastPresence(null);});
 window.addEventListener('pagehide',function(){if(S._presSection)broadcastPresence(null);});
 
-function broadcastLS(acCode,form){
+function broadcastLS(acCode,form,tabId){
   if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
   _rtRef++;
   _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
-    payload:{type:'broadcast',event:'ls_update',payload:{acCode:acCode,form:form,updatedBy:S.user.id,sessionId:_sessionId}},
+    payload:{type:'broadcast',event:'ls_update',payload:{acCode:acCode,form:form,tabId:tabId||null,meta:{_showUnalloc:S._showUnalloc||false,_lsSeatMode:S._lsSeatMode||'edit'},updatedBy:S.user.id,sessionId:_sessionId}},
     ref:String(_rtRef)}));
 }
 async function autoNamedSave(){

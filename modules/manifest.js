@@ -173,7 +173,7 @@ function renderStep1(){
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative" onclick="var i=this.querySelector('input[type=date]');try{i.showPicker&&i.showPicker()}catch(e){i.click()}">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Date</div>
         <div style="font-size:13px;font-weight:600;color:var(--text1)">${_fmtLsDate(d.date)}</div>
-        <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" onclick="event.stopPropagation()" style="position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;border:none;background:transparent">
+        <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" onclick="event.stopPropagation()" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;touch-action:manipulation;cursor:pointer">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">ETD</div>
@@ -276,21 +276,23 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,seatmapKey){
         const origAc=p&&d.origAcMap?d.origAcMap[p.id]:null;
         const movedIn=origAc&&origAc!==acId;
         const leftBorderCol=movedIn?(AC_COL[origAc]||col):col;
-        // Filled: white bg + dark text. Empty: dark bg + light text. Crew: CSS handles.
+        // Filled: white bg + dark text. Empty: dark bg + light text. Drop target: purple highlight. Crew: CSS handles.
         const seatStyle=isCrew?''
           :p?('background:rgba(255,255,255,'+(isSrcSel?'.97':'.93')+');'+(isSrcSel?'border:2px solid #ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.35);':'border-left:4px solid '+leftBorderCol+';')+'border-radius:8px')
+          :isDrop?'background:rgba(124,58,237,.18);border:1.5px solid rgba(124,58,237,.6);border-radius:8px;cursor:pointer'
           :'background:rgba(255,255,255,.05);border-radius:8px';
         // Text colour set per-seat based on background
         const textCol=p&&!isCrew?'color:#1a2035':'color:rgba(255,255,255,.7)';
         seatRowsHTML+=`<div class="seat ${isCrew?'crew':p?'filled':''} ${isSrcSel?'sel-src':''} ${isDrop?'drop-target':''}"
-          style="width:66px;height:54px;${seatStyle}" 
+          style="width:66px;height:54px;${seatStyle}"
           onclick="tapSeat(${cell.i},'${smKey}')"
           draggable="${!!p&&!isCrew}" ondragstart="if(${!!p&&!isCrew})startDrag(event,'${p?p.id:''}','${smKey}',${cell.i})"
           ondragover="event.preventDefault()" ondrop="dropOnSeat(event,${cell.i},'${smKey}')">
           <span class="seat-lbl" style="${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
-            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':''}${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}${p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':''}<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
+            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':''}${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}${p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':''}<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`
+            :isDrop?`<div style="font-size:8px;color:rgba(167,139,250,.9);font-weight:700;line-height:1.3;padding-top:6px;text-align:center">tap<br>assign</div>`:''}
         </div>`;
       }
     });
