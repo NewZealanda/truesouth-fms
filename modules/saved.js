@@ -107,7 +107,13 @@ function renderSaved(){
     opts=opts||{};
     var col=AC_COL[s.form.ac]||'#64748b';
     var isCpCrew=!!s.form.coPilot;
-    var paxCnt=Object.keys(s.form.names||{}).filter(function(k){var ki=parseInt(k);return ki>=1&&!!(s.form.names||{})[k]&&((s.form.names||{})[k]||'').trim()&&!(ki===1&&isCpCrew);}).length;
+    var _names=s.form.names||{},_infants=s.form.infantNames||{},_types=s.form.paxType||{};
+    var _paxA=0,_paxC=0,_paxI=0;
+    Object.keys(_names).forEach(function(k){var ki=parseInt(k);if(ki<1)return;if(ki===1&&isCpCrew)return;var nm=(_names[k]||'').trim();if(!nm)return;if(_infants[ki])return;var t=_types[ki]||'A';if(t==='C')_paxC++;else _paxA++;});
+    Object.keys(_infants).forEach(function(k){var ki=parseInt(k);if(_infants[ki]&&(_names[ki]||'').trim())_paxI++;});
+    var paxCnt=_paxA+_paxC+_paxI;
+    var paxSummary=(_paxA?_paxA+'A ':'')+(_paxC?_paxC+'C ':'')+(_paxI?_paxI+'i':'');
+    if(!paxSummary)paxSummary=paxCnt?paxCnt+' PAX':'0 PAX';else paxSummary=paxSummary.trim();
     var savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
     var isSigned=s.status==='complete';
     var r=calcFormWB(s.form);
@@ -138,8 +144,9 @@ function renderSaved(){
         <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">
           <span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>
           ${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}
-          <span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${paxCnt} PAX</span>
+          <span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${paxSummary}</span>
         </div>
+        ${s.form.createdBy?`<div style="font-size:10px;color:var(--text3);margin-top:4px">by <span onclick="event.stopPropagation();window._lsShowCreator('${sid}')" style="color:var(--text2);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px">${s.form.createdBy}</span>${s.form.createdAt?' · '+_lsRelTime(s.form.createdAt):''}</div>`:''}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
         ${savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">${savedStr}</span>`:''}
@@ -153,6 +160,31 @@ function renderSaved(){
       </div>
     </div>`;
   }
+  window._lsShowCreator=function(id){
+    var s=(S.saved||[]).find(function(x){return x.id===id;});
+    if(!s||!s.form)return;
+    var f=s.form;
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+    var box=document.createElement('div');
+    box.style.cssText='background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:22px;max-width:340px;width:100%';
+    var cAt=f.createdAt?new Date(f.createdAt).toLocaleString('en-NZ',{dateStyle:'medium',timeStyle:'short'}):'';
+    var sAt=s.savedAt?new Date(s.savedAt).toLocaleString('en-NZ',{dateStyle:'medium',timeStyle:'short'}):'';
+    box.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+      +'<div style="font-size:16px;font-weight:700">Loadsheet History</div>'
+      +'<button id="_lcClose" style="background:none;border:none;color:var(--text3);font-size:22px;cursor:pointer;padding:0 4px;line-height:1">&times;</button>'
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;gap:10px">'
+      +(f.createdBy?'<div style="padding:10px 14px;background:var(--card2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:3px">Created by</div><div style="font-size:14px;font-weight:700;color:var(--text1)">'+f.createdBy+'</div>'+(cAt?'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+cAt+'</div>':'')+'</div>':'')
+      +(sAt?'<div style="padding:10px 14px;background:var(--card2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:3px">Last saved</div><div style="font-size:13px;font-weight:600;color:var(--text1)">'+sAt+'</div></div>':'')
+      +'<div style="padding:10px 14px;background:rgba(100,116,139,.08);border-radius:8px;border:1px dashed var(--border2)"><div style="font-size:11px;color:var(--text3);text-align:center">Full edit history coming soon</div></div>'
+      +'</div>';
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+    ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
+    document.getElementById('_lcClose').onclick=function(){ov.remove();};
+  };
+
   // ── Active tab (unsigned) ──
   if(tab==='active'){
     var _aSelCnt=Object.keys(S.savedSel).filter(function(id){return activeItems.find(function(s){return s.id===id;});}).length;
@@ -209,7 +241,7 @@ function renderSaved(){
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
           ${(m.data?.acSetup||[]).map(s=>{const col=AC_COL[s.acId]||'#64748b';return`<span style="padding:1px 7px;border-radius:12px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:11px">${s.acId||'?'}</span>`;}).join('')}
-          <span style="font-size:11px;color:var(--text3)">${m.savedAt?_lsRelTime(m.savedAt):''} · ${m.data?.pax?.length||0} pax</span>
+          <span style="font-size:11px;color:var(--text3)">${(function(){var _p=m.data&&m.data.pax||[];var a=_p.filter(function(x){return!x.infant&&x.type!=='child';}).length;var c=_p.filter(function(x){return x.type==='child';}).length;var i=_p.filter(function(x){return x.infant;}).length;var s=(a?a+'A ':'')+( c?c+'C ':''+(i?i+'i':''));return(m.savedAt?_lsRelTime(m.savedAt)+' · ':'')+( s.trim()||_p.length+' pax');})()}</span>
         </div>
       </div>
       <div style="display:flex;gap:6px">

@@ -16,6 +16,19 @@ function renderLsSeatGrid(f,a){
   var isGa8=a.layout==='ga8';
   var isPod=!!(a.cargo&&a.cargo.length>1&&a.cargo[0]&&a.cargo[0].lbl&&a.cargo[0].lbl.startsWith('Pod'));
   // Build the seat rows column
+  var _lsMode=S._lsSeatMode||'edit';
+  var _modeToggle='<div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px">'
+    +'<button onclick="S._lsSeatMode=\'edit\';render()" title="Click to edit seat passengers" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid '
+    +(_lsMode==='edit'?'var(--acc)':'var(--border2)')
+    +';background:'+(_lsMode==='edit'?'rgba(124,58,237,.18)':'transparent')
+    +';color:'+(_lsMode==='edit'?'var(--acc)':'var(--text3)')
+    +'">✏ Edit</button>'
+    +'<button onclick="S._lsSeatMode=\'move\';render()" title="Drag or tap seats to move passengers" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid '
+    +(_lsMode==='move'?'#22c55e':'var(--border2)')
+    +';background:'+(_lsMode==='move'?'rgba(34,197,94,.18)':'transparent')
+    +';color:'+(_lsMode==='move'?'#22c55e':'var(--text3)')
+    +'">⇄ Move</button>'
+    +'</div>';
   var seatsCol='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0">';
   layout.forEach(function(row){
     if(row==='spacer'){seatsCol+='<div style="height:6px"></div>';return;}
@@ -43,13 +56,15 @@ function renderLsSeatGrid(f,a){
         isOccupied?(gc||'var(--accent)'):'var(--border2)';
       var nameCol=gc?gc:(isPIC?'#93c5fd':isCoPilot?'#94a3b8':'var(--text1)');
       var clickable=!isCoPilot;
-      seatsCol+='<div onclick="'+(isPIC?'window.lsPicChangePopup()':clickable?'window.lsSeatEditPopup('+idx+')':'')+'" style="'
+      var _clickFn=isPIC?'window.lsPicChangePopup()':clickable?(_lsMode==='move'?'window.tapFormSeat('+idx+',\''+f.ac+'\',event)':'window.lsSeatEditPopup('+idx+')'):''
+;      var _dragAttrs=(_lsMode==='move'&&isOccupied&&!isPIC&&!isCoPilot)?' draggable="true" ondragstart="window.lsSeatDragStart('+idx+',event)" ondragover="event.preventDefault();this.style.outline=\'2px solid #22c55e\'" ondragleave="this.style.outline=\'\'" ondrop="window.lsDropOnSeat('+idx+',event);this.style.outline=\'\'"':'';
+      seatsCol+='<div onclick="'+_clickFn+'"'+_dragAttrs+' style="'
         +'width:'+sW+'px;height:'+sH+'px;border-radius:10px;border:2px solid '+borderCol+';'
-        +'background:'+bgCol+';cursor:'+(clickable?'pointer':'default')+';'
+        +'background:'+bgCol+';cursor:'+(_lsMode==='move'&&isOccupied&&!isPIC&&!isCoPilot?'grab':clickable?'pointer':'default')+';'
         +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
         +'position:relative;padding:3px 5px;text-align:center;flex-shrink:0;'
         +'transition:box-shadow .12s'
-        +'"'+(clickable?' onmouseover="this.style.boxShadow=\'0 0 0 2px var(--acc)\'" onmouseout="this.style.boxShadow=\'\'"':'')+' >';
+        +'"'+(clickable?' onmouseover="this.style.boxShadow=\'0 0 0 2px var(--acc)\'" onmouseout="this.style.boxShadow=\'\'"':'')+'  >';
       seatsCol+='<div style="position:absolute;top:3px;left:4px;font-size:9px;font-weight:700;color:'
         +(isPIC?'#3b82f6':isCoPilot?'#64748b':'var(--text3)')+';line-height:1">'
         +(isPIC?'PIC':isCoPilot?'CP':cell.lbl)+'</div>';
@@ -77,7 +92,7 @@ function renderLsSeatGrid(f,a){
     seatsCol+='</div>';
   });
   seatsCol+='</div>';
-  return seatsCol;
+  return _modeToggle+seatsCol;
 }
 
 // ── Seat editor popup ──

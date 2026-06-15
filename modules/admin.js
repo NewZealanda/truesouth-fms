@@ -870,21 +870,27 @@ window.setTab=function(t){
 window.toggleAcSetup=id=>{
   const i=S.dispatch.acSetup.findIndex(s=>s.acId===id);
   if(i>=0){
-    // Removing aircraft: delete empty pax rows (up to seat count)
+    // Removing aircraft: unpin pax assigned to it, delete leftover blank rows
     const seatCount=paxSeatIdxs(id).length;
+    S.dispatch.pax.forEach(function(p){if(p.pinAc===id)p.pinAc=null;});
     var removed=0;
     S.dispatch.pax=S.dispatch.pax.filter(function(p){
-      if(removed<seatCount&&!p.name&&!p.infantName&&(!p.weight||p.weight===0)&&!p.infant){removed++;return false;}
+      if(removed<seatCount&&!p.pinAc&&!p.name&&!p.infantName&&(!p.weight||p.weight===0)&&!p.infant){removed++;return false;}
       return true;
     });
     S.dispatch.acSetup.splice(i,1);
   } else {
     const a=S.aircraft[id];
     S.dispatch.acSetup.push({acId:id,pic:'',coPilot:'',fuelInput:a?Math.round(fromKg(a.fuelKg,id)):null,_ts:Date.now()});
-    // Add empty pax rows equal to pax seat count
     const seatCount=paxSeatIdxs(id).length;
     const now=Date.now();
-    for(var n=0;n<seatCount;n++){S.dispatch.pax.push({id:'p_'+now+'_'+n,name:'',weight:0,bag:0,group:'',pinAc:null,_ts:now,infant:false,type:'adult'});}
+    // Auto-assign existing unallocated pax to this aircraft
+    const unalloc=S.dispatch.pax.filter(function(p){return !p.pinAc&&!p.infant;});
+    const toAssign=unalloc.slice(0,seatCount);
+    toAssign.forEach(function(p){p.pinAc=id;p._ts=now;});
+    // Add blank rows only for remaining empty seats
+    const remaining=seatCount-toAssign.length;
+    for(var n=0;n<remaining;n++){S.dispatch.pax.push({id:'p_'+now+'_'+n,name:'',weight:0,bag:0,group:'',pinAc:id,_ts:now,infant:false,type:'adult'});}
   }
   autoSaveDispatch();render();
 };
@@ -1528,12 +1534,9 @@ window.closeManifestTab=function(id){
   // If closing active tab, switch to adjacent
   if(id===S.activeManifestTabId){
     if(S.manifestTabs.length===0){
-      const fallbackId='mt_'+Date.now();
-      S.manifestTabs=[{id:fallbackId,savedId:null}];
-      S.activeManifestTabId=fallbackId;
+      // Allow 0 open tabs — show empty state
+      S.activeManifestTabId=null;
       S.dispatch=bD();
-      if(!S._manifestDispatches)S._manifestDispatches={};
-      S._manifestDispatches[fallbackId]=JSON.parse(JSON.stringify(S.dispatch));
       S._loadedManifestId=null;
     } else {
       const nextTab=S.manifestTabs[Math.min(tabIdx,S.manifestTabs.length-1)];
@@ -1577,7 +1580,7 @@ function generateLoadsheet(acId){
   S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
   // Save immediately so other devices can load it
   sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:_savedAt,status:'unsigned'}]).catch(function(){});
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt}},ref:String(_rtRef)}));}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt,by:(S.user&&S.user.name)||''}},ref:String(_rtRef)}));}
   render();
 };
 
@@ -1772,7 +1775,7 @@ window.saveUnsigned=async()=>{
   if(_savingTab)delete _savingTab.originalForm;
   lsSet('ts_loadsheets_cache',S.saved);
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned'}]);
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog(isEdit?'loadsheet_edit':'loadsheet_save',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Draft saved.','ok');
   // Close the tab
@@ -1844,11 +1847,12 @@ window.closeLsTab=function(id){
       +'<button id="_lsCloseCancel" style="width:100%;padding:10px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>';
   } else {
     box.innerHTML='<div style="font-size:16px;font-weight:700;margin-bottom:8px">Close '+title+'?</div>'
-      +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px">Your changes have been auto-saved. Close now, or revert to the original version.</div>'
+      +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px">Save your changes to the folder, or close without saving.</div>'
       +'<div style="display:flex;gap:8px;margin-bottom:8px">'
-      +'<button id="_lsCloseKeep" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Close</button>'
-      +'<button id="_lsCloseDelete" style="flex:1;padding:11px;background:transparent;color:#f59e0b;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Revert &amp; Close</button>'
+      +'<button id="_lsCloseKeep" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Save &amp; Close</button>'
+      +'<button id="_lsCloseDelete" style="flex:1;padding:11px;background:transparent;color:#f59e0b;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Discard Changes</button>'
       +'</div>'
+      +'<button id="_lsClosePermDel" style="width:100%;margin-bottom:6px;padding:10px;background:transparent;color:#ef4444;border:1.5px solid #ef4444;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🗑 Delete Loadsheet</button>'
       +'<button id="_lsCloseCancel" style="width:100%;padding:10px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>';
   }
   ov.appendChild(box);
@@ -1860,6 +1864,10 @@ window.closeLsTab=function(id){
   document.getElementById('_lsCloseKeep').onclick=function(){_doClose('keep');};
   document.getElementById('_lsCloseDelete').onclick=function(){_doClose(tab.isNew?'delete':'revert');};
   document.getElementById('_lsCloseCancel').onclick=function(){ov.remove();};
+  var _permDelBtn=document.getElementById('_lsClosePermDel');
+  if(_permDelBtn)_permDelBtn.onclick=function(){
+    if(confirm('Permanently delete this loadsheet? This cannot be undone.'))_doClose('delete');
+  };
 };
 function _execCloseLsTab(id,idx,tab,action){
   if(action==='delete'){
@@ -1867,14 +1875,15 @@ function _execCloseLsTab(id,idx,tab,action){
     S.saved=S.saved.filter(function(s){return s.id!==id;});
     lsSet('ts_loadsheets_cache',S.saved);
     S._lsFormUndo=null;
+    if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_deleted',payload:{id:id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   } else if(action==='revert'){
-    if(tab.originalForm){
-      try{sbU('ts_loadsheets',[{id:id,form:tab.originalForm,saved_at:tab.savedAt||new Date().toISOString(),status:tab.status||'unsigned'}]);}catch(e){}
-      S.saved=S.saved.map(function(s){return s.id===id?Object.assign({},s,{form:tab.originalForm}):s;});
-      lsSet('ts_loadsheets_cache',S.saved);
-    }
+    // Discard: just close, DB unchanged (holds the original)
+    S._lsFormUndo=null;
+  } else if(action==='keep'){
+    // Save & Close: explicit DB write
+    const _sf=tab.form||S.form;
+    if(_sf)saveLsToDb(id,_sf).catch(function(){});
   }
-  // action==='keep': edits already auto-saved, nothing to do
   // Broadcast close
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_close',payload:{id:id}},ref:String(_rtRef)}));}
   if(S.activeTabId===id){
@@ -2064,7 +2073,7 @@ window.createBlankLsTab=function(acId){
   S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:_savedAt,isNew:true});
   S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
   sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:_savedAt,status:'unsigned'}]).catch(function(){});
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt}},ref:String(_rtRef)}));}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt,by:(S.user&&S.user.name)||''}},ref:String(_rtRef)}));}
   render();
 };
 window.changeLsAircraft=function(targetAcFull){

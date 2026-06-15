@@ -1047,12 +1047,38 @@ function initRealtime(){
           const _tp=msg.payload.payload;
           if(_tp&&_tp.id&&!S.lsTabs.find(function(t){return t.id===_tp.id;})){
             S.lsTabs.push({id:_tp.id,acId:_tp.acId,form:_tp.form,status:'unsigned',savedAt:_tp.savedAt});
+            if(_tp.by&&S.user&&_tp.by!==S.user.name)toast((_tp.by||'Someone')+' created '+((_tp.acId||'').replace('ZK-',''))+' loadsheet','info');
             safeRender();
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_tab_close'){
           var _closeId=msg.payload.payload&&msg.payload.payload.id;
           if(_closeId){S.lsTabs=S.lsTabs.filter(function(t){return t.id!==_closeId;});if(S.activeTabId===_closeId){S.activeTabId=null;S.editId=null;S.tab='manifest';}safeRender();}
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_signed'){
+          var _sipl=msg.payload.payload;
+          if(_sipl&&_sipl.sessionId!==_sessionId){
+            if(_sipl.by&&S.user&&_sipl.by!==S.user.name)toast((_sipl.by||'Someone')+' signed '+(_sipl.acCode||'')+' loadsheet','ok');
+            reloadTable('ts_loadsheets').then(function(){safeRender();});
+          }
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_deleted'){
+          var _dlpl=msg.payload.payload;
+          if(_dlpl&&_dlpl.id&&_dlpl.sessionId!==_sessionId){
+            S.saved=(S.saved||[]).filter(function(s){return s.id!==_dlpl.id;});
+            lsSet('ts_loadsheets_cache',S.saved);
+            S.lsTabs=(S.lsTabs||[]).filter(function(t){return t.id!==_dlpl.id;});
+            if(S.activeTabId===_dlpl.id){S.activeTabId=null;S.editId=null;S.tab='manifest';}
+            safeRender();
+          }
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='charter_update'){
+          var _cupl=msg.payload.payload;
+          if(_cupl&&_cupl.sessionId!==_sessionId){
+            if(_cupl.quotes)lsSet('ts_charter_quotes_cache',_cupl.quotes);
+            if(_cupl.by&&S.user&&_cupl.by!==S.user.name)toast((_cupl.by||'Someone')+' updated charter quotes','info');
+            if(S.tab==='charter')safeRender();
+          }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='pad_update'){
           var _pupl=msg.payload.payload;
@@ -1227,6 +1253,14 @@ function broadcastDispatch(){
     payload:{type:'broadcast',event:'dispatch',payload:S.dispatch},
     ref:String(_rtRef)}));
 }
+function broadcastCharter(){
+  if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
+  const _cq=lsGet('ts_charter_quotes_cache')||[];
+  _rtRef++;
+  _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
+    payload:{type:'broadcast',event:'charter_update',payload:{quotes:_cq,by:(S.user&&S.user.name)||'',sessionId:_sessionId}},
+    ref:String(_rtRef)}));
+}
 // ── Manifest pax tab-key navigation ──
 // _ffRow/_ffField: force-focus globals. Tab handler sets these then calls render().
 // render() uses them to focus the right element after rebuilding the DOM.
@@ -1298,16 +1332,23 @@ function autoSaveLS(){
   const _id=S.editId;
   if(!S.user||!_id)return;
   const _tab=S.lsTabs.find(function(t){return t.id===_id;});
-  if(_tab&&_tab.isNew)return; // never auto-save new unsaved tabs
-  const _formSnap=dc(S.form); // snapshot NOW before any tab switch can change S.form
+  if(_tab&&_tab.isNew)return;
+  const _formSnap=dc(S.form);
   clearTimeout(_autoSaveLSTimer);
-  _autoSaveLSTimer=setTimeout(async function(){
+  _autoSaveLSTimer=setTimeout(function(){
     const form=_formSnap;
     const tab=S.lsTabs.find(function(t){return t.id===_id;});
     if(tab){tab.form=form;}
-    await sbU('ts_loadsheets',[{id:_id,form:form,saved_at:new Date().toISOString(),status:form.status||'unsigned'}]);
     broadcastLS(S.lsAc,form);
   },900);
+}
+async function saveLsToDb(id,form){
+  if(!S.user||!id||!form)return;
+  const status=form.status||'unsigned';
+  await sbU('ts_loadsheets',[{id:id,form:form,saved_at:new Date().toISOString(),status:status}]);
+  S.saved=(S.saved||[]).map(function(s){return s.id===id?Object.assign({},s,{form:form,savedAt:new Date().toISOString(),status:status}):s;});
+  lsSet('ts_loadsheets_cache',S.saved);
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{id:id,by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
 }
 function _cleanPresence(){
   if(!S.rtPresence)return;

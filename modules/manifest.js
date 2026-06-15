@@ -7,7 +7,8 @@ function renderSeatmap(){
 }
 
 function _initManifestTabs(){
-  if(!S.manifestTabs||!S.manifestTabs.length){
+  // Only auto-create if tabs have never been set (undefined), not if user closed all tabs
+  if(!S.manifestTabs){
     const id='mt_'+Date.now();
     S.manifestTabs=[{id,savedId:S._loadedManifestId||null}];
     S.activeManifestTabId=id;
@@ -23,6 +24,18 @@ function _manifestTabLabel(tab){
 }
 function renderStep1(){
   _initManifestTabs();
+  // Empty state — all tabs closed
+  if(!S.manifestTabs||S.manifestTabs.length===0){
+    return`<div class="card" style="text-align:center;padding:40px 20px">
+      <div style="font-size:32px;margin-bottom:12px">📋</div>
+      <div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:6px">No open manifests</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Start a new manifest or load a saved one.</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="window.newManifestTab()">+ New Manifest</button>
+        <button class="btn btn-ghost" onclick="S.tab='saved';S.savedTab='manifests';render()">📂 Open Saved</button>
+      </div>
+    </div>`;
+  }
   const d=S.dispatch;
   // Airport options via aptOpts()
   const _tabBar=`<div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px">

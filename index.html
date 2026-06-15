@@ -1289,12 +1289,38 @@ function initRealtime(){
           const _tp=msg.payload.payload;
           if(_tp&&_tp.id&&!S.lsTabs.find(function(t){return t.id===_tp.id;})){
             S.lsTabs.push({id:_tp.id,acId:_tp.acId,form:_tp.form,status:'unsigned',savedAt:_tp.savedAt});
+            if(_tp.by&&S.user&&_tp.by!==S.user.name)toast((_tp.by||'Someone')+' created '+((_tp.acId||'').replace('ZK-',''))+' loadsheet','info');
             safeRender();
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_tab_close'){
           var _closeId=msg.payload.payload&&msg.payload.payload.id;
           if(_closeId){S.lsTabs=S.lsTabs.filter(function(t){return t.id!==_closeId;});if(S.activeTabId===_closeId){S.activeTabId=null;S.editId=null;S.tab='manifest';}safeRender();}
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_signed'){
+          var _sipl=msg.payload.payload;
+          if(_sipl&&_sipl.sessionId!==_sessionId){
+            if(_sipl.by&&S.user&&_sipl.by!==S.user.name)toast((_sipl.by||'Someone')+' signed '+(_sipl.acCode||'')+' loadsheet','ok');
+            reloadTable('ts_loadsheets').then(function(){safeRender();});
+          }
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_deleted'){
+          var _dlpl=msg.payload.payload;
+          if(_dlpl&&_dlpl.id&&_dlpl.sessionId!==_sessionId){
+            S.saved=(S.saved||[]).filter(function(s){return s.id!==_dlpl.id;});
+            lsSet('ts_loadsheets_cache',S.saved);
+            S.lsTabs=(S.lsTabs||[]).filter(function(t){return t.id!==_dlpl.id;});
+            if(S.activeTabId===_dlpl.id){S.activeTabId=null;S.editId=null;S.tab='manifest';}
+            safeRender();
+          }
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='charter_update'){
+          var _cupl=msg.payload.payload;
+          if(_cupl&&_cupl.sessionId!==_sessionId){
+            if(_cupl.quotes)lsSet('ts_charter_quotes_cache',_cupl.quotes);
+            if(_cupl.by&&S.user&&_cupl.by!==S.user.name)toast((_cupl.by||'Someone')+' updated charter quotes','info');
+            if(S.tab==='charter')safeRender();
+          }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='pad_update'){
           var _pupl=msg.payload.payload;
@@ -1469,6 +1495,14 @@ function broadcastDispatch(){
     payload:{type:'broadcast',event:'dispatch',payload:S.dispatch},
     ref:String(_rtRef)}));
 }
+function broadcastCharter(){
+  if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
+  const _cq=lsGet('ts_charter_quotes_cache')||[];
+  _rtRef++;
+  _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
+    payload:{type:'broadcast',event:'charter_update',payload:{quotes:_cq,by:(S.user&&S.user.name)||'',sessionId:_sessionId}},
+    ref:String(_rtRef)}));
+}
 // ── Manifest pax tab-key navigation ──
 // _ffRow/_ffField: force-focus globals. Tab handler sets these then calls render().
 // render() uses them to focus the right element after rebuilding the DOM.
@@ -1540,16 +1574,23 @@ function autoSaveLS(){
   const _id=S.editId;
   if(!S.user||!_id)return;
   const _tab=S.lsTabs.find(function(t){return t.id===_id;});
-  if(_tab&&_tab.isNew)return; // never auto-save new unsaved tabs
-  const _formSnap=dc(S.form); // snapshot NOW before any tab switch can change S.form
+  if(_tab&&_tab.isNew)return;
+  const _formSnap=dc(S.form);
   clearTimeout(_autoSaveLSTimer);
-  _autoSaveLSTimer=setTimeout(async function(){
+  _autoSaveLSTimer=setTimeout(function(){
     const form=_formSnap;
     const tab=S.lsTabs.find(function(t){return t.id===_id;});
     if(tab){tab.form=form;}
-    await sbU('ts_loadsheets',[{id:_id,form:form,saved_at:new Date().toISOString(),status:form.status||'unsigned'}]);
     broadcastLS(S.lsAc,form);
   },900);
+}
+async function saveLsToDb(id,form){
+  if(!S.user||!id||!form)return;
+  const status=form.status||'unsigned';
+  await sbU('ts_loadsheets',[{id:id,form:form,saved_at:new Date().toISOString(),status:status}]);
+  S.saved=(S.saved||[]).map(function(s){return s.id===id?Object.assign({},s,{form:form,savedAt:new Date().toISOString(),status:status}):s;});
+  lsSet('ts_loadsheets_cache',S.saved);
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{id:id,by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
 }
 function _cleanPresence(){
   if(!S.rtPresence)return;
@@ -2330,7 +2371,8 @@ function renderSeatmap(){
 }
 
 function _initManifestTabs(){
-  if(!S.manifestTabs||!S.manifestTabs.length){
+  // Only auto-create if tabs have never been set (undefined), not if user closed all tabs
+  if(!S.manifestTabs){
     const id='mt_'+Date.now();
     S.manifestTabs=[{id,savedId:S._loadedManifestId||null}];
     S.activeManifestTabId=id;
@@ -2346,6 +2388,18 @@ function _manifestTabLabel(tab){
 }
 function renderStep1(){
   _initManifestTabs();
+  // Empty state — all tabs closed
+  if(!S.manifestTabs||S.manifestTabs.length===0){
+    return`<div class="card" style="text-align:center;padding:40px 20px">
+      <div style="font-size:32px;margin-bottom:12px">📋</div>
+      <div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:6px">No open manifests</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Start a new manifest or load a saved one.</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="window.newManifestTab()">+ New Manifest</button>
+        <button class="btn btn-ghost" onclick="S.tab='saved';S.savedTab='manifests';render()">📂 Open Saved</button>
+      </div>
+    </div>`;
+  }
   const d=S.dispatch;
   // Airport options via aptOpts()
   const _tabBar=`<div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px">
@@ -2869,6 +2923,19 @@ function renderLsSeatGrid(f,a){
   var isGa8=a.layout==='ga8';
   var isPod=!!(a.cargo&&a.cargo.length>1&&a.cargo[0]&&a.cargo[0].lbl&&a.cargo[0].lbl.startsWith('Pod'));
   // Build the seat rows column
+  var _lsMode=S._lsSeatMode||'edit';
+  var _modeToggle='<div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px">'
+    +'<button onclick="S._lsSeatMode=\'edit\';render()" title="Click to edit seat passengers" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid '
+    +(_lsMode==='edit'?'var(--acc)':'var(--border2)')
+    +';background:'+(_lsMode==='edit'?'rgba(124,58,237,.18)':'transparent')
+    +';color:'+(_lsMode==='edit'?'var(--acc)':'var(--text3)')
+    +'">✏ Edit</button>'
+    +'<button onclick="S._lsSeatMode=\'move\';render()" title="Drag or tap seats to move passengers" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid '
+    +(_lsMode==='move'?'#22c55e':'var(--border2)')
+    +';background:'+(_lsMode==='move'?'rgba(34,197,94,.18)':'transparent')
+    +';color:'+(_lsMode==='move'?'#22c55e':'var(--text3)')
+    +'">⇄ Move</button>'
+    +'</div>';
   var seatsCol='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0">';
   layout.forEach(function(row){
     if(row==='spacer'){seatsCol+='<div style="height:6px"></div>';return;}
@@ -2896,13 +2963,15 @@ function renderLsSeatGrid(f,a){
         isOccupied?(gc||'var(--accent)'):'var(--border2)';
       var nameCol=gc?gc:(isPIC?'#93c5fd':isCoPilot?'#94a3b8':'var(--text1)');
       var clickable=!isCoPilot;
-      seatsCol+='<div onclick="'+(isPIC?'window.lsPicChangePopup()':clickable?'window.lsSeatEditPopup('+idx+')':'')+'" style="'
+      var _clickFn=isPIC?'window.lsPicChangePopup()':clickable?(_lsMode==='move'?'window.tapFormSeat('+idx+',\''+f.ac+'\',event)':'window.lsSeatEditPopup('+idx+')'):''
+;      var _dragAttrs=(_lsMode==='move'&&isOccupied&&!isPIC&&!isCoPilot)?' draggable="true" ondragstart="window.lsSeatDragStart('+idx+',event)" ondragover="event.preventDefault();this.style.outline=\'2px solid #22c55e\'" ondragleave="this.style.outline=\'\'" ondrop="window.lsDropOnSeat('+idx+',event);this.style.outline=\'\'"':'';
+      seatsCol+='<div onclick="'+_clickFn+'"'+_dragAttrs+' style="'
         +'width:'+sW+'px;height:'+sH+'px;border-radius:10px;border:2px solid '+borderCol+';'
-        +'background:'+bgCol+';cursor:'+(clickable?'pointer':'default')+';'
+        +'background:'+bgCol+';cursor:'+(_lsMode==='move'&&isOccupied&&!isPIC&&!isCoPilot?'grab':clickable?'pointer':'default')+';'
         +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
         +'position:relative;padding:3px 5px;text-align:center;flex-shrink:0;'
         +'transition:box-shadow .12s'
-        +'"'+(clickable?' onmouseover="this.style.boxShadow=\'0 0 0 2px var(--acc)\'" onmouseout="this.style.boxShadow=\'\'"':'')+' >';
+        +'"'+(clickable?' onmouseover="this.style.boxShadow=\'0 0 0 2px var(--acc)\'" onmouseout="this.style.boxShadow=\'\'"':'')+'  >';
       seatsCol+='<div style="position:absolute;top:3px;left:4px;font-size:9px;font-weight:700;color:'
         +(isPIC?'#3b82f6':isCoPilot?'#64748b':'var(--text3)')+';line-height:1">'
         +(isPIC?'PIC':isCoPilot?'CP':cell.lbl)+'</div>';
@@ -2930,7 +2999,7 @@ function renderLsSeatGrid(f,a){
     seatsCol+='</div>';
   });
   seatsCol+='</div>';
-  return seatsCol;
+  return _modeToggle+seatsCol;
 }
 
 // ── Seat editor popup ──
@@ -4034,7 +4103,13 @@ function renderSaved(){
     opts=opts||{};
     var col=AC_COL[s.form.ac]||'#64748b';
     var isCpCrew=!!s.form.coPilot;
-    var paxCnt=Object.keys(s.form.names||{}).filter(function(k){var ki=parseInt(k);return ki>=1&&!!(s.form.names||{})[k]&&((s.form.names||{})[k]||'').trim()&&!(ki===1&&isCpCrew);}).length;
+    var _names=s.form.names||{},_infants=s.form.infantNames||{},_types=s.form.paxType||{};
+    var _paxA=0,_paxC=0,_paxI=0;
+    Object.keys(_names).forEach(function(k){var ki=parseInt(k);if(ki<1)return;if(ki===1&&isCpCrew)return;var nm=(_names[k]||'').trim();if(!nm)return;if(_infants[ki])return;var t=_types[ki]||'A';if(t==='C')_paxC++;else _paxA++;});
+    Object.keys(_infants).forEach(function(k){var ki=parseInt(k);if(_infants[ki]&&(_names[ki]||'').trim())_paxI++;});
+    var paxCnt=_paxA+_paxC+_paxI;
+    var paxSummary=(_paxA?_paxA+'A ':'')+(_paxC?_paxC+'C ':'')+(_paxI?_paxI+'i':'');
+    if(!paxSummary)paxSummary=paxCnt?paxCnt+' PAX':'0 PAX';else paxSummary=paxSummary.trim();
     var savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
     var isSigned=s.status==='complete';
     var r=calcFormWB(s.form);
@@ -4065,8 +4140,9 @@ function renderSaved(){
         <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">
           <span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>
           ${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}
-          <span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${paxCnt} PAX</span>
+          <span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${paxSummary}</span>
         </div>
+        ${s.form.createdBy?`<div style="font-size:10px;color:var(--text3);margin-top:4px">by <span onclick="event.stopPropagation();window._lsShowCreator('${sid}')" style="color:var(--text2);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px">${s.form.createdBy}</span>${s.form.createdAt?' · '+_lsRelTime(s.form.createdAt):''}</div>`:''}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
         ${savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">${savedStr}</span>`:''}
@@ -4080,6 +4156,31 @@ function renderSaved(){
       </div>
     </div>`;
   }
+  window._lsShowCreator=function(id){
+    var s=(S.saved||[]).find(function(x){return x.id===id;});
+    if(!s||!s.form)return;
+    var f=s.form;
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+    var box=document.createElement('div');
+    box.style.cssText='background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:22px;max-width:340px;width:100%';
+    var cAt=f.createdAt?new Date(f.createdAt).toLocaleString('en-NZ',{dateStyle:'medium',timeStyle:'short'}):'';
+    var sAt=s.savedAt?new Date(s.savedAt).toLocaleString('en-NZ',{dateStyle:'medium',timeStyle:'short'}):'';
+    box.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+      +'<div style="font-size:16px;font-weight:700">Loadsheet History</div>'
+      +'<button id="_lcClose" style="background:none;border:none;color:var(--text3);font-size:22px;cursor:pointer;padding:0 4px;line-height:1">&times;</button>'
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;gap:10px">'
+      +(f.createdBy?'<div style="padding:10px 14px;background:var(--card2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:3px">Created by</div><div style="font-size:14px;font-weight:700;color:var(--text1)">'+f.createdBy+'</div>'+(cAt?'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+cAt+'</div>':'')+'</div>':'')
+      +(sAt?'<div style="padding:10px 14px;background:var(--card2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:3px">Last saved</div><div style="font-size:13px;font-weight:600;color:var(--text1)">'+sAt+'</div></div>':'')
+      +'<div style="padding:10px 14px;background:rgba(100,116,139,.08);border-radius:8px;border:1px dashed var(--border2)"><div style="font-size:11px;color:var(--text3);text-align:center">Full edit history coming soon</div></div>'
+      +'</div>';
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+    ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
+    document.getElementById('_lcClose').onclick=function(){ov.remove();};
+  };
+
   // ── Active tab (unsigned) ──
   if(tab==='active'){
     var _aSelCnt=Object.keys(S.savedSel).filter(function(id){return activeItems.find(function(s){return s.id===id;});}).length;
@@ -4136,7 +4237,7 @@ function renderSaved(){
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
           ${(m.data?.acSetup||[]).map(s=>{const col=AC_COL[s.acId]||'#64748b';return`<span style="padding:1px 7px;border-radius:12px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:11px">${s.acId||'?'}</span>`;}).join('')}
-          <span style="font-size:11px;color:var(--text3)">${m.savedAt?_lsRelTime(m.savedAt):''} · ${m.data?.pax?.length||0} pax</span>
+          <span style="font-size:11px;color:var(--text3)">${(function(){var _p=m.data&&m.data.pax||[];var a=_p.filter(function(x){return!x.infant&&x.type!=='child';}).length;var c=_p.filter(function(x){return x.type==='child';}).length;var i=_p.filter(function(x){return x.infant;}).length;var s=(a?a+'A ':'')+( c?c+'C ':''+(i?i+'i':''));return(m.savedAt?_lsRelTime(m.savedAt)+' · ':'')+( s.trim()||_p.length+' pax');})()}</span>
         </div>
       </div>
       <div style="display:flex;gap:6px">
@@ -4325,6 +4426,7 @@ window.saveCharterQuote=function(){
   lsSet('ts_charter_quotes_cache',quotes);
   sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
   toast('Quote saved ✓','ok');
+  if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
 window.loadCharterQuote=function(idx){
@@ -4340,6 +4442,7 @@ window.deleteCharterQuote=function(idx){
   quotes.splice(idx,1);
   lsSet('ts_charter_quotes_cache',quotes);
   sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
 window.renameCharterQuote=function(qi,newName){
@@ -4349,6 +4452,7 @@ window.renameCharterQuote=function(qi,newName){
   quotes[qi].name=newName;
   lsSet('ts_charter_quotes_cache',quotes);
   sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  if(typeof broadcastCharter==='function')broadcastCharter();
 };
 
 // Charter Rates tab (moved from Admin)
@@ -5247,21 +5351,27 @@ window.setTab=function(t){
 window.toggleAcSetup=id=>{
   const i=S.dispatch.acSetup.findIndex(s=>s.acId===id);
   if(i>=0){
-    // Removing aircraft: delete empty pax rows (up to seat count)
+    // Removing aircraft: unpin pax assigned to it, delete leftover blank rows
     const seatCount=paxSeatIdxs(id).length;
+    S.dispatch.pax.forEach(function(p){if(p.pinAc===id)p.pinAc=null;});
     var removed=0;
     S.dispatch.pax=S.dispatch.pax.filter(function(p){
-      if(removed<seatCount&&!p.name&&!p.infantName&&(!p.weight||p.weight===0)&&!p.infant){removed++;return false;}
+      if(removed<seatCount&&!p.pinAc&&!p.name&&!p.infantName&&(!p.weight||p.weight===0)&&!p.infant){removed++;return false;}
       return true;
     });
     S.dispatch.acSetup.splice(i,1);
   } else {
     const a=S.aircraft[id];
     S.dispatch.acSetup.push({acId:id,pic:'',coPilot:'',fuelInput:a?Math.round(fromKg(a.fuelKg,id)):null,_ts:Date.now()});
-    // Add empty pax rows equal to pax seat count
     const seatCount=paxSeatIdxs(id).length;
     const now=Date.now();
-    for(var n=0;n<seatCount;n++){S.dispatch.pax.push({id:'p_'+now+'_'+n,name:'',weight:0,bag:0,group:'',pinAc:null,_ts:now,infant:false,type:'adult'});}
+    // Auto-assign existing unallocated pax to this aircraft
+    const unalloc=S.dispatch.pax.filter(function(p){return !p.pinAc&&!p.infant;});
+    const toAssign=unalloc.slice(0,seatCount);
+    toAssign.forEach(function(p){p.pinAc=id;p._ts=now;});
+    // Add blank rows only for remaining empty seats
+    const remaining=seatCount-toAssign.length;
+    for(var n=0;n<remaining;n++){S.dispatch.pax.push({id:'p_'+now+'_'+n,name:'',weight:0,bag:0,group:'',pinAc:id,_ts:now,infant:false,type:'adult'});}
   }
   autoSaveDispatch();render();
 };
@@ -5905,12 +6015,9 @@ window.closeManifestTab=function(id){
   // If closing active tab, switch to adjacent
   if(id===S.activeManifestTabId){
     if(S.manifestTabs.length===0){
-      const fallbackId='mt_'+Date.now();
-      S.manifestTabs=[{id:fallbackId,savedId:null}];
-      S.activeManifestTabId=fallbackId;
+      // Allow 0 open tabs — show empty state
+      S.activeManifestTabId=null;
       S.dispatch=bD();
-      if(!S._manifestDispatches)S._manifestDispatches={};
-      S._manifestDispatches[fallbackId]=JSON.parse(JSON.stringify(S.dispatch));
       S._loadedManifestId=null;
     } else {
       const nextTab=S.manifestTabs[Math.min(tabIdx,S.manifestTabs.length-1)];
@@ -5954,7 +6061,7 @@ function generateLoadsheet(acId){
   S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
   // Save immediately so other devices can load it
   sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:_savedAt,status:'unsigned'}]).catch(function(){});
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt}},ref:String(_rtRef)}));}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt,by:(S.user&&S.user.name)||''}},ref:String(_rtRef)}));}
   render();
 };
 
@@ -6149,7 +6256,7 @@ window.saveUnsigned=async()=>{
   if(_savingTab)delete _savingTab.originalForm;
   lsSet('ts_loadsheets_cache',S.saved);
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned'}]);
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog(isEdit?'loadsheet_edit':'loadsheet_save',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Draft saved.','ok');
   // Close the tab
@@ -6221,11 +6328,12 @@ window.closeLsTab=function(id){
       +'<button id="_lsCloseCancel" style="width:100%;padding:10px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>';
   } else {
     box.innerHTML='<div style="font-size:16px;font-weight:700;margin-bottom:8px">Close '+title+'?</div>'
-      +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px">Your changes have been auto-saved. Close now, or revert to the original version.</div>'
+      +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px">Save your changes to the folder, or close without saving.</div>'
       +'<div style="display:flex;gap:8px;margin-bottom:8px">'
-      +'<button id="_lsCloseKeep" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Close</button>'
-      +'<button id="_lsCloseDelete" style="flex:1;padding:11px;background:transparent;color:#f59e0b;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Revert &amp; Close</button>'
+      +'<button id="_lsCloseKeep" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Save &amp; Close</button>'
+      +'<button id="_lsCloseDelete" style="flex:1;padding:11px;background:transparent;color:#f59e0b;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Discard Changes</button>'
       +'</div>'
+      +'<button id="_lsClosePermDel" style="width:100%;margin-bottom:6px;padding:10px;background:transparent;color:#ef4444;border:1.5px solid #ef4444;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🗑 Delete Loadsheet</button>'
       +'<button id="_lsCloseCancel" style="width:100%;padding:10px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>';
   }
   ov.appendChild(box);
@@ -6237,6 +6345,10 @@ window.closeLsTab=function(id){
   document.getElementById('_lsCloseKeep').onclick=function(){_doClose('keep');};
   document.getElementById('_lsCloseDelete').onclick=function(){_doClose(tab.isNew?'delete':'revert');};
   document.getElementById('_lsCloseCancel').onclick=function(){ov.remove();};
+  var _permDelBtn=document.getElementById('_lsClosePermDel');
+  if(_permDelBtn)_permDelBtn.onclick=function(){
+    if(confirm('Permanently delete this loadsheet? This cannot be undone.'))_doClose('delete');
+  };
 };
 function _execCloseLsTab(id,idx,tab,action){
   if(action==='delete'){
@@ -6244,14 +6356,15 @@ function _execCloseLsTab(id,idx,tab,action){
     S.saved=S.saved.filter(function(s){return s.id!==id;});
     lsSet('ts_loadsheets_cache',S.saved);
     S._lsFormUndo=null;
+    if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_deleted',payload:{id:id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   } else if(action==='revert'){
-    if(tab.originalForm){
-      try{sbU('ts_loadsheets',[{id:id,form:tab.originalForm,saved_at:tab.savedAt||new Date().toISOString(),status:tab.status||'unsigned'}]);}catch(e){}
-      S.saved=S.saved.map(function(s){return s.id===id?Object.assign({},s,{form:tab.originalForm}):s;});
-      lsSet('ts_loadsheets_cache',S.saved);
-    }
+    // Discard: just close, DB unchanged (holds the original)
+    S._lsFormUndo=null;
+  } else if(action==='keep'){
+    // Save & Close: explicit DB write
+    const _sf=tab.form||S.form;
+    if(_sf)saveLsToDb(id,_sf).catch(function(){});
   }
-  // action==='keep': edits already auto-saved, nothing to do
   // Broadcast close
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_close',payload:{id:id}},ref:String(_rtRef)}));}
   if(S.activeTabId===id){
@@ -6441,7 +6554,7 @@ window.createBlankLsTab=function(acId){
   S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:_savedAt,isNew:true});
   S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
   sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:_savedAt,status:'unsigned'}]).catch(function(){});
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt}},ref:String(_rtRef)}));}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt,by:(S.user&&S.user.name)||''}},ref:String(_rtRef)}));}
   render();
 };
 window.changeLsAircraft=function(targetAcFull){

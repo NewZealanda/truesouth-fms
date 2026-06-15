@@ -174,6 +174,7 @@ window.saveCharterQuote=function(){
   lsSet('ts_charter_quotes_cache',quotes);
   sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
   toast('Quote saved ✓','ok');
+  if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
 window.loadCharterQuote=function(idx){
@@ -189,6 +190,7 @@ window.deleteCharterQuote=function(idx){
   quotes.splice(idx,1);
   lsSet('ts_charter_quotes_cache',quotes);
   sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
 window.renameCharterQuote=function(qi,newName){
@@ -198,6 +200,7 @@ window.renameCharterQuote=function(qi,newName){
   quotes[qi].name=newName;
   lsSet('ts_charter_quotes_cache',quotes);
   sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  if(typeof broadcastCharter==='function')broadcastCharter();
 };
 
 // Charter Rates tab (moved from Admin)
