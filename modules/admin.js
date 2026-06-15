@@ -1432,7 +1432,7 @@ window.bulkUploadSaved=async function(){
   const ids=Object.keys(S.savedSel);
   const signed=ids.filter(function(id){const s=S.saved.find(function(x){return x.id===id;});return s&&s.status==='complete';});
   if(!signed.length){toast('No signed loadsheets selected.','warn');return;}
-  if(!S.gdriveEnabled||!S.gdriveClientId){toast('Google Drive not configured — check Admin > Google Drive.','warn');return;}
+  if(!S.gdriveClientId){toast('Google Drive Client ID not set — check Admin > Google Drive.','warn');return;}
   var _bulkToken=null;
   try{
     _bulkToken=await new Promise(function(res,rej){
@@ -1800,6 +1800,26 @@ window.saveUnsigned=async()=>{
   render();
 };
 window.saveDraft=window.saveUnsigned; // alias for desk staff button
+// submitLsInPlace: save as complete, toast, STAY on tab (pilot view)
+window.submitLsInPlace=async function(){
+  const f=S.form;
+  if(!f||!f.sig){toast('Please sign the loadsheet first.','warn');return;}
+  if(!f.pic){toast('Select a PIC before submitting.','warn');return;}
+  const r=calcFormWB(f);if(!r||!r.towOk||!r.lwOk||!r.cogOk){toast('Fix weight and balance limits before submitting.','warn');return;}
+  const id=S.editId||('ls_'+Date.now());
+  f.sigBy=(S.user&&S.user.name)||'';f.sigTs=f.sigTs||new Date().toISOString();
+  f.savedBy=(S.user&&S.user.name)||'';
+  const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'complete'};
+  S.saved=S.saved.filter(function(s){return s.id!==id;});S.saved.unshift(sheet);
+  lsSet('ts_loadsheets_cache',S.saved);
+  S.editId=id;S.formDirty=false;
+  var _t=S.lsTabs.find(function(t){return t.id===id;});if(_t)delete _t.originalForm;
+  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
+  auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
+  toast('Loadsheet submitted ✓','ok');
+  render();
+};
 // handleSubmit for signed loadsheets
 window.handleSubmit=async()=>{
   const f=S.form;
@@ -2773,9 +2793,9 @@ window.updateMyWeight=async w=>{
 
 // ── Runtime modules (need S) ──
 window.forceUploadAll=async function(){
-  if(!S.gdriveEnabled||!S.gdriveClientId){toast('Google Drive not configured in Admin.','err');return;}
-  const pending=S.saved.filter(function(s){return s.status==='complete'&&!s.driveUploaded;});
-  if(!pending.length){toast('No new signed loadsheets to upload.','info');return;}
+  if(!S.gdriveClientId){toast('Google Drive Client ID not set — check Admin > Google Drive.','err');return;}
+  const pending=S.saved.filter(function(s){return s.status==='complete';});
+  if(!pending.length){toast('No signed loadsheets to upload.','info');return;}
   S.uploadProgress='Authorising Drive…';render();
   // Get OAuth token ONCE and reuse for all uploads
   var sharedToken;

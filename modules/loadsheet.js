@@ -75,7 +75,9 @@ function renderLsSeatGrid(f,a){
         seatsCol+='<div style="position:absolute;bottom:3px;right:3px;font-size:7px;font-weight:900;background:rgba(251,146,60,.7);color:#7c2d12;border-radius:3px;padding:0 3px;line-height:1.6">C</div>';
       }
       if(hasInfant){
-        seatsCol+='<div style="position:absolute;top:2px;right:3px;font-size:7px;font-weight:900;background:rgba(236,72,153,.7);color:#831843;border-radius:3px;padding:0 3px;line-height:1.6">i</div>';
+        seatsCol+='<div style="position:absolute;bottom:3px;right:3px;font-size:7px;font-weight:900;background:rgba(236,72,153,.7);color:#831843;border-radius:3px;padding:0 3px;line-height:1.6">i</div>';
+      } else if(!isPIC&&paxType==='C'){
+        // C badge already rendered above; only show $ if no child badge
       }
       if(!hasInfant&&payReq&&!isPIC){
         seatsCol+='<div style="position:absolute;top:2px;right:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.6);color:#fff;border-radius:3px;padding:0 3px;line-height:1.6">$</div>';
@@ -527,10 +529,10 @@ function renderLoadsheet(){
             const fwdCog=r&&a&&r.towCog!=null&&r.towCog<a.cogMin;
             const fwdWarn=fwdCog?`<div style="padding:8px 12px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fde68a">&#x26a0; Forward CoG ${r.towCog?.toFixed(2)}" &#x2014; forward of limit ${a?.cogMin}". Adjust seating before submitting.</div>`:'';
             if(f.sig){
-              // Signed: Submit & close
+              // Signed: Submit in place (save + toast, stay on tab)
               const canSubmit=canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0;
-              const btn=`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="width:100%;padding:13px;font-size:14px;font-weight:700" onclick="handleSubmit()" ${canSubmit?'':'disabled'}>
-                ${!f.pic?'&#x26a0; Select PIC first':fwdCog?'&#x26a0; Fix CoG first':!allOk?'&#x26a0; Fix W&B first':_overCap>0?'&#x26d4; Fix over-capacity first':'&#x1f4be; Save &amp; Submit'}
+              const btn=`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="width:100%;padding:13px;font-size:14px;font-weight:700" onclick="window.submitLsInPlace()" ${canSubmit?'':'disabled'}>
+                ${!f.pic?'&#x26a0; Select PIC first':fwdCog?'&#x26a0; Fix CoG first':!allOk?'&#x26a0; Fix W&B first':_overCap>0?'&#x26d4; Fix over-capacity first':'&#x2713; Submit'}
               </button>`;
               return fwdWarn+btn;
             } else {

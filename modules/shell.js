@@ -329,7 +329,7 @@ function renderApp(){
   if(_canOps)_navH+='<button tabindex="-1" class="nav-tab '+(_opsOn?'on':'off')+'" onclick="setTab(\'operations\')">Operations</button>';
   if(_canCharter)_navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='charter'?'on':'off')+'" onclick="setTab(\'charter\')">Charter</button>';
   if(_canMaint)_navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='maintenance'?'on':'off')+'" onclick="setTab(\'maintenance\')">Maintenance</button>';
-  _navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='admin'?'on':'off')+'" onclick="setTab(\'admin\')">'+(role==='admin'?'Admin':'Crew')+'</button>';
+  _navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='admin'?'on':'off')+'" onclick="setTab(\'admin\')">'+(role==='admin'?'Admin':'Settings')+'</button>';
   _navH+='</div>';
 
   return`<div style="min-height:100vh;background:var(--bg);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)">
