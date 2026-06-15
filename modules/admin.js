@@ -1531,6 +1531,7 @@ window.newManifestTab=function(){
   S.dispatch=newDisp;
   S._loadedManifestId=null;
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
+  window.saveWorkspace&&window.saveWorkspace();
   render();
 };
 window.closeManifestTab=function(id){

@@ -100,7 +100,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.37';
+const APP_VER='v22.39';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1317,7 +1317,10 @@ document.addEventListener('keydown',function(e){
 });
 window.adminKickUser=function(userId){
   if(!_rtWs||_rtWs.readyState!==1){alert('Not connected to realtime.');return;}
+  var _kp=S.rtPresence&&S.rtPresence[userId];
+  var _kName=(_kp&&_kp.name)||userId;
   _rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'admin_kick',payload:{userId:userId,by:(S.user&&S.user.name)||''}},ref:String(_rtRef)}));
+  auditLog('admin_kick',{target:_kName,targetId:userId,by:(S.user&&S.user.name)||''});
   // Also clear locally
   delete S.rtPresence[userId];updatePresBar(S._presSection||'manifest');
 };
@@ -1352,7 +1355,6 @@ function autoSaveLS(){
   const _id=S.editId;
   if(!S.user||!_id)return;
   const _tab=S.lsTabs.find(function(t){return t.id===_id;});
-  if(_tab&&_tab.isNew)return;
   const _formSnap=dc(S.form);
   clearTimeout(_autoSaveLSTimer);
   _autoSaveLSTimer=setTimeout(function(){
@@ -1600,8 +1602,8 @@ function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.
 async function saveWorkspace(){
   if(!S.user)return;
   var _wsIds=(S.lsTabs||[]).map(function(t){return t.id;});
-  var _wsMIds=(S.manifestTabs||[]).map(function(t){return t.savedId;}).filter(Boolean);
-  var _wsState={openLsIds:_wsIds,openManifestSavedIds:_wsMIds};
+  var _wsMTabs=(S.manifestTabs||[]).map(function(t){return{id:t.id,savedId:t.savedId||null};});
+  var _wsState={openLsIds:_wsIds,openManifestTabs:_wsMTabs};
   await sbU('ts_settings',[{key:'workspace_shared',value:JSON.stringify(_wsState)}]).catch(function(){});
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'workspace_update',payload:{state:_wsState,sessionId:_sessionId}},ref:String(_rtRef)}));}
 }
@@ -1619,28 +1621,50 @@ async function restoreWorkspace(){
 }
 
 function _applyWorkspace(ws){
-  if(!ws||!ws.openLsIds)return;
+  if(!ws)return;
+  var _render=false;
+  // ── Loadsheet tabs ──
   S.lsTabs=S.lsTabs||[];
-  var _added=false;
   (ws.openLsIds||[]).forEach(function(_wid){
     if(S.lsTabs.find(function(t){return t.id===_wid;}))return;
-    var _ws2=S.saved.find(function(x){return x.id===_wid&&x.status!=='deleted';});
+    var _ws2=(S.saved||[]).find(function(x){return x.id===_wid&&x.status!=='deleted';});
     if(_ws2){
       var _wac=(_ws2.form&&_ws2.form.ac)||'ZK-SLA';
       var _wform=dc(_ws2.form);if(!_wform.cargo)_wform.cargo={};
       var _isNew=_ws2.status==='draft';
       S.lsTabs.push({id:_ws2.id,acId:_wac,form:_wform,status:'unsigned',savedAt:_ws2.savedAt,isNew:_isNew,originalForm:_isNew?null:dc(_ws2.form)});
-      _added=true;
+      _render=true;
     }
   });
-  if(_added){
-    if(!S.activeTabId&&S.lsTabs.length){
-      var _wt=S.lsTabs[0];
-      S.activeTabId=_wt.id;S.form=_wt.form;S.lsAc=(_wt.acId||'').replace('ZK-','');S.editId=_wt.id;
-      S.tab='loadsheet';S._newLsTab=false;
-    }
-    safeRender();
+  if(_render&&!S.activeTabId&&S.lsTabs.length){
+    var _wt=S.lsTabs[0];
+    S.activeTabId=_wt.id;S.form=_wt.form;S.lsAc=(_wt.acId||'').replace('ZK-','');S.editId=_wt.id;
+    S.tab='loadsheet';S._newLsTab=false;
   }
+  // ── Manifest tabs ──
+  if(!S.manifestTabs)S.manifestTabs=[];
+  if(!S._manifestDispatches)S._manifestDispatches={};
+  (ws.openManifestTabs||[]).forEach(function(_wmt){
+    if(S.manifestTabs.find(function(t){return t.id===_wmt.id;}))return;
+    if(_wmt.savedId){
+      // Restore a saved manifest into a new tab
+      var _wm=(S.manifests||[]).find(function(m){return m.id===_wmt.savedId;});
+      if(_wm){
+        var _wmData=Object.assign({},bD(),_wm.data||{},{step:1});
+        S.manifestTabs.push({id:_wmt.id,savedId:_wmt.savedId});
+        S._manifestDispatches[_wmt.id]=JSON.parse(JSON.stringify(_wmData));
+        if(!S.activeManifestTabId){S.activeManifestTabId=_wmt.id;S.dispatch=JSON.parse(JSON.stringify(_wmData));S._loadedManifestId=_wmt.savedId;}
+        _render=true;
+      }
+    } else {
+      // Blank manifest tab
+      S.manifestTabs.push({id:_wmt.id,savedId:null});
+      S._manifestDispatches[_wmt.id]=JSON.parse(JSON.stringify(bD()));
+      if(!S.activeManifestTabId){S.activeManifestTabId=_wmt.id;S.dispatch=bD();}
+      _render=true;
+    }
+  });
+  if(_render)safeRender();
 }
 
 window.addEventListener('pagehide',function(){saveWorkspace();});
