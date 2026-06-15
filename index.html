@@ -3066,9 +3066,9 @@ function renderLsSeatGrid(f,a){
       var isSelSeat=S._selFormSeat===idx;
       var isDropTarget=!isPIC&&!isCoPilot&&(S._selFormSeat!=null||S._selUnalloc!=null)&&!isSelSeat;
       var bgCol=isSelSeat?'rgba(245,158,11,.45)':isPIC?'rgba(59,130,246,.18)':isCoPilot?'rgba(100,116,139,.12)':
-        isOccupied?(gc?gc+'30':'rgba(124,58,237,.14)'):(isDropTarget?'rgba(124,58,237,.08)'):'var(--card2)';
+        isOccupied?(gc?gc+'30':'rgba(124,58,237,.14)'):(isDropTarget?'rgba(124,58,237,.08)':'var(--card2)');
       var borderCol=isSelSeat?'#f59e0b':isPIC?'#3b82f6':isCoPilot?'#64748b':
-        isOccupied?(gc||'var(--accent)'):(isDropTarget?'var(--accent)'):'var(--border2)';
+        isOccupied?(gc||'var(--accent)'):(isDropTarget?'var(--accent)':'var(--border2)');
       var nameCol=gc?gc:(isPIC?'#93c5fd':isCoPilot?'#94a3b8':'var(--text1)');
       var clickable=!isCoPilot;
       var _clickFn=isPIC?'window.lsPicChangePopup()':clickable?(_lsMode==='move'?'window.tapFormSeat('+idx+',\''+f.ac+'\',event)':'window.lsSeatEditPopup('+idx+')'):''

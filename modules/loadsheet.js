@@ -40,10 +40,12 @@ function renderLsSeatGrid(f,a){
       if(isPIC){displayNm=(f.names[0]||f.pic||'').trim();}
       else if(isCoPilot){displayNm=(f.coPilot||'').trim();}
       var isOccupied=!!nm||parseFloat(wt)>0;
-      var bgCol=isPIC?'rgba(59,130,246,.18)':isCoPilot?'rgba(100,116,139,.12)':
-        isOccupied?(gc?gc+'30':'rgba(124,58,237,.14)'):'var(--card2)';
-      var borderCol=isPIC?'#3b82f6':isCoPilot?'#64748b':
-        isOccupied?(gc||'var(--accent)'):'var(--border2)';
+      var isSelSeat=S._selFormSeat===idx;
+      var isDropTarget=!isPIC&&!isCoPilot&&(S._selFormSeat!=null||S._selUnalloc!=null)&&!isSelSeat;
+      var bgCol=isSelSeat?'rgba(245,158,11,.45)':isPIC?'rgba(59,130,246,.18)':isCoPilot?'rgba(100,116,139,.12)':
+        isOccupied?(gc?gc+'30':'rgba(124,58,237,.14)'):(isDropTarget?'rgba(124,58,237,.08)':'var(--card2)');
+      var borderCol=isSelSeat?'#f59e0b':isPIC?'#3b82f6':isCoPilot?'#64748b':
+        isOccupied?(gc||'var(--accent)'):(isDropTarget?'var(--accent)':'var(--border2)');
       var nameCol=gc?gc:(isPIC?'#93c5fd':isCoPilot?'#94a3b8':'var(--text1)');
       var clickable=!isCoPilot;
       var _clickFn=isPIC?'window.lsPicChangePopup()':clickable?(_lsMode==='move'?'window.tapFormSeat('+idx+',\''+f.ac+'\',event)':'window.lsSeatEditPopup('+idx+')'):''
@@ -312,7 +314,7 @@ function renderLoadsheet(){
       </div>
       <div style="text-align:center">
         <div style="font-size:9px;color:var(--text3)">WT kg</div>
-        <input class="fi" type="number" value="${cW||''}" ${picCrew?'readonly':''} style="font-size:12px;width:52px;padding:2px 4px;${picCrew?'opacity:.65':''}" onblur="lsS(0,this.value)">
+        <input class="fi" type="number" inputmode="decimal" value="${cW||''}" ${picCrew?'readonly':''} style="font-size:12px;width:52px;padding:2px 4px;${picCrew?'opacity:.65':''}" onblur="lsS(0,this.value)">
       </div>
     </div>`;
     // Pax seat cards (2-column grid)
@@ -333,7 +335,7 @@ function renderLoadsheet(){
       const hasPerson=nm||parseFloat(wt);
       const selUnalloc=S._selUnalloc!=null;const selSeat=S._selFormSeat===idx;
       const isCp=idx===1&&!!f.coPilot;
-      return`<div onclick="window.tapFormSeat(${idx},'${f.ac}',event)" draggable="${nm?'true':'false'}" ondragstart="window.lsSeatDragStart(${idx},event)" ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'" ondragleave="event.currentTarget.style.outline=''" ondrop="window.lsDropOnSeat(${idx},event)" style="position:relative;cursor:${selUnalloc||nm?'pointer':'default'};background:${selSeat?'rgba(245,158,11,.15)':selUnalloc&&!nm?'rgba(124,58,237,.1)':'var(--card2)'};border-radius:7px;padding:4px 6px;border-left:3px solid ${hasPerson?(gc||'var(--accent)'):selUnalloc?'var(--accent)':'var(--border2)'};transition:outline .1s">
+      return`<div onclick="window.tapFormSeat(${idx},'${f.ac}',event)" draggable="${nm?'true':'false'}" ondragstart="window.lsSeatDragStart(${idx},event)" ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'" ondragleave="event.currentTarget.style.outline=''" ondrop="window.lsDropOnSeat(${idx},event)" style="position:relative;cursor:${selUnalloc||nm?'pointer':'default'};background:${selSeat?'rgba(245,158,11,.4)':selUnalloc&&!nm?'rgba(124,58,237,.15)':'var(--card2)'};border-radius:7px;padding:4px 6px;border:${selSeat?'2px solid #f59e0b':selUnalloc&&!nm?'2px dashed var(--accent)':'1px solid var(--border2)'};outline:${selSeat?'3px solid rgba(245,158,11,.3)':'none'};transition:outline .1s">
         <div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;margin-bottom:2px">
           <span style="font-size:9px;font-weight:700;color:var(--text3);min-width:16px;flex-shrink:0">${s.lbl}</span>
           ${nm
@@ -389,7 +391,7 @@ function renderLoadsheet(){
         return`<div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:${podColors[zi%4]};border:1px solid ${podBorders[zi%4]};border-radius:10px;padding:10px 12px">
           <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:${podTextColors[zi%4]};text-transform:uppercase;margin-bottom:6px">${zn.lbl}${zn.maxKg?' · max '+zn.maxKg+'kg':''}</div>
           <div style="display:flex;align-items:baseline;gap:5px">
-            <input class="fi ls-no-spin" type="number" placeholder="0" value="${w}" style="font-size:20px;font-weight:800;width:70px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
+            <input class="fi ls-no-spin" type="number" inputmode="decimal" placeholder="0" value="${w}" style="font-size:20px;font-weight:800;width:70px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsC(${zi},this.value)">
             <span style="font-size:12px;color:${podTextColors[zi%4]}">kg</span>
           </div>
           <div style="font-size:11px;color:${podTextColors[zi%4]};margin-top:4px">${w?'mom '+(((parseFloat(w)||0)*zn.arm).toFixed(0)):''}</div>
@@ -408,7 +410,7 @@ function renderLoadsheet(){
         return`<div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:${bg};border:1px solid ${bdr};border-radius:10px;padding:10px 12px">
           <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:${lc};text-transform:uppercase;margin-bottom:6px">${zn.lbl}${zn.maxKg?' · max '+zn.maxKg+'kg':''}${overLimit?' ⚠ OVER':''}</div>
           <div style="display:flex;align-items:baseline;gap:5px">
-            <input class="fi ls-no-spin" type="number" placeholder="0" value="${w}" style="font-size:20px;font-weight:800;width:70px;padding:0;background:transparent;border:none;color:${overLimit?'#ef4444':'var(--text)'}" onblur="lsC(${zi},this.value)">
+            <input class="fi ls-no-spin" type="number" inputmode="decimal" placeholder="0" value="${w}" style="font-size:20px;font-weight:800;width:70px;padding:0;background:transparent;border:none;color:${overLimit?'#ef4444':'var(--text)'}" onblur="lsC(${zi},this.value)">
             <span style="font-size:12px;color:${lc}">kg</span>
           </div>
           ${w?`<div style="font-size:11px;color:${lc};margin-top:4px">mom ${((parseFloat(w)||0)*zn.arm).toFixed(0)}</div>`:''}
@@ -422,7 +424,7 @@ function renderLoadsheet(){
       <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);border-radius:8px;padding:8px 10px">
         <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#60a5fa;text-transform:uppercase;margin-bottom:4px">Fuel Loaded</div>
         <div style="display:flex;align-items:baseline;gap:4px">
-          <input class="fi ls-no-spin" type="number" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsFuel(this.value,'${f.ac}')">
+          <input class="fi ls-no-spin" type="number" inputmode="decimal" placeholder="${fuelDisplay}" value="${fuelDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsFuel(this.value,'${f.ac}')">
           <span style="font-size:11px;color:#60a5fa">${fuelUnit_}</span>
         </div>
         <div style="font-size:10px;color:#60a5fa;margin-top:2px">${fuelKgVal.toFixed(1)} kg</div>
@@ -430,7 +432,7 @@ function renderLoadsheet(){
       <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30);border-radius:8px;padding:8px 10px">
         <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f59e0b;text-transform:uppercase;margin-bottom:4px">Gnd Burn</div>
         <div style="display:flex;align-items:baseline;gap:4px">
-          <input class="fi ls-no-spin" type="number" placeholder="${gndBurnDisplay}" value="${gndBurnDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsGndBurn(this.value,'${f.ac}')">
+          <input class="fi ls-no-spin" type="number" inputmode="decimal" placeholder="${gndBurnDisplay}" value="${gndBurnDisplay}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsGndBurn(this.value,'${f.ac}')">
           <span style="font-size:11px;color:#f59e0b">${fuelUnit_}</span>
         </div>
         <div style="font-size:10px;color:#f59e0b;margin-top:2px">${gndBurnKg.toFixed(1)} kg</div>
@@ -438,7 +440,7 @@ function renderLoadsheet(){
       <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.30);border-radius:8px;padding:8px 10px">
         <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f87171;text-transform:uppercase;margin-bottom:4px">Flight Burn</div>
         <div style="display:flex;align-items:baseline;gap:4px">
-          <input class="fi ls-no-spin" type="number" placeholder="${a.burnDef||(a?.layout==='ga8'?35:187)}" value="${burnVal}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
+          <input class="fi ls-no-spin" type="number" inputmode="decimal" placeholder="${a.burnDef||(a?.layout==='ga8'?35:187)}" value="${burnVal}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
           <span style="font-size:11px;color:#f87171">${a?.layout==='ga8'?'L':burnUnit_}</span>
         </div>
         <div style="font-size:10px;color:#f87171;margin-top:2px">&#x2248; ${flightMin} min</div>
@@ -583,16 +585,23 @@ function renderLoadsheet(){
           +'</div>';
       }).join('');
       // Placeholder empty slots — drop targets
+      var _selFs=S._selFormSeat!=null;
       var _placeholders='';
       for(var _pi=0;_pi<_emptySlots;_pi++){
-        _placeholders+='<div class="seat" ondragover="event.preventDefault();this.style.outline=\'2px solid var(--acc)\'" ondragleave="this.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event);this.style.outline=\'\'" style="flex-shrink:0;border:2px dashed var(--border2);background:transparent;cursor:pointer;opacity:.5">'
-          +'<div style="font-size:18px;color:var(--border2)">+</div>'
+        _placeholders+='<div class="seat"'+(_selFs?' onclick="window.tapDropUnallocated()"':'')+' ondragover="event.preventDefault();this.style.outline=\'2px solid var(--acc)\'" ondragleave="this.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event);this.style.outline=\'\'" style="flex-shrink:0;border:2px dashed '+(_selFs?'#f59e0b':'var(--border2)')+';background:transparent;cursor:pointer;opacity:'+(_selFs?'1':'.5')+'">'
+          +'<div style="font-size:18px;color:'+(_selFs?'#f59e0b':'var(--border2)')+'">+</div>'
           +'</div>';
       }
-      const hint=selIdx!=null
-        ?'<div style="font-size:11px;color:var(--acc);font-weight:600;margin-bottom:6px">Passenger selected — tap an empty seat above to assign</div>'
-        :'<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Drag from seat or tap to add · drag to a seat above to assign</div>';
-      unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--acc)\'" ondragleave="event.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)"><div class="st">Unallocated'+(ua.length?' ('+ua.length+')':'')+'</div>'+hint+'<div style="display:flex;flex-wrap:wrap;gap:6px">'+cards+_placeholders+'</div></div>';
+      const hint=_selFs
+        ?'<div style="font-size:11px;color:#f59e0b;font-weight:700;margin-bottom:6px;cursor:pointer" onclick="window.tapDropUnallocated()">↓ Tap here to move passenger to unallocated</div>'
+        :selIdx!=null
+          ?'<div style="font-size:11px;color:var(--acc);font-weight:600;margin-bottom:6px">Passenger selected — tap an empty seat above to assign</div>'
+          :'<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Drag from seat or tap to add · drag to a seat above to assign</div>';
+      var _unallocHdr='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div class="st" style="margin-bottom:0;flex:1">Unallocated'+(ua.length?' ('+ua.length+')':'')+'</div>'
+        +(S._unallocUndo?'<button style="font-size:11px;padding:3px 9px;border-radius:14px;border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#f59e0b;cursor:pointer;font-weight:700" onclick="window.undoClearUnallocated()">↩ Undo</button>':'')
+        +(ua.length?'<button style="font-size:11px;padding:3px 9px;border-radius:14px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;cursor:pointer" onclick="if(confirm(\'Remove all unallocated passengers?\'))window.clearUnallocated()">Clear All</button>':'')
+        +'</div>';
+      unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--acc)\'" ondragleave="event.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)">'+_unallocHdr+hint+'<div style="display:flex;flex-wrap:wrap;gap:6px">'+cards+_placeholders+'</div></div>';
     }
   }
   return`${draftBanner}${_overCapBanner}${clearBtn}

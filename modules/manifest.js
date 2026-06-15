@@ -473,7 +473,11 @@ function renderStep2(){
 
   const _hasSel=!!S.selectedPax;
   const poolHTML=`<div class="card" style="padding:10px 12px;margin-bottom:12px;${_hasSel&&!unassigned.length?'border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)':''}" ondragover="event.preventDefault()" ondrop="dropOnPool(event)" onclick="window.tapPool(event)">
-    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Unassigned${unassigned.length?' ('+unassigned.length+')':''}</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;flex:1">Unassigned${unassigned.length?' ('+unassigned.length+')':''}</div>
+      ${S._unassignedUndo?`<button style="font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#f59e0b;cursor:pointer;font-weight:700" onclick="event.stopPropagation();window.undoClearUnassigned()">↩ Undo</button>`:''}
+      ${unassigned.length?`<button style="font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;cursor:pointer" onclick="event.stopPropagation();if(confirm('Remove all unassigned passengers?'))window.clearUnassigned()">Clear All</button>`:''}
+    </div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;min-height:54px;align-items:flex-start">
       ${unassigned.length?unassigned.map(p=>{
         const gc=p.group?.trim()?groupColor(p.group.trim()):null;

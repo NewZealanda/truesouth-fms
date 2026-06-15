@@ -1173,12 +1173,55 @@ window.tapFormSeat=(seatIdx,acId,ev)=>{
   render();
 };
 window.tapUnallocated=function(idx){
+  // If a seat is selected, tapping unallocated moves pax there
+  if(S._selFormSeat!=null){window.tapDropUnallocated();return;}
   S._selUnalloc=(S._selUnalloc===idx)?null:idx;
   S._selFormSeat=null;render();
+};
+window.tapDropUnallocated=function(){
+  if(S._selFormSeat==null)return;
+  const f=S.form;
+  const nm=f.names[S._selFormSeat]||'';
+  if(nm&&nm!==f.coPilot&&nm!==f.pic){
+    if(!f._unallocated)f._unallocated=[];
+    f._unallocated.push({name:nm,weight:f.seats[S._selFormSeat]||'',bag:f.bags[S._selFormSeat]||'',infant:(f.infantNames||{})[S._selFormSeat]||'',group:(f.paxGroups||{})[S._selFormSeat]||''});
+    delete f.names[S._selFormSeat];delete f.seats[S._selFormSeat];delete f.bags[S._selFormSeat];
+    if(f.infantNames)delete f.infantNames[S._selFormSeat];
+    if(f.paxGroups)delete f.paxGroups[S._selFormSeat];
+  }
+  S._selFormSeat=null;autoSaveLS();render();
 };
 window.removeUnallocated=function(idx){
   if(S.form._unallocated)S.form._unallocated.splice(idx,1);
   if(S._selUnalloc===idx)S._selUnalloc=null;render();
+};
+window.clearUnallocated=function(){
+  const f=S.form;if(!f)return;
+  S._unallocUndo=(f._unallocated||[]).map(function(p){return Object.assign({},p);});
+  f._unallocated=[];S._selUnalloc=null;
+  autoSaveLS();render();
+};
+window.undoClearUnallocated=function(){
+  if(!S._unallocUndo||!S.form)return;
+  S.form._unallocated=S._unallocUndo;
+  S._unallocUndo=null;
+  autoSaveLS();render();
+};
+window.clearUnassigned=function(){
+  if(!S.dispatch)return;
+  const seatedIds=new Set(Object.values(S.dispatch.seatMap||{}).flatMap(function(sm){return Object.values(sm||{});}));
+  const unassigned=(S.dispatch.pax||[]).filter(function(p){return !seatedIds.has(p.id);});
+  if(!unassigned.length){toast('No unassigned passengers.','warn');return;}
+  S._unassignedUndo=unassigned.map(function(p){return Object.assign({},p);});
+  S.dispatch.pax=(S.dispatch.pax||[]).filter(function(p){return seatedIds.has(p.id);});
+  autoSaveDispatch();render();
+  toast('Cleared '+unassigned.length+' unassigned pax','ok');
+};
+window.undoClearUnassigned=function(){
+  if(!S._unassignedUndo)return;
+  S.dispatch.pax=(S.dispatch.pax||[]).concat(S._unassignedUndo);
+  S._unassignedUndo=null;
+  autoSaveDispatch();render();
 };
 window.lsUnallocDragStart=function(idx,e){
   S._dragUnalloc=idx;S._dragSeat=null;
@@ -2025,6 +2068,7 @@ window.pushAllLsToSeatmap=function(){
   Object.keys(acGroups).forEach(function(phyId){
     const group=acGroups[phyId];
     group.forEach(function(tab,i){
+      const f=tab.form;if(!f)return;
       const multi=group.length>1;
       const smKey=multi?(phyId+'_'+(i+1)):phyId;
       const suffix=multi?'('+(i+1)+')':null;
@@ -2033,14 +2077,13 @@ window.pushAllLsToSeatmap=function(){
       if(!_pacs){
         var _ephys=S.dispatch.acSetup.find(function(s){return s.acId===phyId;});
         _pacs=Object.assign({},_ephys||{acId:phyId},{acId:phyId,_seatmapKey:smKey,_displaySuffix:suffix});
-        if(f&&f.pic)_pacs.pic=f.pic;if(f&&f.coPilot)_pacs.coPilot=f.coPilot;
+        if(f.pic)_pacs.pic=f.pic;if(f.coPilot)_pacs.coPilot=f.coPilot;
         S.dispatch.acSetup.push(_pacs);
       } else {
-        if(f&&f.pic)_pacs.pic=f.pic;if(f&&f.coPilot)_pacs.coPilot=f.coPilot;
+        if(f.pic)_pacs.pic=f.pic;if(f.coPilot)_pacs.coPilot=f.coPilot;
       }
       // Merge seat assignments (loadsheet takes priority for assigned seats)
       const sm=Object.assign({},S.dispatch.seatMap[smKey]||{});
-      const f=tab.form;if(!f)return;
       Object.keys(f.names||{}).forEach(function(idx){
         if(parseInt(idx)===0)return; // Skip PIC
         const nm=(f.names[idx]||'').trim();if(!nm)return;
