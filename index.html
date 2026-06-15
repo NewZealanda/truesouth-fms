@@ -168,42 +168,59 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
   background-repeat:no-repeat;
 }
 /* ── Responsive ── */
-@media(max-width:480px){
+@media(max-width:600px){
   input[type=date]{max-width:160px;box-sizing:border-box;min-width:0;}
-  /* Layout */
   .g2{grid-template-columns:1fr;}
   .g3{grid-template-columns:1fr 1fr;}
   .page{padding:10px 8px max(100px,calc(env(safe-area-inset-bottom) + 80px));}
 
-  /* Nav bar - scrollable on mobile */
+  /* Nav bar */
   .nav-bar{padding:6px 8px 4px;}
-  .nav-tab{padding:6px 10px;font-size:10px;}
-  .sub-tab{padding:6px 10px;font-size:11px;}
-
-  /* Seat map - smaller cards on mobile */
-  .seat{width:52px!important;height:46px!important;border-radius:6px;}
-  .seat-name{font-size:8px;}
-  .seat-wt{font-size:8px;}
-  .seat-lbl{font-size:7px;}
-  .seat-dot{width:5px;height:5px;top:2px;right:2px;}
+  .nav-tab{padding:5px 10px;font-size:11px;}
+  .sub-tab{padding:5px 10px;font-size:11px;}
 
   /* Cards */
   .card{padding:10px 10px;}
   .st{font-size:14px;margin-bottom:10px;}
 
-  /* Form inputs touch-friendly */
-  .fi{padding:10px 10px;font-size:16px;} /* 16px prevents iOS zoom */
+  /* Form inputs — 16px prevents iOS auto-zoom */
+  .fi{padding:10px 10px;font-size:16px;}
   select.fi{font-size:16px;}
 
-  /* W&B grid on loadsheet */
+  /* W&B grid */
   .wb-grid{grid-template-columns:1fr 1fr!important;}
-
-  /* Pax row - tighter fixed cols on mobile */
-  .pax-row{grid-template-columns:70px 44px 1.5fr 0.8fr 44px 44px 26px!important;}
 
   /* Buttons */
   .btn-full{padding:14px;font-size:14px;}
   button{min-height:36px;}
+}
+
+@media(max-width:480px){
+  /* Seat map - smaller on narrow phones */
+  .seat{width:50px!important;height:44px!important;border-radius:6px;}
+  .seat-name{font-size:8px;}
+  .seat-wt{font-size:8px;}
+  .seat-lbl{font-size:7px;}
+  .seat-dot{width:5px;height:5px;top:2px;right:2px;}
+
+  /* Loadsheet layout — stack seatmap/pods vertically on narrow screens */
+  .ls-cols{flex-direction:column!important;}
+  .ls-mid-col{flex:none!important;width:100%!important;}
+
+  /* Pax row — tighter columns on narrow screens */
+  .pax-row-grid{grid-template-columns:62px 40px 1fr 60px 48px 48px 24px!important;gap:3px!important;}
+
+  /* Manifest aircraft cards — full width */
+  .ac-card-grid{grid-template-columns:1fr!important;}
+
+  /* Charter leg cards */
+  .leg-card{padding:12px!important;}
+}
+
+@media(min-width:900px){
+  /* Desktop: allow charter/admin grids to go wider */
+  .charter-grid{grid-template-columns:1fr 1fr;}
+  .stat-grid{grid-template-columns:repeat(3,1fr);}
 }
 
 /* PWA safe area padding for iPhone notch/home bar */
@@ -325,7 +342,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.27';
+const APP_VER='v22.29';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2134,42 +2151,17 @@ function renderApp(){
   const sh={connecting:`<span class="sync-dot dot-spin"></span>Connecting`,ok:`<span class="sync-dot dot-ok"></span>Synced`,error:`<span class="sync-dot dot-err"></span>Offline`}[S.syncStatus]||'';
   const role=S.user?.role||'desk';
   // Tab visibility by role
-  // Build top-level nav bar HTML
+  // Top-level nav (Operations / Charter / Maintenance / Admin)
   const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
   const _canOps=role==='admin'||_navPerms.operations===true;
   const _canCharter=role==='admin'||_navPerms.charter===true;
   const _canMaint=role==='admin'||_navPerms.maintenance===true;
-  const _mOn=(S.tab==='manifest'||!S.tab)&&!S.activeTabId&&!S._newLsTab;
-  const _smOn=S.tab==='seatmap'&&!S.activeTabId&&!S._newLsTab;
-  const _svOn=S.tab==='saved'&&!S.activeTabId&&!S._newLsTab;
-  const _savedCnt=(S.saved||[]).filter(function(s){return s.status!=='deleted';}).length;
-  let _navH='<div style="display:flex;gap:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;align-items:center">';
-  if(_canOps){
-    _navH+='<button tabindex="-1" class="nav-tab '+(_mOn?'on':'off')+'" onclick="setTab(\'manifest\')">Manifest</button>';
-    _navH+='<button tabindex="-1" class="nav-tab '+(_smOn?'on':'off')+'" onclick="setTab(\'seatmap\')">Seatmap</button>';
-    _navH+='<div style="width:1px;height:18px;background:rgba(255,255,255,.2);margin:0 3px;flex-shrink:0;align-self:center"></div>';
-    (S.lsTabs||[]).forEach(function(tab){
-      const _ac=tab.acId.replace('ZK-','');const _isAct=S.activeTabId===tab.id&&!S._newLsTab;
-      const _col=AC_COL[tab.acId]||'#64748b';const _signed=tab.status==='complete';
-      if(S._lsManageMode){
-        const _sel=!!(S._lsTabSel&&S._lsTabSel[tab.id]);
-        _navH+='<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;border:1px solid '+(_sel?'#ef4444':_col+'55')+';background:'+(_sel?'rgba(239,68,68,.15)':_col+'18')+';cursor:pointer;flex-shrink:0;font-size:11px;font-weight:700;color:'+(_sel?'#fca5a5':_col)+'"><input type="checkbox" '+(_sel?'checked':'')+' onchange="window.toggleLsTabSel(\''+tab.id+'\')" style="cursor:pointer">'+_ac+'</label>';
-      } else {
-        _navH+='<div style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1.5px solid '+(_isAct?_col:_col+'55')+';flex-shrink:0"><button tabindex="-1" onclick="window.switchLsTab(\''+tab.id+'\')" style="padding:4px 9px;font-size:11px;font-weight:700;background:'+(_isAct?_col+'55':_col+'18')+';border:none;cursor:pointer;color:'+(_isAct?_col:_col+'cc')+';white-space:nowrap">'+_ac+(_signed?' ✓':'')+' </button><button tabindex="-1" onclick="window.closeLsTab(\''+tab.id+'\')" style="padding:4px 7px;font-size:13px;line-height:1;background:'+(_isAct?_col+'33':_col+'0f')+';border:none;border-left:1px solid '+(_isAct?_col:_col+'44')+';cursor:pointer;color:'+(_isAct?_col:_col+'99')+'" title="Close">&#xd7;</button></div>';
-      }
-    });
-    if(S._lsManageMode){
-      const _sc=Object.values(S._lsTabSel||{}).filter(Boolean).length;
-      _navH+='<button tabindex="-1" onclick="window.deleteSelectedLsTabs()" '+(_sc?'':'disabled ')+' style="padding:4px 8px;border-radius:8px;border:1px solid #ef4444;background:rgba(239,68,68,.15);color:#fca5a5;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">Delete '+(_sc||0)+'</button>';
-      _navH+='<button tabindex="-1" onclick="window.toggleLsManage()" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:rgba(255,255,255,.5);font-size:11px;cursor:pointer;flex-shrink:0">Cancel</button>';
-    }
-    _navH+='<button tabindex="-1" onclick="window.newLsTab()" title="New Loadsheet" style="padding:4px 9px;font-size:15px;line-height:1;font-weight:700;background:'+(S._newLsTab?'rgba(124,58,237,.4)':'rgba(255,255,255,.08)')+';border:1px solid '+(S._newLsTab?'rgba(124,58,237,.8)':'rgba(255,255,255,.2)')+';border-radius:8px;cursor:pointer;color:'+(S._newLsTab?'#c084fc':'rgba(255,255,255,.45)')+';flex-shrink:0">+</button>';
-    _navH+='<div style="width:1px;height:18px;background:rgba(255,255,255,.2);margin:0 3px;flex-shrink:0;align-self:center"></div>';
-    _navH+='<button tabindex="-1" class="nav-tab '+(_svOn?'on':'off')+'" onclick="setTab(\'saved\')">Saved ('+_savedCnt+')</button>';
-  }
-  if(_canCharter)_navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='charter'?'on':'off')+'" onclick="setTab(\'charter\')">Charter</button>';
-  if(_canMaint)_navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='maintenance'?'on':'off')+'" onclick="setTab(\'maintenance\')">Maintenance</button>';
-  _navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='admin'?'on':'off')+'" onclick="setTab(\'admin\')">'+(role==='admin'?'Admin':'Crew')+'</button>';
+  const _opsOn=['manifest','seatmap','saved','loadsheet'].includes(S.tab)||!!S.activeTabId||!!S._newLsTab;
+  let _navH='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;align-items:center">';
+  if(_canOps)_navH+='<button tabindex="-1" class="nav-tab '+(_opsOn?'on':'off')+'" onclick="setTab('operations')">Operations</button>';
+  if(_canCharter)_navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='charter'?'on':'off')+'" onclick="setTab('charter')">Charter</button>';
+  if(_canMaint)_navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='maintenance'?'on':'off')+'" onclick="setTab('maintenance')">Maintenance</button>';
+  _navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='admin'?'on':'off')+'" onclick="setTab('admin')">'+(role==='admin'?'Admin':'Crew')+'</button>';
   _navH+='</div>';
 
   return`<div style="min-height:100vh;background:var(--bg);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)">
@@ -2182,16 +2174,19 @@ function renderApp(){
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.12em;color:rgba(255,255,255,.55)">FLIGHT MANAGEMENT SYSTEM</div>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span title="${S.rtStatus==='live'?'Live — real-time sync active':S.rtStatus==='connecting'?'Connecting to live sync...':'Offline — reconnecting...'}" class="sync-dot ${S.rtStatus==='live'?'dot-live':S.rtStatus==='connecting'?'dot-connecting':''}" style="width:8px;height:8px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'};flex-shrink:0"></span>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">${APP_VER}</div>
-          <button tabindex="-1" title="${S.wideMode?'Switch to compact width':'Switch to full width'}" onclick="event.stopPropagation();S.wideMode=!S.wideMode;lsSet('ts_wide_mode',S.wideMode);render()" style="background:var(--border);border:none;padding:3px 7px;border-radius:5px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1">${S.wideMode?'⇤⇥':'↔'}</button>
-          <button tabindex="-1" title="${S.mobileView?'Switch to desktop layout':'Switch to mobile layout'}" onclick="event.stopPropagation();S.mobileView=!S.mobileView;lsSet('ts_mobile_view',S.mobileView);render()" style="background:${S.mobileView?'rgba(124,58,237,.3)':'var(--border)'};border:${S.mobileView?'1px solid rgba(124,58,237,.6)':'none'};padding:3px 7px;border-radius:5px;font-size:12px;color:${S.mobileView?'#c084fc':'var(--text2)'};cursor:pointer;line-height:1">📱</button>
-          <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:var(--border);border:none;padding:3px 7px;border-radius:5px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1" title="Help">?</button>
-          <div style="display:flex;align-items:center;gap:4px">
-            <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
-            <button tabindex="-1" onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)" title="${S.rtStatus==='live'?'Live — synced':S.rtStatus==='connecting'?'Connecting...':'Offline'}">
+            <span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'}"></span>
+            <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.04em">${APP_VER}</span>
           </div>
+          <button tabindex="-1" title="${S.wideMode?'Compact width':'Full width'}" onclick="event.stopPropagation();S.wideMode=!S.wideMode;lsSet('ts_wide_mode',S.wideMode);render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:11px;color:rgba(255,255,255,.4);cursor:pointer">${S.wideMode?'⇤⇥':'↔'}</button>
+          <button tabindex="-1" title="${S.mobileView?'Desktop layout':'Mobile layout'}" onclick="event.stopPropagation();S.mobileView=!S.mobileView;lsSet('ts_mobile_view',S.mobileView);render()" style="background:${S.mobileView?'rgba(124,58,237,.3)':'rgba(255,255,255,.07)'};border:${S.mobileView?'1px solid rgba(124,58,237,.5)':'none'};width:28px;height:28px;border-radius:6px;font-size:13px;color:${S.mobileView?'#c084fc':'rgba(255,255,255,.4)'};cursor:pointer">📱</button>
+          <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:12px;color:rgba(255,255,255,.4);cursor:pointer;font-weight:700" title="Help">?</button>
+          <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 10px 5px 6px;border-radius:20px;cursor:pointer;font-size:11px;color:rgba(255,255,255,.75)" title="Profile & Settings">
+            <div style="width:22px;height:22px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${(S.user.name.match(/\b\w/g)||['?']).slice(0,2).join('').toUpperCase()}</div>
+            <span style="white-space:nowrap">${S.user.name.split(' ')[0]}</span>
+            <span style="font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.06em">${S.user.role}</span>
+          </button>
         </div>
       </div>
       ${_navH}
@@ -2269,12 +2264,46 @@ function _applyLsFlash(){
   _triggerFlash('flash-loadsheet');
 }
 function renderOperations(){
-  if(S.activeTabId&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
-  if(S._newLsTab){return renderNewLsPanel();}
   const opsTab=S.tab||'manifest';
-  if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
-  if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return renderSaved();}
-  startPresenceBroadcast('manifest');return presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
+  const isLsView=!!(S.activeTabId||S._newLsTab);
+
+  // Level 2 sub-bar: Manifest | Seatmap | Loadsheets | Saved
+  var _l2='<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center">';
+  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='manifest'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab('manifest')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Manifest</button>';
+  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab('seatmap')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Seatmap</button>';
+  _l2+='<button tabindex="-1" class="sub-tab '+(isLsView?'on':'')+'" onclick="window.switchToLoadsheets()" style="font-size:12px;padding:6px 12px;flex-shrink:0">Loadsheets</button>';
+  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab('saved')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Saved ('+((S.saved||[]).filter(function(s){return s.status!=='deleted';}).length)+')</button>';
+  _l2+='</div>';
+
+  // Level 3 LS tab pills — only shown when loadsheets view is active
+  var _l3='';
+  if(isLsView){
+    _l3='<div style="display:flex;gap:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin-bottom:10px;align-items:center;padding-bottom:2px">';
+    (S.lsTabs||[]).forEach(function(tab){
+      var _ac=tab.acId.replace('ZK-','');var _isAct=S.activeTabId===tab.id&&!S._newLsTab;
+      var _col=AC_COL[tab.acId]||'#64748b';var _signed=tab.status==='complete';
+      var _sel=!!(S._lsTabSel&&S._lsTabSel[tab.id]);
+      if(S._lsManageMode){
+        _l3+='<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;border:1px solid '+(_sel?'#ef4444':_col+'55')+';background:'+(_sel?'rgba(239,68,68,.15)':_col+'18')+';cursor:pointer;flex-shrink:0;font-size:11px;font-weight:700;color:'+(_sel?'#fca5a5':_col)+'"><input type="checkbox" '+(_sel?'checked':'')+' onchange="window.toggleLsTabSel(''+tab.id+'')" style="cursor:pointer">'+_ac+'</label>';
+      } else {
+        _l3+='<div style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1.5px solid '+(_isAct?_col:_col+'55')+';flex-shrink:0"><button tabindex="-1" onclick="window.switchLsTab(''+tab.id+'')" style="padding:4px 9px;font-size:11px;font-weight:700;background:'+(_isAct?_col+'55':_col+'18')+';border:none;cursor:pointer;color:'+(_isAct?_col:_col+'cc')+';white-space:nowrap">'+_ac+(_signed?' ✓':'')+' </button><button tabindex="-1" onclick="window.closeLsTab(''+tab.id+'')" style="padding:4px 7px;font-size:13px;line-height:1;background:'+(_isAct?_col+'33':_col+'0f')+';border:none;border-left:1px solid '+(_isAct?_col:_col+'44')+';cursor:pointer;color:'+(_isAct?_col:_col+'99')+'" title="Close">&#xd7;</button></div>';
+      }
+    });
+    if(S._lsManageMode){
+      var _sc=Object.values(S._lsTabSel||{}).filter(Boolean).length;
+      _l3+='<button tabindex="-1" onclick="window.deleteSelectedLsTabs()" '+(_sc?'':'disabled ')+' style="padding:4px 8px;border-radius:8px;border:1px solid #ef4444;background:rgba(239,68,68,.15);color:#fca5a5;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">Delete '+(_sc||0)+'</button>';
+      _l3+='<button tabindex="-1" onclick="window.toggleLsManage()" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:rgba(255,255,255,.5);font-size:11px;cursor:pointer;flex-shrink:0">Cancel</button>';
+    }
+    _l3+='<button tabindex="-1" onclick="window.newLsTab()" title="New Loadsheet" style="padding:4px 9px;font-size:15px;line-height:1;font-weight:700;background:'+(S._newLsTab?'rgba(124,58,237,.4)':'rgba(255,255,255,.08)')+';border:1px solid '+(S._newLsTab?'rgba(124,58,237,.8)':'rgba(255,255,255,.2)')+';border-radius:8px;cursor:pointer;color:'+(S._newLsTab?'#c084fc':'rgba(255,255,255,.45)')+';flex-shrink:0">+</button>';
+    _l3+='</div>';
+  }
+
+  // Content routing
+  if(isLsView&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return _l2+_l3+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return _l2+_l3+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
+  if(S._newLsTab&&opsTab!=='saved'&&opsTab!=='seatmap'){return _l2+_l3+renderNewLsPanel();}
+  if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return _l2+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
+  if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return _l2+renderSaved();}
+  startPresenceBroadcast('manifest');return _l2+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
 }
 
 function renderNewLsPanel(){
@@ -3178,7 +3207,7 @@ function renderLoadsheet(){
           ${w?`<div style="font-size:11px;color:${lc};margin-top:4px">mom ${((parseFloat(w)||0)*zn.arm).toFixed(0)}</div>`:''}
         </div>`;
       }).join('');
-      cargoSection=`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;width:fit-content">${shelfBoxes}</div>`;
+      cargoSection=`<div style="display:flex;justify-content:center;margin-bottom:8px"><div style="display:flex;flex-direction:column;gap:6px;width:fit-content">${shelfBoxes}</div></div>`;
     }
     // -- Combined Passengers & Loading card
     const _lwDisplay=r?r.lw.toFixed(1):null;
@@ -3392,8 +3421,10 @@ function renderLoadsheet(){
         ${etdSelect(f.etd,f.date,"form")}
       </div>
     </div>
-  </div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px;border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
-  ${unallocH}${loadingH}${calcH}${sigH}`;
+    ${f.createdBy?`<div style="text-align:right;margin-top:6px;font-size:9px;color:rgba(255,255,255,.18);letter-spacing:.04em">Created by ${f.createdBy}</div>`:''}
+  </div>  ${unallocH}${loadingH}${calcH}
+  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px;border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
+  ${sigH}`;
 }
 window.lsCheckChildWt=function(idx){
   const f=S.form;if(!f)return;
@@ -3922,21 +3953,19 @@ function _fmtFlightDate(iso){
   return d.getDate()+' '+mons[d.getMonth()]+' '+d.getFullYear();
 }
 function renderSaved(){
-  const tab=S.savedTab||'unsigned';
+  const tab=S.savedTab||'active';
   const search=(S.savedSearch||'').toLowerCase();
   const sort=S.savedSort||'newest';
-  const _myName=(S.user?.linkedCrew||S.user?.name||'').trim();
-  // Exclude deleted from mine/counts
-  const mySheets=_myName?S.saved.filter(function(s){return(s.form&&s.form.pic||'').trim()===_myName&&s.status!=='deleted';}):[];
 
-  // Bin contents
+  // Counts
   const binLs=S.saved.filter(s=>s.status==='deleted');
   const binMs=S.manifests.filter(m=>m._deleted);
   const binCount=binLs.length+binMs.length;
   const activeManifests=S.manifests.filter(m=>!m._deleted);
-  const allCount=S.saved.filter(s=>s.status!=='deleted').length;
+  const activeItems=S.saved.filter(s=>s.status==='unsigned');
+  const signedItems=S.saved.filter(s=>s.status==='complete'&&!s.driveUploaded);
+  const archiveItems=S.saved.filter(s=>s.status==='complete'&&s.driveUploaded);
 
-  const driveStatusHTML=''; // handled by appMsg banner
   const _selCount=Object.keys(S.savedSel).length;
   const _selSignedCount=Object.keys(S.savedSel).filter(id=>{const s=S.saved.find(x=>x.id===id);return s&&s.status==='complete';}).length;
   const _bulkBar=_selCount>0&&tab!=='bin'?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
@@ -3946,11 +3975,10 @@ function renderSaved(){
     ${_selSignedCount>0?`<button onclick="window.bulkUploadSaved()" style="padding:5px 14px;border-radius:6px;border:none;background:#1a73e8;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;box-shadow:0 1px 4px rgba(26,115,232,.4)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>Upload to Drive (${_selSignedCount})</button>`:''}
     <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_selCount})</button>
   </div>`:'';
-  const tabBar=`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-    <button class="sub-tab ${tab==='unsigned'?'on':''}" onclick="S.savedTab='unsigned';render()">Active — Unsigned (${S.saved.filter(s=>s.status==='unsigned').length})</button>
-    <button class="sub-tab ${tab==='loadsheets'?'on':''}" onclick="S.savedTab='loadsheets';render()">All (${allCount})</button>
-    <button class="sub-tab ${tab==='archived'?'on':''}" onclick="S.savedTab='archived';render()">📦 Archived — Signed (${S.saved.filter(s=>s.status==='complete').length})</button>
-    ${_myName?`<button class="sub-tab ${tab==='mine'?'on':''}" onclick="S.savedTab='mine';render()">Mine (${mySheets.length})</button>`:''}
+  const tabBar=`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="sub-tab ${tab==='active'?'on':''}" onclick="S.savedTab='active';render()">Active (${activeItems.length})</button>
+    <button class="sub-tab ${tab==='signed'?'on':''}" onclick="S.savedTab='signed';render()">Signed (${signedItems.length})</button>
+    <button class="sub-tab ${tab==='archive'?'on':''}" onclick="S.savedTab='archive';render()">Archive (${archiveItems.length})</button>
     <button class="sub-tab ${tab==='manifests'?'on':''}" onclick="S.savedTab='manifests';render()">Manifests (${activeManifests.length})</button>
     <button class="sub-tab ${tab==='bin'?'on':''}" onclick="S.savedTab='bin';render()">🗑️ Bin${binCount>0?' ('+binCount+')':''}</button>
   </div>`;
@@ -3998,34 +4026,55 @@ function renderSaved(){
         }).join('')));
   }
 
-  // ── Mine tab ──
-  if(tab==='mine'){
-    return tabBar+(_myName
-      ?(!mySheets.length
-        ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">No loadsheets found as PIC for ${_myName}</div>`
-        :mySheets.map(function(s){
-            var col=AC_COL[s.form.ac]||'#64748b';
-            var isSigned=s.status==='complete';
-            var _isCpCrew=!!s.form.coPilot;
-            var _paxCnt=Object.keys(s.form.names||{}).filter(function(k){var ki=parseInt(k);return ki>=1&&!!(s.form.names||{})[k]&&((s.form.names||{})[k]||'').trim()&&!(ki===1&&_isCpCrew);}).length;
-            var _savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
-            return'<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid '+col+'">'
-              +'<div style="flex:1;min-width:0">'
-              +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">'
-              +'<span style="padding:2px 10px;border-radius:20px;background:'+col+'22;border:1px solid '+col+'55;color:'+col+';font-weight:700;font-size:12px;white-space:nowrap">'+(s.form.ac||'?').replace('ZK-','')+'</span>'
-              +'<span class="pill pill-blue">'+((s.form.dep||'?').replace(/^NZ/,''))+' &#x2192; '+((s.form.dest||'?').replace(/^NZ/,''))+'</span>'
-              +(s.form.pic?'<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">&#x2708; '+s.form.pic+'</span>':'')
-              +(isSigned?'<span class="pill pill-green">&#x2713; Signed</span>':'<span class="pill" style="background:#0c1a3a;color:#93c5fd">UNSIGNED</span>')
-              +'</div>'
-              +'<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">'+'<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">'+_fmtFlightDate(s.form.date)+'</span>'+(s.form.etd?'<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD '+s.form.etd+'</span>':'')+'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">'+_paxCnt+' PAX</span>'+'</div>'
-              +'</div>'
-              +'<div style="display:flex;gap:5px;flex-shrink:0;align-items:center">'
-              +(_savedStr?'<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved '+_savedStr+'</span>':'')
-              +'<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" data-sid="'+s.id+'" onclick="editSaved(this.dataset.sid)">Open</button>'
-              +'<button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" data-sid="'+s.id+'" onclick="delSaved(this.dataset.sid)" title="Delete">&#x1F5D1;</button>'
-              +'</div></div>';
-          }).join(''))
-      :'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">No crew name linked to your account.</div>');
+  // ── Shared card renderer ──
+  function _lsCard(s,opts){
+    opts=opts||{};
+    var col=AC_COL[s.form.ac]||'#64748b';
+    var isCpCrew=!!s.form.coPilot;
+    var paxCnt=Object.keys(s.form.names||{}).filter(function(k){var ki=parseInt(k);return ki>=1&&!!(s.form.names||{})[k]&&((s.form.names||{})[k]||'').trim()&&!(ki===1&&isCpCrew);}).length;
+    var savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
+    var isSigned=s.status==='complete';
+    var r=calcFormWB(s.form);
+    var ok=r&&r.towOk&&r.lwOk&&r.cogOk;
+    var sel=!!S.savedSel[s.id];
+    var rhsBadge=opts.showNotUploaded&&!s.driveUploaded
+      ?'<span style="padding:2px 7px;background:rgba(100,116,139,.1);border:1px solid var(--border2);border-radius:4px;font-size:10px;color:var(--text3)">☁ Not uploaded</span>'
+      :opts.showUploaded&&s.driveUploaded
+      ?'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:4px;font-size:10px;color:#4ade80">☁ Drive ✓</span>'
+      :'';
+    var limitWarn=isSigned&&!ok?'<span class="pill pill-warn" style="font-size:10px">⚠ check limits</span>':'';
+    return'<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid '+(sel?'#3b82f6':'var(--border)')+';margin-bottom:8px;background:'+(sel?'rgba(59,130,246,.08)':'var(--card)')+';border-left:3px solid '+col+'">'
+      +'<input type="checkbox" '+(sel?'checked ':'')+' onchange="window.toggleSavedSel(''+s.id+'')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">'
+      +'<div style="flex:1;min-width:0">'
+        +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">'
+          +'<span style="padding:2px 10px;border-radius:20px;background:'+col+'22;border:1px solid '+col+'55;color:'+col+';font-weight:700;font-size:12px;white-space:nowrap">'+(s.form.ac||'?').replace('ZK-','')+'</span>'
+          +'<span class="pill pill-blue">'+((s.form.dep||'?').replace(/^NZ/,''))+' → '+((s.form.dest||'?').replace(/^NZ/,''))+'</span>'
+          +(s.form.pic?'<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ '+s.form.pic+'</span>':'')
+          +limitWarn
+        +'</div>'
+        +'<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">'
+          +'<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">'+_fmtFlightDate(s.form.date)+'</span>'
+          +(s.form.etd?'<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD '+s.form.etd+'</span>':'')
+          +'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">'+paxCnt+' PAX</span>'
+        +'</div>'
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">'
+        +(savedStr?'<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">'+savedStr+'</span>':'')
+        +rhsBadge
+        +'<div style="display:flex;gap:5px;align-items:center">'
+          +(isSigned
+            ?'<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved(''+s.id+'')">View</button>'
+             +'<button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved(''+s.id+'')">&#x21BA; Reopen</button>'
+            :'<button class="btn btn-sky" style="font-size:12px;padding:6px 10px" onclick="editSaved(''+s.id+'')">Edit</button>')
+          +((S.gdriveEnabled||S.gdriveClientId)&&opts.showUploadBtn
+            ?'<button class="btn" title="'+(s.driveUploaded?'Re-upload':'Upload to Drive')+'" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet(''+s.id+'')">&#x2601;</button>'
+            :'')
+          +'<button class="btn" title="Print" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer" onclick="window.printSingleSheet(''+s.id+'')">&#x1F5A8;</button>'
+          +'<button class="btn" title="Duplicate" style="font-size:12px;padding:5px 9px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer" onclick="window.duplicateSaved(''+s.id+'')">&#x2398; Dup</button>'
+          +'<button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" onclick="delSaved(''+s.id+'')" title="Delete">&#x1F5D1;</button>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
   }
   if(tab==='manifests'){
     return tabBar+_bulkBar+(activeManifests.length?'<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-red" style="font-size:12px" onclick="window.clearAllManifests()">&#x1f5d1; Clear All Manifests</button></div>':'')+`
@@ -4037,7 +4086,7 @@ function renderSaved(){
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
           ${(m.data?.acSetup||[]).map(s=>{const col=AC_COL[s.acId]||'#64748b';return`<span style="padding:1px 7px;border-radius:12px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:11px">${s.acId||'?'}</span>`;}).join('')}
-          <span style="font-size:11px;color:var(--text3)">${m.savedAt?_lsRelTime(m.savedAt):''} · ${m.data?.pax?.length||0} pax</span>
+          <span style="font-size:11px;color:var(--text3)">${m.savedAt?_lsRelTime(m.savedAt):''} · ${m.data?.pax?.length||0} pax${m.data?.createdBy?' · '+m.data.createdBy:''}</span>
         </div>
       </div>
       <div style="display:flex;gap:6px">
@@ -4046,120 +4095,53 @@ function renderSaved(){
       </div></div>`).join('')}`;
   }
 
-  // ── Unsigned tab ──
-  if(tab==='unsigned'){
-    const unsigned=S.saved.filter(s=>s.status==='unsigned');
-    const _unsignedSelCount=Object.keys(S.savedSel).filter(id=>unsigned.find(s=>s.id===id)).length;
-    const _unsignedBulkBar=_unsignedSelCount>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
-      <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_unsignedSelCount} selected</span>
+  // ── Active tab (unsigned) ──
+  if(tab==='active'){
+    var _aSelCnt=Object.keys(S.savedSel).filter(function(id){return activeItems.find(function(s){return s.id===id;});}).length;
+    var _aBulk=_aSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_aSelCnt} selected</span>
       <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
-      <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_unsignedSelCount})</button>
+      <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_aSelCnt})</button>
     </div>`:'';
     return tabBar+`
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:10px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px">
-      <span style="color:#93c5fd;font-size:13px;font-weight:600;flex:1">🖊 ${unsigned.length} loadsheet${unsigned.length!==1?'s':''} awaiting pilot signature</span>
-      ${unsigned.length?`<button class="btn btn-ghost" style="font-size:12px" onclick="window.selectAllSaved(${JSON.stringify(unsigned.map(s=>s.id))})">${_unsignedSelCount===unsigned.length?'Deselect All':'Select All'}</button>`:''}
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      ${activeItems.length?`<button class="btn btn-ghost" style="font-size:12px" onclick="window.selectAllSaved(${JSON.stringify(activeItems.map(s=>s.id))})">${_aSelCnt===activeItems.length?'Deselect All':'Select All'}</button>`:''}
     </div>
-    ${_unsignedBulkBar}
-    ${!unsigned.length
-      ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">✓ All loadsheets signed</div>`
-      :unsigned.map(s=>{
-        const col=AC_COL[s.form.ac]||'#64748b';
-        const _isCpCrew=!!s.form.coPilot;
-        const _paxCnt=Object.keys(s.form.names||{}).filter(function(k){var ki=parseInt(k);return ki>=1&&!!(s.form.names||{})[k]&&((s.form.names||{})[k]||'').trim()&&!(ki===1&&_isCpCrew);}).length;
-        const _savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
-        return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid ${S.savedSel[s.id]?'#3b82f6':'#1e3a5f'};margin-bottom:8px;background:${S.savedSel[s.id]?'rgba(59,130,246,.08)':'var(--card)'};border-left:3px solid ${col}">
-          <input type="checkbox" ${S.savedSel[s.id]?'checked':''} onchange="window.toggleSavedSel('${s.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-              <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${(s.form.ac||'?').replace('ZK-','')}</span>
-              <span class="pill pill-blue">${(s.form.dep||'?').replace(/^NZ/,'')} → ${(s.form.dest||'?').replace(/^NZ/,'')}</span>
-              ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
-              <span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 UNSIGNED</span>
-            </div>
-            <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span></div>
-          </div>
-          <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
-            ${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}
-            <button class="btn btn-sky" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>
-            <button class="btn" style="font-size:12px;padding:6px 10px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;cursor:pointer;color:var(--text2)" onclick="window.duplicateSaved('${s.id}')">&#x2398; Dup</button>
-            <button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" onclick="delSaved('${s.id}')" title="Delete">&#x1F5D1;</button>
-          </div></div>`;
-      }).join('')}`;
+    ${_aBulk}
+    ${!activeItems.length
+      ?'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">✓ No active loadsheets</div>'
+      :activeItems.map(function(s){return _lsCard(s,{});}).join('')}`;
   }
 
-  // ── All loadsheets tab (and archived) ──
-  let items=S.saved.filter(s=>s.status!=='deleted');
-  if(tab==='archived') items=items.filter(s=>s.status==='complete');
-  else if(tab==='loadsheets') {} // show all non-deleted
-  else if(tab!=='manifests') items=items.filter(s=>s.status!=='complete');
-  if(search){
-    items=items.filter(s=>{
-      const f=s.form;
-      return (f.ac||'').toLowerCase().includes(search)
-          || (f.pic||'').toLowerCase().includes(search)
-          || (f.dep||'').toLowerCase().includes(search)
-          || (f.dest||'').toLowerCase().includes(search)
-          || Object.values(f.names||{}).some(n=>(n||'').toLowerCase().includes(search));
-    });
-  }
-  if(sort==='newest')items.sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt));
-  else if(sort==='oldest')items.sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
-  else if(sort==='aircraft')items.sort((a,b)=>(a.form.ac||'').localeCompare(b.form.ac||''));
-  else if(sort==='pic')items.sort((a,b)=>(a.form.pic||'').localeCompare(b.form.pic||''));
-
-  return driveStatusHTML+tabBar+`
-  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-    <div class="search-bar" style="flex:1;min-width:180px">
-      <span class="icon">🔍</span>
-      <input class="fi" type="text" placeholder="Search pax, PIC, aircraft…" value="${S.savedSearch||''}" id="savedSearchInput" oninput="debounceSearch(this.value)">
+  // ── Signed tab (complete, not yet uploaded) ──
+  if(tab==='signed'){
+    var _sSelCnt=Object.keys(S.savedSel).filter(function(id){return signedItems.find(function(s){return s.id===id;});}).length;
+    var _sBulk=_sSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_sSelCnt} selected</span>
+      <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
+      ${_sSelCnt>0?`<button onclick="window.bulkUploadSaved()" style="padding:5px 14px;border-radius:6px;border:none;background:#1a73e8;color:#fff;font-size:12px;font-weight:700;cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg> Upload All (${_sSelCnt})</button>`:''}
+      <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_sSelCnt})</button>
+    </div>`:'';
+    return tabBar+`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      ${signedItems.length?`<button class="btn btn-ghost" style="font-size:12px" onclick="window.selectAllSaved(${JSON.stringify(signedItems.map(s=>s.id))})">${_sSelCnt===signedItems.length?'Deselect All':'Select All'}</button>`:''}
     </div>
-    <select class="fi" style="width:auto;padding-right:24px" onchange="S.savedSort=this.value;safeRender()">
-      <option value="newest"${sort==='newest'?' selected':''}>Most Recent</option>
-      <option value="oldest"${sort==='oldest'?' selected':''}>Oldest First</option>
-      <option value="aircraft"${sort==='aircraft'?' selected':''}>By Aircraft</option>
-      <option value="pic"${sort==='pic'?' selected':''}>By PIC</option>
-    </select>
-    <button class="btn btn-sky" onclick="newSheet()">+ New</button>
-    ${Object.keys(S.savedSel).length<items.length?`<button class="btn btn-ghost" style="font-size:12px" onclick="window.selectAllSaved(${JSON.stringify(items.map(x=>x.id))})">Select All (${items.length})</button>`:`<button class="btn btn-ghost" style="font-size:12px" onclick="window.clearSavedSel()">Deselect All</button>`}
-  </div>
-  ${_bulkBar}
-  ${!items.length
-    ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">📋 ${allCount?'No results for "'+search+'"':'No saved loadsheets'}</div>`
-    :items.map(s=>{
-      const col=AC_COL[s.form.ac]||'#64748b';
-      const _paxCnt=Object.keys(s.form.names||{}).filter(function(k){var ki=parseInt(k);if(ki===0)return false;var nm=s.form.names[k];return nm&&nm.trim();}).length;
-      const _savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
-      const r=calcFormWB(s.form);
-      const ok=r&&r.towOk&&r.lwOk&&r.cogOk;
-      const isSigned=s.status==='complete';
-      const isUnsigned=s.status==='unsigned';
-      return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid ${S.savedSel[s.id]?'#3b82f6':'var(--border)'};margin-bottom:8px;background:${S.savedSel[s.id]?'rgba(59,130,246,.08)':'var(--card)'};border-left:3px solid ${col}">
-        <input type="checkbox" ${S.savedSel[s.id]?'checked':''} onchange="window.toggleSavedSel('${s.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-            <span style="padding:2px 10px;border-radius:20px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:12px;white-space:nowrap">${(s.form.ac||'?').replace('ZK-','')}</span>
-            <span class="pill pill-blue">${(s.form.dep||'?').replace(/^NZ/,'')} → ${(s.form.dest||'?').replace(/^NZ/,'')}</span>
-            ${s.form.pic?`<span style="padding:2px 7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:4px;font-size:10px;font-weight:700;color:#c4b5fd">✈ ${s.form.pic}</span>`:''}
-            ${isUnsigned
-              ?`<span class="pill" style="background:#0c1a3a;color:#93c5fd">🖊 Unsigned</span>`
-              :isSigned
-                ?`<span class="pill ${ok?'pill-green':'pill-warn'}">${ok?'✓ Signed':'⚠ Signed (check limits)'}</span>`
-                :`<span class="pill pill-warn">Draft</span>`}
-            ${isSigned?(s.driveUploaded?'<span class="pill pill-green" style="font-size:10px">☁ Drive ✓</span>':'<span class="pill" style="background:rgba(100,116,139,.12);border:1px solid var(--border2);color:var(--text3);font-size:10px">☁ Not uploaded</span>'):''}
+    ${_sBulk}
+    ${!signedItems.length
+      ?'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">☁ All signed loadsheets have been uploaded</div>'
+      :signedItems.map(function(s){return _lsCard(s,{showNotUploaded:true,showUploadBtn:true});}).join('')}`;
+  }
 
-          </div>
-          <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap"><span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:700;color:var(--text3)">${_fmtFlightDate(s.form.date)}</span>${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${_paxCnt} PAX</span></div>
-        </div>
-        <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
-          ${_savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">Saved ${_savedStr}</span>`:''}
-          ${isSigned?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${s.id}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${s.id}')">&#x21BA; Reopen</button>`:`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="editSaved('${s.id}')">Edit</button>`}
-          ${isSigned&&(S.gdriveEnabled||S.gdriveClientId)?`<button class="btn" title="${s.driveUploaded?'Re-upload to Drive':'Upload to Drive'}" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${s.id}')">&#x2601;</button>`:''}
-          <button class="btn" title="Print" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer" onclick="window.printSingleSheet('${s.id}')">&#x1F5A8;</button>
-          <button class="btn" title="Duplicate" style="font-size:12px;padding:5px 9px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer" onclick="window.duplicateSaved('${s.id}')">&#x2398; Dup</button>
-          <button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" onclick="delSaved('${s.id}')" title="Delete">&#x1F5D1;</button>
-        </div></div>`;
-    }).join('')}`;
+  // ── Archive tab (uploaded to Drive) ──
+  if(tab==='archive'){
+    return tabBar+`
+    ${!archiveItems.length
+      ?'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">📦 No archived loadsheets yet</div>'
+      :archiveItems.map(function(s){return _lsCard(s,{showUploaded:true,showUploadBtn:true});}).join('')}`;
+  }
+
+  // Fallback: return tab bar
+  return tabBar;
 }
 
 // ── CHARTER CALCULATOR ──
@@ -4279,13 +4261,40 @@ function renderCharter(){
   ${charterLegs.length?`<div class="card" style="padding:12px"><div class="st">Route Map</div><div id="charter-map" class="route-map"></div></div>`:''}`;
 }
 
+function _charterRouteStr(legs){
+  if(!legs||!legs.length)return'';
+  var codes=[legs[0].from].concat(legs.map(function(l){return l.to;}));
+  return codes.map(function(c){return c.replace(/^NZ/,'');}).join('-');
+}
 function renderSavedQuotes(){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
   if(!quotes.length)return'<div class="card"><div class="st">Saved Quotes</div><p style="font-size:13px;color:var(--text3)">No saved quotes yet. Build a quote in the Calculator tab and tap Save Quote.</p></div>';
   return'<div class="card"><div class="st">Saved Quotes</div>'+quotes.map(function(q,qi){
     const legs=q.legs||[];const totalCost=q.totalCost||0;
+    const routeStr=_charterRouteStr(legs);
     const d=q.savedAt?new Date(q.savedAt).toLocaleDateString('en-NZ',{day:'numeric',month:'short'}):'';
-    return'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);gap:8px"><div style="min-width:0"><div style="font-weight:700;font-size:13px;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+legs.map(function(l){return l.from+'→'+l.to;}).join(', ')+'</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+d+' · '+legs.length+' leg'+(legs.length!==1?'s:':':')+' <span style="color:#86efac;font-weight:700">$'+totalCost.toFixed(0)+'</span></div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost" style="font-size:12px" onclick="window.loadCharterQuote('+qi+')">📂 Load</button><button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.deleteCharterQuote('+qi+')">✕</button></div></div>';
+    const acIds=[...new Set(legs.filter(function(l){return l.acId;}).map(function(l){return l.acId;}))];
+    const acPills=acIds.map(function(id){var col=AC_COL[id]||'#64748b';return'<span style="padding:1px 7px;border-radius:12px;background:'+col+'22;border:1px solid '+col+'55;color:'+col+';font-weight:700;font-size:10px">'+id.replace('ZK-','')+'</span>';}).join('');
+    const name=q.name||routeStr;
+    const fqd=q.quoteDate?new Date(q.quoteDate+'T00:00:00').toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'}):'';
+    return'<div style="padding:12px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">'
+        +'<div style="min-width:0;flex:1">'
+          +'<div style="font-weight:700;font-size:13px;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+name+'</div>'
+          +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+routeStr+(fqd?' · For: '+fqd:'')+'</div>'
+          +'<div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">'
+            +acPills
+            +'<span style="color:#86efac;font-weight:700;font-size:12px">$'+totalCost.toFixed(0)+'</span>'
+            +(d?'<span style="font-size:10px;color:var(--text3)">'+d+'</span>':'')
+            +(q.savedBy?'<span style="font-size:10px;color:var(--text3)">by '+q.savedBy+'</span>':'')
+          +'</div>'
+        +'</div>'
+        +'<div style="display:flex;gap:6px;flex-shrink:0">'
+          +'<button class="btn btn-ghost" style="font-size:12px" onclick="window.loadCharterQuote('+qi+')">📂 Load</button>'
+          +'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.deleteCharterQuote('+qi+')">✕</button>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
   }).join('')+'</div>';
 }
 window.clearCharterQuote=function(){
@@ -5151,6 +5160,15 @@ window.applyReset=async()=>{
   S.showReset=false;render();
 };
 
+window.switchToLoadsheets=function(){
+  if(S.lsTabs&&S.lsTabs.length){
+    if(!S.activeTabId)S.activeTabId=S.lsTabs[0].id;
+    S._newLsTab=false;
+  } else {
+    S._newLsTab=true;S.activeTabId=null;
+  }
+  S.tab='loadsheet';render();
+};
 window.switchOpsTab=function(tabId){
   S.activeTabId=null;S._newLsTab=false;
   S.tab=tabId;
@@ -5161,7 +5179,10 @@ window.switchOpsTab=function(tabId){
   window.scrollTo(0,0);
 };
 window.setTab=function(t){
-  if(t==='scratchpad'){
+  if(t==='operations'){
+    if(S._newLsTab&&!S.activeTabId){S._newLsTab=false;S.tab='manifest';}
+    else if(!['manifest','seatmap','saved'].includes(S.tab)&&!S.activeTabId&&!S._newLsTab)S.tab='manifest';
+  } else if(t==='scratchpad'){
     S.tab=t;
     if(S.pads.length===0&&S.padTabs.length===0){
       reloadTable('ts_scratchpads').then(function(){render();});return;
@@ -5170,7 +5191,7 @@ window.setTab=function(t){
     S.tab=t;
   }
   // Re-fetch live_draft when switching to manifest tab
-  if(t==='manifest'){
+  if(t==='manifest'||t==='operations'){
     (async function(){
       try{
         const r=await fetch(SB+'/rest/v1/ts_manifests?id=eq.live_draft&select=*',{headers:SH});
@@ -5597,7 +5618,7 @@ window.saveManifest=async()=>{
   // If we have a loaded manifest ID, UPDATE it; otherwise create new
   const id=S._loadedManifestId||('mn_'+Date.now());
   const savedAt=new Date().toISOString();
-  const data={dep:d.dep,dest:d.dest,date:d.date,etd:d.etd,acSetup:d.acSetup,pax:d.pax,name};
+  const data={dep:d.dep,dest:d.dest,date:d.date,etd:d.etd,acSetup:d.acSetup,pax:d.pax,name,createdBy:(S.user&&S.user.name)||'',createdAt:new Date().toISOString()};
   S.manifests=S.manifests.filter(m=>m.id!==id&&m.name!==name);
   S.manifests.unshift({id,name,savedAt,data});
   S._loadedManifestId=id;
@@ -5899,6 +5920,8 @@ function generateLoadsheet(acId){
   if(setup?.coPilot){const cp=anyCrewList().find(c=>c.n===setup.coPilot);if(cp&&cp.w){form.seats[1]=String(cp.w);form.names[1]=setup.coPilot;}}
   else{const sm=d.seatMap[acId]||{};const p=sm[1]?paxById(sm[1]):null;if(p){form.seats[1]=p.weight||'';form.bags[1]=p.bag||'';form.names[1]=p.name||'';if(p.type==='child')form.paxType[1]='C';form.paxGroups[1]=p.group||'';if(p.paymentReq)form.paxPaymentReq[1]=true;}}
   form.fuel=String(fuelKgForSetup(acId));
+  form.createdBy=(S.user&&S.user.name)||'';
+  form.createdAt=new Date().toISOString();
   const sm=d.seatMap[acId]||{};
   const seatIdxs=paxSeatIdxs(acId)||[];seatIdxs.forEach(function(i){if(i<=1)return;const p=sm[i]?paxById(sm[i]):null;if(p){form.seats[i]=p.weight||'';form.bags[i]=p.bag||'';form.names[i]=p.name||'';if(p.infantName)form.infantNames[i]=p.infantName;if(p.type==='child')form.paxType[i]='C';form.paxGroups[i]=p.group||'';if(p.paymentReq)form.paxPaymentReq[i]=true;}});
   // seat 1 infant (non-copilot)
