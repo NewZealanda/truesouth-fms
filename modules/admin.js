@@ -1332,8 +1332,10 @@ window.loadManifest=id=>{
     S._loadedManifestId=m.id;
   }
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
+  S._newLsTab=false;  // ensure manifest view isn't blocked by new-LS panel
   auditLog('manifest_load',{name:m.name,pax:(m.data&&m.data.pax?m.data.pax.length:0)});
   S._undoLabel='Load "'+m.name+'"';
+  toast('Loaded: '+(m.name||'Manifest'),'ok');
   S.tab='manifest';window.scrollTo(0,0);
   autoSaveDispatch();
   render();
