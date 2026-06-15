@@ -28,6 +28,9 @@ function safeRender(){
     },3000);
   } else {render();}
 }
+// Auto-select input content on focus (type-to-overwrite behaviour)
+document.addEventListener('focusin',function(e){if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')e.target.select();});
+
 // Cmd+Z / Ctrl+Z global undo for loadsheet
 document.addEventListener('keydown',function(e){
   if((e.metaKey||e.ctrlKey)&&e.key==='z'&&!e.shiftKey){

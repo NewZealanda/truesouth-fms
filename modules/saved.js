@@ -198,6 +198,26 @@ function renderSaved(){
       :archiveItems.map(function(s){return _lsCard(s,{showUploaded:true,showUploadBtn:true});}).join('')}`;
   }
 
+  // ── Manifests tab ──
+  if(tab==='manifests'){
+    return tabBar+_bulkBar+(activeManifests.length?'<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-red" style="font-size:12px" onclick="window.clearAllManifests()">&#x1f5d1; Clear All Manifests</button></div>':'')+`
+    ${!activeManifests.length
+      ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">📋 No saved manifests</div>`
+      :activeManifests.map(m=>`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid ${S.savedSel[m.id]?'#3b82f6':'var(--border)'};margin-bottom:8px;background:${S.savedSel[m.id]?'rgba(59,130,246,.08)':'var(--card)'}">
+      <input type="checkbox" ${S.savedSel[m.id]?'checked':''} onchange="window.toggleSavedSel('${m.id}')" style="width:16px;height:16px;accent-color:#3b82f6;flex-shrink:0;cursor:pointer">
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
+          ${(m.data?.acSetup||[]).map(s=>{const col=AC_COL[s.acId]||'#64748b';return`<span style="padding:1px 7px;border-radius:12px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:11px">${s.acId||'?'}</span>`;}).join('')}
+          <span style="font-size:11px;color:var(--text3)">${m.savedAt?_lsRelTime(m.savedAt):''} · ${m.data?.pax?.length||0} pax</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost" style="font-size:12px" onclick="loadManifest('${m.id}')">Load</button>
+        <button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" onclick="deleteManifest('${m.id}')" title="Delete">&#x1F5D1;</button>
+      </div></div>`).join('')}`;
+  }
+
   // Fallback: return tab bar
   return tabBar;
 }

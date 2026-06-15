@@ -134,7 +134,7 @@ function renderSavedQuotes(){
     return'<div style="padding:12px 0;border-bottom:1px solid var(--border)">'
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">'
         +'<div style="min-width:0;flex:1">'
-          +'<div style="font-weight:700;font-size:13px;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+name+'</div>'
+          +'<div contenteditable="true" data-qi="'+qi+'" onblur="window.renameCharterQuote(+this.dataset.qi,this.textContent.trim())" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="font-weight:700;font-size:13px;color:var(--text1);cursor:text;outline:none;border-bottom:1px dashed transparent;transition:border-color .15s" onfocus="this.style.borderBottomColor=\'var(--acc)\'" onblur="this.style.borderBottomColor=\'transparent\';window.renameCharterQuote(+this.dataset.qi,this.textContent.trim())" title="Click to rename">'+name+'</div>'
           +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+routeStr+(fqd?' · For: '+fqd:'')+'</div>'
           +'<div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">'
             +acPills
@@ -190,6 +190,14 @@ window.deleteCharterQuote=function(idx){
   lsSet('ts_charter_quotes_cache',quotes);
   sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
   render();
+};
+window.renameCharterQuote=function(qi,newName){
+  const quotes=lsGet('ts_charter_quotes_cache')||[];
+  if(!quotes[qi])return;
+  if(quotes[qi].name===newName)return;
+  quotes[qi].name=newName;
+  lsSet('ts_charter_quotes_cache',quotes);
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
 };
 
 // Charter Rates tab (moved from Admin)
