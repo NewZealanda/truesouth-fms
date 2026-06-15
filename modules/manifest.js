@@ -46,12 +46,12 @@ function renderStep1(){
       if(editing){
         return`<div style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:8px;border:1px solid var(--acc);background:rgba(124,58,237,.15);white-space:nowrap;flex-shrink:0">
           <input id="tab-rename-${tab.id}" class="fi" type="text" value="${lbl.replace(/"/g,'&quot;')}" style="font-size:12px;font-weight:700;width:110px;padding:2px 6px;color:var(--acc)" onclick="event.stopPropagation()" onblur="window.saveManifestTabName(this.value,'${tab.id}')" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){S._editingManifestTabId=null;render();}">
-          ${S.manifestTabs.length>1?`<span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>`:''}
+          <span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>
         </div>`;
       }
       return`<div onclick="window.switchManifestTab('${tab.id}')" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid ${active?'var(--acc)':'var(--border2)'};background:${active?'rgba(124,58,237,.15)':'var(--card2)'};cursor:pointer;white-space:nowrap;flex-shrink:0;font-size:12px;font-weight:${active?'700':'500'};color:${active?'var(--acc)':'var(--text2)'}">
         <span style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${lbl}</span>
-        ${S.manifestTabs.length>1?`<span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>`:''}
+        <span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>
       </div>`;
     }).join('')}
     <button onclick="window.newManifestTab()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text3);font-size:12px;cursor:pointer;flex-shrink:0;white-space:nowrap">+ New</button>

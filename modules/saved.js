@@ -126,6 +126,7 @@ function renderSaved(){
       :'';
     var limitWarn=isSigned&&!ok?'<span class="pill pill-warn" style="font-size:10px">⚠ check limits</span>':'';
     var sid=s.id;
+    var byStr=(function(){var nm=s.form.createdBy||'';var at=s.form.createdAt;if(!nm&&!at)return '';var ini=nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase();var ts=at?(function(){var d=new Date(at);return ('0'+d.getHours()).slice(-2)+':'+( '0'+d.getMinutes()).slice(-2);}()):'';return 'By '+ini+(ts?' '+ts:'');})();
     var uploadBtn=(S.gdriveEnabled||S.gdriveClientId)&&opts.showUploadBtn
       ?`<button class="btn" title="${s.driveUploaded?'Re-upload':'Upload to Drive'}" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${sid}')">&#x2601;</button>`
       :'';
@@ -146,10 +147,10 @@ function renderSaved(){
           ${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}
           <span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${paxSummary}</span>
         </div>
-        ${s.form.createdBy?`<div style="font-size:10px;color:var(--text3);margin-top:4px">by <span onclick="event.stopPropagation();window._lsShowCreator('${sid}')" style="color:var(--text2);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px">${s.form.createdBy}</span>${s.form.createdAt?' · '+_lsRelTime(s.form.createdAt):''}</div>`:''}
+
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
-        ${savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">${savedStr}</span>`:''}
+        ${byStr?`<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text3)">${byStr}</span>`:''}
         ${rhsBadge}
         <div style="display:flex;gap:5px;align-items:center">
           ${actionBtns}${uploadBtn}
@@ -241,11 +242,11 @@ function renderSaved(){
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
           ${(m.data?.acSetup||[]).map(s=>{const col=AC_COL[s.acId]||'#64748b';return`<span style="padding:1px 7px;border-radius:12px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:11px">${s.acId||'?'}</span>`;}).join('')}
-          <span style="font-size:11px;color:var(--text3)">${(function(){var _p=m.data&&m.data.pax||[];var a=_p.filter(function(x){return!x.infant&&x.type!=='child';}).length;var c=_p.filter(function(x){return x.type==='child';}).length;var i=_p.filter(function(x){return x.infant;}).length;var s=(a?a+'A ':'')+( c?c+'C ':''+(i?i+'i':''));return(m.savedAt?_lsRelTime(m.savedAt)+' · ':'')+( s.trim()||_p.length+' pax');})()}</span>
+          <span style="font-size:11px;color:var(--text3)">${(function(){var _p=m.data&&m.data.pax||[];var a=_p.filter(function(x){return!x.infant&&x.type!=='child';}).length;var c=_p.filter(function(x){return x.type==='child';}).length;var i=_p.filter(function(x){return x.infant;}).length;var s=(a?a+'A ':'')+( c?c+'C ':''+(i?i+'i':''));return(m.savedAt?_lsRelTime(m.savedAt)+' · ':'')+( s.trim()||_p.length+' pax');})()}</span>${(function(){var nm=(m.data&&m.data.createdBy)||'';var at=(m.data&&m.data.createdAt)||'';if(!nm&&!at)return '';var ini=nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase();var ts=at?(function(){var d=new Date(at);return ('0'+d.getHours()).slice(-2)+':'+(  '0'+d.getMinutes()).slice(-2);}()):'';return '<span style="padding:1px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text3)">By '+ini+(ts?' '+ts:'')+'</span>';})()}
         </div>
       </div>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-ghost" style="font-size:12px" onclick="loadManifest('${m.id}')">Load</button>
+        <button class="btn btn-ghost" style="font-size:12px" onclick="loadManifest('${m.id}')">Open</button>
         <button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" onclick="deleteManifest('${m.id}')" title="Delete">&#x1F5D1;</button>
       </div></div>`).join('')}`;
   }

@@ -17,18 +17,7 @@ function renderLsSeatGrid(f,a){
   var isPod=!!(a.cargo&&a.cargo.length>1&&a.cargo[0]&&a.cargo[0].lbl&&a.cargo[0].lbl.startsWith('Pod'));
   // Build the seat rows column
   var _lsMode=S._lsSeatMode||'edit';
-  var _modeToggle='<div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px">'
-    +'<button onclick="S._lsSeatMode=\'edit\';render()" title="Click to edit seat passengers" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid '
-    +(_lsMode==='edit'?'var(--acc)':'var(--border2)')
-    +';background:'+(_lsMode==='edit'?'rgba(124,58,237,.18)':'transparent')
-    +';color:'+(_lsMode==='edit'?'var(--acc)':'var(--text3)')
-    +'">✏ Edit</button>'
-    +'<button onclick="S._lsSeatMode=\'move\';render()" title="Drag or tap seats to move passengers" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid '
-    +(_lsMode==='move'?'#22c55e':'var(--border2)')
-    +';background:'+(_lsMode==='move'?'rgba(34,197,94,.18)':'transparent')
-    +';color:'+(_lsMode==='move'?'#22c55e':'var(--text3)')
-    +'">⇄ Move</button>'
-    +'</div>';
+
   var seatsCol='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0">';
   layout.forEach(function(row){
     if(row==='spacer'){seatsCol+='<div style="height:6px"></div>';return;}
@@ -92,7 +81,7 @@ function renderLsSeatGrid(f,a){
     seatsCol+='</div>';
   });
   seatsCol+='</div>';
-  return _modeToggle+seatsCol;
+  return seatsCol;
 }
 
 // ── Seat editor popup ──
@@ -104,6 +93,7 @@ window.lsSeatEditPopup=function(idx){
   var wt=String(f.seats[idx]||'');
   var bg=String(f.bags[idx]||'');
   var grp=(f.paxGroups&&f.paxGroups[idx])||'';
+  var infantNm=(f.infantNames&&f.infantNames[idx])||'';
   var _pType=(f.paxType&&f.paxType[idx])||'A';
   var _payReq=!!(f.paxPaymentReq&&f.paxPaymentReq[idx]);
   var seatLbl=a.seats[idx].lbl||String(idx);
@@ -131,8 +121,10 @@ window.lsSeatEditPopup=function(idx){
     +'</div></div>'
     +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Payment</label>'
     +'<button id="lsSpPay" style="width:100%;padding:10px;border-radius:8px;border:2px solid '+(_payReq?'#ef4444':'var(--border2)')+';background:'+(_payReq?'rgba(239,68,68,.22)':'transparent')+';color:'+(_payReq?'#ef4444':'var(--text3)')+';font-size:13px;font-weight:700;cursor:pointer">'+(_payReq?'$ Payment Required':'$ Mark as Needs Payment')+'</button></div>'
-    +'<div style="margin-bottom:18px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Group</label>'
+    +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Group</label>'
     +'<input id="lsSpGrp" class="fi" type="text" placeholder="Group name (optional)" value="'+grp.replace(/"/g,'&quot;')+'" style="font-size:13px;width:100%"></div>'
+    +'<div style="margin-bottom:18px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Infant Name <span style=\'font-weight:400;text-transform:none;letter-spacing:0\'>👶</span></label>'
+    +'<input id="lsSpInfant" class="fi" type="text" placeholder="Infant name, or leave blank" value="'+infantNm.replace(/"/g,'&quot;')+'" style="font-size:13px;width:100%"></div>'
     +'<div style="display:flex;gap:8px">'
     +'<button id="lsSpSave" style="flex:2;padding:12px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Save</button>'
     +(isOccupied?'<button id="lsSpClear" style="flex:1;padding:12px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Clear</button>':'')
@@ -170,11 +162,14 @@ window.lsSeatEditPopup=function(idx){
     if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
     S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
     if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();
+    var newInfant=document.getElementById('lsSpInfant').value.trim();
     f.names[idx]=newNm;
     f.seats[idx]=newWt||'';
     f.bags[idx]=newBg||'';
     if(!f.paxGroups)f.paxGroups={};
     if(newGrp)f.paxGroups[idx]=newGrp;else delete f.paxGroups[idx];
+    if(!f.infantNames)f.infantNames={};
+    if(newInfant)f.infantNames[idx]=newInfant;else delete f.infantNames[idx];
     if(!f.paxType)f.paxType={};
     if(newNm||parseFloat(newWt)){f.paxType[idx]=_pType;}else{delete f.paxType[idx];}
     if(!f.paxPaymentReq)f.paxPaymentReq={};
@@ -193,6 +188,7 @@ window.lsSeatEditPopup=function(idx){
       if(f.paxGroups)delete f.paxGroups[idx];
       if(f.paxType)delete f.paxType[idx];
       if(f.paxPaymentReq)delete f.paxPaymentReq[idx];
+      if(f.infantNames)delete f.infantNames[idx];
       S.formDirty=true;autoSaveLS();
       ov.remove();render();
     };
@@ -413,7 +409,7 @@ function renderLoadsheet(){
       </div>`:''}
     </div>`;
     loadingH=`<div class="card" id="lsf-loading" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
-      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Passengers, Loading &amp; Fuel<div style="display:flex;gap:6px;align-items:center">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button></div></div>
+      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Passengers, Loading &amp; Fuel<div style="display:flex;gap:6px;align-items:center">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button></div></div>
       ${wbSummary}
       <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:1;min-width:180px;overflow-x:auto;-webkit-overflow-scrolling:touch">

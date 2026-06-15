@@ -1146,10 +1146,12 @@ window.tapFormSeat=(seatIdx,acId,ev)=>{
     const ua=f._unallocated;
     if(ua&&ua[S._selUnalloc]){
       const p=ua[S._selUnalloc];
-      if(nm){ua.push({name:nm,weight:f.seats[seatIdx]||'',bag:f.bags[seatIdx]||'',infant:(f.infantNames||{})[seatIdx]||''});}
+      if(nm){ua.push({name:nm,weight:f.seats[seatIdx]||'',bag:f.bags[seatIdx]||'',infant:(f.infantNames||{})[seatIdx]||'',group:(f.paxGroups||{})[seatIdx]||''});}
       f.names[seatIdx]=p.name;f.seats[seatIdx]=p.weight;f.bags[seatIdx]=p.bag;
       if(!f.infantNames)f.infantNames={};
       if(p.infant)f.infantNames[seatIdx]=p.infant;else delete f.infantNames[seatIdx];
+      if(!f.paxGroups)f.paxGroups={};
+      if(p.group)f.paxGroups[seatIdx]=p.group;else delete f.paxGroups[seatIdx];
       ua.splice(S._selUnalloc,1);
     }
     S._selUnalloc=null;S._selFormSeat=null;autoSaveLS();render();return;
@@ -1161,6 +1163,7 @@ window.tapFormSeat=(seatIdx,acId,ev)=>{
       swp(f.names,from,seatIdx);swp(f.seats,from,seatIdx);
       swp(f.bags,from,seatIdx);
       if(!f.infantNames)f.infantNames={};swp(f.infantNames,from,seatIdx);
+      if(!f.paxGroups)f.paxGroups={};swp(f.paxGroups,from,seatIdx);
     }
     S._selFormSeat=null;
   } else if(nm){
@@ -1199,10 +1202,12 @@ window.lsDropOnSeat=function(toIdx,e){
     const p=ua[S._dragUnalloc];
     const curNm=f.names[toIdx]||'';
     // Bump existing occupant back to unallocated
-    if(curNm&&curNm!==f.coPilot){ua.push({name:curNm,weight:f.seats[toIdx]||'',bag:f.bags[toIdx]||'',infant:(f.infantNames||{})[toIdx]||''});}
+    if(curNm&&curNm!==f.coPilot){ua.push({name:curNm,weight:f.seats[toIdx]||'',bag:f.bags[toIdx]||'',infant:(f.infantNames||{})[toIdx]||'',group:(f.paxGroups||{})[toIdx]||''});}
     f.names[toIdx]=p.name;f.seats[toIdx]=p.weight;f.bags[toIdx]=p.bag;
     if(!f.infantNames)f.infantNames={};
     if(p.infant)f.infantNames[toIdx]=p.infant;else delete f.infantNames[toIdx];
+    if(!f.paxGroups)f.paxGroups={};
+    if(p.group)f.paxGroups[toIdx]=p.group;else delete f.paxGroups[toIdx];
     ua.splice(S._dragUnalloc,1);
     S._dragUnalloc=null;S._selUnalloc=null;
   } else if(S._dragSeat!=null&&S._dragSeat!==toIdx){
@@ -1210,6 +1215,7 @@ window.lsDropOnSeat=function(toIdx,e){
     const swp=(obj,a,b)=>{const t=obj[a];obj[a]=obj[b];obj[b]=t;};
     swp(f.names,S._dragSeat,toIdx);swp(f.seats,S._dragSeat,toIdx);swp(f.bags,S._dragSeat,toIdx);
     if(!f.infantNames)f.infantNames={};swp(f.infantNames,S._dragSeat,toIdx);
+    if(!f.paxGroups)f.paxGroups={};swp(f.paxGroups,S._dragSeat,toIdx);
     S._dragSeat=null;
   }
   render();
@@ -1223,9 +1229,10 @@ window.lsDropOnUnalloc=function(e){
     const nm=f.names[S._dragSeat]||'';
     if(nm&&nm!==f.coPilot&&nm!==f.pic){
       if(!f._unallocated)f._unallocated=[];
-      f._unallocated.push({name:nm,weight:f.seats[S._dragSeat]||'',bag:f.bags[S._dragSeat]||'',infant:(f.infantNames||{})[S._dragSeat]||''});
+      f._unallocated.push({name:nm,weight:f.seats[S._dragSeat]||'',bag:f.bags[S._dragSeat]||'',infant:(f.infantNames||{})[S._dragSeat]||'',group:(f.paxGroups||{})[S._dragSeat]||''});
       delete f.names[S._dragSeat];delete f.seats[S._dragSeat];delete f.bags[S._dragSeat];
       if(f.infantNames)delete f.infantNames[S._dragSeat];
+      if(f.paxGroups)delete f.paxGroups[S._dragSeat];
     }
     S._dragSeat=null;render();
   }
@@ -1734,7 +1741,7 @@ window.lsGrp=function(idx,val){
 };
 window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;setTimeout(_lsSafeRender,150);};window.lsB=(i,v)=>{S.form.bags[i]=v;setTimeout(_lsSafeRender,150);};window.lsC=(i,v)=>{if(!S.form.cargo)S.form.cargo={};S.form.cargo[i]=v;S.formDirty=true;setTimeout(_lsSafeRender,150);};
 window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));setTimeout(_lsSafeRender,150);};
-window.lsBurn=(v,acId)=>{S.form.burnOff=v;setTimeout(_lsSafeRender,150);};
+window.lsBurn=(v,acId)=>{if(!v||v===''){const _a=S.aircraft[acId];S.form.burnOff=(_a&&_a.layout==='ga8')?'35':(_a&&_a.burnDef?String(_a.burnDef):'');}else{S.form.burnOff=v;}setTimeout(_lsSafeRender,150);};
 window.lsGndBurn=(v,acId)=>{const n=parseFloat(v);S.form.gndBurn=isNaN(n)?null:String(toKg(n,acId));setTimeout(_lsSafeRender,150);};
 window.clearSig=()=>{S.form.sig=null;S.sigTypedName='';autoSaveLS();render();};
 
