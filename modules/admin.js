@@ -1441,23 +1441,53 @@ window.bulkUploadSaved=async function(){
 };
 
 window.clearManifest=()=>{
-  if(!confirm('Clear all passengers and aircraft?'))return;
-  S._dispatchUndo=JSON.parse(JSON.stringify(S.dispatch));
-  auditLog('manifest_clear',{pax:(S.dispatch.pax||[]).length});
-  S._undoLabel='Clear';
-  S._loadedManifestId=null;
-  const _clrTab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
-  if(_clrTab)_clrTab.savedId=null;
-  S.dispatch=bD();
-  if(!S._manifestDispatches)S._manifestDispatches={};
-  S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
-  S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
-  autoSaveDispatch();render();
+  const hasData=(S.dispatch.pax&&S.dispatch.pax.length>0)||(S.dispatch.acSetup&&S.dispatch.acSetup.length>0);
+  if(!hasData){return;} // nothing to clear
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:22px;max-width:360px;width:100%';
+  box.innerHTML='<div style="font-size:16px;font-weight:700;margin-bottom:8px">Close without saving?</div>'
+    +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px">This will clear the current manifest. Save first to keep it.</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:8px">'
+    +(S._loadedManifestId
+      ?'<button id="_clrSave" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">💾 Save</button>'
+      :'<button id="_clrSave" style="flex:1;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">💾 Save</button>')
+    +'<button id="_clrDel" style="flex:1;padding:11px;background:transparent;color:#ef4444;border:1.5px solid #ef4444;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Discard</button>'
+    +'</div>'
+    +'<button id="_clrCancel" style="width:100%;padding:10px;background:var(--card2);color:var(--text2);border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  function _doClear(){
+    ov.remove();
+    S._dispatchUndo=JSON.parse(JSON.stringify(S.dispatch));
+    auditLog('manifest_clear',{pax:(S.dispatch.pax||[]).length});
+    S._undoLabel='Clear';
+    S._loadedManifestId=null;
+    const _clrTab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
+    if(_clrTab)_clrTab.savedId=null;
+    S.dispatch=bD();
+    if(!S._manifestDispatches)S._manifestDispatches={};
+    S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+    S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
+    autoSaveDispatch();render();
+  }
+  document.getElementById('_clrSave').onclick=function(){ov.remove();saveManifest();};
+  document.getElementById('_clrDel').onclick=function(){_doClear();};
+  document.getElementById('_clrCancel').onclick=function(){ov.remove();};
 };
 
 // ── Manifest tab management ──
 window.switchManifestTab=function(id){
-  if(!id||id===S.activeManifestTabId)return;
+  if(!id)return;
+  if(id===S.activeManifestTabId){
+    // Second click on active tab → enter rename mode
+    S._editingManifestTabId=id;
+    render();
+    setTimeout(function(){var inp=document.getElementById('tab-rename-'+id);if(inp){inp.focus();inp.select();}},60);
+    return;
+  }
+  S._editingManifestTabId=null;
   if(!S._manifestDispatches)S._manifestDispatches={};
   // Save current dispatch (guard against null id before tabs are initialised)
   if(S.activeManifestTabId)S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
@@ -1884,6 +1914,7 @@ window.pushLsToSeatmap=function(){
   // Merge loadsheet seats on top of existing seatmap for this aircraft
   const sm=Object.assign({},S.dispatch.seatMap[acId]||{});
   Object.keys(f.names||{}).forEach(function(idx){
+    if(parseInt(idx)===0)return; // Skip PIC — not pushed as pax
     const nm=(f.names[idx]||'').trim();if(!nm)return;
     const key=nm.toLowerCase();
     let pid=nameMap[key];
@@ -1945,6 +1976,7 @@ window.pushAllLsToSeatmap=function(){
       const sm=Object.assign({},S.dispatch.seatMap[smKey]||{});
       const f=tab.form;if(!f)return;
       Object.keys(f.names||{}).forEach(function(idx){
+        if(parseInt(idx)===0)return; // Skip PIC
         const nm=(f.names[idx]||'').trim();if(!nm)return;
         const key=nm.toLowerCase();
         let pid=nameMap[key];
@@ -2158,7 +2190,7 @@ const el=document.getElementById('savedSearchInput');if(el){const pos=el.value.l
 // ── ETD season-based options ──
 function etdOptions(dateStr){
   const d=new Date(dateStr||Date.now());const m=d.getMonth()+1;
-  return (m>=10||m<=4)?['08:00','10:30','13:00','15:30']:['08:00','09:30','12:00','15:30'];
+  return (m>=10||m<=4)?['08:00','10:30','13:00','14:30','15:30']:['08:00','09:30','12:00','15:30'];
 }
 function etdSelect(val,dateStr,dispatchKey){
   var opts=etdOptions(dateStr);

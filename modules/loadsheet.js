@@ -42,8 +42,8 @@ function renderLsSeatGrid(f,a){
       var borderCol=isPIC?'#3b82f6':isCoPilot?'#64748b':
         isOccupied?(gc||'var(--accent)'):'var(--border2)';
       var nameCol=gc?gc:(isPIC?'#93c5fd':isCoPilot?'#94a3b8':'var(--text1)');
-      var clickable=!isPIC&&!isCoPilot;
-      seatsCol+='<div onclick="'+(clickable?'window.lsSeatEditPopup('+idx+')':'')+'" style="'
+      var clickable=!isCoPilot;
+      seatsCol+='<div onclick="'+(isPIC?'window.lsPicChangePopup()':clickable?'window.lsSeatEditPopup('+idx+')':'')+'" style="'
         +'width:'+sW+'px;height:'+sH+'px;border-radius:10px;border:2px solid '+borderCol+';'
         +'background:'+bgCol+';cursor:'+(clickable?'pointer':'default')+';'
         +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
@@ -232,7 +232,7 @@ function renderLoadsheet(){
         <div style="font-size:13px;font-weight:700;color:${r.cogOk?'var(--ok-text)':'var(--err-text)'}">${r.towCog!=null?r.towCog.toFixed(2):'—'}</div>
       </div>
       <div style="text-align:center;background:var(--card2);border-radius:7px;padding:6px 4px">
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">PAX</div>
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">👥 PAX</div>
         <div style="font-size:13px;font-weight:700">${_paxCount}</div>
         <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;margin-top:2px">
           ${_adultCount>0?`<span style="font-size:9px;font-weight:700;color:#4ade80">${_adultCount}A</span>`:''}
@@ -379,15 +379,15 @@ function renderLoadsheet(){
         <div style="font-size:10px;color:#f59e0b;margin-top:2px">${gndBurnKg.toFixed(1)} kg</div>
       </div>
       <div onclick="this.querySelector('input').focus()" style="cursor:pointer;background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.30);border-radius:8px;padding:8px 10px">
-        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f87171;text-transform:uppercase;margin-bottom:4px">Flt Burn</div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#f87171;text-transform:uppercase;margin-bottom:4px">Flight Burn</div>
         <div style="display:flex;align-items:baseline;gap:4px">
-          <input class="fi ls-no-spin" type="number" placeholder="${a.burnDef}" value="${burnVal}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
+          <input class="fi ls-no-spin" type="number" placeholder="${a.burnDef||(a?.layout==='ga8'?35:187)}" value="${burnVal}" style="font-size:16px;font-weight:800;width:60px;padding:0;background:transparent;border:none;color:var(--text)" onblur="lsBurn(this.value,'${f.ac}')">
           <span style="font-size:11px;color:#f87171">${a?.layout==='ga8'?'L':burnUnit_}</span>
         </div>
         <div style="font-size:10px;color:#f87171;margin-top:2px">&#x2248; ${flightMin} min</div>
       </div>
       <div style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:8px;padding:8px 10px">
-        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:4px">@ Dest</div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:4px">Fuel at Dest</div>
         <div style="font-size:16px;font-weight:800;color:var(--text)">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
         <div style="font-size:10px;color:#4ade80;margin-top:2px">${a?.layout==='ga8'?'litres':'lbs'}</div>
       </div>
@@ -403,10 +403,11 @@ function renderLoadsheet(){
       <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:1;min-width:180px;overflow-x:auto;-webkit-overflow-scrolling:touch">
           ${renderLsSeatGrid(f,a)}
-          ${r?`<div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;margin-top:8px;border-top:1px solid var(--border)"><span style="font-size:12px;font-weight:700;color:var(--text3)">Total Pax Weight</span><span style="font-size:13px;font-weight:700">${r.paxW.toFixed(1)} kg</span></div>`:''}
+          ${!isPod?cargoSection:''}
         </div>
+        ${isPod?`<div style="flex:0 0 195px;min-width:150px">${cargoSection}</div>`:''}
         <div style="flex:0 0 195px;min-width:160px">
-          ${cargoSection}${_fuelPanel}
+          ${_fuelPanel}
         </div>
       </div>
     </div>`;
@@ -628,3 +629,39 @@ window.lsInlineBag=function(idx,el){
   el.replaceWith(inp);inp.focus();inp.select();
 };
 
+window.lsPicChangePopup=function(){
+  var f=S.form;if(!f||!f.ac)return;
+  var a=S.aircraft[f.ac];if(!a)return;
+  var pilots=pilotCrewList().filter(function(c){return(c.endorse||[]).includes(f.ac);});
+  if(!pilots.length)pilots=pilotCrewList();
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+  var inner=document.createElement('div');
+  inner.style.cssText='background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:20px;max-width:320px;width:100%;max-height:80vh;overflow-y:auto';
+  var rows=pilots.map(function(c){
+    var sel=c.n===f.pic;
+    return'<div onclick="window._lsPickPic(''+c.n.replace(/'/g,"\\'")+'')" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:6px;background:'+(sel?'rgba(124,58,237,.15)':'var(--card2)')+';border:1px solid '+(sel?'var(--acc)':'var(--border2)')+';">'
+      +'<span style="font-size:13px;font-weight:700;color:'+(sel?'var(--acc)':'var(--text1)')+'">'+c.n+'</span>'
+      +'<span style="font-size:11px;color:var(--text3)">'+c.w+'kg</span>'
+      +'</div>';
+  }).join('');
+  inner.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+    +'<div style="font-size:15px;font-weight:700">Change PIC</div>'
+    +'<button id="_picClose" style="background:none;border:none;color:var(--text3);font-size:22px;cursor:pointer;padding:0 4px;line-height:1">&times;</button>'
+    +'</div>'+rows;
+  ov.appendChild(inner);
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
+  document.getElementById('_picClose').onclick=function(){ov.remove();};
+  window._lsPickPic=function(name){
+    var crew=pilotCrewList().find(function(c){return c.n===name;});
+    if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
+    S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
+    if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();
+    f.pic=name;
+    f.names[0]=name;
+    if(crew&&crew.w)f.seats[0]=String(crew.w);
+    S.formDirty=true;autoSaveLS();
+    ov.remove();render();
+  };
+};

@@ -29,6 +29,13 @@ function renderStep1(){
     ${S.manifestTabs.map(function(tab){
       const active=tab.id===S.activeManifestTabId;
       const lbl=_manifestTabLabel(tab);
+      const editing=active&&S._editingManifestTabId===tab.id;
+      if(editing){
+        return`<div style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:8px;border:1px solid var(--acc);background:rgba(124,58,237,.15);white-space:nowrap;flex-shrink:0">
+          <input id="tab-rename-${tab.id}" class="fi" type="text" value="${lbl.replace(/"/g,'&quot;')}" style="font-size:12px;font-weight:700;width:110px;padding:2px 6px;color:var(--acc)" onclick="event.stopPropagation()" onblur="window.saveManifestTabName(this.value,'${tab.id}')" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){S._editingManifestTabId=null;render();}">
+          ${S.manifestTabs.length>1?`<span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>`:''}
+        </div>`;
+      }
       return`<div onclick="window.switchManifestTab('${tab.id}')" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid ${active?'var(--acc)':'var(--border2)'};background:${active?'rgba(124,58,237,.15)':'var(--card2)'};cursor:pointer;white-space:nowrap;flex-shrink:0;font-size:12px;font-weight:${active?'700':'500'};color:${active?'var(--acc)':'var(--text2)'}">
         <span style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${lbl}</span>
         ${S.manifestTabs.length>1?`<span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>`:''}
@@ -128,13 +135,12 @@ function renderStep1(){
 
   return _tabBar+`
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-    <input class="fi" type="text" placeholder="Manifest name (e.g. NZQN-NZMF 9 Jun)" value="${d.name||''}" style="flex:1;font-size:13px" tabindex="-1" onblur="S.dispatch.name=this.value;autoSaveDispatch()">
     ${S._loadedManifestId
-      ?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="saveManifest()">💾 Update</button>
+      ?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="saveManifest()">💾 Save</button>
         <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="window.saveManifestAs()">+ Save As New</button>
         <button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(239,68,68,.4);color:#ef4444" onclick="window.deleteCurrentManifest()">🗑 Delete</button>`
       :`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="saveManifest()">💾 Save</button>`}
-    <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="S.tab='saved';S.savedTab='manifests';render()">📂 Load</button>
+    <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="S.tab='saved';S.savedTab='manifests';render()">📂 Open</button>
     <button tabindex="-1" class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>${S._undoLabel?'<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(245,158,11,.5);color:#f59e0b" onclick="undoManifest()">&#x21A9; Undo '+S._undoLabel+'</button>':''}
   </div>
   <div class="card"><div class="st">Flight Details</div>
@@ -186,7 +192,7 @@ function renderStep1(){
   </div>
   <div style="display:flex;gap:8px;margin-bottom:8px">
     ${S._loadedManifestId
-      ?`<button tabindex="-1" class="btn btn-ghost" style="flex:2;font-size:13px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="saveManifest()">💾 Update Manifest</button>
+      ?`<button tabindex="-1" class="btn btn-ghost" style="flex:2;font-size:13px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="saveManifest()">💾 Save Manifest</button>
         <button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:12px" onclick="window.saveManifestAs()">+ Save As New</button>`
       :`<button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="saveManifest()">💾 Save Manifest</button>`}
   </div>
@@ -507,3 +513,18 @@ window.inlineEditPaxField=function(oi,field,el){
   el.replaceWith(inp);inp.focus();inp.select();
 };
 
+window.saveManifestTabName=function(name,id){
+  S._editingManifestTabId=null;
+  var trimmed=(name||'').trim();
+  if(trimmed){
+    if(id===S.activeManifestTabId){
+      S.dispatch.name=trimmed;
+      autoSaveDispatch();
+    } else if(S._manifestDispatches&&S._manifestDispatches[id]){
+      S._manifestDispatches[id].name=trimmed;
+    }
+  }
+  render();
+  // Re-focus after render
+  setTimeout(function(){var el=document.getElementById('tab-rename-'+id);if(el){el.focus();}},0);
+};
