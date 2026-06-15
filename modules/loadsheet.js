@@ -583,14 +583,14 @@ function renderLoadsheet(){
       // Placeholder empty slots — drop targets
       var _placeholders='';
       for(var _pi=0;_pi<_emptySlots;_pi++){
-        _placeholders+='<div class="seat" ondragover="event.preventDefault();this.style.outline=\'2px solid var(--acc)\'" ondragleave="this.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event);this.style.outline=\'\'" onclick="window.lsAddUnallocPax()" style="flex-shrink:0;border:2px dashed var(--border2);background:transparent;cursor:pointer;opacity:.5">'
+        _placeholders+='<div class="seat" ondragover="event.preventDefault();this.style.outline=\'2px solid var(--acc)\'" ondragleave="this.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event);this.style.outline=\'\'" style="flex-shrink:0;border:2px dashed var(--border2);background:transparent;cursor:pointer;opacity:.5">'
           +'<div style="font-size:18px;color:var(--border2)">+</div>'
           +'</div>';
       }
       const hint=selIdx!=null
         ?'<div style="font-size:11px;color:var(--acc);font-weight:600;margin-bottom:6px">Passenger selected — tap an empty seat above to assign</div>'
         :'<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Drag from seat or tap to add · drag to a seat above to assign</div>';
-      unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--acc)\'" ondragleave="if(e&&e.currentTarget)e.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)"><div class="st">Unallocated'+(ua.length?' ('+ua.length+')':'')+'</div>'+hint+'<div style="display:flex;flex-wrap:wrap;gap:6px">'+cards+_placeholders+'</div></div>';
+      unallocH='<div class="card" ondragover="event.preventDefault();event.currentTarget.style.outline=\'2px solid var(--acc)\'" ondragleave="event.currentTarget.style.outline=\'\'" ondrop="window.lsDropOnUnalloc(event)"><div class="st">Unallocated'+(ua.length?' ('+ua.length+')':'')+'</div>'+hint+'<div style="display:flex;flex-wrap:wrap;gap:6px">'+cards+_placeholders+'</div></div>';
     }
   }
   return`${draftBanner}${_overCapBanner}${clearBtn}
