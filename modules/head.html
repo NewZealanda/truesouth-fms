@@ -168,42 +168,59 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
   background-repeat:no-repeat;
 }
 /* ── Responsive ── */
-@media(max-width:480px){
+@media(max-width:600px){
   input[type=date]{max-width:160px;box-sizing:border-box;min-width:0;}
-  /* Layout */
   .g2{grid-template-columns:1fr;}
   .g3{grid-template-columns:1fr 1fr;}
   .page{padding:10px 8px max(100px,calc(env(safe-area-inset-bottom) + 80px));}
 
-  /* Nav bar - scrollable on mobile */
+  /* Nav bar */
   .nav-bar{padding:6px 8px 4px;}
-  .nav-tab{padding:6px 10px;font-size:10px;}
-  .sub-tab{padding:6px 10px;font-size:11px;}
-
-  /* Seat map - smaller cards on mobile */
-  .seat{width:52px!important;height:46px!important;border-radius:6px;}
-  .seat-name{font-size:8px;}
-  .seat-wt{font-size:8px;}
-  .seat-lbl{font-size:7px;}
-  .seat-dot{width:5px;height:5px;top:2px;right:2px;}
+  .nav-tab{padding:5px 10px;font-size:11px;}
+  .sub-tab{padding:5px 10px;font-size:11px;}
 
   /* Cards */
   .card{padding:10px 10px;}
   .st{font-size:14px;margin-bottom:10px;}
 
-  /* Form inputs touch-friendly */
-  .fi{padding:10px 10px;font-size:16px;} /* 16px prevents iOS zoom */
+  /* Form inputs — 16px prevents iOS auto-zoom */
+  .fi{padding:10px 10px;font-size:16px;}
   select.fi{font-size:16px;}
 
-  /* W&B grid on loadsheet */
+  /* W&B grid */
   .wb-grid{grid-template-columns:1fr 1fr!important;}
-
-  /* Pax row - tighter fixed cols on mobile */
-  .pax-row{grid-template-columns:70px 44px 1.5fr 0.8fr 44px 44px 26px!important;}
 
   /* Buttons */
   .btn-full{padding:14px;font-size:14px;}
   button{min-height:36px;}
+}
+
+@media(max-width:480px){
+  /* Seat map - smaller on narrow phones */
+  .seat{width:50px!important;height:44px!important;border-radius:6px;}
+  .seat-name{font-size:8px;}
+  .seat-wt{font-size:8px;}
+  .seat-lbl{font-size:7px;}
+  .seat-dot{width:5px;height:5px;top:2px;right:2px;}
+
+  /* Loadsheet layout — stack seatmap/pods vertically on narrow screens */
+  .ls-cols{flex-direction:column!important;}
+  .ls-mid-col{flex:none!important;width:100%!important;}
+
+  /* Pax row — tighter columns on narrow screens */
+  .pax-row-grid{grid-template-columns:62px 40px 1fr 60px 48px 48px 24px!important;gap:3px!important;}
+
+  /* Manifest aircraft cards — full width */
+  .ac-card-grid{grid-template-columns:1fr!important;}
+
+  /* Charter leg cards */
+  .leg-card{padding:12px!important;}
+}
+
+@media(min-width:900px){
+  /* Desktop: allow charter/admin grids to go wider */
+  .charter-grid{grid-template-columns:1fr 1fr;}
+  .stat-grid{grid-template-columns:repeat(3,1fr);}
 }
 
 /* PWA safe area padding for iPhone notch/home bar */

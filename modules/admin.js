@@ -796,6 +796,15 @@ window.applyReset=async()=>{
   S.showReset=false;render();
 };
 
+window.switchToLoadsheets=function(){
+  if(S.lsTabs&&S.lsTabs.length){
+    if(!S.activeTabId)S.activeTabId=S.lsTabs[0].id;
+    S._newLsTab=false;
+  } else {
+    S._newLsTab=true;S.activeTabId=null;
+  }
+  S.tab='loadsheet';render();
+};
 window.switchOpsTab=function(tabId){
   S.activeTabId=null;S._newLsTab=false;
   S.tab=tabId;
@@ -807,7 +816,8 @@ window.switchOpsTab=function(tabId){
 };
 window.setTab=function(t){
   if(t==='operations'){
-    if(!['manifest','seatmap','saved','loadsheet','ls_SLA','ls_SLB','ls_SLD','ls_SLQ','ls_SDB'].includes(S.tab)) S.tab='manifest';
+    if(S._newLsTab&&!S.activeTabId){S._newLsTab=false;S.tab='manifest';}
+    else if(!['manifest','seatmap','saved'].includes(S.tab)&&!S.activeTabId&&!S._newLsTab)S.tab='manifest';
   } else if(t==='scratchpad'){
     S.tab=t;
     if(S.pads.length===0&&S.padTabs.length===0){
@@ -816,20 +826,7 @@ window.setTab=function(t){
   } else {
     S.tab=t;
   }
-  // Re-fetch live_draft only when switching to manifest/operations tab
-  if(t==='manifest'||t==='operations'){
-    (async function(){
-      try{
-        const r=await fetch(SB+'/rest/v1/ts_manifests?id=eq.live_draft&select=*',{headers:SH});
-        if(r.ok){const rows=await r.json();
-          if(rows&&rows[0]&&rows[0].data&&rows[0].data._updatedBy!==S.user?.id){
-            mergeDispatch(rows[0].data);safeRender();
-          }
-        }
-      }catch(e){}
-    })();
-  }
-  // Re-fetch live_draft only when switching to manifest/operations tab
+  // Re-fetch live_draft when switching to manifest tab
   if(t==='manifest'||t==='operations'){
     (async function(){
       try{
@@ -1257,7 +1254,7 @@ window.saveManifest=async()=>{
   // If we have a loaded manifest ID, UPDATE it; otherwise create new
   const id=S._loadedManifestId||('mn_'+Date.now());
   const savedAt=new Date().toISOString();
-  const data={dep:d.dep,dest:d.dest,date:d.date,etd:d.etd,acSetup:d.acSetup,pax:d.pax,name};
+  const data={dep:d.dep,dest:d.dest,date:d.date,etd:d.etd,acSetup:d.acSetup,pax:d.pax,name,createdBy:(S.user&&S.user.name)||'',createdAt:new Date().toISOString()};
   S.manifests=S.manifests.filter(m=>m.id!==id&&m.name!==name);
   S.manifests.unshift({id,name,savedAt,data});
   S._loadedManifestId=id;
@@ -1376,7 +1373,8 @@ window.viewSaved=function(id){
   var s=S.saved.find(function(x){return x.id===id;});
   if(!s)return;
   var acFull=s.form&&s.form.ac?s.form.ac:'ZK-SLA';
-  S.lsTabs.push({id:s.id,acId:acFull,form:dc(s.form),status:s.status||'unsigned',savedAt:s.savedAt,isNew:false,originalForm:dc(s.form)});
+  var _vsForm=dc(s.form);if(!_vsForm.cargo)_vsForm.cargo={};var _vsAc=S.aircraft[_vsForm.ac];if(_vsAc&&_vsAc.layout==='ga8'&&(!_vsForm.burnOff||parseFloat(_vsForm.burnOff)<30)){_vsForm.burnOff='35';}
+  S.lsTabs.push({id:s.id,acId:acFull,form:_vsForm,status:s.status||'unsigned',savedAt:s.savedAt,isNew:false,originalForm:dc(s.form)});
   window.switchLsTab(s.id);
 };
 window.reopenSaved=async function(id){
@@ -1385,6 +1383,7 @@ window.reopenSaved=async function(id){
   if(!s)return;
   var form=dc(s.form);
   form.sig=null;form.status='unsigned';form.sigTs=null;
+  if(!form.cargo)form.cargo={};var _rsAc=S.aircraft[form.ac];if(_rsAc&&_rsAc.layout==='ga8'&&(!form.burnOff||parseFloat(form.burnOff)<30)){form.burnOff='35';}
   s.form=form;s.status='unsigned';
   lsSet('ts_loadsheets_cache',S.saved);
   await sbU('ts_loadsheets',[{id:s.id,form:form,saved_at:s.savedAt,status:'unsigned'}]);
@@ -1557,6 +1556,8 @@ function generateLoadsheet(acId){
   if(setup?.coPilot){const cp=anyCrewList().find(c=>c.n===setup.coPilot);if(cp&&cp.w){form.seats[1]=String(cp.w);form.names[1]=setup.coPilot;}}
   else{const sm=d.seatMap[acId]||{};const p=sm[1]?paxById(sm[1]):null;if(p){form.seats[1]=p.weight||'';form.bags[1]=p.bag||'';form.names[1]=p.name||'';if(p.type==='child')form.paxType[1]='C';form.paxGroups[1]=p.group||'';if(p.paymentReq)form.paxPaymentReq[1]=true;}}
   form.fuel=String(fuelKgForSetup(acId));
+  form.createdBy=(S.user&&S.user.name)||'';
+  form.createdAt=new Date().toISOString();
   const sm=d.seatMap[acId]||{};
   const seatIdxs=paxSeatIdxs(acId)||[];seatIdxs.forEach(function(i){if(i<=1)return;const p=sm[i]?paxById(sm[i]):null;if(p){form.seats[i]=p.weight||'';form.bags[i]=p.bag||'';form.names[i]=p.name||'';if(p.infantName)form.infantNames[i]=p.infantName;if(p.type==='child')form.paxType[i]='C';form.paxGroups[i]=p.group||'';if(p.paymentReq)form.paxPaymentReq[i]=true;}});
   // seat 1 infant (non-copilot)
@@ -1567,10 +1568,10 @@ function generateLoadsheet(acId){
   // Populate _unallocated: pax pinned to this aircraft but not given a seat
   {const _spIds=new Set(Object.values(sm));const _unass=(d.pax||[]).filter(function(p){return p.pinAc===acId&&!_spIds.has(p.id)&&!p.infant&&p.name;});if(_unass.length){form._unallocated=_unass.map(function(p){return{name:p.name,weight:p.weight,bag:p.bag||0,infant:p.infantName||null};});}}
   // Fuel/burnOff defaults by aircraft type
-  if(a.layout==='ga8'&&!form.burnOff){form.burnOff='35';}
+  if(a.layout==='ga8'&&(!form.burnOff||parseFloat(form.burnOff)<30)){form.burnOff='35';}
   if(a.layout==='c208'){form.fuel=String(Math.round(800*0.453592));}
   var _savedAt=new Date().toISOString();
-  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:_savedAt,isNew:true});
+  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:_savedAt,isNew:false});
   S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
   // Save immediately so other devices can load it
   sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:_savedAt,status:'unsigned'}]).catch(function(){});
@@ -1726,7 +1727,7 @@ window.lsGrp=function(idx,val){
   }
   autoSaveLS();_lsSafeRender();
 };
-window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;setTimeout(_lsSafeRender,150);};window.lsB=(i,v)=>{S.form.bags[i]=v;setTimeout(_lsSafeRender,150);};window.lsC=(i,v)=>{S.form.cargo[i]=v;setTimeout(_lsSafeRender,150);};
+window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;setTimeout(_lsSafeRender,150);};window.lsB=(i,v)=>{S.form.bags[i]=v;setTimeout(_lsSafeRender,150);};window.lsC=(i,v)=>{if(!S.form.cargo)S.form.cargo={};S.form.cargo[i]=v;S.formDirty=true;setTimeout(_lsSafeRender,150);};
 window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));setTimeout(_lsSafeRender,150);};
 window.lsBurn=(v,acId)=>{S.form.burnOff=v;setTimeout(_lsSafeRender,150);};
 window.lsGndBurn=(v,acId)=>{const n=parseFloat(v);S.form.gndBurn=isNaN(n)?null:String(toKg(n,acId));setTimeout(_lsSafeRender,150);};
@@ -1904,9 +1905,14 @@ window.pushLsToSeatmap=function(){
   S.dispatch.acSetup=S.dispatch.acSetup||[];
   S.dispatch.seatMap=S.dispatch.seatMap||{};
   S.dispatch.pax=S.dispatch.pax||[];
-  // Auto-add aircraft to seatmap setup if not already present
-  if(!S.dispatch.acSetup.find(function(s){return s.acId===acId;})){
-    S.dispatch.acSetup.push({acId:acId,pic:f.pic||'',coPilot:f.coPilot||''});
+  // Auto-add aircraft to seatmap setup if not already present; always update PIC/coPilot
+  var _acsEntry=S.dispatch.acSetup.find(function(s){return s.acId===acId;});
+  if(!_acsEntry){
+    _acsEntry={acId:acId,pic:f.pic||'',coPilot:f.coPilot||''};
+    S.dispatch.acSetup.push(_acsEntry);
+  } else {
+    if(f.pic)_acsEntry.pic=f.pic;
+    if(f.coPilot)_acsEntry.coPilot=f.coPilot;
   }
   // Build name→id map from existing pax
   const nameMap={};
@@ -1940,8 +1946,8 @@ window.pushLsToSeatmap=function(){
   });
   S.dispatch.seatMap[acId]=sm;
   autoSaveDispatch();
-  S.tab='seatmap';render();
-  toast('Loadsheet pushed to seatmap ✓','ok');
+  render();
+  toast('✅ Pushed to seatmap','ok');
 };
 window.pushAllLsToSeatmap=function(){
   const tabs=S.lsTabs||[];
@@ -1967,10 +1973,15 @@ window.pushAllLsToSeatmap=function(){
       const multi=group.length>1;
       const smKey=multi?(phyId+'_'+(i+1)):phyId;
       const suffix=multi?'('+(i+1)+')':null;
-      // Add to acSetup only if not already present
-      if(!S.dispatch.acSetup.find(function(s){return(s._seatmapKey||s.acId)===smKey;})){
-        const existingPhySetup=S.dispatch.acSetup.find(function(s){return s.acId===phyId;});
-        S.dispatch.acSetup.push(Object.assign({},existingPhySetup||{acId:phyId},{acId:phyId,_seatmapKey:smKey,_displaySuffix:suffix}));
+      // Add to acSetup if not present; always update PIC/coPilot from loadsheet
+      var _pacs=S.dispatch.acSetup.find(function(s){return(s._seatmapKey||s.acId)===smKey;});
+      if(!_pacs){
+        var _ephys=S.dispatch.acSetup.find(function(s){return s.acId===phyId;});
+        _pacs=Object.assign({},_ephys||{acId:phyId},{acId:phyId,_seatmapKey:smKey,_displaySuffix:suffix});
+        if(f&&f.pic)_pacs.pic=f.pic;if(f&&f.coPilot)_pacs.coPilot=f.coPilot;
+        S.dispatch.acSetup.push(_pacs);
+      } else {
+        if(f&&f.pic)_pacs.pic=f.pic;if(f&&f.coPilot)_pacs.coPilot=f.coPilot;
       }
       // Merge seat assignments (loadsheet takes priority for assigned seats)
       const sm=Object.assign({},S.dispatch.seatMap[smKey]||{});
@@ -1999,9 +2010,27 @@ window.pushAllLsToSeatmap=function(){
       S.dispatch.seatMap[smKey]=sm;
     });
   });
-  S.tab='seatmap';
   autoSaveDispatch();render();
-  toast('Loadsheets merged to seatmap &#x2713;','ok');
+  toast('✅ All loadsheets pushed to seatmap','ok');
+};
+window.pullFromSeatmap=function(){
+  const d=S.dispatch;
+  // Sync pax pinAc from seatmap seat assignments
+  Object.entries(d.seatMap||{}).forEach(function(e){
+    const acId=e[0];const sm=e[1];
+    Object.values(sm||{}).forEach(function(paxId){
+      const p=(d.pax||[]).find(function(x){return x.id===paxId;});
+      if(p){p.pinAc=acId;p._ts=Date.now();}
+    });
+  });
+  // Update PICs in acSetup from open loadsheets
+  (d.acSetup||[]).forEach(function(s){
+    const tab=(S.lsTabs||[]).find(function(t){return t.acId===s.acId&&t.form&&t.form.pic;});
+    if(tab&&tab.form.pic)s.pic=tab.form.pic;
+    if(tab&&tab.form.coPilot)s.coPilot=tab.form.coPilot;
+  });
+  autoSaveDispatch();render();
+  toast('✅ Pulled from seatmap','ok');
 };
 window.clearSeatmap=function(){
   S.dispatch.seatMap={};
@@ -2050,7 +2079,8 @@ window.editSaved=function(id){
   var s=S.saved.find(function(x){return x.id===id;});
   if(!s)return;
   var acFull=s.form&&s.form.ac?s.form.ac:'ZK-SLA';
-  S.lsTabs.push({id:s.id,acId:acFull,form:dc(s.form),status:s.status||'unsigned',savedAt:s.savedAt,originalForm:dc(s.form)});
+  var _esForm=dc(s.form);if(!_esForm.cargo)_esForm.cargo={};var _esAc=S.aircraft[_esForm.ac];if(_esAc&&_esAc.layout==='ga8'&&(!_esForm.burnOff||parseFloat(_esForm.burnOff)<30)){_esForm.burnOff='35';}
+  S.lsTabs.push({id:s.id,acId:acFull,form:_esForm,status:s.status||'unsigned',savedAt:s.savedAt,originalForm:dc(s.form)});
   window.switchLsTab(s.id);
 };
 window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted'}]);};

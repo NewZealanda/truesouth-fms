@@ -357,7 +357,7 @@ function renderLoadsheet(){
           ${w?`<div style="font-size:11px;color:${lc};margin-top:4px">mom ${((parseFloat(w)||0)*zn.arm).toFixed(0)}</div>`:''}
         </div>`;
       }).join('');
-      cargoSection=`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${shelfBoxes}</div>`;
+      cargoSection=`<div style="display:flex;justify-content:center;margin-bottom:8px"><div style="display:flex;flex-direction:column;gap:6px;width:fit-content">${shelfBoxes}</div></div>`;
     }
     // -- Combined Passengers & Loading card
     const _lwDisplay=r?r.lw.toFixed(1):null;
@@ -571,8 +571,10 @@ function renderLoadsheet(){
         ${etdSelect(f.etd,f.date,"form")}
       </div>
     </div>
-  </div>  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px;border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
-  ${unallocH}${loadingH}${calcH}${sigH}`;
+    ${f.createdBy?`<div style="text-align:right;margin-top:6px;font-size:9px;color:rgba(255,255,255,.18);letter-spacing:.04em">Created by ${f.createdBy}</div>`:''}
+  </div>  ${unallocH}${loadingH}${calcH}
+  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px;border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
+  ${sigH}`;
 }
 window.lsCheckChildWt=function(idx){
   const f=S.form;if(!f)return;
@@ -638,9 +640,10 @@ window.lsPicChangePopup=function(){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
   var inner=document.createElement('div');
   inner.style.cssText='background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:20px;max-width:320px;width:100%;max-height:80vh;overflow-y:auto';
-  var rows=pilots.map(function(c){
+  window._lsPicPilots=pilots;
+  var rows=pilots.map(function(c,ci){
     var sel=c.n===f.pic;
-    return'<div onclick="window._lsPickPic(''+c.n.replace(/'/g,"\\'")+'')" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:6px;background:'+(sel?'rgba(124,58,237,.15)':'var(--card2)')+';border:1px solid '+(sel?'var(--acc)':'var(--border2)')+';">'
+    return'<div onclick="window._lsPickPic('+ci+')" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:6px;background:'+(sel?'rgba(124,58,237,.15)':'var(--card2)')+';border:1px solid '+(sel?'var(--acc)':'var(--border2)')+';">'
       +'<span style="font-size:13px;font-weight:700;color:'+(sel?'var(--acc)':'var(--text1)')+'">'+c.n+'</span>'
       +'<span style="font-size:11px;color:var(--text3)">'+c.w+'kg</span>'
       +'</div>';
@@ -653,8 +656,8 @@ window.lsPicChangePopup=function(){
   document.body.appendChild(ov);
   ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
   document.getElementById('_picClose').onclick=function(){ov.remove();};
-  window._lsPickPic=function(name){
-    var crew=pilotCrewList().find(function(c){return c.n===name;});
+  window._lsPickPic=function(idx){
+    var crew=(window._lsPicPilots||[])[idx];var name=crew?crew.n:'';
     if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
     S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
     if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();

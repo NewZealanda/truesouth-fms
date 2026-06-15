@@ -10,7 +10,7 @@ function renderIOSBanner(){
       <span style="display:inline-block;border:1px solid rgba(255,255,255,.5);border-radius:4px;padding:0 4px;font-size:10px">⎙ Share</span>
       then <strong>Add to Home Screen</strong>
     </div>
-    <button onclick="localStorage.setItem('hs_banner_dismissed','1');this.closest('div[style*=fixed]').remove()" style="background:rgba(255,255,255,.2);border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:11px;cursor:pointer;white-space:nowrap">Dismiss</button>
+    <button onclick="localStorage.setItem('hs_banner_dismissed','1');this.closest(\'div[style*=fixed]\').remove()" style="background:rgba(255,255,255,.2);border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:11px;cursor:pointer;white-space:nowrap">Dismiss</button>
   </div>`;
 }
 
@@ -316,19 +316,18 @@ function renderApp(){
   const sh={connecting:`<span class="sync-dot dot-spin"></span>Connecting`,ok:`<span class="sync-dot dot-ok"></span>Synced`,error:`<span class="sync-dot dot-err"></span>Offline`}[S.syncStatus]||'';
   const role=S.user?.role||'desk';
   // Tab visibility by role
-  // Dynamic tab visibility — admin tab always shown; others controlled by rolePerms
-  const _allTabs=[
-    {id:'operations',lbl:'Operations'},
-    {id:'charter',lbl:'Charter'},
-    {id:'maintenance',lbl:'Maintenance'},
-    {id:'admin',lbl:role==='admin'?'Admin':'Crew & Profile'},
-  ];
-  const tabs=_allTabs.filter(t=>{
-    if(role==='admin') return true;
-    if(t.id==='admin') return true;
-    const perms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
-    return perms[t.id]===true;
-  });
+  // Top-level nav (Operations / Charter / Maintenance / Admin)
+  const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
+  const _canOps=role==='admin'||_navPerms.operations===true;
+  const _canCharter=role==='admin'||_navPerms.charter===true;
+  const _canMaint=role==='admin'||_navPerms.maintenance===true;
+  const _opsOn=['manifest','seatmap','saved','loadsheet'].includes(S.tab)||!!S.activeTabId||!!S._newLsTab;
+  let _navH='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;align-items:center">';
+  if(_canOps)_navH+='<button tabindex="-1" class="nav-tab '+(_opsOn?'on':'off')+'" onclick="setTab(\'operations\')">Operations</button>';
+  if(_canCharter)_navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='charter'?'on':'off')+'" onclick="setTab(\'charter\')">Charter</button>';
+  if(_canMaint)_navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='maintenance'?'on':'off')+'" onclick="setTab(\'maintenance\')">Maintenance</button>';
+  _navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='admin'?'on':'off')+'" onclick="setTab(\'admin\')">'+(role==='admin'?'Admin':'Crew')+'</button>';
+  _navH+='</div>';
 
   return`<div style="min-height:100vh;background:var(--bg);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)">
     <div style="background:linear-gradient(135deg,#0a0e1a,#0f172a);border-bottom:1px solid var(--border);padding:max(14px,env(safe-area-inset-top)) 14px 0">
@@ -340,21 +339,22 @@ function renderApp(){
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.12em;color:rgba(255,255,255,.55)">FLIGHT MANAGEMENT SYSTEM</div>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span title="${S.rtStatus==='live'?'Live — real-time sync active':S.rtStatus==='connecting'?'Connecting to live sync...':'Offline — reconnecting...'}" class="sync-dot ${S.rtStatus==='live'?'dot-live':S.rtStatus==='connecting'?'dot-connecting':''}" style="width:8px;height:8px;border-radius:50%;background:${S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'};flex-shrink:0"></span>
-          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.3);padding:2px 6px;border:1px solid rgba(255,255,255,.1);border-radius:4px">${APP_VER}</div>
-          <button tabindex="-1" title="${S.wideMode?'Switch to compact width':'Switch to full width'}" onclick="event.stopPropagation();S.wideMode=!S.wideMode;lsSet('ts_wide_mode',S.wideMode);render()" style="background:var(--border);border:none;padding:3px 7px;border-radius:5px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1">${S.wideMode?'⇤⇥':'↔'}</button>
-          <button tabindex="-1" title="${S.mobileView?'Switch to desktop layout':'Switch to mobile layout'}" onclick="event.stopPropagation();S.mobileView=!S.mobileView;lsSet('ts_mobile_view',S.mobileView);render()" style="background:${S.mobileView?'rgba(124,58,237,.3)':'var(--border)'};border:${S.mobileView?'1px solid rgba(124,58,237,.6)':'none'};padding:3px 7px;border-radius:5px;font-size:12px;color:${S.mobileView?'#c084fc':'var(--text2)'};cursor:pointer;line-height:1">📱</button>
-          <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:var(--border);border:none;padding:3px 7px;border-radius:5px;font-size:12px;color:var(--text2);cursor:pointer;line-height:1" title="Help">?</button>
-          <div style="display:flex;align-items:center;gap:4px">
-            <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="background:var(--border);border:none;padding:4px 8px;border-radius:5px;font-size:11px;color:var(--text2);cursor:pointer">${S.user.name.split(' ')[0]} · ${S.user.role}</button>
-            <button tabindex="-1" onclick="event.stopPropagation();logout()" style="background:var(--border);padding:3px 8px;border-radius:5px;font-size:10px;color:var(--text2);border:none;cursor:pointer">↩ Sign out</button>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)" title="${S.rtStatus==='live'?'Live — synced':S.rtStatus==='connecting'?'Connecting...':'Offline'}">
+            <span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'}"></span>
+            <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.04em">${APP_VER}</span>
           </div>
+          <button tabindex="-1" title="${S.wideMode?'Compact width':'Full width'}" onclick="event.stopPropagation();S.wideMode=!S.wideMode;lsSet('ts_wide_mode',S.wideMode);render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:11px;color:rgba(255,255,255,.4);cursor:pointer">${S.wideMode?'⇤⇥':'↔'}</button>
+          <button tabindex="-1" title="${S.mobileView?'Desktop layout':'Mobile layout'}" onclick="event.stopPropagation();S.mobileView=!S.mobileView;lsSet('ts_mobile_view',S.mobileView);render()" style="background:${S.mobileView?'rgba(124,58,237,.3)':'rgba(255,255,255,.07)'};border:${S.mobileView?'1px solid rgba(124,58,237,.5)':'none'};width:28px;height:28px;border-radius:6px;font-size:13px;color:${S.mobileView?'#c084fc':'rgba(255,255,255,.4)'};cursor:pointer">📱</button>
+          <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:12px;color:rgba(255,255,255,.4);cursor:pointer;font-weight:700" title="Help">?</button>
+          <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 10px 5px 6px;border-radius:20px;cursor:pointer;font-size:11px;color:rgba(255,255,255,.75)" title="Profile & Settings">
+            <div style="width:22px;height:22px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${(S.user.name.match(/\b\w/g)||['?']).slice(0,2).join('').toUpperCase()}</div>
+            <span style="white-space:nowrap">${S.user.name.split(' ')[0]}</span>
+            <span style="font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.06em">${S.user.role}</span>
+          </button>
         </div>
       </div>
-      <div style="display:flex;gap:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">
-        ${tabs.map(t=>`<button tabindex="-1" class="nav-tab ${['manifest','seatmap','saved','loadsheet','ls_SLA','ls_SLB','ls_SLD','ls_SLQ','ls_SDB'].includes(S.tab)&&t.id==='operations'?'on':S.tab===t.id?'on':'off'}" onclick="setTab('${t.id}')">${t.lbl}</button>`).join('')}
-      </div>
+      ${_navH}
     </div>
     ${S._helpOpen?`<div onclick="S._helpOpen=false;render()" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
       <div onclick="event.stopPropagation()" style="background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:24px;max-width:480px;width:100%;max-height:85vh;overflow-y:auto">
@@ -430,43 +430,45 @@ function _applyLsFlash(){
 }
 function renderOperations(){
   const opsTab=S.tab||'manifest';
-  var tabsH='<div style="display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center">';
-  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='manifest')?'on':'')+'" onclick="window.switchOpsTab(\'manifest\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0">Manifest</button>';
-  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='seatmap')?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0">Seatmap</button>';
-  if(S.lsTabs.length>0){
-    tabsH+='<div style="width:1px;height:20px;background:var(--border);margin:0 2px;flex-shrink:0"></div>';
-    S.lsTabs.forEach(function(tab){
-      var acCode=tab.acId.replace('ZK-','');
-      var isActive=S.activeTabId===tab.id&&!S._newLsTab;
-      var col=AC_COL[tab.acId]||'#64748b';
-      var signed=tab.status==='complete';
-      var isSel=!!(S._lsTabSel&&S._lsTabSel[tab.id]);
+  const isLsView=!!(S.activeTabId||S._newLsTab);
+
+  // Level 2 sub-bar: Manifest | Seatmap | Loadsheets | Saved
+  var _l2='<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center">';
+  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='manifest'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'manifest\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Manifest</button>';
+  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Seatmap</button>';
+  _l2+='<button tabindex="-1" class="sub-tab '+(isLsView?'on':'')+'" onclick="window.switchToLoadsheets()" style="font-size:12px;padding:6px 12px;flex-shrink:0">Loadsheets</button>';
+  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Saved ('+((S.saved||[]).filter(function(s){return s.status!=='deleted';}).length)+')</button>';
+  _l2+='</div>';
+
+  // Level 3 LS tab pills — only shown when loadsheets view is active
+  var _l3='';
+  if(isLsView){
+    _l3='<div style="display:flex;gap:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin-bottom:10px;align-items:center;padding-bottom:2px">';
+    (S.lsTabs||[]).forEach(function(tab){
+      var _ac=tab.acId.replace('ZK-','');var _isAct=S.activeTabId===tab.id&&!S._newLsTab;
+      var _col=AC_COL[tab.acId]||'#64748b';var _signed=tab.status==='complete';
+      var _sel=!!(S._lsTabSel&&S._lsTabSel[tab.id]);
       if(S._lsManageMode){
-        tabsH+='<label style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid '+(isSel?'#ef4444':'var(--border)')+';background:'+(isSel?'rgba(239,68,68,.15)':'var(--card2)')+';cursor:pointer;flex-shrink:0;font-size:12px;font-weight:700;color:'+(isSel?'#fca5a5':col)+'">';
-        tabsH+='<input type="checkbox" '+(isSel?'checked':'')+' onchange="window.toggleLsTabSel(\''+tab.id+'\')" style="cursor:pointer">';
-        tabsH+=acCode+'</label>';
+        _l3+='<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;border:1px solid '+(_sel?'#ef4444':_col+'55')+';background:'+(_sel?'rgba(239,68,68,.15)':_col+'18')+';cursor:pointer;flex-shrink:0;font-size:11px;font-weight:700;color:'+(_sel?'#fca5a5':_col)+'"><input type="checkbox" '+(_sel?'checked':'')+' onchange="window.toggleLsTabSel(\''+tab.id+'\')" style="cursor:pointer">'+_ac+'</label>';
       } else {
-        tabsH+='<div style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1.5px solid '+(isActive?col:col+'55')+';flex-shrink:0">';
-        tabsH+='<button onclick="window.switchLsTab(\''+tab.id+'\')" style="padding:5px 10px;font-size:12px;font-weight:700;background:'+(isActive?col+'55':col+'18')+';border:none;cursor:pointer;color:'+(isActive?col:col+'cc')+';white-space:nowrap">'+acCode+(signed?' &#x2713;':'')+'</button>';
-        tabsH+='<button onclick="window.closeLsTab(\''+tab.id+'\')" style="padding:5px 7px;font-size:14px;line-height:1;background:'+(isActive?col+'33':col+'0f')+';border:none;border-left:1px solid '+(isActive?col:col+'44')+';cursor:pointer;color:'+(isActive?col:col+'99')+'" title="Close">&#xd7;</button>';
-        tabsH+='</div>';
+        _l3+='<div style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1.5px solid '+(_isAct?_col:_col+'55')+';flex-shrink:0"><button tabindex="-1" onclick="window.switchLsTab(\''+tab.id+'\')" style="padding:4px 9px;font-size:11px;font-weight:700;background:'+(_isAct?_col+'55':_col+'18')+';border:none;cursor:pointer;color:'+(_isAct?_col:_col+'cc')+';white-space:nowrap">'+_ac+(_signed?' ✓':'')+' </button><button tabindex="-1" onclick="window.closeLsTab(\''+tab.id+'\')" style="padding:4px 7px;font-size:13px;line-height:1;background:'+(_isAct?_col+'33':_col+'0f')+';border:none;border-left:1px solid '+(_isAct?_col:_col+'44')+';cursor:pointer;color:'+(_isAct?_col:_col+'99')+'" title="Close">&#xd7;</button></div>';
       }
     });
     if(S._lsManageMode){
-      var _selCnt=Object.values(S._lsTabSel||{}).filter(Boolean).length;
-      tabsH+='<button onclick="window.deleteSelectedLsTabs()" '+(_selCnt?'':'disabled ')+' style="padding:5px 10px;border-radius:8px;border:1px solid #ef4444;background:rgba(239,68,68,.15);color:#fca5a5;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap">Delete '+(_selCnt||'0')+'</button>';
-      tabsH+='<button onclick="window.toggleLsManage()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:var(--text3);font-size:12px;cursor:pointer;flex-shrink:0">Cancel</button>';
+      var _sc=Object.values(S._lsTabSel||{}).filter(Boolean).length;
+      _l3+='<button tabindex="-1" onclick="window.deleteSelectedLsTabs()" '+(_sc?'':'disabled ')+' style="padding:4px 8px;border-radius:8px;border:1px solid #ef4444;background:rgba(239,68,68,.15);color:#fca5a5;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">Delete '+(_sc||0)+'</button>';
+      _l3+='<button tabindex="-1" onclick="window.toggleLsManage()" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:rgba(255,255,255,.5);font-size:11px;cursor:pointer;flex-shrink:0">Cancel</button>';
     }
+    _l3+='<button tabindex="-1" onclick="window.newLsTab()" title="New Loadsheet" style="padding:4px 9px;font-size:15px;line-height:1;font-weight:700;background:'+(S._newLsTab?'rgba(124,58,237,.4)':'rgba(255,255,255,.08)')+';border:1px solid '+(S._newLsTab?'rgba(124,58,237,.8)':'rgba(255,255,255,.2)')+';border-radius:8px;cursor:pointer;color:'+(S._newLsTab?'#c084fc':'rgba(255,255,255,.45)')+';flex-shrink:0">+</button>';
+    _l3+='</div>';
   }
-  tabsH+='<button onclick="window.newLsTab()" style="padding:5px 10px;font-size:16px;line-height:1;font-weight:700;background:'+(S._newLsTab?'var(--acc)':'var(--card2)')+';border:1px solid '+(S._newLsTab?'var(--acc)':'var(--border)')+';border-radius:8px;cursor:pointer;color:'+(S._newLsTab?'#fff':'var(--text2)')+';flex-shrink:0" title="New Loadsheet">+</button>';
 
-  tabsH+='<button class="sub-tab '+((!S.activeTabId&&!S._newLsTab&&opsTab==='saved')?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0;margin-left:auto">Saved ('+S.saved.length+')</button>';
-  tabsH+='</div>';
-  if(S.activeTabId&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return tabsH+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return tabsH+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
-  if(S._newLsTab){return tabsH+renderNewLsPanel();}
-  if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return tabsH+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
-  if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return tabsH+renderSaved();}
-  startPresenceBroadcast('manifest');return tabsH+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
+  // Content routing
+  if(isLsView&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return _l2+_l3+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return _l2+_l3+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
+  if(S._newLsTab&&opsTab!=='saved'&&opsTab!=='seatmap'){return _l2+_l3+renderNewLsPanel();}
+  if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return _l2+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
+  if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return _l2+renderSaved();}
+  startPresenceBroadcast('manifest');return _l2+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
 }
 
 function renderNewLsPanel(){

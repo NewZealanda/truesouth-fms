@@ -2,11 +2,12 @@
 function renderCharter(){
   const sub=S.charterTab||'calc';
   const tabBar='<div style="display:flex;gap:6px;margin-bottom:14px">'+
-    [{id:'calc',lbl:'Calculator'},{id:'rates',lbl:'Rates'}].map(t=>
+    [{id:'calc',lbl:'Calculator'},{id:'saved',lbl:'Saved Quotes'},{id:'rates',lbl:'Rates'}].map(t=>
       '<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.charterTab=\''+t.id+'\';render()">'+t.lbl+'</button>'
     ).join('')+'</div>';
 
   if(sub==='rates') return tabBar+renderCharterRates();
+  if(sub==='saved') return tabBar+renderSavedQuotes();
 
   // ── Calculator tab ──
   const c=S.charter;
@@ -84,8 +85,15 @@ function renderCharter(){
   const charterLegs=legs.filter(l=>APT_COORDS[l.from]&&APT_COORDS[l.to]);
   if(charterLegs.length)renderRouteMap('charter-map',charterLegs);
 
-  return tabBar+`<div class="card"><div class="st">Charter Quote Calculator</div>
-    <p style="font-size:12px;color:var(--text3);margin-bottom:12px">Build a multi-leg charter itinerary. Rates based on aircraft type and flight time.</p>
+  return tabBar+`<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div><div class="st" style="margin-bottom:0">Charter Quote Calculator</div>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:0;margin-top:2px">Multi-leg quotes · 2.5hr minimum · GST incl.</p></div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-ghost" style="font-size:12px" onclick="window.clearCharterQuote()">🗑 Clear</button>
+        ${totalCost>0?'<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.saveCharterQuote()">💾 Save Quote</button>':''}
+      </div>
+    </div>
   </div>
   ${legCards}
   <button class="btn btn-ghost" style="width:100%;margin-bottom:14px;font-size:13px" onclick="addLeg()">+ Add Leg</button>
@@ -106,6 +114,83 @@ function renderCharter(){
   </div>`:''}
   ${charterLegs.length?`<div class="card" style="padding:12px"><div class="st">Route Map</div><div id="charter-map" class="route-map"></div></div>`:''}`;
 }
+
+function _charterRouteStr(legs){
+  if(!legs||!legs.length)return'';
+  var codes=[legs[0].from].concat(legs.map(function(l){return l.to;}));
+  return codes.map(function(c){return c.replace(/^NZ/,'');}).join('-');
+}
+function renderSavedQuotes(){
+  const quotes=lsGet('ts_charter_quotes_cache')||[];
+  if(!quotes.length)return'<div class="card"><div class="st">Saved Quotes</div><p style="font-size:13px;color:var(--text3)">No saved quotes yet. Build a quote in the Calculator tab and tap Save Quote.</p></div>';
+  return'<div class="card"><div class="st">Saved Quotes</div>'+quotes.map(function(q,qi){
+    const legs=q.legs||[];const totalCost=q.totalCost||0;
+    const routeStr=_charterRouteStr(legs);
+    const d=q.savedAt?new Date(q.savedAt).toLocaleDateString('en-NZ',{day:'numeric',month:'short'}):'';
+    const acIds=[...new Set(legs.filter(function(l){return l.acId;}).map(function(l){return l.acId;}))];
+    const acPills=acIds.map(function(id){var col=AC_COL[id]||'#64748b';return'<span style="padding:1px 7px;border-radius:12px;background:'+col+'22;border:1px solid '+col+'55;color:'+col+';font-weight:700;font-size:10px">'+id.replace('ZK-','')+'</span>';}).join('');
+    const name=q.name||routeStr;
+    const fqd=q.quoteDate?new Date(q.quoteDate+'T00:00:00').toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'}):'';
+    return'<div style="padding:12px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">'
+        +'<div style="min-width:0;flex:1">'
+          +'<div style="font-weight:700;font-size:13px;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+name+'</div>'
+          +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+routeStr+(fqd?' · For: '+fqd:'')+'</div>'
+          +'<div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">'
+            +acPills
+            +'<span style="color:#86efac;font-weight:700;font-size:12px">$'+totalCost.toFixed(0)+'</span>'
+            +(d?'<span style="font-size:10px;color:var(--text3)">'+d+'</span>':'')
+            +(q.savedBy?'<span style="font-size:10px;color:var(--text3)">by '+q.savedBy+'</span>':'')
+          +'</div>'
+        +'</div>'
+        +'<div style="display:flex;gap:6px;flex-shrink:0">'
+          +'<button class="btn btn-ghost" style="font-size:12px" onclick="window.loadCharterQuote('+qi+')">📂 Load</button>'
+          +'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.deleteCharterQuote('+qi+')">✕</button>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
+  }).join('')+'</div>';
+}
+window.clearCharterQuote=function(){
+  if(!confirm('Clear this quote and start fresh?'))return;
+  S.charter={legs:[{from:'NZQN',to:'NZMF',acId:'',waitHrs:0,note:''}],showQuote:false};
+  render();
+};
+window.saveCharterQuote=function(){
+  const legs=S.charter.legs||[];
+  let totalCost=0;
+  const waitRate=S.charterWaitRate||150;
+  legs.forEach(function(leg){
+    const dist=distNm(leg.from,leg.to);const speed=(S.aircraft[leg.acId]||{}).layout==='ga8'?130:170;
+    const fh=dist>0?dist/speed:0;
+    const r=leg.acId?S.charterRates[leg.acId]:null;
+    const lc=r&&fh>0?fh*r.perHour:0;
+    const wh=parseFloat(leg.waitHrs)||0;
+    totalCost+=lc+Math.max(0,wh-1)*waitRate;
+  });
+  const quote={legs:JSON.parse(JSON.stringify(legs)),totalCost,savedAt:new Date().toISOString()};
+  const quotes=lsGet('ts_charter_quotes_cache')||[];
+  quotes.unshift(quote);
+  lsSet('ts_charter_quotes_cache',quotes);
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  toast('Quote saved ✓','ok');
+  render();
+};
+window.loadCharterQuote=function(idx){
+  const quotes=lsGet('ts_charter_quotes_cache')||[];
+  if(!quotes[idx])return;
+  S.charter={legs:JSON.parse(JSON.stringify(quotes[idx].legs||[])),showQuote:false};
+  S.charterTab='calc';
+  render();toast('Quote loaded','ok');
+};
+window.deleteCharterQuote=function(idx){
+  if(!confirm('Delete this saved quote?'))return;
+  const quotes=lsGet('ts_charter_quotes_cache')||[];
+  quotes.splice(idx,1);
+  lsSet('ts_charter_quotes_cache',quotes);
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  render();
+};
 
 // Charter Rates tab (moved from Admin)
 function renderCharterRates(){

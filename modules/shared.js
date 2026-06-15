@@ -100,7 +100,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.25';
+const APP_VER='v22.29';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -837,6 +837,11 @@ async function loadAll(){
       else{S.charterWaitRate=lsGet('ts_charter_wait_rate')||150;}}
       else{S.charterWaitRate=lsGet('ts_charter_wait_rate')||150;}
     }catch(e){S.charterWaitRate=lsGet('ts_charter_wait_rate')||150;}
+    // Load saved charter quotes
+    try{
+      const _cq=await fetch(SB+'/rest/v1/ts_settings?key=eq.charter_quotes&select=value',{headers:SH});
+      if(_cq.ok){const _cqd=await _cq.json();if(_cqd[0]&&_cqd[0].value){lsSet('ts_charter_quotes_cache',JSON.parse(_cqd[0].value));}}
+    }catch(e){}
 
     // ── Loadsheets ──
     const ls=await sbF('ts_loadsheets');
@@ -1090,6 +1095,9 @@ function initRealtime(){
             }
             S.lsForms[_lsp.acCode]=_lsp.form;
             if(S.lsAc===_lsp.acCode){S.form=_lsp.form;}
+            // Update matching lsTab form so other tabs show latest
+            var _lsTF=(S.lsTabs||[]).find(function(t){return t.acId&&t.acId.replace('ZK-','')===_lsp.acCode;});
+            if(_lsTF)_lsTF.form=_lsp.form;
             if(S.tab==='saved')reloadTable('ts_loadsheets').then(function(){safeRender();});
             else safeRender();
           }

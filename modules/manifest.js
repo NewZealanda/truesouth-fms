@@ -116,7 +116,7 @@ function renderStep1(){
     const groupCol=p.group?.trim()
       ?`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="${_pillStyle};background:${gc};color:#fff;user-select:none;max-width:80px;overflow:hidden;text-overflow:ellipsis">${p.group}</div>`
       :`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text3)">🏷️</div>`;
-    return `<div style="display:grid;grid-template-columns:80px 52px 1.5fr 72px 56px 56px 28px;gap:5px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;background:${rowBg}">
+    return `<div style="display:grid;grid-template-columns:70px 46px 1fr 68px 52px 52px 26px;gap:4px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;min-width:0;overflow:hidden;background:${rowBg}">
       <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-width:0">${acBtns}</div>
       <div style="display:flex;gap:2px;align-items:center;min-width:0">
         <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>
@@ -135,6 +135,7 @@ function renderStep1(){
 
   return _tabBar+`
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+    ${(d.acSetup&&d.acSetup.length)?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(99,179,237,.5);color:#63b3ed" onclick="window.pullFromSeatmap()">🔄 Pull from Seatmap</button>`:''}
     ${S._loadedManifestId
       ?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="saveManifest()">💾 Save</button>
         <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="window.saveManifestAs()">+ Save As New</button>
@@ -169,7 +170,7 @@ function renderStep1(){
   </div>
   <div class="card"><div class="st">Select Aircraft, PICs & Fuel</div>
     <p style="font-size:12px;color:var(--text3);margin-bottom:10px">Tap aircraft to select. Co-pilot optional — if blank, Seat 1 is a passenger seat.</p>
-    ${acCards}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start">${acCards}</div>
     ${d.acSetup.length&&!d.acSetup.every(s=>s.pic)?`<div style="font-size:12px;color:var(--warn-text);margin-top:4px">⚠ Assign a PIC to each selected aircraft</div>`:''}
   </div>
   <div style="position:sticky;top:0;z-index:100;background:var(--bg);padding:4px 0 6px;margin:-4px 0">
