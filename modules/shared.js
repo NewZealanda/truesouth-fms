@@ -1034,6 +1034,10 @@ function initRealtime(){
             updatePresBar(S._presSection||'manifest');
           }
         }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='admin_kick'){
+          const _kp=msg.payload.payload;
+          if(_kp&&_kp.userId&&S.user&&_kp.userId===S.user.id){logout();alert('You have been logged out by an administrator.');}
+        }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='crew_update'){
           if(msg.payload.payload&&msg.payload.payload.updatedBy!==S.user?.id){
             Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){S._pendingFlash=(S._pendingFlash||[]).concat(['flash-admin']);render();});
@@ -1301,6 +1305,12 @@ document.addEventListener('keydown',function(e){
     setTimeout(function(){_ffRow=String(nextRow);_ffField='name';render();},30);
   }
 });
+window.adminKickUser=function(userId){
+  if(!_rtWs||_rtWs.readyState!==1){alert('Not connected to realtime.');return;}
+  _rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'admin_kick',payload:{userId:userId,by:(S.user&&S.user.name)||''}},ref:String(_rtRef)}));
+  // Also clear locally
+  delete S.rtPresence[userId];updatePresBar(S._presSection||'manifest');
+};
 function startPresenceBroadcast(section){
   if(S._presSection===section)return;
   clearInterval(_presInterval);
