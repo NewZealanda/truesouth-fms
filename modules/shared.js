@@ -100,7 +100,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.35';
+const APP_VER='v22.36';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1622,17 +1622,21 @@ function anyCrewList(){
 // ── Presence ──
 const PRES_COLORS=['#f87171','#fb923c','#fbbf24','#34d399','#22d3ee','#60a5fa','#a78bfa','#f472b6'];
 function presColor(id){let h=0;for(let i=0;i<(id||'').length;i++)h=(h*31+id.charCodeAt(i))&0xfffffff;return PRES_COLORS[h%PRES_COLORS.length];}
+window._presKick=function(uid){var p=S.rtPresence&&S.rtPresence[uid];if(p&&confirm('Force logout '+(p.name||uid)+'?'))window.adminKickUser(uid);};
 function presBarInner(section){
   if(!S.user)return'';
   const now=Date.now();
-  const others=Object.values(S.rtPresence||{}).filter(function(p){return p.section===section&&now-p.ts<22000;});
+  const isAdmin=S.user&&(S.user.role==='superadmin'||S.user.role==='admin');
+  const others=Object.entries(S.rtPresence||{}).filter(function(e){return e[1].section===section&&now-e[1].ts<22000;});
   if(!others.length)return'';
   return'<div style="display:flex;align-items:center;gap:6px;padding:4px 0 10px;flex-wrap:wrap">'
     +'<span style="font-size:11px;color:var(--text3);font-weight:600">Also viewing:</span>'
-    +others.map(function(p){
+    +others.map(function(e){
+      var uid=e[0];var p=e[1];
       const init=p.code||(p.name||'?').trim().split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
-      return'<div title="'+p.name+'" style="display:flex;align-items:center;gap:4px">'
+      return'<div title="'+p.name+'" style="display:flex;align-items:center;gap:2px">'
         +'<div style="width:22px;height:22px;border-radius:50%;background:'+p.color+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">'+init+'</div>'
+        +(isAdmin?'<button onclick="window._presKick(\''+uid+'\')" style="background:none;border:none;color:var(--text3);font-size:13px;line-height:1;cursor:pointer;padding:0;opacity:.5;flex-shrink:0" title="Force logout '+p.name+'">×</button>':'')
         +'</div>';
     }).join('<span style="color:var(--border2);font-size:10px;padding:0 2px">·</span>')
     +'</div>';
