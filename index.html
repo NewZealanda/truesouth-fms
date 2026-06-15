@@ -2410,12 +2410,12 @@ function renderStep1(){
       if(editing){
         return`<div style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:8px;border:1px solid var(--acc);background:rgba(124,58,237,.15);white-space:nowrap;flex-shrink:0">
           <input id="tab-rename-${tab.id}" class="fi" type="text" value="${lbl.replace(/"/g,'&quot;')}" style="font-size:12px;font-weight:700;width:110px;padding:2px 6px;color:var(--acc)" onclick="event.stopPropagation()" onblur="window.saveManifestTabName(this.value,'${tab.id}')" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){S._editingManifestTabId=null;render();}">
-          ${S.manifestTabs.length>1?`<span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>`:''}
+          <span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>
         </div>`;
       }
       return`<div onclick="window.switchManifestTab('${tab.id}')" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid ${active?'var(--acc)':'var(--border2)'};background:${active?'rgba(124,58,237,.15)':'var(--card2)'};cursor:pointer;white-space:nowrap;flex-shrink:0;font-size:12px;font-weight:${active?'700':'500'};color:${active?'var(--acc)':'var(--text2)'}">
         <span style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${lbl}</span>
-        ${S.manifestTabs.length>1?`<span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>`:''}
+        <span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>
       </div>`;
     }).join('')}
     <button onclick="window.newManifestTab()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text3);font-size:12px;cursor:pointer;flex-shrink:0;white-space:nowrap">+ New</button>
@@ -2924,18 +2924,7 @@ function renderLsSeatGrid(f,a){
   var isPod=!!(a.cargo&&a.cargo.length>1&&a.cargo[0]&&a.cargo[0].lbl&&a.cargo[0].lbl.startsWith('Pod'));
   // Build the seat rows column
   var _lsMode=S._lsSeatMode||'edit';
-  var _modeToggle='<div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px">'
-    +'<button onclick="S._lsSeatMode=\'edit\';render()" title="Click to edit seat passengers" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid '
-    +(_lsMode==='edit'?'var(--acc)':'var(--border2)')
-    +';background:'+(_lsMode==='edit'?'rgba(124,58,237,.18)':'transparent')
-    +';color:'+(_lsMode==='edit'?'var(--acc)':'var(--text3)')
-    +'">✏ Edit</button>'
-    +'<button onclick="S._lsSeatMode=\'move\';render()" title="Drag or tap seats to move passengers" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid '
-    +(_lsMode==='move'?'#22c55e':'var(--border2)')
-    +';background:'+(_lsMode==='move'?'rgba(34,197,94,.18)':'transparent')
-    +';color:'+(_lsMode==='move'?'#22c55e':'var(--text3)')
-    +'">⇄ Move</button>'
-    +'</div>';
+
   var seatsCol='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0">';
   layout.forEach(function(row){
     if(row==='spacer'){seatsCol+='<div style="height:6px"></div>';return;}
@@ -2999,7 +2988,7 @@ function renderLsSeatGrid(f,a){
     seatsCol+='</div>';
   });
   seatsCol+='</div>';
-  return _modeToggle+seatsCol;
+  return seatsCol;
 }
 
 // ── Seat editor popup ──
@@ -3011,6 +3000,7 @@ window.lsSeatEditPopup=function(idx){
   var wt=String(f.seats[idx]||'');
   var bg=String(f.bags[idx]||'');
   var grp=(f.paxGroups&&f.paxGroups[idx])||'';
+  var infantNm=(f.infantNames&&f.infantNames[idx])||'';
   var _pType=(f.paxType&&f.paxType[idx])||'A';
   var _payReq=!!(f.paxPaymentReq&&f.paxPaymentReq[idx]);
   var seatLbl=a.seats[idx].lbl||String(idx);
@@ -3038,8 +3028,10 @@ window.lsSeatEditPopup=function(idx){
     +'</div></div>'
     +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Payment</label>'
     +'<button id="lsSpPay" style="width:100%;padding:10px;border-radius:8px;border:2px solid '+(_payReq?'#ef4444':'var(--border2)')+';background:'+(_payReq?'rgba(239,68,68,.22)':'transparent')+';color:'+(_payReq?'#ef4444':'var(--text3)')+';font-size:13px;font-weight:700;cursor:pointer">'+(_payReq?'$ Payment Required':'$ Mark as Needs Payment')+'</button></div>'
-    +'<div style="margin-bottom:18px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Group</label>'
+    +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Group</label>'
     +'<input id="lsSpGrp" class="fi" type="text" placeholder="Group name (optional)" value="'+grp.replace(/"/g,'&quot;')+'" style="font-size:13px;width:100%"></div>'
+    +'<div style="margin-bottom:18px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Infant Name <span style=\'font-weight:400;text-transform:none;letter-spacing:0\'>👶</span></label>'
+    +'<input id="lsSpInfant" class="fi" type="text" placeholder="Infant name, or leave blank" value="'+infantNm.replace(/"/g,'&quot;')+'" style="font-size:13px;width:100%"></div>'
     +'<div style="display:flex;gap:8px">'
     +'<button id="lsSpSave" style="flex:2;padding:12px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Save</button>'
     +(isOccupied?'<button id="lsSpClear" style="flex:1;padding:12px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Clear</button>':'')
@@ -3077,11 +3069,14 @@ window.lsSeatEditPopup=function(idx){
     if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
     S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
     if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();
+    var newInfant=document.getElementById('lsSpInfant').value.trim();
     f.names[idx]=newNm;
     f.seats[idx]=newWt||'';
     f.bags[idx]=newBg||'';
     if(!f.paxGroups)f.paxGroups={};
     if(newGrp)f.paxGroups[idx]=newGrp;else delete f.paxGroups[idx];
+    if(!f.infantNames)f.infantNames={};
+    if(newInfant)f.infantNames[idx]=newInfant;else delete f.infantNames[idx];
     if(!f.paxType)f.paxType={};
     if(newNm||parseFloat(newWt)){f.paxType[idx]=_pType;}else{delete f.paxType[idx];}
     if(!f.paxPaymentReq)f.paxPaymentReq={};
@@ -3100,6 +3095,7 @@ window.lsSeatEditPopup=function(idx){
       if(f.paxGroups)delete f.paxGroups[idx];
       if(f.paxType)delete f.paxType[idx];
       if(f.paxPaymentReq)delete f.paxPaymentReq[idx];
+      if(f.infantNames)delete f.infantNames[idx];
       S.formDirty=true;autoSaveLS();
       ov.remove();render();
     };
@@ -3313,14 +3309,14 @@ function renderLoadsheet(){
         <div style="font-size:16px;font-weight:800;color:var(--text)">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
         <div style="font-size:10px;color:#4ade80;margin-top:2px">${a?.layout==='ga8'?'litres':'lbs'}</div>
       </div>
-      ${_lwDisplay!==null?`<div style="background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.30);border-radius:8px;padding:8px 10px">
+      \${_lwDisplay!==null?\`<div style="background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.30);border-radius:8px;padding:8px 10px">
         <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#c084fc;text-transform:uppercase;margin-bottom:4px">Landing Weight</div>
-        <div style="font-size:16px;font-weight:800;color:${r.lwOk?'var(--text)':'#f87171'}">${_lwDisplay}</div>
-        <div style="font-size:10px;color:#c084fc;margin-top:2px">kg (max ${r.mlw})</div>
-      </div>`:''}
-    </div>`;
+        <div style="font-size:16px;font-weight:800;color:\${r.lwOk?'var(--text)':'#f87171'}">\${_lwDisplay}</div>
+        <div style="font-size:10px;color:#c084fc;margin-top:2px">kg (max \${r.mlw})</div>
+      </div>\`:''}
+    </div>\`;
     loadingH=`<div class="card" id="lsf-loading" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
-      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Passengers, Loading &amp; Fuel<div style="display:flex;gap:6px;align-items:center">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button></div></div>
+      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Passengers, Loading &amp; Fuel<div style="display:flex;gap:6px;align-items:center">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button></div></div>
       ${wbSummary}
       <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:1;min-width:180px;overflow-x:auto;-webkit-overflow-scrolling:touch">
@@ -4122,6 +4118,7 @@ function renderSaved(){
       :'';
     var limitWarn=isSigned&&!ok?'<span class="pill pill-warn" style="font-size:10px">⚠ check limits</span>':'';
     var sid=s.id;
+    var byStr=(function(){var nm=s.form.createdBy||'';var at=s.form.createdAt;if(!nm&&!at)return '';var ini=nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase();var ts=at?(function(){var d=new Date(at);return ('0'+d.getHours()).slice(-2)+':'+( '0'+d.getMinutes()).slice(-2);}()):'';return 'By '+ini+(ts?' '+ts:'');})();
     var uploadBtn=(S.gdriveEnabled||S.gdriveClientId)&&opts.showUploadBtn
       ?`<button class="btn" title="${s.driveUploaded?'Re-upload':'Upload to Drive'}" style="font-size:16px;line-height:1;padding:5px 9px;background:var(--acc);color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="window.uploadSingleSheet('${sid}')">&#x2601;</button>`
       :'';
@@ -4142,10 +4139,10 @@ function renderSaved(){
           ${s.form.etd?`<span style="padding:2px 7px;background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.28);border-radius:4px;font-size:10px;font-weight:700;color:#93c5fd">ETD ${s.form.etd}</span>`:''}
           <span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;font-weight:700;color:#4ade80">${paxSummary}</span>
         </div>
-        ${s.form.createdBy?`<div style="font-size:10px;color:var(--text3);margin-top:4px">by <span onclick="event.stopPropagation();window._lsShowCreator('${sid}')" style="color:var(--text2);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px">${s.form.createdBy}</span>${s.form.createdAt?' · '+_lsRelTime(s.form.createdAt):''}</div>`:''}
+
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
-        ${savedStr?`<span style="padding:2px 7px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:4px;font-size:10px;font-weight:700;color:#fbbf24">${savedStr}</span>`:''}
+        ${byStr?`<span style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text3)">${byStr}</span>`:''}
         ${rhsBadge}
         <div style="display:flex;gap:5px;align-items:center">
           ${actionBtns}${uploadBtn}
@@ -4237,11 +4234,11 @@ function renderSaved(){
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
           ${(m.data?.acSetup||[]).map(s=>{const col=AC_COL[s.acId]||'#64748b';return`<span style="padding:1px 7px;border-radius:12px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:11px">${s.acId||'?'}</span>`;}).join('')}
-          <span style="font-size:11px;color:var(--text3)">${(function(){var _p=m.data&&m.data.pax||[];var a=_p.filter(function(x){return!x.infant&&x.type!=='child';}).length;var c=_p.filter(function(x){return x.type==='child';}).length;var i=_p.filter(function(x){return x.infant;}).length;var s=(a?a+'A ':'')+( c?c+'C ':''+(i?i+'i':''));return(m.savedAt?_lsRelTime(m.savedAt)+' · ':'')+( s.trim()||_p.length+' pax');})()}</span>
+          <span style="font-size:11px;color:var(--text3)">${(function(){var _p=m.data&&m.data.pax||[];var a=_p.filter(function(x){return!x.infant&&x.type!=='child';}).length;var c=_p.filter(function(x){return x.type==='child';}).length;var i=_p.filter(function(x){return x.infant;}).length;var s=(a?a+'A ':'')+( c?c+'C ':''+(i?i+'i':''));return(m.savedAt?_lsRelTime(m.savedAt)+' · ':'')+( s.trim()||_p.length+' pax');})()}</span>${(function(){var nm=(m.data&&m.data.createdBy)||'';var at=(m.data&&m.data.createdAt)||'';if(!nm&&!at)return '';var ini=nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase();var ts=at?(function(){var d=new Date(at);return ('0'+d.getHours()).slice(-2)+':'+(  '0'+d.getMinutes()).slice(-2);}()):'';return `<span style="padding:1px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text3)">By ${ini}${ts?' '+ts:''}</span>`;})()}
         </div>
       </div>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-ghost" style="font-size:12px" onclick="loadManifest('${m.id}')">Load</button>
+        <button class="btn btn-ghost" style="font-size:12px" onclick="loadManifest('${m.id}')">Open</button>
         <button class="btn btn-red" style="font-size:16px;line-height:1;padding:5px 8px" onclick="deleteManifest('${m.id}')" title="Delete">&#x1F5D1;</button>
       </div></div>`).join('')}`;
   }
@@ -4386,7 +4383,7 @@ function renderSavedQuotes(){
     return'<div style="padding:12px 0;border-bottom:1px solid var(--border)">'
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">'
         +'<div style="min-width:0;flex:1">'
-          +'<div contenteditable="true" data-qi="'+qi+'" onblur="window.renameCharterQuote(+this.dataset.qi,this.textContent.trim())" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="font-weight:700;font-size:13px;color:var(--text1);cursor:text;outline:none;border-bottom:1px dashed transparent;transition:border-color .15s" onfocus="this.style.borderBottomColor=\'var(--acc)\'" onblur="this.style.borderBottomColor=\'transparent\';window.renameCharterQuote(+this.dataset.qi,this.textContent.trim())" title="Click to rename">'+name+'</div>'
+          +'<div contenteditable="true" data-qi="'+qi+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="font-weight:700;font-size:13px;color:var(--text1);cursor:text;outline:none;border-bottom:1px dashed transparent;transition:border-color .15s" onfocus="this.style.borderBottomColor=\'var(--acc)\'" onblur="this.style.borderBottomColor=\'transparent\';window.renameCharterQuote(+this.dataset.qi,this.textContent.trim())" title="Click to rename">'+name+'</div>'
           +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+routeStr+(fqd?' · For: '+fqd:'')+'</div>'
           +'<div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">'
             +acPills
@@ -5627,10 +5624,12 @@ window.tapFormSeat=(seatIdx,acId,ev)=>{
     const ua=f._unallocated;
     if(ua&&ua[S._selUnalloc]){
       const p=ua[S._selUnalloc];
-      if(nm){ua.push({name:nm,weight:f.seats[seatIdx]||'',bag:f.bags[seatIdx]||'',infant:(f.infantNames||{})[seatIdx]||''});}
+      if(nm){ua.push({name:nm,weight:f.seats[seatIdx]||'',bag:f.bags[seatIdx]||'',infant:(f.infantNames||{})[seatIdx]||'',group:(f.paxGroups||{})[seatIdx]||''});}
       f.names[seatIdx]=p.name;f.seats[seatIdx]=p.weight;f.bags[seatIdx]=p.bag;
       if(!f.infantNames)f.infantNames={};
       if(p.infant)f.infantNames[seatIdx]=p.infant;else delete f.infantNames[seatIdx];
+      if(!f.paxGroups)f.paxGroups={};
+      if(p.group)f.paxGroups[seatIdx]=p.group;else delete f.paxGroups[seatIdx];
       ua.splice(S._selUnalloc,1);
     }
     S._selUnalloc=null;S._selFormSeat=null;autoSaveLS();render();return;
@@ -5642,6 +5641,7 @@ window.tapFormSeat=(seatIdx,acId,ev)=>{
       swp(f.names,from,seatIdx);swp(f.seats,from,seatIdx);
       swp(f.bags,from,seatIdx);
       if(!f.infantNames)f.infantNames={};swp(f.infantNames,from,seatIdx);
+      if(!f.paxGroups)f.paxGroups={};swp(f.paxGroups,from,seatIdx);
     }
     S._selFormSeat=null;
   } else if(nm){
@@ -5680,10 +5680,12 @@ window.lsDropOnSeat=function(toIdx,e){
     const p=ua[S._dragUnalloc];
     const curNm=f.names[toIdx]||'';
     // Bump existing occupant back to unallocated
-    if(curNm&&curNm!==f.coPilot){ua.push({name:curNm,weight:f.seats[toIdx]||'',bag:f.bags[toIdx]||'',infant:(f.infantNames||{})[toIdx]||''});}
+    if(curNm&&curNm!==f.coPilot){ua.push({name:curNm,weight:f.seats[toIdx]||'',bag:f.bags[toIdx]||'',infant:(f.infantNames||{})[toIdx]||'',group:(f.paxGroups||{})[toIdx]||''});}
     f.names[toIdx]=p.name;f.seats[toIdx]=p.weight;f.bags[toIdx]=p.bag;
     if(!f.infantNames)f.infantNames={};
     if(p.infant)f.infantNames[toIdx]=p.infant;else delete f.infantNames[toIdx];
+    if(!f.paxGroups)f.paxGroups={};
+    if(p.group)f.paxGroups[toIdx]=p.group;else delete f.paxGroups[toIdx];
     ua.splice(S._dragUnalloc,1);
     S._dragUnalloc=null;S._selUnalloc=null;
   } else if(S._dragSeat!=null&&S._dragSeat!==toIdx){
@@ -5691,6 +5693,7 @@ window.lsDropOnSeat=function(toIdx,e){
     const swp=(obj,a,b)=>{const t=obj[a];obj[a]=obj[b];obj[b]=t;};
     swp(f.names,S._dragSeat,toIdx);swp(f.seats,S._dragSeat,toIdx);swp(f.bags,S._dragSeat,toIdx);
     if(!f.infantNames)f.infantNames={};swp(f.infantNames,S._dragSeat,toIdx);
+    if(!f.paxGroups)f.paxGroups={};swp(f.paxGroups,S._dragSeat,toIdx);
     S._dragSeat=null;
   }
   render();
@@ -5704,9 +5707,10 @@ window.lsDropOnUnalloc=function(e){
     const nm=f.names[S._dragSeat]||'';
     if(nm&&nm!==f.coPilot&&nm!==f.pic){
       if(!f._unallocated)f._unallocated=[];
-      f._unallocated.push({name:nm,weight:f.seats[S._dragSeat]||'',bag:f.bags[S._dragSeat]||'',infant:(f.infantNames||{})[S._dragSeat]||''});
+      f._unallocated.push({name:nm,weight:f.seats[S._dragSeat]||'',bag:f.bags[S._dragSeat]||'',infant:(f.infantNames||{})[S._dragSeat]||'',group:(f.paxGroups||{})[S._dragSeat]||''});
       delete f.names[S._dragSeat];delete f.seats[S._dragSeat];delete f.bags[S._dragSeat];
       if(f.infantNames)delete f.infantNames[S._dragSeat];
+      if(f.paxGroups)delete f.paxGroups[S._dragSeat];
     }
     S._dragSeat=null;render();
   }
@@ -6215,7 +6219,7 @@ window.lsGrp=function(idx,val){
 };
 window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;setTimeout(_lsSafeRender,150);};window.lsB=(i,v)=>{S.form.bags[i]=v;setTimeout(_lsSafeRender,150);};window.lsC=(i,v)=>{if(!S.form.cargo)S.form.cargo={};S.form.cargo[i]=v;S.formDirty=true;setTimeout(_lsSafeRender,150);};
 window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));setTimeout(_lsSafeRender,150);};
-window.lsBurn=(v,acId)=>{S.form.burnOff=v;setTimeout(_lsSafeRender,150);};
+window.lsBurn=(v,acId)=>{if(!v||v===''){const _a=S.aircraft[acId];S.form.burnOff=(_a&&_a.layout==='ga8')?'35':(_a&&_a.burnDef?String(_a.burnDef):'');}else{S.form.burnOff=v;}setTimeout(_lsSafeRender,150);};
 window.lsGndBurn=(v,acId)=>{const n=parseFloat(v);S.form.gndBurn=isNaN(n)?null:String(toKg(n,acId));setTimeout(_lsSafeRender,150);};
 window.clearSig=()=>{S.form.sig=null;S.sigTypedName='';autoSaveLS();render();};
 
