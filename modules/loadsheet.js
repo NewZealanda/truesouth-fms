@@ -21,7 +21,8 @@ function renderLsSeatGrid(f,a){
   var seatsCol='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0">';
   layout.forEach(function(row){
     if(row==='spacer'){seatsCol+='<div style="height:6px"></div>';return;}
-    seatsCol+='<div style="display:flex;gap:8px">';
+    var _rowWt=0;
+    seatsCol+='<div style="display:flex;gap:8px;align-items:center">';
     row.forEach(function(cell){
       var idx=cell.i;
       var isPIC=idx===0;
@@ -46,7 +47,9 @@ function renderLsSeatGrid(f,a){
       var nameCol=gc?gc:(isPIC?'#93c5fd':isCoPilot?'#94a3b8':'var(--text1)');
       var clickable=!isCoPilot;
       var _clickFn=isPIC?'window.lsPicChangePopup()':clickable?(_lsMode==='move'?'window.tapFormSeat('+idx+',\''+f.ac+'\',event)':'window.lsSeatEditPopup('+idx+')'):''
-;      var _dragAttrs=(_lsMode==='move'&&isOccupied&&!isPIC&&!isCoPilot)?' draggable="true" ondragstart="window.lsSeatDragStart('+idx+',event)" ondragover="event.preventDefault();this.style.outline=\'2px solid #22c55e\'" ondragleave="this.style.outline=\'\'" ondrop="window.lsDropOnSeat('+idx+',event);this.style.outline=\'\'"':'';
+;      var _dragSrc=(_lsMode==='move'&&isOccupied&&!isPIC&&!isCoPilot)?' draggable="true" ondragstart="window.lsSeatDragStart('+idx+',event)"':'';
+      var _dropTgt=(!isPIC&&!isCoPilot)?' ondragover="event.preventDefault();this.style.outline=\'2px solid #22c55e\'" ondragleave="this.style.outline=\'\'" ondrop="window.lsDropOnSeat('+idx+',event);this.style.outline=\'\'"':'';
+      var _dragAttrs=_dragSrc+_dropTgt;
       seatsCol+='<div onclick="'+_clickFn+'"'+_dragAttrs+' style="'
         +'width:'+sW+'px;height:'+sH+'px;border-radius:10px;border:2px solid '+borderCol+';'
         +'background:'+bgCol+';cursor:'+(_lsMode==='move'&&isOccupied&&!isPIC&&!isCoPilot?'grab':clickable?'pointer':'default')+';'
@@ -65,6 +68,7 @@ function renderLsSeatGrid(f,a){
         seatsCol+='<div style="font-size:11px;color:var(--border2);margin-top:8px">+</div>';
       }
       if(isOccupied&&!isPIC&&!isCoPilot&&parseFloat(wt)>0){
+        _rowWt+=parseFloat(wt)||0;_rowWt+=parseFloat(bg)||0;
         seatsCol+='<div style="font-size:'+(isMob?'8':'9')+'px;color:'+(gc?gc:'var(--text3)')+';margin-top:2px;opacity:.9">'+wt+'kg'+(parseFloat(bg)>0?' +🎒':'')+'</div>';
       }
       if(!isPIC&&!isCoPilot&&isOccupied&&paxType==='C'){
@@ -79,6 +83,7 @@ function renderLsSeatGrid(f,a){
       seatsCol+='</div>';
     });
     seatsCol+='</div>';
+    if(_rowWt>0)seatsCol+='<div style="font-size:10px;font-weight:700;color:var(--text3);margin-left:6px;white-space:nowrap">'+Math.round(_rowWt)+'<span style="font-size:8px">kg</span></div>';
   });
   seatsCol+='</div>';
   return seatsCol;
@@ -102,32 +107,39 @@ window.lsSeatEditPopup=function(idx){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
   var inner=document.createElement('div');
   inner.style.cssText='background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:20px;max-width:360px;width:100%;max-height:90vh;overflow-y:auto';
-  inner.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+  var _hasInfant=!!infantNm;
+  inner.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
     +'<div style="font-size:16px;font-weight:700">Seat '+seatLbl+'</div>'
     +'<button id="lsSpClose" style="background:none;border:none;color:var(--text3);font-size:22px;cursor:pointer;padding:0 4px;line-height:1">&times;</button>'
     +'</div>'
-    +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Passenger Name</label>'
-    +'<input id="lsSpName" class="fi" type="text" placeholder="First Last" value="'+nm.replace(/"/g,'&quot;')+'" style="font-size:15px;font-weight:600;width:100%"></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
-    +'<div><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Weight (kg)</label>'
-    +'<input id="lsSpWt" class="fi" type="number" inputmode="decimal" min="0" step="1" placeholder="kg" value="'+wt+'" style="font-size:15px;font-weight:600"></div>'
-    +'<div><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Bag (kg)</label>'
-    +'<input id="lsSpBag" class="fi" type="number" inputmode="decimal" min="0" step="1" placeholder="0" value="'+bg+'" style="font-size:15px;font-weight:600"></div>'
+    +'<div style="margin-bottom:10px">'
+    +'<input id="lsSpName" class="fi" type="text" placeholder="Passenger name" value="'+nm.replace(/"/g,'&quot;')+'" style="font-size:15px;font-weight:600;width:100%"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'
+    +'<div style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;cursor:pointer" onclick="this.querySelector(\'input\').focus()">'
+    +'<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Weight</div>'
+    +'<div style="display:flex;align-items:baseline;gap:3px"><input id="lsSpWt" class="fi" type="number" inputmode="decimal" min="0" step="1" placeholder="—" value="'+wt+'" style="font-size:16px;font-weight:800;width:52px;padding:0;background:transparent;border:none;color:var(--text1)"><span style="font-size:11px;color:var(--text3)">kg</span></div>'
     +'</div>'
-    +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Type</label>'
+    +'<div style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;cursor:pointer" onclick="this.querySelector(\'input\').focus()">'
+    +'<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Bag</div>'
+    +'<div style="display:flex;align-items:baseline;gap:3px"><input id="lsSpBag" class="fi" type="number" inputmode="decimal" min="0" step="1" placeholder="0" value="'+bg+'" style="font-size:16px;font-weight:800;width:52px;padding:0;background:transparent;border:none;color:var(--text1)"><span style="font-size:11px;color:var(--text3)">kg</span></div>'
+    +'</div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">'
+    +'<button id="lsSpTA" style="padding:9px 4px;border-radius:8px;border:2px solid '+(_pType==='A'?'#3b82f6':'var(--border2)')+';background:'+(_pType==='A'?'rgba(59,130,246,.18)':'transparent')+';color:'+(_pType==='A'?'#60a5fa':'var(--text3)')+';font-size:12px;font-weight:700;cursor:pointer">Adult</button>'
+    +'<button id="lsSpTC" style="padding:9px 4px;border-radius:8px;border:2px solid '+(_pType==='C'?'#fb923c':'var(--border2)')+';background:'+(_pType==='C'?'rgba(251,146,60,.18)':'transparent')+';color:'+(_pType==='C'?'#fb923c':'var(--text3)')+';font-size:12px;font-weight:700;cursor:pointer">Child</button>'
+    +'<button id="lsSpInfantToggle" style="padding:9px 4px;border-radius:8px;border:2px solid '+(_hasInfant?'#ec4899':'var(--border2)')+';background:'+(_hasInfant?'rgba(236,72,153,.18)':'transparent')+';color:'+(_hasInfant?'#ec4899':'var(--text3)')+';font-size:12px;font-weight:700;cursor:pointer">👶 Infant</button>'
+    +'</div>'
+    +'<div id="lsSpInfantRow" style="margin-bottom:10px;display:'+(_hasInfant?'block':'none')+'">'
+    +'<input id="lsSpInfant" class="fi" type="text" placeholder="Infant name" value="'+infantNm.replace(/"/g,'&quot;')+'" style="font-size:13px;width:100%"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'
+    +'<button id="lsSpPay" style="padding:9px 4px;border-radius:8px;border:2px solid '+(_payReq?'#ef4444':'var(--border2)')+';background:'+(_payReq?'rgba(239,68,68,.18)':'transparent')+';color:'+(_payReq?'#ef4444':'var(--text3)')+';font-size:12px;font-weight:700;cursor:pointer">'+(_payReq?'$ Needs Pay':'$ Payment')+'</button>'
+    +'<div style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:4px 8px;display:flex;align-items:center">'
+    +'<input id="lsSpGrp" class="fi" type="text" placeholder="Group" value="'+grp.replace(/"/g,'&quot;')+'" style="font-size:12px;width:100%;background:transparent;border:none;padding:0;color:var(--text1)">'
+    +'</div>'
+    +'</div>'
     +'<div style="display:flex;gap:8px">'
-    +'<button id="lsSpTA" style="flex:1;padding:10px;border-radius:8px;border:2px solid '+(_pType==='A'?'#3b82f6':'var(--border2)')+';background:'+(_pType==='A'?'rgba(59,130,246,.22)':'transparent')+';color:var(--text1);font-size:13px;font-weight:700;cursor:pointer">Adult</button>'
-    +'<button id="lsSpTC" style="flex:1;padding:10px;border-radius:8px;border:2px solid '+(_pType==='C'?'#fb923c':'var(--border2)')+';background:'+(_pType==='C'?'rgba(251,146,60,.22)':'transparent')+';color:var(--text1);font-size:13px;font-weight:700;cursor:pointer">Child</button>'
-    +'</div></div>'
-    +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Payment</label>'
-    +'<button id="lsSpPay" style="width:100%;padding:10px;border-radius:8px;border:2px solid '+(_payReq?'#ef4444':'var(--border2)')+';background:'+(_payReq?'rgba(239,68,68,.22)':'transparent')+';color:'+(_payReq?'#ef4444':'var(--text3)')+';font-size:13px;font-weight:700;cursor:pointer">'+(_payReq?'$ Payment Required':'$ Mark as Needs Payment')+'</button></div>'
-    +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Group</label>'
-    +'<input id="lsSpGrp" class="fi" type="text" placeholder="Group name (optional)" value="'+grp.replace(/"/g,'&quot;')+'" style="font-size:13px;width:100%"></div>'
-    +'<div style="margin-bottom:18px"><label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px">Infant Name <span style=\'font-weight:400;text-transform:none;letter-spacing:0\'>👶</span></label>'
-    +'<input id="lsSpInfant" class="fi" type="text" placeholder="Infant name, or leave blank" value="'+infantNm.replace(/"/g,'&quot;')+'" style="font-size:13px;width:100%"></div>'
-    +'<div style="display:flex;gap:8px">'
-    +'<button id="lsSpSave" style="flex:2;padding:12px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Save</button>'
-    +(isOccupied?'<button id="lsSpClear" style="flex:1;padding:12px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Clear</button>':'')
+    +'<button id="lsSpSave" style="flex:2;padding:11px;background:var(--acc);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Save</button>'
+    +(isOccupied?'<button id="lsSpClear" style="flex:1;padding:11px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Clear</button>':'')
     +'</div>';
   ov.appendChild(inner);
   document.body.appendChild(ov);
@@ -143,15 +155,24 @@ window.lsSeatEditPopup=function(idx){
   }
   document.getElementById('lsSpTA').onclick=function(){setType('A');};
   document.getElementById('lsSpTC').onclick=function(){setType('C');};
+  // Infant toggle
+  document.getElementById('lsSpInfantToggle').onclick=function(){
+    _hasInfant=!_hasInfant;
+    var btn=document.getElementById('lsSpInfantToggle');
+    var row=document.getElementById('lsSpInfantRow');
+    if(btn){btn.style.borderColor=_hasInfant?'#ec4899':'var(--border2)';btn.style.background=_hasInfant?'rgba(236,72,153,.18)':'transparent';btn.style.color=_hasInfant?'#ec4899':'var(--text3)';}
+    if(row){row.style.display=_hasInfant?'block':'none';}
+    if(_hasInfant){var inp=document.getElementById('lsSpInfant');if(inp){inp.focus();try{inp.select();}catch(e){}}}
+  };
   // Payment toggle
   document.getElementById('lsSpPay').onclick=function(){
     _payReq=!_payReq;
     var btn=document.getElementById('lsSpPay');
     if(!btn)return;
     btn.style.borderColor=_payReq?'#ef4444':'var(--border2)';
-    btn.style.background=_payReq?'rgba(239,68,68,.22)':'transparent';
+    btn.style.background=_payReq?'rgba(239,68,68,.18)':'transparent';
     btn.style.color=_payReq?'#ef4444':'var(--text3)';
-    btn.textContent=_payReq?'$ Payment Required':'$ Mark as Needs Payment';
+    btn.textContent=_payReq?'$ Needs Pay':'$ Payment';
   };
   // Save
   document.getElementById('lsSpSave').onclick=function(){
@@ -162,7 +183,8 @@ window.lsSeatEditPopup=function(idx){
     if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
     S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
     if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();
-    var newInfant=document.getElementById('lsSpInfant').value.trim();
+    var newInfant=_hasInfant?(document.getElementById('lsSpInfant')||{}).value||'':'';
+    newInfant=newInfant.trim();
     f.names[idx]=newNm;
     f.seats[idx]=newWt||'';
     f.bags[idx]=newBg||'';
@@ -409,8 +431,9 @@ function renderLoadsheet(){
       </div>`:''}
     </div>`;
     loadingH=`<div class="card" id="lsf-loading" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
-      <div class="st" style="display:flex;align-items:center;justify-content:space-between">Passengers, Loading &amp; Fuel<div style="display:flex;gap:6px;align-items:center">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button></div></div>
+      <div class="st">Passengers, Loading &amp; Fuel</div>
       ${wbSummary}
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button><button onclick="S._showUnalloc=!S._showUnalloc;render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._showUnalloc||((f._unallocated||[]).length>0)?'#f59e0b':'var(--border2)'};background:${S._showUnalloc||((f._unallocated||[]).length>0)?'rgba(245,158,11,.18)':'transparent'};color:${S._showUnalloc||((f._unallocated||[]).length>0)?'#f59e0b':'var(--text3)'}">&#x1f465; Unallocated${(f._unallocated||[]).length>0?' ('+f._unallocated.length+')':''}</button></div>
       <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:1;min-width:180px;overflow-x:auto;-webkit-overflow-scrolling:touch">
           ${renderLsSeatGrid(f,a)}
@@ -512,7 +535,7 @@ function renderLoadsheet(){
   
   {
     const ua=f._unallocated;
-    if(ua&&ua.length){
+    if((ua&&ua.length)||S._showUnalloc){
       const selIdx=S._selUnalloc;
       const cards=ua.map(function(p,i){
         const sel=selIdx===i;

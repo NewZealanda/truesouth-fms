@@ -1325,20 +1325,20 @@ window.loadManifest=id=>{
   data._updateTs=now;data._loadedAt=now;
   // Tab-aware load: if current tab is blank replace it, otherwise open new tab
   if(!S._manifestDispatches)S._manifestDispatches={};
+  if(!S.manifestTabs)S.manifestTabs=[];
   const _curIsBlank=!S.dispatch.pax?.length&&!S.dispatch.acSetup?.length;
-  if(_curIsBlank){
-    // Replace current tab
+  const _curTab=S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
+  if(_curIsBlank&&_curTab){
+    // Replace current blank tab
     S.dispatch=data;
     S._loadedManifestId=m.id;
-    const _lt=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
-    if(_lt)_lt.savedId=m.id;
+    _curTab.savedId=m.id;
     S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(data));
   } else {
-    // Save current dispatch, open new tab
-    S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+    // No current tab, or current has data — open in new tab
+    if(S.activeManifestTabId)S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
     const newId='mt_'+Date.now();
     S._manifestDispatches[newId]=JSON.parse(JSON.stringify(data));
-    if(!S.manifestTabs)S.manifestTabs=[];
     S.manifestTabs.push({id:newId,savedId:m.id});
     S.activeManifestTabId=newId;
     S.dispatch=JSON.parse(JSON.stringify(data));

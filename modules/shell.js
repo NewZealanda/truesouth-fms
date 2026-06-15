@@ -483,7 +483,11 @@ function renderNewLsPanel(){
     var col=AC_COL[a.id]||'#64748b';
     h+='<button onclick="window.createBlankLsTab(\''+a.id+'\')" style="padding:14px 22px;border-radius:12px;border:2px solid '+col+';background:'+col+'1a;color:'+col+';font-size:16px;font-weight:800;cursor:pointer;letter-spacing:.06em">'+a.id.replace('ZK-','')+'</button>';
   });
-  h+='</div></div>';
+  h+='</div>';
+  h+='<div style="margin-top:14px;border-top:1px solid var(--border2);padding-top:14px">';
+  h+='<button onclick="S.opsTab=\'saved\';S.savedTab=\'loadsheets\';S._newLsTab=false;render()" style="padding:10px 18px;border-radius:10px;border:1.5px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">📂 Open Saved Loadsheet</button>';
+  h+='</div>';
+  h+='</div>';
   return h;
 }
 
