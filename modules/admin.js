@@ -1353,6 +1353,7 @@ window.loadManifest=id=>{
   toast('Loaded: '+(m.name||'Manifest'),'ok');
   S.tab='manifest';window.scrollTo(0,0);
   autoSaveDispatch();
+  window.saveWorkspace&&window.saveWorkspace();
   render();
 };
 window.undoManifest=function(){
@@ -1392,7 +1393,7 @@ window.viewSaved=function(id){
   var acFull=s.form&&s.form.ac?s.form.ac:'ZK-SLA';
   var _vsForm=dc(s.form);if(!_vsForm.cargo)_vsForm.cargo={};var _vsAc=S.aircraft[_vsForm.ac];if(_vsAc&&_vsAc.layout==='ga8'&&(!_vsForm.burnOff||parseFloat(_vsForm.burnOff)<30)){_vsForm.burnOff='35';}
   S.lsTabs.push({id:s.id,acId:acFull,form:_vsForm,status:s.status||'unsigned',savedAt:s.savedAt,isNew:false,originalForm:dc(s.form)});
-  window.switchLsTab(s.id);
+  window.switchLsTab(s.id);window.saveWorkspace&&window.saveWorkspace();
 };
 window.reopenSaved=async function(id){
   if(!confirm('Reopen this loadsheet for editing? The pilot signature will be cleared and they will need to re-sign.'))return;
@@ -1409,6 +1410,7 @@ window.reopenSaved=async function(id){
   if(existing){existing.form=form;existing.status='unsigned';existing.acId=acFull;window.switchLsTab(id);}
   else{S.lsTabs.push({id:s.id,acId:acFull,form:form,status:'unsigned',savedAt:s.savedAt});window.switchLsTab(s.id);}
   toast('Loadsheet reopened - signature cleared','ok');
+  window.saveWorkspace&&window.saveWorkspace();
 };
 window.deleteManifest=async function(id){if(!confirm('Move this manifest to Bin?'))return;var m=S.manifests.find(function(x){return x.id===id;});if(!m)return;if(!m.data)m.data={};m.data._deleted=true;m._deleted=true;lsSet('ts_manifests_cache',S.manifests);render();await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);};
 window.toggleSavedSel=id=>{if(S.savedSel[id])delete S.savedSel[id];else S.savedSel[id]=true;render();};
@@ -1555,6 +1557,7 @@ window.closeManifestTab=function(id){
     }
   }
   S.viewAc=null;S.viewAc2=null;S.selectedPax=null;S.solverRes={};
+  window.saveWorkspace&&window.saveWorkspace();
   render();
 };
 
@@ -1585,11 +1588,13 @@ function generateLoadsheet(acId){
   if(a.layout==='ga8'&&(!form.burnOff||parseFloat(form.burnOff)<30)){form.burnOff='35';}
   if(a.layout==='c208'){form.fuel=String(Math.round(800*0.453592));}
   var _savedAt=new Date().toISOString();
-  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:_savedAt,isNew:false});
+  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'draft',savedAt:_savedAt,isNew:true});
   S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
-  // Save immediately so other devices can load it
-  sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:_savedAt,status:'unsigned'}]).catch(function(){});
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt,by:(S.user&&S.user.name)||''}},ref:String(_rtRef)}));}
+  // Save as draft — hidden from Saved folder until explicitly saved
+  sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:_savedAt,status:'draft'}]).catch(function(){});
+  S.saved=S.saved||[];S.saved.unshift({id:_newTabId,form:form,status:'draft',savedAt:_savedAt});lsSet('ts_loadsheets_cache',S.saved);
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt,status:'draft',isNew:true,by:(S.user&&S.user.name)||''}},ref:String(_rtRef)}));}
+  window.saveWorkspace&&window.saveWorkspace();
   render();
 };
 
@@ -1928,7 +1933,7 @@ function _execCloseLsTab(id,idx,tab,action){
     if(S.lsTabs.length>1){var next=S.lsTabs[idx>0?idx-1:1];S.activeTabId=next.id;S.form=next.form;S.lsAc=next.acId.replace('ZK-','');S.editId=next.id;}
     else{S.activeTabId=null;S.editId=null;S._newLsTab=false;S.tab='manifest';}
   }
-  S.lsTabs.splice(idx,1);render();
+  S.lsTabs.splice(idx,1);window.saveWorkspace&&window.saveWorkspace();render();
 }
 window.newLsTab=function(){S._newLsTab=true;S.activeTabId=null;S.tab='manifest';render();};
 window.toggleLsManage=function(){S._lsManageMode=!S._lsManageMode;S._lsTabSel={};render();};
@@ -1944,7 +1949,7 @@ window.deleteSelectedLsTabs=function(){
   lsSet('ts_loadsheets_cache',S.saved);
   S.lsTabs=S.lsTabs.filter(function(t){return!S._lsTabSel[t.id];});
   if(S.activeTabId&&S._lsTabSel[S.activeTabId]){S.activeTabId=null;S.editId=null;S.tab='manifest';}
-  S._lsManageMode=false;S._lsTabSel={};render();
+  S._lsManageMode=false;S._lsTabSel={};window.saveWorkspace&&window.saveWorkspace();render();
 };
 window.createLsTab=function(acId){S._newLsTab=false;generateLoadsheet(acId);};
 window.pushLsToSeatmap=function(){
@@ -2108,10 +2113,12 @@ window.createBlankLsTab=function(acId){
   const _newTabId='ls_'+_lsAcCode+'_'+Date.now();
   S.lsForms[_lsAcCode]=form;S.lsAc=_lsAcCode;S.form=form;S.editId=_newTabId;S.formDirty=false;
   var _savedAt=new Date().toISOString();
-  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'unsigned',savedAt:_savedAt,isNew:true});
+  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'draft',savedAt:_savedAt,isNew:true});
   S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
-  sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:_savedAt,status:'unsigned'}]).catch(function(){});
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt,by:(S.user&&S.user.name)||''}},ref:String(_rtRef)}));}
+  sbU('ts_loadsheets',[{id:_newTabId,form:form,saved_at:_savedAt,status:'draft'}]).catch(function(){});
+  S.saved=S.saved||[];S.saved.unshift({id:_newTabId,form:form,status:'draft',savedAt:_savedAt});lsSet('ts_loadsheets_cache',S.saved);
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:form,savedAt:_savedAt,status:'draft',isNew:true,by:(S.user&&S.user.name)||''}},ref:String(_rtRef)}));}
+  window.saveWorkspace&&window.saveWorkspace();
   render();
 };
 window.changeLsAircraft=function(targetAcFull){
@@ -2130,7 +2137,7 @@ window.editSaved=function(id){
   var acFull=s.form&&s.form.ac?s.form.ac:'ZK-SLA';
   var _esForm=dc(s.form);if(!_esForm.cargo)_esForm.cargo={};var _esAc=S.aircraft[_esForm.ac];if(_esAc&&_esAc.layout==='ga8'&&(!_esForm.burnOff||parseFloat(_esForm.burnOff)<30)){_esForm.burnOff='35';}
   S.lsTabs.push({id:s.id,acId:acFull,form:_esForm,status:s.status||'unsigned',savedAt:s.savedAt,originalForm:dc(s.form)});
-  window.switchLsTab(s.id);
+  window.switchLsTab(s.id);window.saveWorkspace&&window.saveWorkspace();
 };
 window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted'}]);};
 window.restoreFromBin=async function(id){

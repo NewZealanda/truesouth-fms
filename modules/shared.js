@@ -100,7 +100,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.36';
+const APP_VER='v22.37';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -954,6 +954,7 @@ async function loadAll(){
   // Load audit log from localStorage first (instant)
   S.auditLog=lsGet('ts_audit_log')||[];
   render();
+  if(S.user)setTimeout(function(){restoreWorkspace();},400);
   // Then fetch latest 50 from Supabase in background (works on fresh login AND refresh)
   if(S.user?.superAdmin){
     (async()=>{try{
@@ -1050,14 +1051,23 @@ function initRealtime(){
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_tab_open'){
           const _tp=msg.payload.payload;
           if(_tp&&_tp.id&&!S.lsTabs.find(function(t){return t.id===_tp.id;})){
-            S.lsTabs.push({id:_tp.id,acId:_tp.acId,form:_tp.form,status:'unsigned',savedAt:_tp.savedAt});
-            if(_tp.by&&S.user&&_tp.by!==S.user.name)toast((_tp.by||'Someone')+' created '+((_tp.acId||'').replace('ZK-',''))+' loadsheet','info');
+            var _tpStatus=_tp.status||'unsigned';
+            S.lsTabs.push({id:_tp.id,acId:_tp.acId,form:_tp.form,status:_tpStatus,savedAt:_tp.savedAt,isNew:_tp.isNew||false});
+            if(_tpStatus==='draft'&&!(S.saved||[]).find(function(x){return x.id===_tp.id;})){
+              S.saved=S.saved||[];S.saved.unshift({id:_tp.id,form:_tp.form,status:'draft',savedAt:_tp.savedAt});
+              lsSet('ts_loadsheets_cache',S.saved);
+            }
+            if(_tp.by&&S.user&&_tp.by!==S.user.name)toast((_tp.by||'Someone')+' opened '+((_tp.acId||'').replace('ZK-',''))+' loadsheet','info');
             safeRender();
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_tab_close'){
           var _closeId=msg.payload.payload&&msg.payload.payload.id;
           if(_closeId){S.lsTabs=S.lsTabs.filter(function(t){return t.id!==_closeId;});if(S.activeTabId===_closeId){S.activeTabId=null;S.editId=null;S.tab='manifest';}safeRender();}
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='workspace_update'){
+          var _wupl=msg.payload.payload;
+          if(_wupl&&_wupl.sessionId!==_sessionId&&_wupl.state){_applyWorkspace(_wupl.state);}
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_signed'){
           var _sipl=msg.payload.payload;
@@ -1566,7 +1576,7 @@ async function _doLogin(emailArg,passArg){
   ['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});
   // Update auth header to use user's session token if available (fixes RLS for writes)
   if(u.sessionToken) SH['Authorization']='Bearer '+u.sessionToken;
-  S.tab=u.role==='maint'?'maintenance':'manifest';render();initRealtime();
+  S.tab=u.role==='maint'?'maintenance':'manifest';render();initRealtime();setTimeout(function(){restoreWorkspace();},600);
   // Fetch latest audit log from Supabase after login
   if(u.superAdmin){
     (async()=>{try{
@@ -1585,6 +1595,55 @@ async function _doLogin(emailArg,passArg){
 window.tryLogin=function(){_doLogin();};
 window.updateLoginSuffix=function(){var s=document.getElementById('li_e_sfx');var e=document.getElementById('li_e');if(s&&e)s.style.display=e.value.includes('@')?'none':'';};
 function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.removeItem('ts_remembered_user');broadcastPresence(null);if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}S.rtStatus='offline';S.rtPresence={};S._presSection=null;clearInterval(_presInterval);render();}
+
+// ── Shared Workspace Persistence ──
+async function saveWorkspace(){
+  if(!S.user)return;
+  var _wsIds=(S.lsTabs||[]).map(function(t){return t.id;});
+  var _wsMIds=(S.manifestTabs||[]).map(function(t){return t.savedId;}).filter(Boolean);
+  var _wsState={openLsIds:_wsIds,openManifestSavedIds:_wsMIds};
+  await sbU('ts_settings',[{key:'workspace_shared',value:JSON.stringify(_wsState)}]).catch(function(){});
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'workspace_update',payload:{state:_wsState,sessionId:_sessionId}},ref:String(_rtRef)}));}
+}
+window.saveWorkspace=saveWorkspace;
+
+async function restoreWorkspace(){
+  if(!S.user)return;
+  try{
+    var _r=await fetch(SB+'/rest/v1/ts_settings?key=eq.workspace_shared&select=value&limit=1',{headers:{'apikey':SK,...SH}});
+    if(!_r.ok)return;
+    var _rows=await _r.json();
+    if(!_rows.length||!_rows[0].value)return;
+    _applyWorkspace(JSON.parse(_rows[0].value));
+  }catch(e){}
+}
+
+function _applyWorkspace(ws){
+  if(!ws||!ws.openLsIds)return;
+  S.lsTabs=S.lsTabs||[];
+  var _added=false;
+  (ws.openLsIds||[]).forEach(function(_wid){
+    if(S.lsTabs.find(function(t){return t.id===_wid;}))return;
+    var _ws2=S.saved.find(function(x){return x.id===_wid&&x.status!=='deleted';});
+    if(_ws2){
+      var _wac=(_ws2.form&&_ws2.form.ac)||'ZK-SLA';
+      var _wform=dc(_ws2.form);if(!_wform.cargo)_wform.cargo={};
+      var _isNew=_ws2.status==='draft';
+      S.lsTabs.push({id:_ws2.id,acId:_wac,form:_wform,status:'unsigned',savedAt:_ws2.savedAt,isNew:_isNew,originalForm:_isNew?null:dc(_ws2.form)});
+      _added=true;
+    }
+  });
+  if(_added){
+    if(!S.activeTabId&&S.lsTabs.length){
+      var _wt=S.lsTabs[0];
+      S.activeTabId=_wt.id;S.form=_wt.form;S.lsAc=(_wt.acId||'').replace('ZK-','');S.editId=_wt.id;
+      S.tab='loadsheet';S._newLsTab=false;
+    }
+    safeRender();
+  }
+}
+
+window.addEventListener('pagehide',function(){saveWorkspace();});
 
 // ── Pilot list: S.crew + any pilot/admin users without a linked crew record ──
 function pilotCrewList(){
