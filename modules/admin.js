@@ -1776,6 +1776,7 @@ window.saveUnsigned=async()=>{
   const f=S.form;if(!f.ac){toast('Select an aircraft first.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
   const isEdit=!!S.editId;
+  f.savedBy=(S.user&&S.user.name)||'';
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'unsigned'};
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);
   S.editId=id;S.formDirty=false;
@@ -1806,6 +1807,8 @@ window.handleSubmit=async()=>{
   if(!f.pic){toast('Select a PIC before submitting.','warn');return;}
   const r=calcFormWB(f);if(!r||!r.towOk||!r.lwOk||!r.cogOk){toast('Fix weight and balance limits before submitting.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
+  f.sigBy=(S.user&&S.user.name)||'';f.sigTs=new Date().toISOString();
+  f.savedBy=(S.user&&S.user.name)||'';
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'complete'};
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);lsSet('ts_loadsheets_cache',S.saved);
   var _submitTab=S.lsTabs.find(function(t){return t.id===id;});
@@ -2384,7 +2387,7 @@ window.uploadToDrive=async function(sheet,preToken){
     if(sheet&&sheet.id){
       sbPatch('ts_loadsheets',sheet.id,{drive_uploaded:true}).catch(function(){});
       var _sh=S.saved.find(function(s){return s.id===sheet.id;});
-      if(_sh)_sh.driveUploaded=true;
+      if(_sh){_sh.driveUploaded=true;_sh.uploadedBy=(S.user&&S.user.name)||'';_sh.uploadedAt=new Date().toISOString();lsSet('ts_loadsheets_cache',S.saved);}
     }
     render();
     // No popup - status banner handles it

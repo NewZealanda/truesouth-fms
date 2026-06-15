@@ -129,7 +129,22 @@ function renderSaved(){
       :'';
     var limitWarn=isSigned&&!ok?'<span class="pill pill-warn" style="font-size:10px">⚠ check limits</span>':'';
     var sid=s.id;
-    var byStr=(function(){var nm=s.form.createdBy||'';var at=s.form.createdAt;if(!nm&&!at)return '';var ini=nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase();var ts=at?(function(){var d=new Date(at);return ('0'+d.getHours()).slice(-2)+':'+( '0'+d.getMinutes()).slice(-2);}()):'';return 'By '+ini+(ts?' '+ts:'');})();
+    function _whoAt(nm,isoTs){
+      if(!nm&&!isoTs)return '';
+      var ini=nm?(nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase()):'?';
+      if(!isoTs)return ini;
+      var d=new Date(isoTs);var now=new Date();
+      var sameDay=d.toDateString()===now.toDateString();
+      var yest=new Date(now);yest.setDate(yest.getDate()-1);
+      var wasYest=d.toDateString()===yest.toDateString();
+      var hm=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+      var when=sameDay?'today at '+hm:wasYest?'yesterday at '+hm:d.getDate()+' '+'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[d.getMonth()]+' at '+hm;
+      return ini+' '+when;
+    }
+    var _savedBy=s.form.savedBy||(s.form.createdBy||'');
+    var savedStr2=_whoAt(_savedBy,s.savedAt);
+    var signedStr=isSigned?_whoAt(s.form.sigBy||_savedBy,s.form.sigTs||s.savedAt):'';
+    var uploadStr=s.driveUploaded?_whoAt(s.uploadedBy||'',s.uploadedAt||''):'';
     var uploadBtn='';
     var actionBtns=isSigned
       ?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${sid}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${sid}')">&#x21BA; Reopen</button>`
@@ -151,9 +166,10 @@ function renderSaved(){
 
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
-        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-          ${byStr?`<span onclick="event.stopPropagation();window._lsShowCreator('${sid}')" style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text2);cursor:pointer;text-decoration:underline;text-underline-offset:2px">${byStr}</span>`:''}
-          ${rhsBadge}
+        <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end">
+          ${savedStr2?`<span style="padding:1px 6px;background:rgba(100,116,139,.1);border:1px solid rgba(100,116,139,.18);border-radius:4px;font-size:10px;color:var(--text3)">Saved ${savedStr2}</span>`:''}
+          ${signedStr?`<span style="padding:1px 6px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;color:#4ade80">Signed ${signedStr}</span>`:''}
+          ${uploadStr?`<span style="padding:1px 6px;background:rgba(26,115,232,.1);border:1px solid rgba(26,115,232,.25);border-radius:4px;font-size:10px;color:#93c5fd">☁ Uploaded ${uploadStr}</span>`:(rhsBadge||'')}
         </div>
         <div style="display:flex;gap:5px;align-items:center">
           ${actionBtns}${uploadBtn}

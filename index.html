@@ -4192,7 +4192,22 @@ function renderSaved(){
       :'';
     var limitWarn=isSigned&&!ok?'<span class="pill pill-warn" style="font-size:10px">⚠ check limits</span>':'';
     var sid=s.id;
-    var byStr=(function(){var nm=s.form.createdBy||'';var at=s.form.createdAt;if(!nm&&!at)return '';var ini=nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase();var ts=at?(function(){var d=new Date(at);return ('0'+d.getHours()).slice(-2)+':'+( '0'+d.getMinutes()).slice(-2);}()):'';return 'By '+ini+(ts?' '+ts:'');})();
+    function _whoAt(nm,isoTs){
+      if(!nm&&!isoTs)return '';
+      var ini=nm?(nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase()):'?';
+      if(!isoTs)return ini;
+      var d=new Date(isoTs);var now=new Date();
+      var sameDay=d.toDateString()===now.toDateString();
+      var yest=new Date(now);yest.setDate(yest.getDate()-1);
+      var wasYest=d.toDateString()===yest.toDateString();
+      var hm=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+      var when=sameDay?'today at '+hm:wasYest?'yesterday at '+hm:d.getDate()+' '+'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[d.getMonth()]+' at '+hm;
+      return ini+' '+when;
+    }
+    var _savedBy=s.form.savedBy||(s.form.createdBy||'');
+    var savedStr2=_whoAt(_savedBy,s.savedAt);
+    var signedStr=isSigned?_whoAt(s.form.sigBy||_savedBy,s.form.sigTs||s.savedAt):'';
+    var uploadStr=s.driveUploaded?_whoAt(s.uploadedBy||'',s.uploadedAt||''):'';
     var uploadBtn='';
     var actionBtns=isSigned
       ?`<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.viewSaved('${sid}')">View</button><button class="btn" style="font-size:12px;padding:6px 10px;background:#854d0e;color:#fde68a;border:none;border-radius:6px;cursor:pointer" onclick="window.reopenSaved('${sid}')">&#x21BA; Reopen</button>`
@@ -4214,9 +4229,10 @@ function renderSaved(){
 
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
-        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-          ${byStr?`<span onclick="event.stopPropagation();window._lsShowCreator('${sid}')" style="padding:2px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text2);cursor:pointer;text-decoration:underline;text-underline-offset:2px">${byStr}</span>`:''}
-          ${rhsBadge}
+        <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end">
+          ${savedStr2?`<span style="padding:1px 6px;background:rgba(100,116,139,.1);border:1px solid rgba(100,116,139,.18);border-radius:4px;font-size:10px;color:var(--text3)">Saved ${savedStr2}</span>`:''}
+          ${signedStr?`<span style="padding:1px 6px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:4px;font-size:10px;color:#4ade80">Signed ${signedStr}</span>`:''}
+          ${uploadStr?`<span style="padding:1px 6px;background:rgba(26,115,232,.1);border:1px solid rgba(26,115,232,.25);border-radius:4px;font-size:10px;color:#93c5fd">☁ Uploaded ${uploadStr}</span>`:(rhsBadge||'')}
         </div>
         <div style="display:flex;gap:5px;align-items:center">
           ${actionBtns}${uploadBtn}
@@ -6328,6 +6344,7 @@ window.saveUnsigned=async()=>{
   const f=S.form;if(!f.ac){toast('Select an aircraft first.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
   const isEdit=!!S.editId;
+  f.savedBy=(S.user&&S.user.name)||'';
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'unsigned'};
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);
   S.editId=id;S.formDirty=false;
@@ -6358,6 +6375,8 @@ window.handleSubmit=async()=>{
   if(!f.pic){toast('Select a PIC before submitting.','warn');return;}
   const r=calcFormWB(f);if(!r||!r.towOk||!r.lwOk||!r.cogOk){toast('Fix weight and balance limits before submitting.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
+  f.sigBy=(S.user&&S.user.name)||'';f.sigTs=new Date().toISOString();
+  f.savedBy=(S.user&&S.user.name)||'';
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'complete'};
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);lsSet('ts_loadsheets_cache',S.saved);
   var _submitTab=S.lsTabs.find(function(t){return t.id===id;});
@@ -6936,7 +6955,7 @@ window.uploadToDrive=async function(sheet,preToken){
     if(sheet&&sheet.id){
       sbPatch('ts_loadsheets',sheet.id,{drive_uploaded:true}).catch(function(){});
       var _sh=S.saved.find(function(s){return s.id===sheet.id;});
-      if(_sh)_sh.driveUploaded=true;
+      if(_sh){_sh.driveUploaded=true;_sh.uploadedBy=(S.user&&S.user.name)||'';_sh.uploadedAt=new Date().toISOString();lsSet('ts_loadsheets_cache',S.saved);}
     }
     render();
     // No popup - status banner handles it
