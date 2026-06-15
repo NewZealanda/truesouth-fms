@@ -322,7 +322,7 @@ function calcAcScore(acId, paxList, fuelKgOv){
     // Heaviest group fills first row pair, next group fills next row pair, etc.
     // This gives a realistic best-case CoG estimate
     const gMapF={};
-    paxList.forEach(p=>{const g=p.group?.trim()||' '+p.id;if(!gMapF[g])gMapF[g]=[];
+    paxList.forEach(p=>{const g=p.group?.trim()||''+p.id;if(!gMapF[g])gMapF[g]=[];
       gMapF[g].push(parseFloat(p.weight||0)+parseFloat(p.bag||0));});
     const groupWeights=Object.values(gMapF).map(ws=>({ws,total:ws.reduce((s,w)=>s+w,0)}))
       .sort((a,b)=>b.total-a.total);
@@ -368,7 +368,7 @@ function calcAcScore(acId, paxList, fuelKgOv){
   // Build groups
   const gMap={};
   paxList.forEach(p=>{
-    const g=p.group?.trim()||' '+p.id;
+    const g=p.group?.trim()||''+p.id;
     if(!gMap[g]) gMap[g]={pax:[],solo:!p.group?.trim()};
     gMap[g].pax.push(p);
   });
@@ -1358,6 +1358,17 @@ function _cleanPresence(){
   if(changed)safeRender();
 }
 setInterval(_cleanPresence,5000);
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){
+    if(S._presSection)broadcastPresence(null);
+    clearInterval(_presInterval);
+  } else {
+    if(S._presSection){broadcastPresence(S._presSection);_presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},9000);}
+  }
+});
+window.addEventListener('beforeunload',function(){if(S._presSection)broadcastPresence(null);});
+window.addEventListener('pagehide',function(){if(S._presSection)broadcastPresence(null);});
+
 function broadcastLS(acCode,form){
   if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
   _rtRef++;
