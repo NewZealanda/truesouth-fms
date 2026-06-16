@@ -972,7 +972,7 @@ window.tapFormSeat=(seatIdx,acId,ev)=>{
   const f=S.form;
   const nm=f.names[seatIdx]||'';
   if(S._selUnalloc!=null){
-    const ua=f._unallocated;
+    const ua=_uaPool();
     if(ua&&ua[S._selUnalloc]){
       const p=ua[S._selUnalloc];
       if(nm){ua.push({name:nm,weight:f.seats[seatIdx]||'',bag:f.bags[seatIdx]||'',infant:(f.infantNames||{})[seatIdx]||'',group:(f.paxGroups||{})[seatIdx]||''});}
@@ -1012,8 +1012,7 @@ window.tapDropUnallocated=function(){
   const f=S.form;
   const nm=f.names[S._selFormSeat]||'';
   if(nm&&nm!==f.coPilot&&nm!==f.pic){
-    f._unallocated=_uaPool();
-    f._unallocated.push({name:nm,weight:f.seats[S._selFormSeat]||'',bag:f.bags[S._selFormSeat]||'',infant:(f.infantNames||{})[S._selFormSeat]||'',group:(f.paxGroups||{})[S._selFormSeat]||''});
+    _uaPool().push({name:nm,weight:f.seats[S._selFormSeat]||'',bag:f.bags[S._selFormSeat]||'',infant:(f.infantNames||{})[S._selFormSeat]||'',group:(f.paxGroups||{})[S._selFormSeat]||''});
     delete f.names[S._selFormSeat];delete f.seats[S._selFormSeat];delete f.bags[S._selFormSeat];
     if(f.infantNames)delete f.infantNames[S._selFormSeat];
     if(f.paxGroups)delete f.paxGroups[S._selFormSeat];
@@ -1066,12 +1065,11 @@ window.lsSeatDragStart=function(idx,e){
 window.lsDropOnSeat=function(toIdx,e){
   e.preventDefault();
   if(e.currentTarget)e.currentTarget.style.outline='';
-  if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
-{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>20)_us.shift();S._lsFormUndo=null;}
+  _lsUndoPush();
   const f=S.form;
   if(S._dragUnalloc!=null){
     // Drop from unallocated onto seat
-    const ua=f._unallocated;
+    const ua=_uaPool();
     if(!ua||ua[S._dragUnalloc]==null){S._dragUnalloc=null;return;}
     const p=ua[S._dragUnalloc];
     const curNm=f.names[toIdx]||'';
@@ -1097,14 +1095,12 @@ window.lsDropOnSeat=function(toIdx,e){
 window.lsDropOnUnalloc=function(e){
   e.preventDefault();
   if(e.currentTarget)e.currentTarget.style.outline='';
-  if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
-{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>20)_us.shift();S._lsFormUndo=null;}
+  _lsUndoPush();
   const f=S.form;
   if(S._dragSeat!=null){
     const nm=f.names[S._dragSeat]||'';
     if(nm&&nm!==f.coPilot&&nm!==f.pic){
-      f._unallocated=_uaPool();
-      f._unallocated.push({name:nm,weight:f.seats[S._dragSeat]||'',bag:f.bags[S._dragSeat]||'',infant:(f.infantNames||{})[S._dragSeat]||'',group:(f.paxGroups||{})[S._dragSeat]||''});
+      _uaPool().push({name:nm,weight:f.seats[S._dragSeat]||'',bag:f.bags[S._dragSeat]||'',infant:(f.infantNames||{})[S._dragSeat]||'',group:(f.paxGroups||{})[S._dragSeat]||''});
       delete f.names[S._dragSeat];delete f.seats[S._dragSeat];delete f.bags[S._dragSeat];
       if(f.infantNames)delete f.infantNames[S._dragSeat];
       if(f.paxGroups)delete f.paxGroups[S._dragSeat];
@@ -1116,7 +1112,7 @@ window.startDragForm=(ev,idx,acId)=>{S.dragState={fromFormIdx:idx,fromFormAc:acI
 window.dropFormSeat=(ev,toIdx,acId)=>{
   ev.preventDefault();
   if(S._dragUnalloc!=null){window.lsDropOnSeat(toIdx,ev);return;}
-  {var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
+  _lsUndoPush();
   if(!S.dragState?.fromFormIdx&&S.dragState?.fromFormIdx!==0)return;
   const from=S.dragState.fromFormIdx;
   // Swap names, weights, bags, infant names
@@ -1524,7 +1520,7 @@ window.lsCopyFlight=function(targetAc){
   const tgtSeatCount=tgtAc?tgtAc.seats.length:999;
   tgt.dep=src.dep;tgt.dest=src.dest;tgt.date=src.date;tgt.etd=src.etd;tgt.etdCustom=src.etdCustom||false;
   tgt.pic=src.pic;tgt.coPilot=src.coPilot;
-  tgt.names={};tgt.seats={};tgt.bags={};tgt.infantNames={};tgt._unallocated=_uaPool();
+  tgt.names={};tgt.seats={};tgt.bags={};tgt.infantNames={};
   const srcInfants=src.infantNames||{};
   Object.keys(src.names||{}).forEach(function(k){
     const i=parseInt(k);
@@ -1535,7 +1531,7 @@ window.lsCopyFlight=function(targetAc){
       tgt.names[i]=nm;tgt.seats[i]=wt;tgt.bags[i]=bg;
       if(inf){if(!tgt.infantNames)tgt.infantNames={};tgt.infantNames[i]=inf;}
     } else {
-      tgt._unallocated.push({name:nm,weight:wt,bag:bg,infant:inf});
+      _uaPool().push({name:nm,weight:wt,bag:bg,infant:inf});
     }
   });
   tgt.cargo=Object.assign({},src.cargo||{});
@@ -1554,7 +1550,7 @@ window.lsCopyFlight=function(targetAc){
     tgt.fuel=String(tgtAc.fuelKg);
     tgt.burnOff='';
   }
-  const unallocCount=tgt._unallocated.length;
+  const unallocCount=_uaPool().length;
   const paxCount=Object.keys(tgt.names).filter(function(k){return tgt.names[k];}).length;
   autoSaveLS();
   toast('Copied to ZK-'+targetAc+' ('+paxCount+' seats'+(unallocCount?' +'+unallocCount+' unallocated':'')+')','ok');
@@ -1569,7 +1565,7 @@ window.lsTrimExcess=()=>{
   render();
 };
 window.lsDelPax=idx=>{
-  {var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
+  _lsUndoPush();
   delete S.form.names[idx];delete S.form.seats[idx];delete S.form.bags[idx];
   if(S.form.infantNames)delete S.form.infantNames[idx];
   autoSaveLS();render();
@@ -1577,11 +1573,16 @@ window.lsDelPax=idx=>{
 window.lsUndo=function(){
   var _us=S._lsFormUndoStack;
   if(!_us||!_us.length)return;
-  S.form=_us.pop();
+  var snap=_us.pop();
+  // Back-compat: older snapshots were the bare form object.
+  var snapForm=snap&&snap.form?snap.form:snap;
+  var snapPool=snap&&snap.pool?snap.pool:null;
+  S.form=snapForm;
+  if(snapPool){var p=_uaPool();p.length=0;snapPool.forEach(function(x){p.push(x);});}
   S._lsFormUndo=_us.length?_us[_us.length-1]:null;
   var tab=S.lsTabs.find(function(t){return t.id===S.editId;});
   if(tab)tab.form=S.form;
-  autoSaveLS();render();
+  autoSaveLS();autoSaveDispatch();render();
 };
 window.lsPIC=v=>{S.form.pic=v;const c=anyCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[0]=String(c.w);S.form.names[0]=v;}else{S.form.names[0]=v;}autoSaveLS();render();};
 window.lsCoPilot=v=>{

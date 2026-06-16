@@ -308,6 +308,8 @@ const Q_LOADSHEETS=()=>`&created_at=gte.${_fetchSince()}`;
 const Q_MANIFESTS=()=>`&or=(created_at.gte.${_fetchSince()},id.eq.live_draft,id.like.ls_live_*)`;
 // Shared unallocated pool — single source for every loadsheet tab (and, later, the seatmap).
 function _uaPool(){if(!S.dispatch)S.dispatch={};if(!Array.isArray(S.dispatch._unallocated))S.dispatch._unallocated=[];return S.dispatch._unallocated;}
+// Loadsheet undo snapshots BOTH the form (seats) and the shared pool, so undo restores both.
+function _lsUndoPush(){if(!S._lsFormUndoStack)S._lsFormUndoStack=[];S._lsFormUndoStack.push({form:dc(S.form),pool:JSON.parse(JSON.stringify(_uaPool()))});if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();S._lsFormUndo=null;}
 const sbU=async(t,d)=>{try{const r=await fetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);return null;}};
 const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:SH});return r.ok;}catch{return false;}};
 const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
@@ -360,7 +362,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.58';
+const APP_VER='v22.59';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -992,7 +994,7 @@ function runSolver(){
 
 // ── State ──
 function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
-function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',_unallocated:[],paxType:{},paxGroups:{},sig:null};}
+function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',paxType:{},paxGroups:{},sig:null};}
 function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
 let S={
@@ -2116,19 +2118,23 @@ function renderIOSBanner(){
 // safeRender: defers render if an input/select/textarea is currently focused
 let _rtRenderPending=false;
 let _rtRenderMaxWait=null;
+const _PICKER_TYPES=/^(date|datetime-local|month|week|time|color|range|file|checkbox|radio)$/;
+function _isPickerOpen(){var a=document.activeElement;return !!(a&&a.tagName==='INPUT'&&_PICKER_TYPES.test(a.type||''));}
 function safeRender(){
   const ae=document.activeElement;
   const tag=ae&&ae.tagName;
   if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){
     _rtRenderPending=true;
-    // Safety net: force render after 3s even if input stays focused
-    if(!_rtRenderMaxWait)_rtRenderMaxWait=setTimeout(function(){
+    // Safety net: force render after 3s even if input stays focused — but NEVER while a
+    // native date/time picker is open (it would close the picker mid-use), so keep waiting.
+    if(!_rtRenderMaxWait)_rtRenderMaxWait=setTimeout(function _mw(){
+      if(_isPickerOpen()){_rtRenderMaxWait=setTimeout(_mw,2000);return;}
       _rtRenderPending=false;_rtRenderMaxWait=null;render();
     },3000);
   } else {render();}
 }
-// Auto-select input content on focus (type-to-overwrite behaviour)
-document.addEventListener('focusin',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&typeof t.select==='function'){try{t.select();}catch(_){}}});
+// Auto-select input content on focus (type-to-overwrite) — skip date/time/etc. pickers.
+document.addEventListener('focusin',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&typeof t.select==='function'&&!_PICKER_TYPES.test(t.type||'')){try{t.select();}catch(_){}}});
 
 // Cmd+Z / Ctrl+Z global undo for loadsheet
 document.addEventListener('keydown',function(e){
@@ -3537,9 +3543,7 @@ window.lsSeatEditPopup=function(idx){
     var newWt=document.getElementById('lsSpWt').value.trim();
     var newBg=document.getElementById('lsSpBag').value.trim();
     var newGrp=document.getElementById('lsSpGrp').value.trim();
-    if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
-    S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
-    if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();
+    _lsUndoPush();
     f.names[idx]=newNm;
     f.seats[idx]=newWt||'';
     f.bags[idx]=newBg||'';
@@ -3575,7 +3579,7 @@ window.lsSeatEditPopup=function(idx){
 
 function renderLoadsheet(){
   const f=S.form,a=S.aircraft[f.ac],r=a?calcFormWB(f):null,allOk=r&&r.towOk&&r.lwOk&&r.cogOk;
-  if(f)f._unallocated=_uaPool(); // every loadsheet tab shows the one shared unallocated pool
+  if(f&&f._unallocated)delete f._unallocated; // pool lives only on S.dispatch._unallocated (shared), never on the form
   const picCrew=pilotCrewList().find(c=>c.n===f.pic);
   if(picCrew&&String(f.seats[0])!==String(picCrew.w))f.seats[0]=String(picCrew.w);
 
@@ -3792,7 +3796,7 @@ function renderLoadsheet(){
     loadingH=`<div class="card" id="lsf-loading" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
       <div class="st">Passengers, Loading &amp; Fuel</div>
       ${wbSummary}
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button><button onclick="S._showUnalloc=!S._showUnalloc;autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._showUnalloc||((f._unallocated||[]).length>0)?'#f59e0b':'var(--border2)'};background:${S._showUnalloc||((f._unallocated||[]).length>0)?'rgba(245,158,11,.18)':'transparent'};color:${S._showUnalloc||((f._unallocated||[]).length>0)?'#f59e0b':'var(--text3)'}">&#x1f465; Unallocated${(f._unallocated||[]).length>0?' ('+f._unallocated.length+')':''}</button></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button><button onclick="S._showUnalloc=!S._showUnalloc;autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--border2)'};background:${S._showUnalloc||(_uaPool().length>0)?'rgba(245,158,11,.18)':'transparent'};color:${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--text3)'}">&#x1f465; Unallocated${_uaPool().length>0?' ('+_uaPool().length+')':''}</button></div>
       <div style="display:flex;gap:${isMob?'8px':'14px'};align-items:flex-start;${isMob?'':'flex-wrap:wrap;'}">
         <div style="${isMob?'flex:1 1 0;min-width:0':'flex:1;min-width:180px'};overflow-x:auto;-webkit-overflow-scrolling:touch">
           ${renderLsSeatGrid(f,a)}
@@ -3893,7 +3897,7 @@ function renderLoadsheet(){
 
   
   {
-    const ua=f._unallocated||[];
+    const ua=_uaPool();
     if(ua.length||S._showUnalloc){
       const selIdx=S._selUnalloc;
       // Dynamic slot count: min 3, always 1 empty; shrink when removing
@@ -4069,9 +4073,7 @@ window.lsPicChangePopup=function(){
   document.getElementById('_picClose').onclick=function(){ov.remove();};
   window._lsPickPic=function(idx){
     var crew=(window._lsPicPilots||[])[idx];var name=crew?crew.n:'';
-    if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
-    S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
-    if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();
+    _lsUndoPush();
     f.pic=name;
     f.names[0]=name;
     if(crew&&crew.w)f.seats[0]=String(crew.w);
@@ -5963,7 +5965,7 @@ window.tapFormSeat=(seatIdx,acId,ev)=>{
   const f=S.form;
   const nm=f.names[seatIdx]||'';
   if(S._selUnalloc!=null){
-    const ua=f._unallocated;
+    const ua=_uaPool();
     if(ua&&ua[S._selUnalloc]){
       const p=ua[S._selUnalloc];
       if(nm){ua.push({name:nm,weight:f.seats[seatIdx]||'',bag:f.bags[seatIdx]||'',infant:(f.infantNames||{})[seatIdx]||'',group:(f.paxGroups||{})[seatIdx]||''});}
@@ -6003,8 +6005,7 @@ window.tapDropUnallocated=function(){
   const f=S.form;
   const nm=f.names[S._selFormSeat]||'';
   if(nm&&nm!==f.coPilot&&nm!==f.pic){
-    f._unallocated=_uaPool();
-    f._unallocated.push({name:nm,weight:f.seats[S._selFormSeat]||'',bag:f.bags[S._selFormSeat]||'',infant:(f.infantNames||{})[S._selFormSeat]||'',group:(f.paxGroups||{})[S._selFormSeat]||''});
+    _uaPool().push({name:nm,weight:f.seats[S._selFormSeat]||'',bag:f.bags[S._selFormSeat]||'',infant:(f.infantNames||{})[S._selFormSeat]||'',group:(f.paxGroups||{})[S._selFormSeat]||''});
     delete f.names[S._selFormSeat];delete f.seats[S._selFormSeat];delete f.bags[S._selFormSeat];
     if(f.infantNames)delete f.infantNames[S._selFormSeat];
     if(f.paxGroups)delete f.paxGroups[S._selFormSeat];
@@ -6057,12 +6058,11 @@ window.lsSeatDragStart=function(idx,e){
 window.lsDropOnSeat=function(toIdx,e){
   e.preventDefault();
   if(e.currentTarget)e.currentTarget.style.outline='';
-  if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
-{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>20)_us.shift();S._lsFormUndo=null;}
+  _lsUndoPush();
   const f=S.form;
   if(S._dragUnalloc!=null){
     // Drop from unallocated onto seat
-    const ua=f._unallocated;
+    const ua=_uaPool();
     if(!ua||ua[S._dragUnalloc]==null){S._dragUnalloc=null;return;}
     const p=ua[S._dragUnalloc];
     const curNm=f.names[toIdx]||'';
@@ -6088,14 +6088,12 @@ window.lsDropOnSeat=function(toIdx,e){
 window.lsDropOnUnalloc=function(e){
   e.preventDefault();
   if(e.currentTarget)e.currentTarget.style.outline='';
-  if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
-{var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>20)_us.shift();S._lsFormUndo=null;}
+  _lsUndoPush();
   const f=S.form;
   if(S._dragSeat!=null){
     const nm=f.names[S._dragSeat]||'';
     if(nm&&nm!==f.coPilot&&nm!==f.pic){
-      f._unallocated=_uaPool();
-      f._unallocated.push({name:nm,weight:f.seats[S._dragSeat]||'',bag:f.bags[S._dragSeat]||'',infant:(f.infantNames||{})[S._dragSeat]||'',group:(f.paxGroups||{})[S._dragSeat]||''});
+      _uaPool().push({name:nm,weight:f.seats[S._dragSeat]||'',bag:f.bags[S._dragSeat]||'',infant:(f.infantNames||{})[S._dragSeat]||'',group:(f.paxGroups||{})[S._dragSeat]||''});
       delete f.names[S._dragSeat];delete f.seats[S._dragSeat];delete f.bags[S._dragSeat];
       if(f.infantNames)delete f.infantNames[S._dragSeat];
       if(f.paxGroups)delete f.paxGroups[S._dragSeat];
@@ -6107,7 +6105,7 @@ window.startDragForm=(ev,idx,acId)=>{S.dragState={fromFormIdx:idx,fromFormAc:acI
 window.dropFormSeat=(ev,toIdx,acId)=>{
   ev.preventDefault();
   if(S._dragUnalloc!=null){window.lsDropOnSeat(toIdx,ev);return;}
-  {var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
+  _lsUndoPush();
   if(!S.dragState?.fromFormIdx&&S.dragState?.fromFormIdx!==0)return;
   const from=S.dragState.fromFormIdx;
   // Swap names, weights, bags, infant names
@@ -6515,7 +6513,7 @@ window.lsCopyFlight=function(targetAc){
   const tgtSeatCount=tgtAc?tgtAc.seats.length:999;
   tgt.dep=src.dep;tgt.dest=src.dest;tgt.date=src.date;tgt.etd=src.etd;tgt.etdCustom=src.etdCustom||false;
   tgt.pic=src.pic;tgt.coPilot=src.coPilot;
-  tgt.names={};tgt.seats={};tgt.bags={};tgt.infantNames={};tgt._unallocated=_uaPool();
+  tgt.names={};tgt.seats={};tgt.bags={};tgt.infantNames={};
   const srcInfants=src.infantNames||{};
   Object.keys(src.names||{}).forEach(function(k){
     const i=parseInt(k);
@@ -6526,7 +6524,7 @@ window.lsCopyFlight=function(targetAc){
       tgt.names[i]=nm;tgt.seats[i]=wt;tgt.bags[i]=bg;
       if(inf){if(!tgt.infantNames)tgt.infantNames={};tgt.infantNames[i]=inf;}
     } else {
-      tgt._unallocated.push({name:nm,weight:wt,bag:bg,infant:inf});
+      _uaPool().push({name:nm,weight:wt,bag:bg,infant:inf});
     }
   });
   tgt.cargo=Object.assign({},src.cargo||{});
@@ -6545,7 +6543,7 @@ window.lsCopyFlight=function(targetAc){
     tgt.fuel=String(tgtAc.fuelKg);
     tgt.burnOff='';
   }
-  const unallocCount=tgt._unallocated.length;
+  const unallocCount=_uaPool().length;
   const paxCount=Object.keys(tgt.names).filter(function(k){return tgt.names[k];}).length;
   autoSaveLS();
   toast('Copied to ZK-'+targetAc+' ('+paxCount+' seats'+(unallocCount?' +'+unallocCount+' unallocated':'')+')','ok');
@@ -6560,7 +6558,7 @@ window.lsTrimExcess=()=>{
   render();
 };
 window.lsDelPax=idx=>{
-  {var _us=S._lsFormUndoStack;_us.push(dc(S.form));if(_us.length>10)_us.shift();S._lsFormUndo=null;}
+  _lsUndoPush();
   delete S.form.names[idx];delete S.form.seats[idx];delete S.form.bags[idx];
   if(S.form.infantNames)delete S.form.infantNames[idx];
   autoSaveLS();render();
@@ -6568,11 +6566,16 @@ window.lsDelPax=idx=>{
 window.lsUndo=function(){
   var _us=S._lsFormUndoStack;
   if(!_us||!_us.length)return;
-  S.form=_us.pop();
+  var snap=_us.pop();
+  // Back-compat: older snapshots were the bare form object.
+  var snapForm=snap&&snap.form?snap.form:snap;
+  var snapPool=snap&&snap.pool?snap.pool:null;
+  S.form=snapForm;
+  if(snapPool){var p=_uaPool();p.length=0;snapPool.forEach(function(x){p.push(x);});}
   S._lsFormUndo=_us.length?_us[_us.length-1]:null;
   var tab=S.lsTabs.find(function(t){return t.id===S.editId;});
   if(tab)tab.form=S.form;
-  autoSaveLS();render();
+  autoSaveLS();autoSaveDispatch();render();
 };
 window.lsPIC=v=>{S.form.pic=v;const c=anyCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[0]=String(c.w);S.form.names[0]=v;}else{S.form.names[0]=v;}autoSaveLS();render();};
 window.lsCoPilot=v=>{
@@ -9078,6 +9081,14 @@ var ROLE_GROUPS=[
   {key:'accounts', label:'Accounts', roles:['accounts'],           col:'#06b6d4'},
   {key:'marketing',label:'Marketing',roles:['marketing'],          col:'#ec4899'},
 ];
+// Which roster group a user belongs to. Anyone marked as a pilot (incl. admins who fly)
+// is grouped under Pilots so their aircraft ratings show alongside the other pilots.
+function _rGroupKey(u){
+  if(!u)return null;
+  if(u.isPilot||u.role==='pilot')return 'pilot';
+  var g=ROLE_GROUPS.filter(function(g){return g.roles.indexOf(u.role)>=0;})[0];
+  return g?g.key:null;
+}
 
 // ── Helpers ──
 function _rMonday(d){var dd=new Date(d);dd.setHours(0,0,0,0);var dy=dd.getDay();dd.setDate(dd.getDate()+(dy===0?-6:1-dy));return dd;}
@@ -9163,8 +9174,8 @@ function renderRosterView(){
 
   var allUsers=(S.users||[]).filter(function(u){return u.id&&u.name&&!u.inactive;});
   var displayUsers=allUsers.filter(function(u){
-    var grp=ROLE_GROUPS.filter(function(g){return g.roles.indexOf(u.role)>=0;})[0];
-    return grp&&_rGH.indexOf(grp.key)===-1;
+    var gk=_rGroupKey(u);
+    return gk&&_rGH.indexOf(gk)===-1;
   });
   var roleOrder={superadmin:0,admin:1,pilot:2,desk:3,cx_manager:3,accounts:4,marketing:5,maint:6,maintenance:6,ground_staff:7,ground:7};
   displayUsers=displayUsers.slice().sort(function(a,b){return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');});
@@ -9177,7 +9188,7 @@ function renderRosterView(){
       var st=_rGetStatus(u,ds,roster);
       var raw=st&&st.indexOf('other:')===0?'other':st;
       if(ROSTER_WORKING.has(raw)){
-        ROLE_GROUPS.forEach(function(g){if(g.roles.indexOf(u.role)>=0)t[g.key]++;});
+        var _gk=_rGroupKey(u);if(_gk&&t[_gk]!=null)t[_gk]++;
       }
     });
     return t;
@@ -9270,10 +9281,10 @@ function renderRosterView(){
   } else {
     var grouped=[];
     ROLE_GROUPS.forEach(function(g){
-      var members=displayUsers.filter(function(u){return g.roles.indexOf(u.role)>=0;});
+      var members=displayUsers.filter(function(u){return _rGroupKey(u)===g.key;});
       if(members.length)grouped.push({g:g,members:members});
     });
-    var ungrouped=displayUsers.filter(function(u){return !ROLE_GROUPS.some(function(g){return g.roles.indexOf(u.role)>=0;});});
+    var ungrouped=displayUsers.filter(function(u){return !_rGroupKey(u);});
     if(ungrouped.length)grouped.push({g:{key:'other',label:'Other',col:'#94a3b8'},members:ungrouped});
 
     grouped.forEach(function(grp){
@@ -9283,9 +9294,9 @@ function renderRosterView(){
 
       grp.members.forEach(function(u){
         var ini=_rIni(u);
-        var rc=ROLE_GROUPS.filter(function(g2){return g2.roles.indexOf(u.role)>=0;})[0];
+        var rc=ROLE_GROUPS.filter(function(g2){return g2.key===_rGroupKey(u);})[0];
         var rowCol=rc?rc.col:'#94a3b8';
-        var isPilot=u.role==='pilot';
+        var isPilot=!!(u.isPilot||u.role==='pilot');
         h+='<tr style="border-top:1px solid rgba(255,255,255,.035)">';
         // Sticky name cell
         h+='<td style="padding:5px 10px;white-space:nowrap;position:sticky;left:0;z-index:1;background:var(--card);border-right:1px solid rgba(255,255,255,.06)">';

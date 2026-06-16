@@ -60,6 +60,8 @@ const Q_LOADSHEETS=()=>`&created_at=gte.${_fetchSince()}`;
 const Q_MANIFESTS=()=>`&or=(created_at.gte.${_fetchSince()},id.eq.live_draft,id.like.ls_live_*)`;
 // Shared unallocated pool — single source for every loadsheet tab (and, later, the seatmap).
 function _uaPool(){if(!S.dispatch)S.dispatch={};if(!Array.isArray(S.dispatch._unallocated))S.dispatch._unallocated=[];return S.dispatch._unallocated;}
+// Loadsheet undo snapshots BOTH the form (seats) and the shared pool, so undo restores both.
+function _lsUndoPush(){if(!S._lsFormUndoStack)S._lsFormUndoStack=[];S._lsFormUndoStack.push({form:dc(S.form),pool:JSON.parse(JSON.stringify(_uaPool()))});if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();S._lsFormUndo=null;}
 const sbU=async(t,d)=>{try{const r=await fetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);return null;}};
 const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:SH});return r.ok;}catch{return false;}};
 const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
@@ -112,7 +114,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.58';
+const APP_VER='v22.59';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -744,7 +746,7 @@ function runSolver(){
 
 // ── State ──
 function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
-function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',_unallocated:[],paxType:{},paxGroups:{},sig:null};}
+function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',paxType:{},paxGroups:{},sig:null};}
 function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
 let S={

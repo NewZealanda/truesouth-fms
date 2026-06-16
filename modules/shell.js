@@ -17,19 +17,23 @@ function renderIOSBanner(){
 // safeRender: defers render if an input/select/textarea is currently focused
 let _rtRenderPending=false;
 let _rtRenderMaxWait=null;
+const _PICKER_TYPES=/^(date|datetime-local|month|week|time|color|range|file|checkbox|radio)$/;
+function _isPickerOpen(){var a=document.activeElement;return !!(a&&a.tagName==='INPUT'&&_PICKER_TYPES.test(a.type||''));}
 function safeRender(){
   const ae=document.activeElement;
   const tag=ae&&ae.tagName;
   if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){
     _rtRenderPending=true;
-    // Safety net: force render after 3s even if input stays focused
-    if(!_rtRenderMaxWait)_rtRenderMaxWait=setTimeout(function(){
+    // Safety net: force render after 3s even if input stays focused — but NEVER while a
+    // native date/time picker is open (it would close the picker mid-use), so keep waiting.
+    if(!_rtRenderMaxWait)_rtRenderMaxWait=setTimeout(function _mw(){
+      if(_isPickerOpen()){_rtRenderMaxWait=setTimeout(_mw,2000);return;}
       _rtRenderPending=false;_rtRenderMaxWait=null;render();
     },3000);
   } else {render();}
 }
-// Auto-select input content on focus (type-to-overwrite behaviour)
-document.addEventListener('focusin',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&typeof t.select==='function'){try{t.select();}catch(_){}}});
+// Auto-select input content on focus (type-to-overwrite) — skip date/time/etc. pickers.
+document.addEventListener('focusin',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&typeof t.select==='function'&&!_PICKER_TYPES.test(t.type||'')){try{t.select();}catch(_){}}});
 
 // Cmd+Z / Ctrl+Z global undo for loadsheet
 document.addEventListener('keydown',function(e){

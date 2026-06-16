@@ -51,6 +51,14 @@ var ROLE_GROUPS=[
   {key:'accounts', label:'Accounts', roles:['accounts'],           col:'#06b6d4'},
   {key:'marketing',label:'Marketing',roles:['marketing'],          col:'#ec4899'},
 ];
+// Which roster group a user belongs to. Anyone marked as a pilot (incl. admins who fly)
+// is grouped under Pilots so their aircraft ratings show alongside the other pilots.
+function _rGroupKey(u){
+  if(!u)return null;
+  if(u.isPilot||u.role==='pilot')return 'pilot';
+  var g=ROLE_GROUPS.filter(function(g){return g.roles.indexOf(u.role)>=0;})[0];
+  return g?g.key:null;
+}
 
 // ── Helpers ──
 function _rMonday(d){var dd=new Date(d);dd.setHours(0,0,0,0);var dy=dd.getDay();dd.setDate(dd.getDate()+(dy===0?-6:1-dy));return dd;}
@@ -136,8 +144,8 @@ function renderRosterView(){
 
   var allUsers=(S.users||[]).filter(function(u){return u.id&&u.name&&!u.inactive;});
   var displayUsers=allUsers.filter(function(u){
-    var grp=ROLE_GROUPS.filter(function(g){return g.roles.indexOf(u.role)>=0;})[0];
-    return grp&&_rGH.indexOf(grp.key)===-1;
+    var gk=_rGroupKey(u);
+    return gk&&_rGH.indexOf(gk)===-1;
   });
   var roleOrder={superadmin:0,admin:1,pilot:2,desk:3,cx_manager:3,accounts:4,marketing:5,maint:6,maintenance:6,ground_staff:7,ground:7};
   displayUsers=displayUsers.slice().sort(function(a,b){return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');});
@@ -150,7 +158,7 @@ function renderRosterView(){
       var st=_rGetStatus(u,ds,roster);
       var raw=st&&st.indexOf('other:')===0?'other':st;
       if(ROSTER_WORKING.has(raw)){
-        ROLE_GROUPS.forEach(function(g){if(g.roles.indexOf(u.role)>=0)t[g.key]++;});
+        var _gk=_rGroupKey(u);if(_gk&&t[_gk]!=null)t[_gk]++;
       }
     });
     return t;
@@ -243,10 +251,10 @@ function renderRosterView(){
   } else {
     var grouped=[];
     ROLE_GROUPS.forEach(function(g){
-      var members=displayUsers.filter(function(u){return g.roles.indexOf(u.role)>=0;});
+      var members=displayUsers.filter(function(u){return _rGroupKey(u)===g.key;});
       if(members.length)grouped.push({g:g,members:members});
     });
-    var ungrouped=displayUsers.filter(function(u){return !ROLE_GROUPS.some(function(g){return g.roles.indexOf(u.role)>=0;});});
+    var ungrouped=displayUsers.filter(function(u){return !_rGroupKey(u);});
     if(ungrouped.length)grouped.push({g:{key:'other',label:'Other',col:'#94a3b8'},members:ungrouped});
 
     grouped.forEach(function(grp){
@@ -256,9 +264,9 @@ function renderRosterView(){
 
       grp.members.forEach(function(u){
         var ini=_rIni(u);
-        var rc=ROLE_GROUPS.filter(function(g2){return g2.roles.indexOf(u.role)>=0;})[0];
+        var rc=ROLE_GROUPS.filter(function(g2){return g2.key===_rGroupKey(u);})[0];
         var rowCol=rc?rc.col:'#94a3b8';
-        var isPilot=u.role==='pilot';
+        var isPilot=!!(u.isPilot||u.role==='pilot');
         h+='<tr style="border-top:1px solid rgba(255,255,255,.035)">';
         // Sticky name cell
         h+='<td style="padding:5px 10px;white-space:nowrap;position:sticky;left:0;z-index:1;background:var(--card);border-right:1px solid rgba(255,255,255,.06)">';

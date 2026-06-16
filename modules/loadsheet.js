@@ -208,9 +208,7 @@ window.lsSeatEditPopup=function(idx){
     var newWt=document.getElementById('lsSpWt').value.trim();
     var newBg=document.getElementById('lsSpBag').value.trim();
     var newGrp=document.getElementById('lsSpGrp').value.trim();
-    if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
-    S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
-    if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();
+    _lsUndoPush();
     f.names[idx]=newNm;
     f.seats[idx]=newWt||'';
     f.bags[idx]=newBg||'';
@@ -246,7 +244,7 @@ window.lsSeatEditPopup=function(idx){
 
 function renderLoadsheet(){
   const f=S.form,a=S.aircraft[f.ac],r=a?calcFormWB(f):null,allOk=r&&r.towOk&&r.lwOk&&r.cogOk;
-  if(f)f._unallocated=_uaPool(); // every loadsheet tab shows the one shared unallocated pool
+  if(f&&f._unallocated)delete f._unallocated; // pool lives only on S.dispatch._unallocated (shared), never on the form
   const picCrew=pilotCrewList().find(c=>c.n===f.pic);
   if(picCrew&&String(f.seats[0])!==String(picCrew.w))f.seats[0]=String(picCrew.w);
 
@@ -463,7 +461,7 @@ function renderLoadsheet(){
     loadingH=`<div class="card" id="lsf-loading" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
       <div class="st">Passengers, Loading &amp; Fuel</div>
       ${wbSummary}
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button><button onclick="S._showUnalloc=!S._showUnalloc;autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._showUnalloc||((f._unallocated||[]).length>0)?'#f59e0b':'var(--border2)'};background:${S._showUnalloc||((f._unallocated||[]).length>0)?'rgba(245,158,11,.18)':'transparent'};color:${S._showUnalloc||((f._unallocated||[]).length>0)?'#f59e0b':'var(--text3)'}">&#x1f465; Unallocated${(f._unallocated||[]).length>0?' ('+f._unallocated.length+')':''}</button></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button><button onclick="S._showUnalloc=!S._showUnalloc;autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--border2)'};background:${S._showUnalloc||(_uaPool().length>0)?'rgba(245,158,11,.18)':'transparent'};color:${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--text3)'}">&#x1f465; Unallocated${_uaPool().length>0?' ('+_uaPool().length+')':''}</button></div>
       <div style="display:flex;gap:${isMob?'8px':'14px'};align-items:flex-start;${isMob?'':'flex-wrap:wrap;'}">
         <div style="${isMob?'flex:1 1 0;min-width:0':'flex:1;min-width:180px'};overflow-x:auto;-webkit-overflow-scrolling:touch">
           ${renderLsSeatGrid(f,a)}
@@ -564,7 +562,7 @@ function renderLoadsheet(){
 
   
   {
-    const ua=f._unallocated||[];
+    const ua=_uaPool();
     if(ua.length||S._showUnalloc){
       const selIdx=S._selUnalloc;
       // Dynamic slot count: min 3, always 1 empty; shrink when removing
@@ -740,9 +738,7 @@ window.lsPicChangePopup=function(){
   document.getElementById('_picClose').onclick=function(){ov.remove();};
   window._lsPickPic=function(idx){
     var crew=(window._lsPicPilots||[])[idx];var name=crew?crew.n:'';
-    if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
-    S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
-    if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();
+    _lsUndoPush();
     f.pic=name;
     f.names[0]=name;
     if(crew&&crew.w)f.seats[0]=String(crew.w);
