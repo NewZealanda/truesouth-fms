@@ -13,6 +13,7 @@ function renderMaintenance(){
   if(sub==='overview') return renderMaintOverview();
   if(sub==='log') return renderMaintLog();
   if(sub==='aircraft') return renderMaintAircraftData();
+  if(sub==='observations') return renderMaintObservations();
 
   if(sub==='bookings'&&isAdmin) return renderMaintBookings();
   if(sub==='estimator'&&isAdmin) return renderMaintEstimator();
@@ -23,6 +24,111 @@ function renderMaintenance(){
 function renderMaintAircraftData(){
   return renderAdminAircraft();
 }
+
+// ── Aircraft Observations / Defects log ──
+function _obsEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function renderMaintObservations(){
+  var acs=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(a){return S.aircraft[a];});
+  var canEdit=hasRolePerm('maint_bookings');
+  if(!S._maintObsLoaded){S._maintObsLoaded=true;window.loadMaintObs();}
+  if(!S.maintObs)S.maintObs={};
+  var sel=S._obsAc&&acs.indexOf(S._obsAc)>=0?S._obsAc:(acs[0]||'ZK-SLA');
+  S._obsAc=sel;
+  var all=(S.maintObs[sel]||[]).slice().sort(function(a,b){return (b.ts||'').localeCompare(a.ts||'');});
+  var showResolved=!!S._obsShowResolved;
+  var TC={observation:'#06b6d4',defect:'#ef4444',note:'#94a3b8'},TL={observation:'Observation',defect:'Defect',note:'Note'};
+
+  var h='<div style="max-width:820px;margin:0 auto">';
+  h+='<div class="st" style="margin-bottom:10px">Aircraft Observations &amp; Defects</div>';
+  // Aircraft selector (with open-defect badges)
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">';
+  acs.forEach(function(a){
+    var on=a===sel,col=AC_COL[a]||'#64748b';
+    var od=(S.maintObs[a]||[]).filter(function(e){return e.type==='defect'&&e.status!=='resolved';}).length;
+    h+='<button tabindex="-1" onclick="S._obsAc=\''+a+'\';render()" style="padding:7px 13px;border-radius:9px;border:2px solid '+(on?col:'var(--border2)')+';background:'+(on?col+'22':'transparent')+';color:'+(on?col:'var(--text2)')+';font-size:13px;font-weight:700;cursor:pointer">'+acDisp(a)+(od?' <span style="background:#ef4444;color:#fff;font-size:10px;font-weight:800;border-radius:10px;padding:1px 6px">'+od+'</span>':'')+'</button>';
+  });
+  h+='</div>';
+  // Add-entry form (maintenance + admins)
+  if(canEdit){
+    var nt=S._obsNewType||'observation';
+    h+='<div class="card" style="margin-bottom:14px"><div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">';
+    [['observation','Observation'],['defect','Defect'],['note','Note']].forEach(function(t){
+      var on=nt===t[0],c=TC[t[0]];
+      h+='<button tabindex="-1" onclick="S._obsNewType=\''+t[0]+'\';render()" style="padding:5px 12px;border-radius:20px;border:1.5px solid '+(on?c:'var(--border2)')+';background:'+(on?c+'22':'transparent')+';color:'+(on?c:'var(--text3)')+';font-size:12px;font-weight:700;cursor:pointer">'+t[1]+'</button>';
+    });
+    h+='</div>';
+    h+='<textarea id="obs-new-text" oninput="S._obsNewText=this.value" placeholder="Describe the observation or defect for '+acDisp(sel)+'…" rows="3" style="width:100%;padding:10px 12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text1);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit">'+_obsEsc(S._obsNewText||'')+'</textarea>';
+    h+='<div style="display:flex;justify-content:flex-end;margin-top:8px"><button tabindex="-1" onclick="window.maintObsAdd()" style="padding:8px 20px;border-radius:8px;border:none;background:var(--acc);color:#fff;font-size:13px;font-weight:700;cursor:pointer">Add entry</button></div></div>';
+  }
+  // Summary + resolved toggle
+  var openDefects=all.filter(function(e){return e.type==='defect'&&e.status!=='resolved';}).length;
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+  h+='<div style="font-size:12px;color:var(--text3)">'+(openDefects?'<span style="color:#ef4444;font-weight:700">'+openDefects+' open defect'+(openDefects!==1?'s':'')+'</span>':'No open defects')+'</div>';
+  h+='<button tabindex="-1" onclick="S._obsShowResolved=!S._obsShowResolved;render()" style="font-size:11px;padding:4px 10px;border-radius:14px;border:1px solid var(--border2);background:'+(showResolved?'var(--card2)':'transparent')+';color:var(--text3);cursor:pointer">'+(showResolved?'Hide resolved':'Show resolved')+'</button></div>';
+  // Entries
+  var visible=all.filter(function(e){return showResolved||!(e.type==='defect'&&e.status==='resolved');});
+  if(!visible.length){
+    h+='<div class="card" style="text-align:center;color:var(--text3);padding:30px">No observations logged for '+acDisp(sel)+' yet.</div>';
+  } else {
+    visible.forEach(function(e){
+      var col=TC[e.type]||'#94a3b8',resolved=e.type==='defect'&&e.status==='resolved';
+      var d=e.ts?new Date(e.ts):null;
+      var dstr=d?d.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'}):'';
+      h+='<div class="card" style="margin-bottom:8px;border-left:4px solid '+col+';'+(resolved?'opacity:.55':'')+'">';
+      h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">';
+      h+='<span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:'+col+';background:'+col+'1a;padding:2px 8px;border-radius:5px">'+(TL[e.type]||'Note')+'</span>';
+      if(e.type==='defect')h+='<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;background:'+(resolved?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)')+';color:'+(resolved?'#22c55e':'#ef4444')+'">'+(resolved?'Resolved':'Open')+'</span>';
+      h+='<span style="font-size:11px;color:var(--text3);margin-left:auto">'+_obsEsc(e.author||'')+' · '+dstr+'</span></div>';
+      h+='<div style="font-size:13px;color:var(--text1);white-space:pre-wrap;line-height:1.5">'+_obsEsc(e.text||'')+'</div>';
+      if(canEdit){
+        h+='<div style="display:flex;gap:8px;margin-top:8px">';
+        if(e.type==='defect')h+='<button tabindex="-1" onclick="window.maintObsResolve(\''+e.id+'\')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid '+(resolved?'var(--border2)':'rgba(34,197,94,.5)')+';background:transparent;color:'+(resolved?'var(--text3)':'#22c55e')+';cursor:pointer">'+(resolved?'Mark open':'Mark resolved')+'</button>';
+        h+='<button tabindex="-1" onclick="window.maintObsDelete(\''+e.id+'\')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;cursor:pointer">Delete</button>';
+        h+='</div>';
+      }
+      h+='</div>';
+    });
+  }
+  h+='</div>';
+  return h;
+}
+window.loadMaintObs=async function(){
+  try{
+    var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.aircraft_obs&select=value',{headers:SH});
+    if(r.ok){var rows=await r.json();if(rows&&rows[0]&&rows[0].value){S.maintObs=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;lsSet('ts_aircraft_obs',S.maintObs);safeRender();return;}}
+  }catch(e){}
+  var c=lsGet('ts_aircraft_obs');if(c){S.maintObs=c;safeRender();}
+};
+function _saveMaintObs(){
+  lsSet('ts_aircraft_obs',S.maintObs||{});
+  sbU('ts_settings',[{key:'aircraft_obs',value:JSON.stringify(S.maintObs||{})}]).catch(function(){});
+}
+window.maintObsAdd=function(){
+  var el=document.getElementById('obs-new-text');var txt=el?el.value.trim():(S._obsNewText||'').trim();
+  if(!txt){toast('Enter some text first.','err');return;}
+  var ac=S._obsAc;if(!ac)return;
+  if(!S.maintObs)S.maintObs={};if(!S.maintObs[ac])S.maintObs[ac]=[];
+  var type=S._obsNewType||'observation';
+  S.maintObs[ac].push({id:'obs_'+Date.now()+'_'+Math.floor(Math.random()*1e4),ts:new Date().toISOString(),author:(S.user&&(S.user.name||S.user.email))||'Unknown',type:type,text:txt,status:type==='defect'?'open':null});
+  S._obsNewText='';
+  _saveMaintObs();
+  if(typeof auditLog==='function')auditLog('maint_obs_add',{ac:ac,type:type});
+  toast('Entry added','ok');render();
+};
+window.maintObsResolve=function(id){
+  var ac=S._obsAc,arr=(S.maintObs||{})[ac]||[],e=arr.find(function(x){return x.id===id;});
+  if(!e)return;
+  e.status=e.status==='resolved'?'open':'resolved';
+  e.resolvedBy=e.status==='resolved'?((S.user&&S.user.name)||''):null;
+  e.resolvedAt=e.status==='resolved'?new Date().toISOString():null;
+  _saveMaintObs();render();
+};
+window.maintObsDelete=function(id){
+  if(!confirm('Delete this entry?'))return;
+  var ac=S._obsAc;if(!S.maintObs||!S.maintObs[ac])return;
+  S.maintObs[ac]=S.maintObs[ac].filter(function(x){return x.id!==id;});
+  _saveMaintObs();render();
+};
 
 function _lastUpdatedLabel(ac){
   // Include hist entries, comp wash dates, and ADAS dates

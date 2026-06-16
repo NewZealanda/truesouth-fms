@@ -411,6 +411,7 @@ function renderDrawer(){
       h+=_mn('Overview','overview');
       h+=_mn('Logs','log');
       h+=_mn('Aircraft','aircraft');
+      h+=_mn('Observations','observations');
       if(_isAdminPlus){h+=_mn('Bookings','bookings');h+=_mn('Estimator','estimator');}
       h+=_mn('Search','search');
     }
@@ -490,6 +491,7 @@ function renderMaintenanceSubTabs(){
     {id:'overview',  lbl:'Overview'},
     {id:'log',       lbl:'Logs'},
     {id:'aircraft',  lbl:'Aircraft'},
+    {id:'observations', lbl:'Observations'},
     ...(isAdmin?[{id:'bookings',lbl:'Bookings'},{id:'estimator',lbl:'Estimator'},{id:'search',lbl:'Search'}]:[{id:'search',lbl:'Search'}])
   ];
   var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
