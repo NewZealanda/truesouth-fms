@@ -344,7 +344,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.46';
+const APP_VER='v22.47';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2432,7 +2432,7 @@ function renderDrawer(){
   }
   h+='<div style="height:1px;background:rgba(255,255,255,.07);margin:8px 6px"></div>';
   if(_canRoster){
-    h+=_secBtn('Roster','roster','\U0001f5d3️');
+    h+=_secBtn('Roster','roster','🗓️');
     if(exp==='roster'){
       h+=_subBtn('Roster',sec==='roster',"S._drawerOpen=false;S.section='roster';render()");
     }
@@ -2447,7 +2447,7 @@ function renderDrawer(){
     if(_canApproveLeaveNav)h+=_subBtn('Approvals',_lvActive&&S._leave&&S._leave.tab==='approvals',"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='approvals';render()");
   }}
   if(_canMaint){
-    h+=_secBtn('Maintenance','maintenance','\U0001f527');
+    h+=_secBtn('Maintenance','maintenance','🔧');
     if(exp==='maintenance'){
       var msub=S.maintTab||'overview';
       var _mn=function(lbl,id){return _subBtn(lbl,sec==='maintenance'&&msub===id,"S._drawerOpen=false;S.maintTab='"+id+"';window.setTab('maintenance')");};
@@ -8845,6 +8845,11 @@ function renderRoster(){
     if(_loc&&typeof _loc==='object')S.roster=_loc;
     window.loadRosterFromCloud();
   }
+  // Load approved leave for this week from ts_leave_requests
+  if(!S._rosterLeaveWeek||S._rosterLeaveWeek!==S.rosterWeek){
+    S._rosterLeaveWeek=S.rosterWeek||null;
+    window.loadRosterLeave&&window.loadRosterLeave();
+  }
 
   const role=S.user?.role||'desk';
   const _isAdminPlus=role==='superadmin'||role==='admin';
@@ -8909,7 +8914,7 @@ function renderRoster(){
         +'</td>';
       days.forEach(function(d,i){
         var ds=_iso(d);
-        var _ini=(u.name||'').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);var st=(roster[ds]&&(roster[ds][u.id]||roster[ds][_ini]))||'';
+        var _ini=(u.name||'').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);var st=(roster[ds]&&(roster[ds][u.id]||roster[ds][_ini]))||'';var _lvReq=S._rosterLeave&&S._rosterLeave[ds]&&S._rosterLeave[ds][u.id];if(_lvReq){var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};st=_lvMap[_lvReq]||'leave';}
         var cfg=SC[st]||SC[''];
         var isWe=i>=5,isToday=ds===todayStr;
         var cellBg=isToday?'rgba(167,139,250,.04)':(isWe?'rgba(255,255,255,.015)':'');
@@ -8987,6 +8992,33 @@ window.loadRosterFromCloud=async function(){
     if(!rows||!rows.length)return;
     var val=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;
     if(val&&typeof val==='object'){S.roster=val;lsSet('ts_roster',val);render();}
+  }catch(e){}
+};
+
+window.loadRosterLeave=async function(){
+  var weekStart=S.rosterWeek;
+  if(!weekStart)return;
+  var endD=new Date(weekStart+'T00:00:00');
+  endD.setDate(endD.getDate()+6);
+  var weekEnd=endD.getFullYear()+'-'+String(endD.getMonth()+1).padStart(2,'0')+'-'+String(endD.getDate()).padStart(2,'0');
+  try{
+    var r=await fetch(SB+'/rest/v1/ts_leave_requests?status=eq.approved&start_date=lte.'+weekEnd+'&end_date=gte.'+weekStart,{headers:SH});
+    if(!r.ok)return;
+    var rows=await r.json();
+    // Build {dateISO:{userId:leaveType}} lookup for the week
+    var lookup={};
+    rows.forEach(function(req){
+      var s=new Date(req.start_date+'T00:00:00'),e=new Date(req.end_date+'T00:00:00');
+      var lo=new Date(Math.max(s.getTime(),new Date(weekStart+'T00:00:00').getTime()));
+      var hi=new Date(Math.min(e.getTime(),new Date(weekEnd+'T00:00:00').getTime()));
+      for(var d=new Date(lo);d<=hi;d.setDate(d.getDate()+1)){
+        var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        if(!lookup[ds])lookup[ds]={};
+        lookup[ds][req.user_id]=req.leave_type;
+      }
+    });
+    S._rosterLeave=lookup;
+    safeRender();
   }catch(e){}
 };
 
