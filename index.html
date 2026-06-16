@@ -156,8 +156,8 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 .page{max-width:760px;margin:0 auto;padding:14px 12px 80px;}
 @keyframes lsFlash{0%{outline:3px solid #fbbf24;background:rgba(251,191,36,.18);}100%{outline:3px solid transparent;background:transparent;}}
 .ls-flash{animation:lsFlash 2s ease-out;border-radius:6px;}
-@media(min-width:900px){body.wide-mode .page{max-width:100%;padding:16px 28px 80px;}}
-@media(min-width:1400px){body.wide-mode .page{padding:16px 40px 80px;}}
+@media(min-width:900px){.page{max-width:1100px;padding:16px 28px 80px;}}
+@media(min-width:1400px){.page{max-width:1400px;padding:16px 48px 80px;}}
 
 .route-map{height:260px;border-radius:10px;border:1px solid var(--border);overflow:hidden;margin-top:10px;}
 #login-overlay{
@@ -301,13 +301,13 @@ const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true},
-  admin:       {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true},
-  pilot:       {operations:true, charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true},
-  desk:        {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
-  maint:       {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
-  maintenance: {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
-  ground_staff:{operations:false,charter:false,maintenance:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false}
+  superadmin:  {operations:true, charter:true, maintenance:true, roster:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true},
+  admin:       {operations:true, charter:true, maintenance:true, roster:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true},
+  pilot:       {operations:true, charter:false,maintenance:true, roster:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true},
+  desk:        {operations:true, charter:true, maintenance:true, roster:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
+  maint:       {operations:false,charter:false,maintenance:true, roster:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
+  maintenance: {operations:false,charter:false,maintenance:true, roster:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
+  ground_staff:{operations:false,charter:false,maintenance:false,roster:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false}
 };
 function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
 
@@ -342,7 +342,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.44';
+const APP_VER='v22.45';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2305,7 +2305,7 @@ function renderAccountModal(){
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <div>
           <div style="font-size:16px;font-weight:700">${u.name||u.email}</div>
-          <div style="font-size:12px;color:var(--text3)">${u.email} · <span style="color:${({'admin':'#f59e0b','pilot':'#7B9EC6','desk':'#10b981','maint':'#a78bfa'}[u.role]||'#888')}">${u.role}</span></div>
+          <div style="font-size:12px;color:var(--text3)">${u.email} · <span style="color:${({'superadmin':'#f43f5e','admin':'#f59e0b','pilot':'#7B9EC6','desk':'#10b981','maint':'#a78bfa','ground_staff':'#64748b'}[u.role]||'#888')}">${u.role}</span></div>
         </div>
         <button onclick="S.showAccount=false;S.changePwMsg=null;render()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">×</button>
       </div>
@@ -2393,10 +2393,11 @@ function renderRosterPlaceholder(){
 function renderDrawer(){
   const role=S.user?.role||'desk';
   const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
-  const _canOps=role==='admin'||_navPerms.operations===true;
-  const _canCharter=role==='admin'||_navPerms.charter===true;
-  const _canMaint=role==='admin'||_navPerms.maintenance===true;
-  const _canRoster=role==='admin';
+  const _isAdminPlus=role==='superadmin'||role==='admin';
+  const _canOps=_isAdminPlus||_navPerms.operations===true;
+  const _canCharter=_isAdminPlus||_navPerms.charter===true;
+  const _canMaint=_isAdminPlus||_navPerms.maintenance===true;
+  const _canRoster=_isAdminPlus||_navPerms.roster===true;
   const sec=S.section||'operations';
   const t=S.tab||'manifest';
   const isLs=!!(S.activeTabId||S._newLsTab);
@@ -2431,7 +2432,7 @@ function renderDrawer(){
   h+='<div style="height:1px;background:rgba(255,255,255,.07);margin:8px 6px"></div>';
   if(_canRoster)h+=_navBtn('Roster','roster','🗓️',sec==='roster');
   if(_canMaint)h+=_navBtn('Maintenance','maintenance','🔧',sec==='maintenance');
-  h+=_navBtn(role==='admin'?'Admin':'Settings','settings','⚙️',sec==='settings');
+  h+=_navBtn((role==='admin'||role==='superadmin')?'Admin':'Settings','settings','⚙️',sec==='settings');
   h+='</nav>';
   h+='<div style="padding:10px 16px;font-size:10px;color:rgba(255,255,255,.18);font-family:monospace;border-top:1px solid rgba(255,255,255,.06)">'+APP_VER+'</div>';
   h+='</div>';
@@ -2440,6 +2441,23 @@ function renderDrawer(){
   h+='</div>';
   return h;
 }
+function renderOpsSubTabs(){
+  const role=S.user?.role||'desk';
+  const _opsNavPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
+  const _isOpsAdminPlus=role==='superadmin'||role==='admin';
+  const opsTab=S.tab||'manifest';
+  const isLsView=!!(S.activeTabId||S._newLsTab);
+  const savedCount=(S.saved||[]).filter(function(s){return s.status!=='deleted';}).length;
+  var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='manifest'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'manifest\')" style="flex-shrink:0">Manifest</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" style="flex-shrink:0">Seatmap</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(isLsView?'on':'')+'" onclick="window.switchToLoadsheets()" style="flex-shrink:0">Loadsheets</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="flex-shrink:0">Saved ('+savedCount+')</button>';
+  if(_isOpsAdminPlus||_opsNavPerms.charter===true)h+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="flex-shrink:0">Charter</button>';
+  h+='</div>';
+  return h;
+}
+
 function renderApp(){
   const sh={connecting:`<span class="sync-dot dot-spin"></span>Connecting`,ok:`<span class="sync-dot dot-ok"></span>Synced`,error:`<span class="sync-dot dot-err"></span>Offline`}[S.syncStatus]||'';
   const role=S.user?.role||'desk';
@@ -2460,8 +2478,6 @@ function renderApp(){
             <span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'}"></span>
             <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.04em">${APP_VER}</span>
           </div>
-          <button tabindex="-1" title="${S.wideMode?'Compact width':'Full width'}" onclick="event.stopPropagation();S.wideMode=!S.wideMode;lsSet('ts_wide_mode',S.wideMode);render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:11px;color:rgba(255,255,255,.4);cursor:pointer">${S.wideMode?'⇤⇥':'↔'}</button>
-          <button tabindex="-1" title="${S.mobileView?'Desktop layout':'Mobile layout'}" onclick="event.stopPropagation();S.mobileView=!S.mobileView;lsSet('ts_mobile_view',S.mobileView);render()" style="background:${S.mobileView?'rgba(124,58,237,.3)':'rgba(255,255,255,.07)'};border:${S.mobileView?'1px solid rgba(124,58,237,.5)':'none'};width:28px;height:28px;border-radius:6px;font-size:13px;color:${S.mobileView?'#c084fc':'rgba(255,255,255,.4)'};cursor:pointer">📱</button>
           <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:12px;color:rgba(255,255,255,.4);cursor:pointer;font-weight:700" title="Help">?</button>
           <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 10px 5px 6px;border-radius:20px;cursor:pointer;font-size:11px;color:rgba(255,255,255,.75)" title="Profile & Settings">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${(S.user.name.match(/\b\w/g)||['?']).slice(0,2).join('').toUpperCase()}</div>
@@ -2470,6 +2486,7 @@ function renderApp(){
           </button>
         </div>
       </div>
+      ${(S.section||'operations')==='operations'?renderOpsSubTabs():''}
     </div>
     ${S._drawerOpen?renderDrawer():''}
     ${S._helpOpen?`<div onclick="S._helpOpen=false;render()" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
@@ -2550,15 +2567,6 @@ function renderOperations(){
   const opsTab=S.tab||'manifest';
   const isLsView=!!(S.activeTabId||S._newLsTab);
 
-  // Level 2 sub-bar: Manifest | Seatmap | Loadsheets | Saved
-  var _l2='<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center">';
-  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='manifest'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'manifest\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Manifest</button>';
-  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Seatmap</button>';
-  _l2+='<button tabindex="-1" class="sub-tab '+(isLsView?'on':'')+'" onclick="window.switchToLoadsheets()" style="font-size:12px;padding:6px 12px;flex-shrink:0">Loadsheets</button>';
-  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Saved ('+((S.saved||[]).filter(function(s){return s.status!=='deleted';}).length)+')</button>';
-  var _opsNavPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
-  if(role==='admin'||_opsNavPerms.charter===true)_l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Charter</button>';
-  _l2+='</div>';
 
   // Level 3 LS tab pills — only shown when loadsheets view is active
   var _l3='';
@@ -2584,12 +2592,12 @@ function renderOperations(){
   }
 
   // Content routing
-  if(isLsView&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return _l2+_l3+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return _l2+_l3+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
-  if(S._newLsTab&&opsTab!=='saved'&&opsTab!=='seatmap'&&opsTab!=='charter'){return _l2+_l3+renderNewLsPanel();}
-  if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return _l2+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
-  if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return _l2+renderSaved();}
-  if(opsTab==='charter'){if(S._presSection)broadcastPresence(null);return _l2+'<div id="flash-charter">'+renderCharter()+'</div>';}
-  startPresenceBroadcast('manifest');return _l2+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
+  if(isLsView&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return _l3+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return _l3+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
+  if(S._newLsTab&&opsTab!=='saved'&&opsTab!=='seatmap'&&opsTab!=='charter'){return _l3+renderNewLsPanel();}
+  if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
+  if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return renderSaved();}
+  if(opsTab==='charter'){if(S._presSection)broadcastPresence(null);return '<div id="flash-charter">'+renderCharter()+'</div>';}
+  startPresenceBroadcast('manifest');return presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
 }
 
 function renderNewLsPanel(){
@@ -2609,6 +2617,22 @@ function renderNewLsPanel(){
   return h;
 }
 
+function renderManifestStickyBar(){
+  var h='<div style="height:68px"></div>';
+  h+='<div style="position:fixed;bottom:0;left:0;right:0;z-index:200;background:var(--card);border-top:1px solid var(--border2);padding:10px 14px;padding-bottom:max(10px,env(safe-area-inset-bottom));display:flex;gap:8px;align-items:center">';
+  var saveBdr=S._loadedManifestId?'rgba(74,222,128,.55)':'rgba(255,255,255,.15)';
+  var saveBg=S._loadedManifestId?'rgba(74,222,128,.1)':'transparent';
+  var saveTxt=S._loadedManifestId?'#4ade80':'var(--text2)';
+  var saveLbl=S._loadedManifestId?'Save':'Save New';
+  h+='<button tabindex="-1" onclick="saveManifest()" style="flex:2;padding:11px 10px;border-radius:10px;border:1.5px solid '+saveBdr+';background:'+saveBg+';color:'+saveTxt+';font-size:14px;font-weight:700;cursor:pointer">💾 '+saveLbl+'</button>';
+  if(S._loadedManifestId){
+    h+='<button tabindex="-1" onclick="window.saveManifestAs()" style="padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,.15);background:transparent;color:var(--text2);font-size:14px;font-weight:700;cursor:pointer">+ New</button>';
+    h+='<button tabindex="-1" onclick="window.deleteCurrentManifest()" style="padding:11px 12px;border-radius:10px;border:1.5px solid rgba(239,68,68,.35);background:transparent;color:#ef4444;font-size:14px;font-weight:700;cursor:pointer">🗑</button>';
+  }
+  h+='<button tabindex="-1" onclick="clearManifest()" style="padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,.15);background:transparent;color:var(--text2);font-size:14px;font-weight:700;cursor:pointer">✕</button>';
+  h+='</div>';
+  return h;
+}
 function renderManifest(){
   return renderStep1();
 }
@@ -2757,15 +2781,11 @@ function renderStep1(){
   const canNext=d.acSetup.length>0&&d.acSetup.every(s=>s.pic)&&d.pax.length>0;
 
   return _tabBar+`
-  <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+  <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
     ${(d.acSetup&&d.acSetup.length)?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(99,179,237,.5);color:#63b3ed" onclick="window.pullFromSeatmap()">🔄 Pull from Seatmap</button>`:''}
-    ${S._loadedManifestId
-      ?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="saveManifest()">💾 Save</button>
-        <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="window.saveManifestAs()">+ Save As New</button>
-        <button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(239,68,68,.4);color:#ef4444" onclick="window.deleteCurrentManifest()">🗑 Delete</button>`
-      :`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="saveManifest()">💾 Save</button>`}
-    <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="S.tab='saved';S.savedTab='manifests';render()">📂 Open</button>
-    <button tabindex="-1" class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>${S._undoLabel?'<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(245,158,11,.5);color:#f59e0b" onclick="undoManifest()">&#x21A9; Undo '+S._undoLabel+'</button>':''}
+    <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="S.section='operations';S.tab='saved';S.savedTab='manifests';render()">📂 Open Saved</button>
+    <button tabindex="-1" class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>
+    ${S._undoLabel?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(245,158,11,.5);color:#f59e0b" onclick="undoManifest()">&#x21A9; Undo ${S._undoLabel}</button>`:''}
   </div>
   <div class="card"><div class="st">Flight Details</div>
     <div style="display:flex;align-items:stretch;gap:6px;margin-bottom:8px">
@@ -2814,132 +2834,10 @@ function renderStep1(){
       ${(S._paxUndo&&S._paxUndo.length)?`<button tabindex="-1" class="btn btn-ghost" style="font-size:13px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.undoPax()">&#x21A9; Undo Delete (${S._paxUndo.length})</button>`:""}
     </div>
   </div>
-  <div style="display:flex;gap:8px;margin-bottom:8px">
-    ${S._loadedManifestId
-      ?`<button tabindex="-1" class="btn btn-ghost" style="flex:2;font-size:13px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="saveManifest()">💾 Save Manifest</button>
-        <button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:12px" onclick="window.saveManifestAs()">+ Save As New</button>`
-      :`<button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="saveManifest()">💾 Save Manifest</button>`}
-  </div>
   <button tabindex="-1" class="btn-full ${canNext?'btn-primary':'btn-disabled'}" onclick="${canNext?'autoAllocate()':''}"
-    ${!canNext?'disabled':''}>Auto-Allocate & Open Seat Map →</button>`;
-}
-
-
-// ── Cabin SVG ── (proper aircraft shape)
-function renderCabinSVG(acId,interactive,form,_sz,_ht,seatmapKey){
-  if(typeof seatSz==='undefined'){var seatSz=_sz||64;var seatHt=_ht||52;}
-  const a=S.aircraft[acId];if(!a)return'';
-  const layout=acLayout(acId);
-  const isGA8=a.layout==='ga8';
-  const col=AC_COL[acId]||'#1e6b8c';
-  const d=S.dispatch;
-  const smKey=seatmapKey||acId;
-  const sm=interactive?d.seatMap[smKey]||{}:{};
-  const formSm=form?form.names:null; // for loadsheet view
-  const rows=layout.filter(r=>r!=='spacer');
-  const hasSpacerBefore=(idx)=>layout.slice(0,layout.indexOf(layout.filter(r=>r!=='spacer')[idx])).some(r=>r==='spacer');
-
-  // Build seat rows HTML
-  let seatRowsHTML='';
-  let rowIdx=0;
-  layout.forEach((row,li)=>{
-    if(row==='spacer'){seatRowsHTML+=`<div style="height:${isGA8?'16px':'10px'}"></div>`;return;}
-    // Compute row total weight
-    const rowWt=row.filter(c=>!c.crew&&c.i!==0&&!(c.i===1&&seat1IsCoPilot(acId))).reduce((s,c)=>{
-      if(interactive){
-        const pid=d.seatMap[smKey]?.[c.i];const p=pid?paxById(pid):null;
-        return s+(p?parseFloat(p.weight||0)+parseFloat(p.bag||0):0);
-      } else if(form){
-        return s+parseFloat(form.seats?.[c.i]||0)+parseFloat(form.bags?.[c.i]||0);
-      }
-      return s;
-    },0);
-    seatRowsHTML+=`<div style="display:flex;gap:7px;justify-content:center;align-items:center;margin-bottom:7px">`;
-    row.forEach(cell=>{
-      const isPIC=cell.i===0;
-      const isCoPilotSeat=cell.i===1&&seat1IsCoPilot(acId);
-      const isCrew=isPIC||isCoPilotSeat;
-      if(!interactive&&form){
-        // Loadsheet view — same style as manifest allocation cards
-        const nm=formSm?formSm[cell.i]||'':'';const isInfant=S.dispatch.pax.find(p=>p.name===nm)?.infant||false;
-        const wt=form?parseFloat(form.seats?.[cell.i]||0)+parseFloat(form.bags?.[cell.i]||0):0;
-        const grp=S.dispatch.pax.find(p=>p.name===nm)?.group||'';
-        const gc=grp?groupColor(grp):null;
-        // Match interactive card style: white bg + coloured left border when filled
-        const lsSeatStyle=isCrew?''
-          :nm?('background:rgba(255,255,255,.93);border-left:4px solid '+(gc||col)+';border-radius:8px')
-          :'background:rgba(255,255,255,.05);border-radius:8px';
-        const lsTextCol=nm&&!isCrew?'color:#1a2035':'color:rgba(255,255,255,.7)';
-        seatRowsHTML+=`<div class="seat ${isCrew?'crew':nm?'filled':''} ${S._selFormSeat===cell.i?'sel-src':''}" style="width:${seatSz}px;height:${seatHt}px;${lsSeatStyle}${S._selFormSeat===cell.i?';box-shadow:0 0 0 2px #f59e0b':''}" onclick="${!isCrew?`tapFormSeat(${cell.i},'${acId}')`:''}" draggable="${!isCrew&&nm?'true':'false'}" ondragstart="if(${!isCrew&&!!nm})startDragForm(event,${cell.i},'${acId}')" ondragover="event.preventDefault()" ondrop="dropFormSeat(event,${cell.i},'${acId}')">
-          <span class="seat-lbl" style="${nm&&!isCrew?'color:#475569;opacity:.7':''}font-size:9px">${cell.lbl}</span>
-          ${gc?`<div class="seat-dot" style="background:${gc};top:3px;right:3px"></div>`:''}
-          ${nm?`<div class="seat-name" style="${lsTextCol};font-weight:700;font-size:${seatSz<52?'7px':'9px'}">${nm.split(' ')[0].slice(0,seatSz<52?5:9)}${(form?.infantNames?.[cell.i])?'<span style="font-size:7px;font-weight:900;background:rgba(236,72,153,.25);color:#f472b6;border-radius:2px;padding:0 2px;margin-left:2px">i</span>':''}${(form?.paxType||{})[cell.i]==='C'?'<span style="font-size:7px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:2px;padding:0 2px;margin-left:2px">C</span>':''}</div><div class="seat-wt" style="${lsTextCol};font-size:${seatSz<52?'7px':'8px'}">${wt>0?wt+'kg':''}</div>`:isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.85);font-weight:700">${isPIC?'PIC':'CP'}</div>`:''}
-        </div>`;
-      } else {
-        // Manifest seat map view
-        const pid=sm[cell.i];const p=pid?paxById(pid):null;
-        const gc=p?.group?.trim()?groupColor(p.group.trim()):null;
-        const setup=d.acSetup.find(s=>(s._seatmapKey||s.acId)===smKey)||d.acSetup.find(s=>s.acId===acId);
-        const crewName=isPIC?(setup?.pic||'PIC'):(setup?.coPilot||'CP');
-        const isSrcSel=S.selectedPax&&p&&p.id===S.selectedPax;
-        const isDrop=S.selectedPax&&!p&&!isCrew;
-        const origAc=p&&d.origAcMap?d.origAcMap[p.id]:null;
-        const movedIn=origAc&&origAc!==acId;
-        const leftBorderCol=movedIn?(AC_COL[origAc]||col):col;
-        // Filled: white bg + dark text. Empty: dark bg + light text. Drop target: purple highlight. Crew: CSS handles.
-        const seatStyle=isCrew?''
-          :p?('background:rgba(255,255,255,'+(isSrcSel?'.97':'.93')+');'+(isSrcSel?'border:2px solid #ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.35);':'border-left:4px solid '+leftBorderCol+';')+'border-radius:8px')
-          :isDrop?'background:rgba(124,58,237,.18);border:1.5px solid rgba(124,58,237,.6);border-radius:8px;cursor:pointer'
-          :'background:rgba(255,255,255,.05);border-radius:8px';
-        // Text colour set per-seat based on background
-        const textCol=p&&!isCrew?'color:#1a2035':'color:rgba(255,255,255,.7)';
-        seatRowsHTML+=`<div class="seat ${isCrew?'crew':p?'filled':''} ${isSrcSel?'sel-src':''} ${isDrop?'drop-target':''}"
-          style="width:66px;height:54px;${seatStyle}"
-          onclick="tapSeat(${cell.i},'${smKey}')"
-          draggable="${!!p&&!isCrew}" ondragstart="if(${!!p&&!isCrew})startDrag(event,'${p?p.id:''}','${smKey}',${cell.i})"
-          ondragover="event.preventDefault()" ondrop="dropOnSeat(event,${cell.i},'${smKey}')">
-          <span class="seat-lbl" style="${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
-          ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
-          ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
-            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':''}${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}${p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':''}<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`
-            :isDrop?`<div style="font-size:8px;color:rgba(167,139,250,.9);font-weight:700;line-height:1.3;padding-top:6px;text-align:center">tap<br>assign</div>`:''}
-        </div>`;
-      }
-    });
-    seatRowsHTML+=`<div style="font-size:10px;color:var(--text3);width:28px;min-width:28px;text-align:center;font-weight:600;line-height:1.2;margin-left:2px">${rowWt>0?rowWt.toFixed(0)+'<br><span style="font-weight:400;font-size:9px">kg</span>':''}</div>`;
-    seatRowsHTML+='</div>';
-    rowIdx++;
-  });
-
-  const cabinBg=col;
-  return`<div>
-    <div style="background:${cabinBg}22;border:2px solid ${cabinBg};border-radius:${isGA8?'16px 16px 10px 10px':'18px 18px 12px 12px'};padding:10px 8px;display:inline-block;min-width:${isGA8?'155px':'160px'}">
-      <div style="text-align:center;font-size:9px;color:${cabinBg};font-weight:700;letter-spacing:.1em;margin-bottom:6px">▲ FRONT</div>
-      ${seatRowsHTML}
-      <div style="text-align:center;font-size:9px;color:${cabinBg};font-weight:700;letter-spacing:.1em;margin-top:4px">▼ REAR</div>
-    </div>
-    ${(()=>{
-      // Show cargo/baggage zones if any values entered
-      const cargoItems=a.cargo||[];
-      if(!cargoItems.length) return "";
-      const cargoVals=interactive?(S.dispatch?.cargo?.[acId]||{}):form?(form.cargo||{}):(S.form?.cargo||{});
-      const hasVal=cargoItems.some((_,i)=>parseFloat(cargoVals[i]||0)>0);
-      if(!hasVal) return "";
-      const rows=cargoItems.map((c,i)=>{
-        const w=parseFloat(cargoVals[i]||0);
-        if(!w) return "";
-        return`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:rgba(0,0,0,.1);border-radius:4px;margin-bottom:2px">
-          <span style="font-size:10px;color:${cabinBg}">${c.lbl}</span>
-          <span style="font-size:11px;font-weight:700;color:var(--text)">${w}kg</span>
-        </div>`;
-      }).join("");
-      if(!rows) return "";
-      return`<div style="margin-top:6px;padding:6px;background:${cabinBg}15;border:1px solid ${cabinBg}44;border-radius:6px;min-width:155px">
-        <div style="font-size:9px;color:${cabinBg};font-weight:700;letter-spacing:.08em;margin-bottom:4px">CARGO / PODS</div>
-        ${rows}
-      </div>`;
-    })()}
-  </div>`;
+    ${!canNext?'disabled':''}>Auto-Allocate & Open Seat Map →</button>
+  ${renderManifestStickyBar()}
+`;
 }
 
 
@@ -4933,6 +4831,7 @@ function renderAdminPerms(){
     {id:'operations',     lbl:'Operations',         icon:'✈️', desc:'Manifest, Seatmap & Loadsheet'},
     {id:'charter',        lbl:'Charter',            icon:'💰', desc:'Charter pricing & bookings'},
     {id:'maintenance',    lbl:'Maintenance',        icon:'🔧', desc:'Aircraft logs & scheduling'},
+    {id:'roster',         lbl:'Roster',             icon:'🗓️', desc:'Staff roster and scheduling'},
     {id:'maint_bookings', lbl:'Maint Bookings',     icon:'🗓', desc:'Edit maintenance checks & bookings'},
     {id:'sign_loadsheet', lbl:'Sign Loadsheets',    icon:'✍️', desc:'PIC certification signature on loadsheets'},
   ];
@@ -5335,7 +5234,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10
     // Profile tab
     let bodyHtml='';
     if(tab==='profile'){
-      const isPilotOrAbove=['pilot','admin'].includes(d.role);
+      const isPilotOrAbove=['pilot','desk','admin','superadmin'].includes(d.role);
       const _expiryDefs=isPilotOrAbove?[['medExpiry','Medical Expiry','#22c55e'],['ocaDue','OCA Due','#7B9EC6'],['firstAid','First Aid','#f59e0b'],['avsecExpiry','AVSEC Expiry','#a78bfa']]:[['firstAid','First Aid','#f59e0b'],['avsecExpiry','AVSEC Expiry','#a78bfa']];
       const expiryRows=_expiryDefs.map(function(t){
         const k=t[0],lbl=t[1],col=t[2];
@@ -6142,10 +6041,10 @@ window.saveManifest=async()=>{
   // Update active tab's savedId
   const _curTab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
   if(_curTab)_curTab.savedId=id;
-  lsSet('ts_manifests_cache',S.manifests);render();
+  lsSet('ts_manifests_cache',S.manifests);
   await sbU('ts_manifests',[{id,name,saved_at:savedAt,data}]);
   auditLog('manifest_save',{name,pax:d.pax.length,aircraft:d.acSetup.map(s=>s.acId).join(',')});
-  S.appMsg={type:'ok',text:'Manifest "'+name+'" saved.'};
+  toast('Manifest "'+name+'" saved.','ok');
 };
 window.saveManifestAs=async function(){
   S._loadedManifestId=null;
@@ -6164,9 +6063,9 @@ window.deleteCurrentManifest=async function(){
   S._loadedManifestId=null;
   const _delTab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
   if(_delTab)_delTab.savedId=null;
-  lsSet('ts_manifests_cache',S.manifests);render();
+  lsSet('ts_manifests_cache',S.manifests);
   await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);
-  S.appMsg={type:'ok',text:'Manifest moved to Bin.'};
+  toast('Manifest moved to Bin.','ok');
 };
 
 function _autoSaveCurrent(reason){
@@ -6842,10 +6741,14 @@ window.pushLsToSeatmap=function(){
     _acsEntry={acId:acId,pic:'',coPilot:''};
     S.dispatch.acSetup.push(_acsEntry);
   }
+  // Use _seatmapKey if present (matches how seatmap render resolves the key)
+  const smKey=_acsEntry._seatmapKey||acId;
+  // Clear existing seat assignments for this aircraft — displaced pax stay in dispatch.pax (unassigned pool)
+  delete S.dispatch.seatMap[smKey];
   // Build name→id map from existing pax
   const nameMap={};
   S.dispatch.pax.forEach(function(p){if(p.name)nameMap[p.name.trim().toLowerCase()]=p.id;});
-  // Full replace — start from empty so removed pax don't persist
+  // Build fresh seatmap from loadsheet
   const sm={};
   Object.keys(f.names||{}).forEach(function(idx){
     if(parseInt(idx)===0)return; // Skip PIC — not pushed as pax
@@ -6853,7 +6756,7 @@ window.pushLsToSeatmap=function(){
     const key=nm.toLowerCase();
     let pid=nameMap[key];
     if(!pid){
-      // Pax in loadsheet but not in manifest — add them tagged
+      // Pax in loadsheet but not in manifest — add them
       pid='_ls_'+key.replace(/[^a-z0-9]/g,'_');
       if(!S.dispatch.pax.find(function(p){return p.id===pid;})){
         S.dispatch.pax.push({id:pid,name:nm,
@@ -6872,11 +6775,11 @@ window.pushLsToSeatmap=function(){
     var payReqVal=(f.paxPaymentReq||{})[idx];
     if(payReqVal!=null){var _dp2=S.dispatch.pax.find(function(px){return px.id===pid;});if(_dp2)_dp2.paymentReq=!!payReqVal;}
   });
-  S.dispatch.seatMap[acId]=sm;
+  S.dispatch.seatMap[smKey]=sm;
   runSolver();
   autoSaveDispatch();
   render();
-  toast('✅ Pushed to seatmap','ok');
+  toast('✅ Pushed to seatmap — displaced pax moved to unassigned','ok');
 };
 window.pushAllLsToSeatmap=function(){
   const tabs=S.lsTabs||[];
