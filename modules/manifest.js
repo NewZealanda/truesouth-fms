@@ -429,6 +429,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
 
 function renderStep2(){
   const d=S.dispatch;
+  _seatmapSyncPool(); // keep seatmap "Unassigned" in step with the shared loadsheet pool
   const setups=d.acSetup||[];
   // Find open loadsheet tabs not yet in the seatmap
   const _lsTabs=S.lsTabs||[];

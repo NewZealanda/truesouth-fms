@@ -62,6 +62,30 @@ const Q_MANIFESTS=()=>`&or=(created_at.gte.${_fetchSince()},id.eq.live_draft,id.
 function _uaPool(){if(!S.dispatch)S.dispatch={};if(!Array.isArray(S.dispatch._unallocated))S.dispatch._unallocated=[];return S.dispatch._unallocated;}
 // Loadsheet undo snapshots BOTH the form (seats) and the shared pool, so undo restores both.
 function _lsUndoPush(){if(!S._lsFormUndoStack)S._lsFormUndoStack=[];S._lsFormUndoStack.push({form:dc(S.form),pool:JSON.parse(JSON.stringify(_uaPool()))});if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();S._lsFormUndo=null;}
+// Keep the seatmap's unassigned list and the shared loadsheet pool in lock-step.
+// The pool is the single source; entries carry the passenger id so the seatmap can seat them.
+function _seatmapSyncPool(){
+  var d=S.dispatch; if(!d)return;
+  if(!Array.isArray(d.pax))d.pax=[];
+  var pool=_uaPool();
+  var seated={}; Object.keys(d.seatMap||{}).forEach(function(ac){Object.keys(d.seatMap[ac]||{}).forEach(function(i){var pid=d.seatMap[ac][i];if(pid)seated[pid]=1;});});
+  // 1. Promote any loadsheet-origin pool entries (no id) into d.pax so the seatmap can seat them.
+  pool.forEach(function(e){
+    if(!e.id){
+      var np={id:'p_'+Date.now()+'_'+Math.floor(Math.random()*1e5),name:e.name||'',weight:e.weight||0,bag:e.bag||0,group:e.group||'',pinAc:null,infant:false,infantName:e.infant||null,type:e.type||'adult',paymentReq:!!e.paymentReq,_ts:Date.now()};
+      d.pax.push(np); e.id=np.id;
+    }
+  });
+  // 2. Drop pool entries that are now seated in the seatmap.
+  for(var i=pool.length-1;i>=0;i--){if(pool[i].id&&seated[pool[i].id])pool.splice(i,1);}
+  // 3. Add any unseated, non-infant passengers that aren't already in the pool (by id or name+weight).
+  var inPool={},poolKey={}; pool.forEach(function(e){if(e.id)inPool[e.id]=1;poolKey[(e.name||'')+'|'+(e.weight||'')]=1;});
+  (d.pax||[]).forEach(function(p){
+    if(p.infant||seated[p.id]||inPool[p.id])return;
+    if(poolKey[(p.name||'')+'|'+(p.weight||'')])return;
+    pool.push({id:p.id,name:p.name,weight:p.weight,bag:p.bag||0,group:p.group||'',infant:p.infantName||null,type:p.type||'adult',paymentReq:!!p.paymentReq});
+  });
+}
 const sbU=async(t,d)=>{try{const r=await fetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);return null;}};
 const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:SH});return r.ok;}catch{return false;}};
 const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
@@ -114,7 +138,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.61';
+const APP_VER='v22.62';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
