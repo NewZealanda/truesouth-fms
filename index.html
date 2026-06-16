@@ -2402,8 +2402,9 @@ function renderDrawer(){
   const sec=S.section||'operations';
   const t=S.tab||'manifest';
   const isLs=!!(S.activeTabId||S._newLsTab);
-  function _navBtn(label,section,icon,active){
-    return '<button tabindex="-1" onclick="S.section=\''+section+'\';S._drawerOpen=false;render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(active?'rgba(124,58,237,.22)':'transparent')+';color:'+(active?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(active?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px">'+icon+' <span>'+label+'</span></button>';
+  function _navBtn(label,section,icon,active,fn){
+    var _nav_onclick=fn||("S.section='"+section+"';S._drawerOpen=false;render()");
+    return '<button tabindex="-1" onclick="'+_nav_onclick+'" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(active?'rgba(124,58,237,.22)':'transparent')+';color:'+(active?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(active?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px">'+icon+' <span>'+label+'</span></button>';
   }
   function _subBtn(label,tab,active,action){
     var onclick=action||('S._drawerOpen=false;window.switchOpsTab(\''+tab+'\')');
@@ -2432,8 +2433,8 @@ function renderDrawer(){
   }
   h+='<div style="height:1px;background:rgba(255,255,255,.07);margin:8px 6px"></div>';
   if(_canRoster)h+=_navBtn('Roster','roster','🗓️',sec==='roster');
-  if(_canMaint)h+=_navBtn('Maintenance','maintenance','🔧',sec==='maintenance');
-  h+=_navBtn((role==='admin'||role==='superadmin')?'Admin':'Settings','settings','⚙️',sec==='settings');
+  if(_canMaint)h+=_navBtn('Maintenance','maintenance','🔧',sec==='maintenance',"S._drawerOpen=false;window.setTab('maintenance')");
+  h+=_navBtn((role==='admin'||role==='superadmin')?'Admin':'Settings','settings','⚙️',sec==='settings',"S._drawerOpen=false;window.setTab('admin')");
   h+='</nav>';
   h+='<div style="padding:10px 16px;font-size:10px;color:rgba(255,255,255,.18);font-family:monospace;border-top:1px solid rgba(255,255,255,.06)">'+APP_VER+'</div>';
   h+='</div>';
