@@ -987,7 +987,7 @@ let S={
   // Audit
   auditLog:[],
   // Maintenance
-  maintenance:{},maintBookings:{},uploadProgress:null,driveLastUpload:lsGet('ts_drive_last_upload')||null,wideMode:lsGet('ts_wide_mode')!==false,
+  maintenance:{},maintBookings:{},roster:null,rosterWeek:null,_rosterLoaded:false,_rosterSaved:false,uploadProgress:null,driveLastUpload:lsGet('ts_drive_last_upload')||null,wideMode:lsGet('ts_wide_mode')!==false,
   // Drive
   driveQueue:[],
   // Manifest / Dispatch
@@ -2400,45 +2400,74 @@ function renderDrawer(){
   const _canMaint=_isAdminPlus||_navPerms.maintenance===true;
   const _canRoster=_isAdminPlus||_navPerms.roster===true;
   const sec=S.section||'operations';
+  const exp=S._drawerSection||sec;
   const t=S.tab||'manifest';
   const isLs=!!(S.activeTabId||S._newLsTab);
-  function _navBtn(label,section,icon,active,fn){
-    var _nav_onclick=fn||("S.section='"+section+"';S._drawerOpen=false;render()");
-    return '<button tabindex="-1" onclick="'+_nav_onclick+'" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(active?'rgba(124,58,237,.22)':'transparent')+';color:'+(active?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(active?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px">'+icon+' <span>'+label+'</span></button>';
+  function _secBtn(label,section,icon){
+    var isOn=sec===section;
+    var isExp=exp===section;
+    return '<button tabindex="-1" onclick="S._drawerSection=\''+section+'\';render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(isOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(isOn?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(isOn?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px">'+icon+' <span style="flex:1">'+label+'</span><span style="font-size:10px;opacity:.45">'+(isExp?'▲':'▼')+'</span></button>';
   }
-  function _subBtn(label,tab,active,action){
-    var onclick=action||('S._drawerOpen=false;window.switchOpsTab(\''+tab+'\')');
-    return '<button tabindex="-1" onclick="'+onclick+'" style="width:100%;text-align:left;padding:7px 14px 7px 44px;border-radius:8px;border:none;background:'+(active?'rgba(255,255,255,.09)':'transparent')+';color:'+(active?'#fff':'rgba(255,255,255,.5)')+';font-size:13px;font-weight:'+(active?'600':'400')+';cursor:pointer;margin-bottom:1px">'+label+'</button>';
+  function _subBtn(label,active,action){
+    return '<button tabindex="-1" onclick="'+action+'" style="width:100%;text-align:left;padding:7px 14px 7px 44px;border-radius:8px;border:none;background:'+(active?'rgba(255,255,255,.09)':'transparent')+';color:'+(active?'#fff':'rgba(255,255,255,.5)')+';font-size:13px;font-weight:'+(active?'600':'400')+';cursor:pointer;margin-bottom:1px">'+label+'</button>';
   }
   var h='<div style="position:fixed;inset:0;z-index:1000;display:flex" onclick="S._drawerOpen=false;render()">';
   h+='<div onclick="event.stopPropagation()" style="width:270px;height:100%;background:linear-gradient(180deg,#080c17,#0d1526);border-right:1px solid rgba(255,255,255,.1);overflow-y:auto;display:flex;flex-direction:column;padding-top:max(0px,env(safe-area-inset-top));flex-shrink:0">';
-  // Drawer header
   h+='<div style="padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px">';
   h+='<div style="width:32px;height:32px;border-radius:7px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0"><img src="'+LOGO+'" style="width:27px;height:27px;object-fit:contain" alt=""></div>';
   h+='<div style="flex:1"><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:16px;font-weight:800;letter-spacing:.06em;color:#fff">TRUE SOUTH</div><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:10px;font-weight:600;letter-spacing:.1em;color:rgba(255,255,255,.35)">FLIGHT MANAGEMENT</div></div>';
   h+='<button onclick="S._drawerOpen=false;render()" style="background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;padding:5px 7px;border-radius:6px;flex-shrink:0;line-height:1">✕</button>';
   h+='</div>';
-  // Nav items
   h+='<nav style="flex:1;padding:10px 8px">';
   if(_canOps){
-    var opsActive=sec==='operations';
-    h+=_navBtn('Operations','operations','✈️',opsActive);
-    if(opsActive){
-      h+=_subBtn('Manifest','manifest',t==='manifest'&&!isLs,null);
-      h+=_subBtn('Seatmap','seatmap',t==='seatmap'&&!isLs,null);
-      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window.switchToLoadsheets();" style="width:100%;text-align:left;padding:7px 14px 7px 44px;border-radius:8px;border:none;background:'+(isLs?'rgba(255,255,255,.09)':'transparent')+';color:'+(isLs?'#fff':'rgba(255,255,255,.5)')+';font-size:13px;font-weight:'+(isLs?'600':'400')+';cursor:pointer;margin-bottom:1px">Loadsheets</button>';
-      h+=_subBtn('Saved','saved',t==='saved'&&!isLs,null);
-      if(_canCharter)h+=_subBtn('Charter','charter',t==='charter'&&!isLs,null);
+    h+=_secBtn('Operations','operations','✈️');
+    if(exp==='operations'){
+      h+=_subBtn('Manifest',t==='manifest'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('manifest')");
+      h+=_subBtn('Seatmap',t==='seatmap'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('seatmap')");
+      h+=_subBtn('Loadsheets',isLs&&sec==='operations',"S._drawerOpen=false;window.switchToLoadsheets()");
+      h+=_subBtn('Saved',t==='saved'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('saved')");
+      if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
     }
   }
   h+='<div style="height:1px;background:rgba(255,255,255,.07);margin:8px 6px"></div>';
-  if(_canRoster)h+=_navBtn('Roster','roster','🗓️',sec==='roster');
-  if(_canMaint)h+=_navBtn('Maintenance','maintenance','🔧',sec==='maintenance',"S._drawerOpen=false;window.setTab('maintenance')");
-  h+=_navBtn((role==='admin'||role==='superadmin')?'Admin':'Settings','settings','⚙️',sec==='settings',"S._drawerOpen=false;window.setTab('admin')");
+  if(_canRoster){
+    h+=_secBtn('Roster','roster','\U0001f5d3️');
+    if(exp==='roster'){
+      h+=_subBtn('Roster',sec==='roster',"S._drawerOpen=false;S.section='roster';render()");
+    }
+  }
+  if(_canMaint){
+    h+=_secBtn('Maintenance','maintenance','\U0001f527');
+    if(exp==='maintenance'){
+      var msub=S.maintTab||'overview';
+      var _mn=function(lbl,id){return _subBtn(lbl,sec==='maintenance'&&msub===id,"S._drawerOpen=false;S.maintTab='"+id+"';window.setTab('maintenance')");};
+      h+=_mn('Overview','overview');
+      h+=_mn('Logs','log');
+      h+=_mn('Aircraft','aircraft');
+      if(_isAdminPlus){h+=_mn('Bookings','bookings');h+=_mn('Estimator','estimator');}
+      h+=_mn('Search','search');
+    }
+  }
+  {
+    h+=_secBtn((role==='admin'||role==='superadmin')?'Admin':'Settings','settings','⚙️');
+    if(exp==='settings'){
+      var adSec=(S.admin||{}).section||'people';
+      var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
+      if(_isAdminPlus){
+        h+=_sn('People','people');
+        h+=_sn('Permissions','perms');
+        h+=_sn('Drive','gdrive');
+        h+=_sn('Aerodromes','aerodromes');
+        h+=_sn('Statistics','statistics');
+        if(role==='superadmin')h+=_sn('Audit','audit');
+      } else {
+        h+=_subBtn('People',sec==='settings',"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='people';window.setTab('admin')");
+      }
+    }
+  }
   h+='</nav>';
   h+='<div style="padding:10px 16px;font-size:10px;color:rgba(255,255,255,.18);font-family:monospace;border-top:1px solid rgba(255,255,255,.06)">'+APP_VER+'</div>';
   h+='</div>';
-  // Backdrop
   h+='<div style="flex:1;background:rgba(0,0,0,.5)"></div>';
   h+='</div>';
   return h;
@@ -2504,7 +2533,7 @@ function renderApp(){
     <div style="background:linear-gradient(135deg,#0a0e1a,#0f172a);border-bottom:1px solid var(--border);padding:max(14px,env(safe-area-inset-top)) 14px 0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:10px">
-          <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1" title="Menu">☰</button>
+          <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;S._drawerSection=S.section;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1" title="Menu">☰</button>
           <div style="width:38px;height:38px;border-radius:8px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden"><img src="${LOGO}" style="width:32px;height:32px;object-fit:contain" alt=""></div>
           <div>
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:800;letter-spacing:.06em;color:#fff">TRUE SOUTH</div>
@@ -2564,7 +2593,7 @@ function renderApp(){
         const _sec=S.section||'operations';
         if(_sec==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';
         if(_sec==='settings')return'<div id="flash-admin">'+renderAdmin()+'</div>';
-        if(_sec==='roster')return'<div id="flash-roster">'+renderRosterPlaceholder()+'</div>';
+        if(_sec==='roster')return'<div id="flash-roster">'+renderRoster()+'</div>';
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
@@ -3734,10 +3763,10 @@ function renderLoadsheet(){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative">
+      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative" onclick="var i=this.querySelector('input[type=date]');try{i.showPicker&&i.showPicker()}catch(e){i.click()}">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;pointer-events:none">Date</div>
         <div style="font-size:13px;font-weight:600;color:var(--text1);pointer-events:none">${_fmtLsDate(f.date)}</div>
-        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();safeRender()" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;cursor:pointer;z-index:10;touch-action:manipulation">
+        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();safeRender()" onclick="event.stopPropagation()" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;cursor:pointer;z-index:10;touch-action:manipulation">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">ETD</div>
@@ -8791,6 +8820,158 @@ window.onload=()=>{
     if(document.visibilityState==='visible') reqWake();
   });
 })();
+function renderRoster(){
+  // Auto-load on first visit per session
+  if(!S._rosterLoaded){
+    S._rosterLoaded=true;
+    var _loc=lsGet('ts_roster');
+    if(_loc&&typeof _loc==='object')S.roster=_loc;
+    window.loadRosterFromCloud();
+  }
+
+  const role=S.user?.role||'desk';
+  const _isAdminPlus=role==='superadmin'||role==='admin';
+
+  // Week navigation
+  function _monday(d){var dd=new Date(d);dd.setHours(0,0,0,0);var dy=dd.getDay();dd.setDate(dd.getDate()+(dy===0?-6:1-dy));return dd;}
+  function _iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  var today=new Date();today.setHours(0,0,0,0);
+  var curMon=_monday(today);
+  var weekStart=S.rosterWeek?new Date(S.rosterWeek+'T00:00:00'):curMon;
+  S.rosterWeek=_iso(weekStart);
+  var curMonStr=_iso(curMon);
+
+  var days=[],DNAMES=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  for(var _i=0;_i<7;_i++){var _d=new Date(weekStart);_d.setDate(_d.getDate()+_i);days.push(_d);}
+  var prevMon=new Date(weekStart);prevMon.setDate(prevMon.getDate()-7);
+  var nextMon=new Date(weekStart);nextMon.setDate(nextMon.getDate()+7);
+
+  // Week label
+  var d0=days[0],d6=days[6];
+  var wkLbl=d0.getDate()+' '+MONTHS[d0.getMonth()]+(d0.getFullYear()!==d6.getFullYear()?' '+d0.getFullYear():'')+' – '+d6.getDate()+' '+MONTHS[d6.getMonth()]+' '+d6.getFullYear();
+
+  // Users
+  var roleOrder={superadmin:0,admin:1,pilot:2,desk:3,maint:4,maintenance:4,ground_staff:5};
+  var roleLabel={superadmin:'Super Admin',admin:'Admin',pilot:'Pilot',desk:'Desk',maint:'Maint',maintenance:'Maint',ground_staff:'Ground'};
+  var roleCol={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10b981',maint:'#a78bfa',maintenance:'#a78bfa',ground_staff:'#64748b'};
+  var users=(S.users||[]).filter(function(u){return u.id&&u.name;}).slice().sort(function(a,b){
+    return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');
+  });
+
+  // Status config
+  var CYCLE=['','on','leave','sick','training'];
+  var SC={
+    '':       {bg:'transparent',           bd:'rgba(255,255,255,.1)', col:'rgba(255,255,255,.25)',lbl:'—'},
+    on:       {bg:'rgba(34,197,94,.15)',    bd:'#22c55e',              col:'#22c55e',             lbl:'On'},
+    leave:    {bg:'rgba(245,158,11,.14)',   bd:'#f59e0b',              col:'#f59e0b',             lbl:'AL'},
+    sick:     {bg:'rgba(239,68,68,.14)',    bd:'#ef4444',              col:'#ef4444',             lbl:'Sick'},
+    training: {bg:'rgba(99,102,241,.15)',   bd:'#818cf8',              col:'#818cf8',             lbl:'Train'},
+  };
+
+  var roster=S.roster||{};
+  var todayStr=_iso(today);
+
+  // Header row
+  var hd='<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);white-space:nowrap;min-width:130px">Crew</th>';
+  days.forEach(function(d,i){
+    var ds=_iso(d),isToday=ds===todayStr,isWe=i>=5;
+    hd+='<th style="padding:6px 4px;text-align:center;min-width:56px;font-size:11px;font-weight:700;color:'+(isToday?'#a78bfa':(isWe?'rgba(255,255,255,.3)':'var(--text3)'))+'">'
+      +DNAMES[i]+'<br><span style="font-size:14px;font-weight:800;color:'+(isToday?'#a78bfa':'var(--text1)')+'">'+d.getDate()+'</span></th>';
+  });
+
+  // Body rows
+  var rows='';
+  if(!users.length){
+    rows='<tr><td colspan="8" style="padding:28px;text-align:center;color:var(--text3);font-size:13px">No users found — check Admin › People.</td></tr>';
+  } else {
+    users.forEach(function(u){
+      var rc=roleCol[u.role]||'#64748b',rl=roleLabel[u.role]||u.role;
+      var cells='<td style="padding:7px 12px;white-space:nowrap;border-right:1px solid rgba(255,255,255,.05)">'
+        +'<div style="font-size:13px;font-weight:600;color:var(--text1);line-height:1.2">'+u.name+'</div>'
+        +'<span style="font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;background:'+rc+'22;color:'+rc+'">'+rl+'</span>'
+        +'</td>';
+      days.forEach(function(d,i){
+        var ds=_iso(d);
+        var st=(roster[ds]&&roster[ds][u.id])||'';
+        var cfg=SC[st]||SC[''];
+        var isWe=i>=5,isToday=ds===todayStr;
+        var cellBg=isToday?'rgba(167,139,250,.04)':(isWe?'rgba(255,255,255,.015)':'');
+        if(_isAdminPlus){
+          cells+='<td style="padding:3px 4px;text-align:center'+(cellBg?';background:'+cellBg:'')+'">'
+            +'<button onclick="window.rosterCycle(\''+ds+'\',\''+u.id+'\')" style="width:100%;min-width:46px;padding:5px 3px;border-radius:7px;border:1.5px solid '+cfg.bd+';background:'+cfg.bg+';color:'+cfg.col+';font-size:11px;font-weight:700;cursor:pointer">'+cfg.lbl+'</button>'
+            +'</td>';
+        } else {
+          cells+='<td style="padding:3px 4px;text-align:center'+(cellBg?';background:'+cellBg:'')+'">'
+            +'<div style="min-width:46px;padding:5px 3px;border-radius:7px;border:1.5px solid '+cfg.bd+';background:'+cfg.bg+';color:'+cfg.col+';font-size:11px;font-weight:700;text-align:center">'+cfg.lbl+'</div>'
+            +'</td>';
+        }
+      });
+      rows+='<tr style="border-bottom:1px solid rgba(255,255,255,.04)">'+cells+'</tr>';
+    });
+  }
+
+  // Legend
+  var lgd='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
+    +'<span style="font-size:11px;color:var(--text3);font-weight:600;margin-right:2px">Legend:</span>';
+  CYCLE.slice(1).forEach(function(s){var c=SC[s];lgd+='<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;border:1.5px solid '+c.bd+';background:'+c.bg+';color:'+c.col+'">'+c.lbl+'</span>';});
+  lgd+='</div>';
+
+  // Save button (admin only)
+  var saveBtn=_isAdminPlus
+    ?'<div style="margin-top:14px"><button onclick="window.saveRosterToCloud()" style="padding:8px 20px;background:var(--acc);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer">Save Roster</button>'
+      +(S._rosterSaved?'<span style="margin-left:10px;font-size:12px;color:#4ade80;font-weight:600">✓ Saved</span>':'')+'</div>'
+    :'';
+
+  // Week nav
+  var nav='<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+    +'<button onclick="S.rosterWeek=\''+_iso(prevMon)+'\';render()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">‹ Prev</button>'
+    +'<div style="flex:1;text-align:center"><div style="font-size:13px;font-weight:700;color:var(--text1)">'+wkLbl+'</div></div>'
+    +(S.rosterWeek!==curMonStr?'<button onclick="S.rosterWeek=\''+curMonStr+'\';render()" style="padding:7px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.1);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">This week</button>':'')
+    +'<button onclick="S.rosterWeek=\''+_iso(nextMon)+'\';render()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">Next ›</button>'
+    +'</div>';
+
+  return nav
+    +'<div class="card" style="overflow-x:auto">'
+    +'<table style="width:100%;border-collapse:collapse;min-width:500px">'
+    +'<thead><tr style="border-bottom:2px solid var(--border)">'+hd+'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table>'
+    +lgd
+    +saveBtn
+    +'</div>';
+}
+
+window.rosterCycle=function(dateStr,userId){
+  if(!S.roster)S.roster={};
+  if(!S.roster[dateStr])S.roster[dateStr]={};
+  var CYCLE=['','on','leave','sick','training'];
+  var cur=S.roster[dateStr][userId]||'';
+  var next=CYCLE[(CYCLE.indexOf(cur)+1)%CYCLE.length];
+  if(next==='')delete S.roster[dateStr][userId];
+  else S.roster[dateStr][userId]=next;
+  S._rosterSaved=false;
+  lsSet('ts_roster',S.roster);
+  render();
+};
+
+window.saveRosterToCloud=async function(){
+  try{
+    await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
+    S._rosterSaved=true;render();
+    setTimeout(function(){S._rosterSaved=false;render();},3000);
+  }catch(e){toast('Roster save failed','err');}
+};
+
+window.loadRosterFromCloud=async function(){
+  try{
+    var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.roster&select=value',{headers:SH});
+    if(!r.ok)return;
+    var rows=await r.json();
+    if(!rows||!rows.length)return;
+    var val=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;
+    if(val&&typeof val==='object'){S.roster=val;lsSet('ts_roster',val);render();}
+  }catch(e){}
+};
 </script>
 </body>
 </html>
