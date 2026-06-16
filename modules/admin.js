@@ -975,12 +975,14 @@ window.tapFormSeat=(seatIdx,acId,ev)=>{
     const ua=_uaPool();
     if(ua&&ua[S._selUnalloc]){
       const p=ua[S._selUnalloc];
-      if(nm){ua.push({name:nm,weight:f.seats[seatIdx]||'',bag:f.bags[seatIdx]||'',infant:(f.infantNames||{})[seatIdx]||'',group:(f.paxGroups||{})[seatIdx]||''});}
+      if(nm){ua.push({name:nm,weight:f.seats[seatIdx]||'',bag:f.bags[seatIdx]||'',infant:(f.infantNames||{})[seatIdx]||'',group:(f.paxGroups||{})[seatIdx]||'',paymentReq:!!((f.paxPaymentReq||{})[seatIdx]),type:((f.paxType||{})[seatIdx]==='C'?'child':'adult')});}
       f.names[seatIdx]=p.name;f.seats[seatIdx]=p.weight;f.bags[seatIdx]=p.bag;
       if(!f.infantNames)f.infantNames={};
       if(p.infant)f.infantNames[seatIdx]=p.infant;else delete f.infantNames[seatIdx];
       if(!f.paxGroups)f.paxGroups={};
       if(p.group)f.paxGroups[seatIdx]=p.group;else delete f.paxGroups[seatIdx];
+      if(!f.paxType)f.paxType={};if(p.type==='child')f.paxType[seatIdx]='C';else delete f.paxType[seatIdx];
+      if(!f.paxPaymentReq)f.paxPaymentReq={};if(p.paymentReq)f.paxPaymentReq[seatIdx]=true;else delete f.paxPaymentReq[seatIdx];
       ua.splice(S._selUnalloc,1);
     }
     S._selUnalloc=null;S._selFormSeat=null;autoSaveLS();render();return;
@@ -1012,10 +1014,12 @@ window.tapDropUnallocated=function(){
   const f=S.form;
   const nm=f.names[S._selFormSeat]||'';
   if(nm&&nm!==f.coPilot&&nm!==f.pic){
-    _uaPool().push({name:nm,weight:f.seats[S._selFormSeat]||'',bag:f.bags[S._selFormSeat]||'',infant:(f.infantNames||{})[S._selFormSeat]||'',group:(f.paxGroups||{})[S._selFormSeat]||''});
+    _uaPool().push({name:nm,weight:f.seats[S._selFormSeat]||'',bag:f.bags[S._selFormSeat]||'',infant:(f.infantNames||{})[S._selFormSeat]||'',group:(f.paxGroups||{})[S._selFormSeat]||'',paymentReq:!!((f.paxPaymentReq||{})[S._selFormSeat]),type:((f.paxType||{})[S._selFormSeat]==='C'?'child':'adult')});
     delete f.names[S._selFormSeat];delete f.seats[S._selFormSeat];delete f.bags[S._selFormSeat];
     if(f.infantNames)delete f.infantNames[S._selFormSeat];
     if(f.paxGroups)delete f.paxGroups[S._selFormSeat];
+    if(f.paxType)delete f.paxType[S._selFormSeat];
+    if(f.paxPaymentReq)delete f.paxPaymentReq[S._selFormSeat];
   }
   S._selFormSeat=null;autoSaveLS();render();
 };
@@ -1074,12 +1078,14 @@ window.lsDropOnSeat=function(toIdx,e){
     const p=ua[S._dragUnalloc];
     const curNm=f.names[toIdx]||'';
     // Bump existing occupant back to unallocated
-    if(curNm&&curNm!==f.coPilot){ua.push({name:curNm,weight:f.seats[toIdx]||'',bag:f.bags[toIdx]||'',infant:(f.infantNames||{})[toIdx]||'',group:(f.paxGroups||{})[toIdx]||''});}
+    if(curNm&&curNm!==f.coPilot){ua.push({name:curNm,weight:f.seats[toIdx]||'',bag:f.bags[toIdx]||'',infant:(f.infantNames||{})[toIdx]||'',group:(f.paxGroups||{})[toIdx]||'',paymentReq:!!((f.paxPaymentReq||{})[toIdx]),type:((f.paxType||{})[toIdx]==='C'?'child':'adult')});}
     f.names[toIdx]=p.name;f.seats[toIdx]=p.weight;f.bags[toIdx]=p.bag;
     if(!f.infantNames)f.infantNames={};
     if(p.infant)f.infantNames[toIdx]=p.infant;else delete f.infantNames[toIdx];
     if(!f.paxGroups)f.paxGroups={};
     if(p.group)f.paxGroups[toIdx]=p.group;else delete f.paxGroups[toIdx];
+    if(!f.paxType)f.paxType={};if(p.type==='child')f.paxType[toIdx]='C';else delete f.paxType[toIdx];
+    if(!f.paxPaymentReq)f.paxPaymentReq={};if(p.paymentReq)f.paxPaymentReq[toIdx]=true;else delete f.paxPaymentReq[toIdx];
     ua.splice(S._dragUnalloc,1);
     S._dragUnalloc=null;S._selUnalloc=null;
   } else if(S._dragSeat!=null&&S._dragSeat!==toIdx){
@@ -1088,6 +1094,8 @@ window.lsDropOnSeat=function(toIdx,e){
     swp(f.names,S._dragSeat,toIdx);swp(f.seats,S._dragSeat,toIdx);swp(f.bags,S._dragSeat,toIdx);
     if(!f.infantNames)f.infantNames={};swp(f.infantNames,S._dragSeat,toIdx);
     if(!f.paxGroups)f.paxGroups={};swp(f.paxGroups,S._dragSeat,toIdx);
+    if(!f.paxType)f.paxType={};swp(f.paxType,S._dragSeat,toIdx);
+    if(!f.paxPaymentReq)f.paxPaymentReq={};swp(f.paxPaymentReq,S._dragSeat,toIdx);
     S._dragSeat=null;
   }
   render();
@@ -1100,10 +1108,12 @@ window.lsDropOnUnalloc=function(e){
   if(S._dragSeat!=null){
     const nm=f.names[S._dragSeat]||'';
     if(nm&&nm!==f.coPilot&&nm!==f.pic){
-      _uaPool().push({name:nm,weight:f.seats[S._dragSeat]||'',bag:f.bags[S._dragSeat]||'',infant:(f.infantNames||{})[S._dragSeat]||'',group:(f.paxGroups||{})[S._dragSeat]||''});
+      _uaPool().push({name:nm,weight:f.seats[S._dragSeat]||'',bag:f.bags[S._dragSeat]||'',infant:(f.infantNames||{})[S._dragSeat]||'',group:(f.paxGroups||{})[S._dragSeat]||'',paymentReq:!!((f.paxPaymentReq||{})[S._dragSeat]),type:((f.paxType||{})[S._dragSeat]==='C'?'child':'adult')});
       delete f.names[S._dragSeat];delete f.seats[S._dragSeat];delete f.bags[S._dragSeat];
       if(f.infantNames)delete f.infantNames[S._dragSeat];
       if(f.paxGroups)delete f.paxGroups[S._dragSeat];
+      if(f.paxType)delete f.paxType[S._dragSeat];
+      if(f.paxPaymentReq)delete f.paxPaymentReq[S._dragSeat];
     }
     S._dragSeat=null;render();
   }
@@ -1456,7 +1466,7 @@ function generateLoadsheet(acId){
   const _newTabId='ls_'+_lsAcCode+'_'+Date.now();
   S.lsForms[_lsAcCode]=form;S.lsAc=_lsAcCode;S.form=form;S.editId=_newTabId;S.formDirty=false;
   // Populate _unallocated: pax pinned to this aircraft but not given a seat
-  {const _spIds=new Set(Object.values(sm));const _unass=(d.pax||[]).filter(function(p){return p.pinAc===acId&&!_spIds.has(p.id)&&!p.infant&&p.name;});var _pool=_uaPool();_unass.forEach(function(p){if(!_pool.some(function(x){return x.name===p.name&&String(x.weight)===String(p.weight);}))_pool.push({name:p.name,weight:p.weight,bag:p.bag||0,infant:p.infantName||null,group:p.group||'',type:p.type||'adult'});});form._unallocated=_pool;}
+  {const _spIds=new Set(Object.values(sm));const _unass=(d.pax||[]).filter(function(p){return p.pinAc===acId&&!_spIds.has(p.id)&&!p.infant&&p.name;});var _pool=_uaPool();_unass.forEach(function(p){if(!_pool.some(function(x){return x.name===p.name&&String(x.weight)===String(p.weight);}))_pool.push({name:p.name,weight:p.weight,bag:p.bag||0,infant:p.infantName||null,group:p.group||'',type:p.type||'adult',paymentReq:!!p.paymentReq});});form._unallocated=_pool;}
   // Fuel/burnOff defaults by aircraft type
   if(a.layout==='ga8'&&(!form.burnOff||parseFloat(form.burnOff)<30)){form.burnOff='35';}
   if(a.layout==='c208'){form.fuel=String(Math.round(800*0.453592));}
