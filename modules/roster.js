@@ -2,23 +2,25 @@
 
 // ── Status config ──
 var ROSTER_SC={
-  '':           {bg:'transparent',           bd:'rgba(255,255,255,.08)', col:'rgba(255,255,255,.2)',  lbl:'—'},
-  on:           {bg:'rgba(34,197,94,.16)',    bd:'#22c55e',               col:'#4ade80',              lbl:'On'},
-  c208b:        {bg:'rgba(59,130,246,.18)',   bd:'#3b82f6',               col:'#60a5fa',              lbl:'C208B'},
-  ga8:          {bg:'rgba(168,85,247,.18)',   bd:'#a855f7',               col:'#c084fc',              lbl:'GA8'},
-  desk:         {bg:'rgba(20,184,166,.18)',   bd:'#14b8a6',               col:'#2dd4bf',              lbl:'Desk'},
-  admin_duty:   {bg:'rgba(251,191,36,.16)',   bd:'#fbbf24',               col:'#fde047',              lbl:'Admin'},
-  called_in:    {bg:'rgba(34,197,94,.08)',    bd:'rgba(34,197,94,.45)',    col:'rgba(134,239,172,.8)', lbl:'Called'},
-  half_day:     {bg:'rgba(234,179,8,.16)',    bd:'#eab308',               col:'#facc15',              lbl:'½ Day'},
-  off:          {bg:'rgba(100,116,139,.1)',   bd:'rgba(100,116,139,.4)',   col:'#94a3b8',              lbl:'Off'},
-  rdo:          {bg:'rgba(148,163,184,.08)',  bd:'rgba(148,163,184,.3)',   col:'#64748b',              lbl:'RDO'},
-  leave:        {bg:'rgba(245,158,11,.15)',   bd:'#f59e0b',               col:'#fbbf24',              lbl:'AL'},
-  sick:         {bg:'rgba(239,68,68,.15)',    bd:'#ef4444',               col:'#f87171',              lbl:'Sick'},
-  training:     {bg:'rgba(99,102,241,.16)',   bd:'#818cf8',               col:'#a5b4fc',              lbl:'Train'},
-  other:        {bg:'rgba(148,163,184,.08)',  bd:'rgba(148,163,184,.25)', col:'#94a3b8',              lbl:'?'},
+  '':         {bg:'transparent',           bd:'rgba(255,255,255,.08)', col:'rgba(255,255,255,.2)',  lbl:'-'},
+  c208b:      {bg:'rgba(59,130,246,.18)',   bd:'#3b82f6',               col:'#60a5fa',              lbl:'C208B'},
+  ga8:        {bg:'rgba(168,85,247,.18)',   bd:'#a855f7',               col:'#c084fc',              lbl:'GA8'},
+  desk:       {bg:'rgba(20,184,166,.18)',   bd:'#14b8a6',               col:'#2dd4bf',              lbl:'Desk'},
+  admin_duty: {bg:'rgba(251,191,36,.16)',   bd:'#fbbf24',               col:'#fde047',              lbl:'Admin'},
+  called_in:  {bg:'rgba(34,197,94,.25)',    bd:'#22c55e',               col:'#86efac',              lbl:'Called In'},
+  half_day:   {bg:'rgba(34,197,94,.25)',    bd:'#22c55e',               col:'#86efac',              lbl:'1/2 Day'},
+  gnd:        {bg:'rgba(100,116,139,.18)',  bd:'#64748b',               col:'#94a3b8',              lbl:'GND'},
+  mrktg:      {bg:'rgba(236,72,153,.18)',   bd:'#ec4899',               col:'#f472b6',              lbl:'MRKTG'},
+  off:        {bg:'rgba(100,116,139,.1)',   bd:'rgba(100,116,139,.4)',   col:'#94a3b8',              lbl:'Off'},
+  rdo:        {bg:'rgba(148,163,184,.08)',  bd:'rgba(148,163,184,.3)',   col:'#64748b',              lbl:'RDO'},
+  leave:      {bg:'rgba(245,158,11,.15)',   bd:'#f59e0b',               col:'#fbbf24',              lbl:'AL'},
+  ul:         {bg:'rgba(239,68,68,.12)',    bd:'rgba(239,68,68,.45)',    col:'#fca5a5',              lbl:'UL'},
+  sick:       {bg:'rgba(239,68,68,.15)',    bd:'#ef4444',               col:'#f87171',              lbl:'Sick'},
+  training:   {bg:'rgba(99,102,241,.16)',   bd:'#818cf8',               col:'#a5b4fc',              lbl:'Training'},
+  other:      {bg:'rgba(148,163,184,.08)',  bd:'rgba(148,163,184,.25)', col:'#94a3b8',              lbl:'Other'},
 };
-var ROSTER_ORDER=['','on','c208b','ga8','desk','admin_duty','called_in','half_day','off','rdo','leave','sick','training','other'];
-var ROSTER_WORKING=new Set(['on','c208b','ga8','desk','admin_duty','called_in','half_day']);
+var ROSTER_ORDER=['','c208b','ga8','desk','admin_duty','called_in','half_day','gnd','mrktg','off','rdo','leave','ul','sick','training','other'];
+var ROSTER_WORKING=new Set(['c208b','ga8','desk','admin_duty','called_in','half_day','gnd','mrktg']);
 
 // ── Role groups ──
 var ROLE_GROUPS=[
@@ -121,9 +123,9 @@ function renderRosterView(){
   // ── Toolbar ──
   var h='';
   h+='<div style="padding:10px 14px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card)">';
-  h+='<input type="date" value="'+S.rosterWeek+'" onchange="S.rosterWeek=this.value;S._rosterLeaveWeek=null;render()" style="padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px">';
   h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(prevStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">‹</button>';
-  h+='<span style="font-size:13px;font-weight:700;color:var(--text1);white-space:nowrap">'+wkLbl+'</span>';
+  h+='<span onclick="document.getElementById(\'rv-date-pick\').showPicker?document.getElementById(\'rv-date-pick\').showPicker():document.getElementById(\'rv-date-pick\').click()" style="font-size:13px;font-weight:700;color:var(--text1);white-space:nowrap;cursor:pointer;padding:4px 8px;border-radius:7px;border:1px solid transparent" title="Click to jump to date">'+wkLbl+'</span>';
+  h+='<input type="date" id="rv-date-pick" value="'+S.rosterWeek+'" onchange="window.rosterJump(this.value)" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0">';
   h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(nextStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">›</button>';
   h+='<button tabindex="-1" onclick="S.rosterWeek=null;S._rosterLeaveWeek=null;render()" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.08);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">Today</button>';
   h+='<select onchange="S.rosterFilter=this.value;S.rosterWeek=null;render()" style="padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px;cursor:pointer;margin-left:4px">';
@@ -148,7 +150,8 @@ function renderRosterView(){
   days.forEach(function(d,i){
     var ds=_rIso(d),isTdy=ds===todayStr,isWe=i>=5;
     h+='<th style="padding:5px 3px;text-align:center;min-width:66px;background:'+(isTdy?'rgba(124,58,237,.14)':'#0d1526')+';border-bottom:1px solid rgba(255,255,255,.05)">';
-    h+='<div style="font-size:10px;font-weight:700;color:'+(isTdy?'#a78bfa':(isWe?'rgba(255,255,255,.28)':'var(--text3)'))+'">'+DNAMES[i]+'</div>';
+    var _DSHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    h+='<div style="font-size:10px;font-weight:700;color:'+(isTdy?'#a78bfa':(isWe?'rgba(255,255,255,.28)':'var(--text3)'))+'">'+_DSHORT[d.getDay()]+'</div>';
     h+='<div style="font-size:16px;font-weight:800;color:'+(isTdy?'#a78bfa':'var(--text1)')+'">'+d.getDate()+'</div>';
     h+='<div style="font-size:9px;font-weight:500;color:var(--text3)">'+MONTHS[d.getMonth()]+'</div>';
     h+='</th>';
@@ -223,7 +226,7 @@ function renderRosterView(){
           var dispLbl=isOther?(otherNote||'?'):cfg.lbl;
           h+='<td style="padding:3px 2px;text-align:center;background:'+(isTdy?'rgba(124,58,237,.06)':(isWe?'rgba(255,255,255,.01)':'transparent'))+'">';
           if(canEdit){
-            h+='<select tabindex="-1" onchange="window.rosterSet(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?otherNote:'')+'" style="appearance:none;-webkit-appearance:none;padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:62px;text-align:center">';
+            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?otherNote:'')+'" style="padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:66px;text-align:center">';
             ROSTER_ORDER.forEach(function(s){
               var c=ROSTER_SC[s];
               h+='<option value="'+s+'"'+(rawSt===s?' selected':'')+'>'+c.lbl+'</option>';

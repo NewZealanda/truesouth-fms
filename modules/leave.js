@@ -40,17 +40,17 @@ function _lvStatusBadge(status){
 
 // ── Init state ──
 function _lvInit(){
-  if(!S._leave)S._leave={
-    tab:'my',
-    myReqs:null,allReqs:null,
-    _myLoaded:false,_allLoaded:false,
-    form:{show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''},
-    filter:{status:'pending',userId:'',dateFrom:'',dateTo:''},
-    declineId:null,declineComment:'',
-    notifOpen:false
-  };
-  if(!S._leave.form)S._leave.form={show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''};
-  return S._leave;
+  if(!S._leave)S._leave={tab:'my'};
+  var lv=S._leave;
+  if(lv.myReqs===undefined)lv.myReqs=null;
+  if(lv.allReqs===undefined)lv.allReqs=null;
+  if(!lv._myLoaded)lv._myLoaded=false;
+  if(!lv._allLoaded)lv._allLoaded=false;
+  if(!lv.form)lv.form={show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''};
+  if(!lv.filter)lv.filter={status:'pending',userId:'',dateFrom:'',dateTo:''};
+  if(lv.declineId===undefined)lv.declineId=null;
+  if(lv.declineComment===undefined)lv.declineComment='';
+  return lv;
 }
 
 // ── Main render ──
@@ -337,12 +337,12 @@ function renderNotificationPanel(){
 window.loadMyLeave=async function(){
   var uid=S.user?.id;if(!uid)return;
   var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&user_id=eq.'+uid+'&order=submitted_at.desc',{headers:SH});
-  if(r.ok){_lvInit().myReqs=await r.json();safeRender();}
+  if(r.ok){_lvInit().myReqs=(await r.json()).filter(Boolean);safeRender();}
 };
 
 window.loadAllLeave=async function(){
   var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&order=submitted_at.desc',{headers:SH});
-  if(r.ok){_lvInit().allReqs=await r.json();safeRender();}
+  if(r.ok){_lvInit().allReqs=(await r.json()).filter(Boolean);safeRender();}
 };
 
 window.submitLeaveRequest=async function(){

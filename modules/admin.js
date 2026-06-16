@@ -2990,17 +2990,16 @@ window.saveRolePerms=async function(){
 
 function renderAdminPerms(){
   var PERM_COLS=[
-    {k:'operations',    lbl:'Ops'},
-    {k:'charter',       lbl:'Charter'},
-    {k:'maintenance',   lbl:'Maint'},
-    {k:'roster',        lbl:'Roster'},
-    {k:'leave',         lbl:'Leave'},
-    {k:'leave_approve', lbl:'Approve'},
-    {k:'admin_crew',    lbl:'Crew'},
-    {k:'admin_users',   lbl:'Users'},
-    {k:'sign_loadsheet',lbl:'Sign'},
-    {k:'maint_bookings',lbl:'Bookings'},
-    {k:'audit',         lbl:'Audit'}
+    {k:'operations',    lbl:'Ops',           tip:'Access to flight operations (manifests, loadsheets, seatmap)'},
+    {k:'charter',       lbl:'Charter',        tip:'View and manage charter quotes'},
+    {k:'maintenance',   lbl:'Maint',          tip:'Access to the maintenance section'},
+    {k:'roster_leave',  lbl:'Roster & Leave', tip:'View the roster and submit/view own leave requests'},
+    {k:'leave_approve', lbl:'Approvals',      tip:'Approve or decline leave requests from staff'},
+    {k:'admin_crew',    lbl:'Crew',           tip:'View and edit crew profiles and endorsements'},
+    {k:'admin_users',   lbl:'Users',          tip:'Manage user accounts, roles and passwords'},
+    {k:'sign_loadsheet',lbl:'Sign',           tip:'Sign off on loadsheets as PIC'},
+    {k:'maint_bookings',lbl:'Bookings',       tip:'Manage maintenance bookings'},
+    {k:'audit',         lbl:'Audit',          tip:'View the system audit log'}
   ];
   var ROLE_ROWS=[
     {k:'admin',        lbl:'Admin'},
@@ -3021,17 +3020,23 @@ function renderAdminPerms(){
     +'<table style="border-collapse:collapse;min-width:100%;font-size:12px">'
     +'<thead><tr><th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:600;white-space:nowrap">Role</th>';
   PERM_COLS.forEach(function(col){
-    h+='<th style="padding:6px 4px;color:var(--text3);font-weight:600;text-align:center;white-space:nowrap">'+col.lbl+'</th>';
+    h+='<th title="'+col.tip+'" style="padding:6px 4px;color:var(--text3);font-weight:600;text-align:center;white-space:nowrap;cursor:help">'+col.lbl+'</th>';
   });
   h+='</tr></thead><tbody>';
   ROLE_ROWS.forEach(function(row,ri){
     var base=DEFAULT_ROLE_PERMS[row.k]||{};
     var over=rp[row.k]||{};
     var bg=ri%2===0?'background:var(--card2)':'';
-    h+='<tr style="'+bg+'">'
-      +'<td style="padding:7px 8px;font-weight:600;white-space:nowrap;color:var(--text1)">'+row.lbl+'</td>';
+    h+='<tr style="'+bg+'"><td style="padding:7px 8px;font-weight:600;white-space:nowrap;color:var(--text1)">'+row.lbl+'</td>';
     PERM_COLS.forEach(function(col){
-      var eff=over[col.k]!==undefined?over[col.k]:base[col.k]||false;
+      var eff;
+      if(col.k==='roster_leave'){
+        var r1=over['roster']!==undefined?over['roster']:base['roster']||false;
+        var r2=over['leave']!==undefined?over['leave']:base['leave']||false;
+        eff=r1||r2;
+      } else {
+        eff=over[col.k]!==undefined?over[col.k]:base[col.k]||false;
+      }
       h+='<td style="text-align:center;padding:4px">'
         +'<input type="checkbox" '+(eff?'checked':'')+' '
         +'onchange="window.toggleRolePerm('+JSON.stringify(row.k)+','+JSON.stringify(col.k)+',this.checked)" '
@@ -3041,11 +3046,17 @@ function renderAdminPerms(){
     h+='</tr>';
   });
   h+='</tbody></table></div>'
-    +'<p style="font-size:11px;color:var(--text3);margin-top:12px">Superadmin always has full access. Changes apply after Save.</p>'
+    +'<div style="margin-top:16px;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Column Guide</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:6px 22px">';
+  PERM_COLS.forEach(function(col){
+    h+='<div style="font-size:11px;color:var(--text2)"><span style="font-weight:700;color:var(--text1)">'+col.lbl+'</span> '+col.tip+'</div>';
+  });
+  h+='</div></div>'
+    +'<p style="font-size:11px;color:var(--text3);margin-top:12px">Superadmin always has full access. Hover column headers for quick descriptions. Changes apply after Save.</p>'
     +'</div>';
   return h;
 }
-
 // --- Audit Log ---
 function renderAdminAudit(){
   var log=(S.auditLog||[]).slice().sort(function(a,b){return b.time>a.time?1:-1;});

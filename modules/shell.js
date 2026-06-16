@@ -293,7 +293,7 @@ window.changePasswordFromModal=async function(){
 };
 
 window.goToMyProfile=function(){
-  S.tab='admin';
+  S.section='settings';S.tab='admin';
   S.admin=S.admin||{};
   S.admin.section='people';
   S.showAccount=false;
@@ -396,7 +396,7 @@ function renderDrawer(){
     }
   }
   {
-    h+=_secBtn((role==='admin'||role==='superadmin')?'Admin':'Settings','settings','⚙️');
+    h+=_secBtn('Settings','settings','⚙️');
     if(exp==='settings'){
       var adSec=(S.admin||{}).section||'people';
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};

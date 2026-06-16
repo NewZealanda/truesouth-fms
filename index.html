@@ -2373,7 +2373,7 @@ window.changePasswordFromModal=async function(){
 };
 
 window.goToMyProfile=function(){
-  S.tab='admin';
+  S.section='settings';S.tab='admin';
   S.admin=S.admin||{};
   S.admin.section='people';
   S.showAccount=false;
@@ -2476,7 +2476,7 @@ function renderDrawer(){
     }
   }
   {
-    h+=_secBtn((role==='admin'||role==='superadmin')?'Admin':'Settings','settings','⚙️');
+    h+=_secBtn('Settings','settings','⚙️');
     if(exp==='settings'){
       var adSec=(S.admin||{}).section||'people';
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
@@ -7801,17 +7801,16 @@ window.saveRolePerms=async function(){
 
 function renderAdminPerms(){
   var PERM_COLS=[
-    {k:'operations',    lbl:'Ops'},
-    {k:'charter',       lbl:'Charter'},
-    {k:'maintenance',   lbl:'Maint'},
-    {k:'roster',        lbl:'Roster'},
-    {k:'leave',         lbl:'Leave'},
-    {k:'leave_approve', lbl:'Approve'},
-    {k:'admin_crew',    lbl:'Crew'},
-    {k:'admin_users',   lbl:'Users'},
-    {k:'sign_loadsheet',lbl:'Sign'},
-    {k:'maint_bookings',lbl:'Bookings'},
-    {k:'audit',         lbl:'Audit'}
+    {k:'operations',    lbl:'Ops',           tip:'Access to flight operations (manifests, loadsheets, seatmap)'},
+    {k:'charter',       lbl:'Charter',        tip:'View and manage charter quotes'},
+    {k:'maintenance',   lbl:'Maint',          tip:'Access to the maintenance section'},
+    {k:'roster_leave',  lbl:'Roster & Leave', tip:'View the roster and submit/view own leave requests'},
+    {k:'leave_approve', lbl:'Approvals',      tip:'Approve or decline leave requests from staff'},
+    {k:'admin_crew',    lbl:'Crew',           tip:'View and edit crew profiles and endorsements'},
+    {k:'admin_users',   lbl:'Users',          tip:'Manage user accounts, roles and passwords'},
+    {k:'sign_loadsheet',lbl:'Sign',           tip:'Sign off on loadsheets as PIC'},
+    {k:'maint_bookings',lbl:'Bookings',       tip:'Manage maintenance bookings'},
+    {k:'audit',         lbl:'Audit',          tip:'View the system audit log'}
   ];
   var ROLE_ROWS=[
     {k:'admin',        lbl:'Admin'},
@@ -7832,17 +7831,23 @@ function renderAdminPerms(){
     +'<table style="border-collapse:collapse;min-width:100%;font-size:12px">'
     +'<thead><tr><th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:600;white-space:nowrap">Role</th>';
   PERM_COLS.forEach(function(col){
-    h+='<th style="padding:6px 4px;color:var(--text3);font-weight:600;text-align:center;white-space:nowrap">'+col.lbl+'</th>';
+    h+='<th title="'+col.tip+'" style="padding:6px 4px;color:var(--text3);font-weight:600;text-align:center;white-space:nowrap;cursor:help">'+col.lbl+'</th>';
   });
   h+='</tr></thead><tbody>';
   ROLE_ROWS.forEach(function(row,ri){
     var base=DEFAULT_ROLE_PERMS[row.k]||{};
     var over=rp[row.k]||{};
     var bg=ri%2===0?'background:var(--card2)':'';
-    h+='<tr style="'+bg+'">'
-      +'<td style="padding:7px 8px;font-weight:600;white-space:nowrap;color:var(--text1)">'+row.lbl+'</td>';
+    h+='<tr style="'+bg+'"><td style="padding:7px 8px;font-weight:600;white-space:nowrap;color:var(--text1)">'+row.lbl+'</td>';
     PERM_COLS.forEach(function(col){
-      var eff=over[col.k]!==undefined?over[col.k]:base[col.k]||false;
+      var eff;
+      if(col.k==='roster_leave'){
+        var r1=over['roster']!==undefined?over['roster']:base['roster']||false;
+        var r2=over['leave']!==undefined?over['leave']:base['leave']||false;
+        eff=r1||r2;
+      } else {
+        eff=over[col.k]!==undefined?over[col.k]:base[col.k]||false;
+      }
       h+='<td style="text-align:center;padding:4px">'
         +'<input type="checkbox" '+(eff?'checked':'')+' '
         +'onchange="window.toggleRolePerm('+JSON.stringify(row.k)+','+JSON.stringify(col.k)+',this.checked)" '
@@ -7852,11 +7857,17 @@ function renderAdminPerms(){
     h+='</tr>';
   });
   h+='</tbody></table></div>'
-    +'<p style="font-size:11px;color:var(--text3);margin-top:12px">Superadmin always has full access. Changes apply after Save.</p>'
+    +'<div style="margin-top:16px;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Column Guide</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:6px 22px">';
+  PERM_COLS.forEach(function(col){
+    h+='<div style="font-size:11px;color:var(--text2)"><span style="font-weight:700;color:var(--text1)">'+col.lbl+'</span> '+col.tip+'</div>';
+  });
+  h+='</div></div>'
+    +'<p style="font-size:11px;color:var(--text3);margin-top:12px">Superadmin always has full access. Hover column headers for quick descriptions. Changes apply after Save.</p>'
     +'</div>';
   return h;
 }
-
 // --- Audit Log ---
 function renderAdminAudit(){
   var log=(S.auditLog||[]).slice().sort(function(a,b){return b.time>a.time?1:-1;});
@@ -8794,23 +8805,25 @@ window.onload=()=>{
 
 // ── Status config ──
 var ROSTER_SC={
-  '':           {bg:'transparent',           bd:'rgba(255,255,255,.08)', col:'rgba(255,255,255,.2)',  lbl:'—'},
-  on:           {bg:'rgba(34,197,94,.16)',    bd:'#22c55e',               col:'#4ade80',              lbl:'On'},
-  c208b:        {bg:'rgba(59,130,246,.18)',   bd:'#3b82f6',               col:'#60a5fa',              lbl:'C208B'},
-  ga8:          {bg:'rgba(168,85,247,.18)',   bd:'#a855f7',               col:'#c084fc',              lbl:'GA8'},
-  desk:         {bg:'rgba(20,184,166,.18)',   bd:'#14b8a6',               col:'#2dd4bf',              lbl:'Desk'},
-  admin_duty:   {bg:'rgba(251,191,36,.16)',   bd:'#fbbf24',               col:'#fde047',              lbl:'Admin'},
-  called_in:    {bg:'rgba(34,197,94,.08)',    bd:'rgba(34,197,94,.45)',    col:'rgba(134,239,172,.8)', lbl:'Called'},
-  half_day:     {bg:'rgba(234,179,8,.16)',    bd:'#eab308',               col:'#facc15',              lbl:'½ Day'},
-  off:          {bg:'rgba(100,116,139,.1)',   bd:'rgba(100,116,139,.4)',   col:'#94a3b8',              lbl:'Off'},
-  rdo:          {bg:'rgba(148,163,184,.08)',  bd:'rgba(148,163,184,.3)',   col:'#64748b',              lbl:'RDO'},
-  leave:        {bg:'rgba(245,158,11,.15)',   bd:'#f59e0b',               col:'#fbbf24',              lbl:'AL'},
-  sick:         {bg:'rgba(239,68,68,.15)',    bd:'#ef4444',               col:'#f87171',              lbl:'Sick'},
-  training:     {bg:'rgba(99,102,241,.16)',   bd:'#818cf8',               col:'#a5b4fc',              lbl:'Train'},
-  other:        {bg:'rgba(148,163,184,.08)',  bd:'rgba(148,163,184,.25)', col:'#94a3b8',              lbl:'?'},
+  '':         {bg:'transparent',           bd:'rgba(255,255,255,.08)', col:'rgba(255,255,255,.2)',  lbl:'-'},
+  c208b:      {bg:'rgba(59,130,246,.18)',   bd:'#3b82f6',               col:'#60a5fa',              lbl:'C208B'},
+  ga8:        {bg:'rgba(168,85,247,.18)',   bd:'#a855f7',               col:'#c084fc',              lbl:'GA8'},
+  desk:       {bg:'rgba(20,184,166,.18)',   bd:'#14b8a6',               col:'#2dd4bf',              lbl:'Desk'},
+  admin_duty: {bg:'rgba(251,191,36,.16)',   bd:'#fbbf24',               col:'#fde047',              lbl:'Admin'},
+  called_in:  {bg:'rgba(34,197,94,.25)',    bd:'#22c55e',               col:'#86efac',              lbl:'Called In'},
+  half_day:   {bg:'rgba(34,197,94,.25)',    bd:'#22c55e',               col:'#86efac',              lbl:'1/2 Day'},
+  gnd:        {bg:'rgba(100,116,139,.18)',  bd:'#64748b',               col:'#94a3b8',              lbl:'GND'},
+  mrktg:      {bg:'rgba(236,72,153,.18)',   bd:'#ec4899',               col:'#f472b6',              lbl:'MRKTG'},
+  off:        {bg:'rgba(100,116,139,.1)',   bd:'rgba(100,116,139,.4)',   col:'#94a3b8',              lbl:'Off'},
+  rdo:        {bg:'rgba(148,163,184,.08)',  bd:'rgba(148,163,184,.3)',   col:'#64748b',              lbl:'RDO'},
+  leave:      {bg:'rgba(245,158,11,.15)',   bd:'#f59e0b',               col:'#fbbf24',              lbl:'AL'},
+  ul:         {bg:'rgba(239,68,68,.12)',    bd:'rgba(239,68,68,.45)',    col:'#fca5a5',              lbl:'UL'},
+  sick:       {bg:'rgba(239,68,68,.15)',    bd:'#ef4444',               col:'#f87171',              lbl:'Sick'},
+  training:   {bg:'rgba(99,102,241,.16)',   bd:'#818cf8',               col:'#a5b4fc',              lbl:'Training'},
+  other:      {bg:'rgba(148,163,184,.08)',  bd:'rgba(148,163,184,.25)', col:'#94a3b8',              lbl:'Other'},
 };
-var ROSTER_ORDER=['','on','c208b','ga8','desk','admin_duty','called_in','half_day','off','rdo','leave','sick','training','other'];
-var ROSTER_WORKING=new Set(['on','c208b','ga8','desk','admin_duty','called_in','half_day']);
+var ROSTER_ORDER=['','c208b','ga8','desk','admin_duty','called_in','half_day','gnd','mrktg','off','rdo','leave','ul','sick','training','other'];
+var ROSTER_WORKING=new Set(['c208b','ga8','desk','admin_duty','called_in','half_day','gnd','mrktg']);
 
 // ── Role groups ──
 var ROLE_GROUPS=[
@@ -8913,9 +8926,9 @@ function renderRosterView(){
   // ── Toolbar ──
   var h='';
   h+='<div style="padding:10px 14px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card)">';
-  h+='<input type="date" value="'+S.rosterWeek+'" onchange="S.rosterWeek=this.value;S._rosterLeaveWeek=null;render()" style="padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px">';
   h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(prevStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">‹</button>';
-  h+='<span style="font-size:13px;font-weight:700;color:var(--text1);white-space:nowrap">'+wkLbl+'</span>';
+  h+='<span onclick="document.getElementById(\'rv-date-pick\').showPicker?document.getElementById(\'rv-date-pick\').showPicker():document.getElementById(\'rv-date-pick\').click()" style="font-size:13px;font-weight:700;color:var(--text1);white-space:nowrap;cursor:pointer;padding:4px 8px;border-radius:7px;border:1px solid transparent" title="Click to jump to date">'+wkLbl+'</span>';
+  h+='<input type="date" id="rv-date-pick" value="'+S.rosterWeek+'" onchange="window.rosterJump(this.value)" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0">';
   h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(nextStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">›</button>';
   h+='<button tabindex="-1" onclick="S.rosterWeek=null;S._rosterLeaveWeek=null;render()" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.08);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">Today</button>';
   h+='<select onchange="S.rosterFilter=this.value;S.rosterWeek=null;render()" style="padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px;cursor:pointer;margin-left:4px">';
@@ -8940,7 +8953,8 @@ function renderRosterView(){
   days.forEach(function(d,i){
     var ds=_rIso(d),isTdy=ds===todayStr,isWe=i>=5;
     h+='<th style="padding:5px 3px;text-align:center;min-width:66px;background:'+(isTdy?'rgba(124,58,237,.14)':'#0d1526')+';border-bottom:1px solid rgba(255,255,255,.05)">';
-    h+='<div style="font-size:10px;font-weight:700;color:'+(isTdy?'#a78bfa':(isWe?'rgba(255,255,255,.28)':'var(--text3)'))+'">'+DNAMES[i]+'</div>';
+    var _DSHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    h+='<div style="font-size:10px;font-weight:700;color:'+(isTdy?'#a78bfa':(isWe?'rgba(255,255,255,.28)':'var(--text3)'))+'">'+_DSHORT[d.getDay()]+'</div>';
     h+='<div style="font-size:16px;font-weight:800;color:'+(isTdy?'#a78bfa':'var(--text1)')+'">'+d.getDate()+'</div>';
     h+='<div style="font-size:9px;font-weight:500;color:var(--text3)">'+MONTHS[d.getMonth()]+'</div>';
     h+='</th>';
@@ -9015,7 +9029,7 @@ function renderRosterView(){
           var dispLbl=isOther?(otherNote||'?'):cfg.lbl;
           h+='<td style="padding:3px 2px;text-align:center;background:'+(isTdy?'rgba(124,58,237,.06)':(isWe?'rgba(255,255,255,.01)':'transparent'))+'">';
           if(canEdit){
-            h+='<select tabindex="-1" onchange="window.rosterSet(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?otherNote:'')+'" style="appearance:none;-webkit-appearance:none;padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:62px;text-align:center">';
+            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?otherNote:'')+'" style="padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:66px;text-align:center">';
             ROSTER_ORDER.forEach(function(s){
               var c=ROSTER_SC[s];
               h+='<option value="'+s+'"'+(rawSt===s?' selected':'')+'>'+c.lbl+'</option>';
@@ -9298,17 +9312,17 @@ function _lvStatusBadge(status){
 
 // ── Init state ──
 function _lvInit(){
-  if(!S._leave)S._leave={
-    tab:'my',
-    myReqs:null,allReqs:null,
-    _myLoaded:false,_allLoaded:false,
-    form:{show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''},
-    filter:{status:'pending',userId:'',dateFrom:'',dateTo:''},
-    declineId:null,declineComment:'',
-    notifOpen:false
-  };
-  if(!S._leave.form)S._leave.form={show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''};
-  return S._leave;
+  if(!S._leave)S._leave={tab:'my'};
+  var lv=S._leave;
+  if(lv.myReqs===undefined)lv.myReqs=null;
+  if(lv.allReqs===undefined)lv.allReqs=null;
+  if(!lv._myLoaded)lv._myLoaded=false;
+  if(!lv._allLoaded)lv._allLoaded=false;
+  if(!lv.form)lv.form={show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''};
+  if(!lv.filter)lv.filter={status:'pending',userId:'',dateFrom:'',dateTo:''};
+  if(lv.declineId===undefined)lv.declineId=null;
+  if(lv.declineComment===undefined)lv.declineComment='';
+  return lv;
 }
 
 // ── Main render ──
@@ -9595,12 +9609,12 @@ function renderNotificationPanel(){
 window.loadMyLeave=async function(){
   var uid=S.user?.id;if(!uid)return;
   var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&user_id=eq.'+uid+'&order=submitted_at.desc',{headers:SH});
-  if(r.ok){_lvInit().myReqs=await r.json();safeRender();}
+  if(r.ok){_lvInit().myReqs=(await r.json()).filter(Boolean);safeRender();}
 };
 
 window.loadAllLeave=async function(){
   var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&order=submitted_at.desc',{headers:SH});
-  if(r.ok){_lvInit().allReqs=await r.json();safeRender();}
+  if(r.ok){_lvInit().allReqs=(await r.json()).filter(Boolean);safeRender();}
 };
 
 window.submitLeaveRequest=async function(){
