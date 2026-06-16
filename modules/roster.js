@@ -19,7 +19,7 @@ var ROSTER_SC={
   training:   {bg:'rgba(99,102,241,.16)',   bd:'#818cf8',               col:'#a5b4fc',              lbl:'Training'},
   other:      {bg:'rgba(148,163,184,.08)',  bd:'rgba(148,163,184,.25)', col:'#94a3b8',              lbl:'Other'},
 };
-var ROSTER_ORDER=['','c208b','ga8','desk','admin_duty','called_in','half_day','gnd','mrktg','off','rdo','leave','ul','sick','training','other'];
+var ROSTER_ORDER=['','c208b','ga8','desk','admin_duty','called_in','half_day','gnd','mrktg','rdo','leave','ul','sick','training','other'];
 var ROSTER_WORKING=new Set(['c208b','ga8','desk','admin_duty','called_in','half_day','gnd','mrktg']);
 
 // Color helpers
@@ -44,9 +44,9 @@ function _rAccent(key){return (S.rosterColors&&S.rosterColors[key])||ROSTER_SC_H
 // ── Role groups ──
 var ROLE_GROUPS=[
   {key:'pilot',    label:'Pilots',   roles:['pilot'],              col:'#7B9EC6'},
-  {key:'desk',     label:'Desk',     roles:['desk','cx_manager'],  col:'#10b981'},
+  {key:'desk',     label:'Desk',     roles:['desk','cx_manager'],  col:'#f9a8d4'},
   {key:'admin',    label:'Admin',    roles:['admin','superadmin'], col:'#f59e0b'},
-  {key:'ground',   label:'Ground',   roles:['ground_staff'],       col:'#64748b'},
+  {key:'ground',   label:'Ground',   roles:['ground_staff','ground'], col:'#a16207'},
   {key:'maint',    label:'Maint',    roles:['maint','maintenance'],col:'#a78bfa'},
   {key:'accounts', label:'Accounts', roles:['accounts'],           col:'#06b6d4'},
   {key:'marketing',label:'Marketing',roles:['marketing'],          col:'#ec4899'},
@@ -58,6 +58,11 @@ function _rThursday(d){var dd=new Date(d);dd.setHours(0,0,0,0);dd.setDate(dd.get
 function _rIso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function _rGetStatus(u,ds,roster){
   var _ini=(u.name||'').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
+  var _draft=S._rosterDraft||{};
+  if(_draft[ds]){
+    var _dv=u.id!==undefined&&_draft[ds][u.id]!==undefined?_draft[ds][u.id]:(_ini&&_draft[ds][_ini]!==undefined?_draft[ds][_ini]:undefined);
+    if(_dv!==undefined)return _dv;
+  }
   var st=(roster[ds]&&(roster[ds][u.id]||roster[ds][_ini]))||'';
   var _lvReq=S._rosterLeave&&S._rosterLeave[ds]&&S._rosterLeave[ds][u.id];
   if(_lvReq){var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};st=_lvMap[_lvReq]||'leave';}
@@ -83,7 +88,6 @@ function renderRoster(){
   h+=_rTabBtn('📅 Roster','view',tab==='view');
   h+=_rTabBtn('🔨 Build Pattern','build',tab==='build');
   h+='<div style="flex:1"></div>';
-  if(S._rosterSaved){h+='<span style="font-size:11px;color:#4ade80;font-weight:600;margin-right:12px">✓ Saved</span>';}
   h+='</div>';
   h+=(tab==='build'?renderRosterBuild():renderRosterView());
   h+='</div>';
@@ -103,12 +107,15 @@ function renderRosterView(){
   var todayStr=_rIso(today);
   var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var DNAMES=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  var filter=S.rosterFilter||'all';
   if(!S._rosterHide)S._rosterHide=[];var rHide=S._rosterHide;
   if(!S._rosterColorsLoaded){S._rosterColorsLoaded=true;window.loadRosterColors();}
+  var NEVER_SHOW=['maint','accounts'];
+  if(!S._rosterGroupHide)S._rosterGroupHide=NEVER_SHOW.slice();
+  NEVER_SHOW.forEach(function(k){if(S._rosterGroupHide.indexOf(k)===-1)S._rosterGroupHide.push(k);});
+  var _rGH=S._rosterGroupHide;
 
   if(!S.rosterWeek){
-    S.rosterWeek=_rIso(filter==='accounts'?_rThursday(today):_rMonday(today));
+    S.rosterWeek=_rIso(_rMonday(today));
   }
   var weekStart=new Date(S.rosterWeek+'T00:00:00');
   var days=[];
@@ -119,19 +126,18 @@ function renderRosterView(){
   var wkLbl=d0.getDate()+' '+MONTHS[d0.getMonth()]+(d0.getFullYear()!==d6.getFullYear()?' '+d0.getFullYear():'')+' – '+d6.getDate()+' '+MONTHS[d6.getMonth()]+' '+d6.getFullYear();
 
   var allUsers=(S.users||[]).filter(function(u){return u.id&&u.name&&!u.inactive;});
-  var displayUsers=allUsers;
-  if(filter!=='all'){
-    var grp=ROLE_GROUPS.filter(function(g){return g.key===filter;})[0];
-    if(grp)displayUsers=allUsers.filter(function(u){return grp.roles.indexOf(u.role)>=0;});
-  }
-  var roleOrder={superadmin:0,admin:1,pilot:2,desk:3,cx_manager:3,accounts:4,marketing:5,maint:6,maintenance:6,ground_staff:7};
+  var displayUsers=allUsers.filter(function(u){
+    var grp=ROLE_GROUPS.filter(function(g){return g.roles.indexOf(u.role)>=0;})[0];
+    return grp&&_rGH.indexOf(grp.key)===-1;
+  });
+  var roleOrder={superadmin:0,admin:1,pilot:2,desk:3,cx_manager:3,accounts:4,marketing:5,maint:6,maintenance:6,ground_staff:7,ground:7};
   displayUsers=displayUsers.slice().sort(function(a,b){return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');});
   var roster=S.roster||{};
 
   function _dayTots(ds){
     var t={};
     ROLE_GROUPS.forEach(function(g){t[g.key]=0;});
-    allUsers.forEach(function(u){
+    displayUsers.forEach(function(u){
       var st=_rGetStatus(u,ds,roster);
       var raw=st&&st.indexOf('other:')===0?'other':st;
       if(ROSTER_WORKING.has(raw)){
@@ -144,19 +150,29 @@ function renderRosterView(){
   // ── Toolbar ──
   var h='';
   h+='<div style="padding:10px 14px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card)">';
-  h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(prevStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">‹</button>';
-  h+='<span style="font-size:13px;font-weight:700;color:var(--text1);white-space:nowrap;padding:4px 0">'+wkLbl+'</span>';
-  h+='<input type="date" value="'+S.rosterWeek+'" onchange="window.rosterJump(this.value)" style="padding:4px 7px;border-radius:7px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:11px;cursor:pointer" title="Jump to week">';
-  h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(nextStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">›</button>';
+  h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(prevStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">◁</button>';
+  h+='<label onclick="this.querySelector(\'input\').showPicker?this.querySelector(\'input\').showPicker():null" style="display:inline-flex;align-items:center;cursor:pointer;position:relative">';
+  h+='<span style="font-size:13px;font-weight:700;color:var(--accent);padding:4px 8px;border-radius:6px;border:1px solid rgba(167,139,250,.35);background:rgba(167,139,250,.08);white-space:nowrap">'+wkLbl+'</span>';
+  h+='<input type="date" value="'+S.rosterWeek+'" onchange="window.rosterJump(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;left:0;top:0">';
+  h+='</label>';
+  h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(nextStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>';
   h+='<button tabindex="-1" onclick="S.rosterWeek=null;S._rosterLeaveWeek=null;render()" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.08);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">Today</button>';
-  h+='<select onchange="S.rosterFilter=this.value;S.rosterWeek=null;render()" style="padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px;cursor:pointer;margin-left:4px">';
-  h+='<option value="all"'+(filter==='all'?' selected':'')+'>All Staff</option>';
-  ROLE_GROUPS.forEach(function(g){h+='<option value="'+g.key+'"'+(filter===g.key?' selected':'')+'>'+g.label+'</option>';});
-  h+='</select>';
+  h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-left:2px">';
+  ROLE_GROUPS.forEach(function(g){
+    var hidden=_rGH.indexOf(g.key)>=0;
+    h+='<button tabindex="-1" onclick="window.rosterToggleGroup(\''+g.key+'\')" style="padding:4px 10px;border-radius:20px;border:1px solid '+(hidden?'var(--border2)':g.col+'88')+';background:'+(hidden?'var(--card2)':g.col+'22')+';color:'+(hidden?'var(--text3)':g.col)+';font-size:11px;font-weight:700;cursor:pointer;opacity:'+(hidden?'0.45':'1')+'">'+g.label+'</button>';
+  });
+  h+='</div>';
   if(isAdminPlus){
     var lk=!!S.rosterLocked;
     h+='<button tabindex="-1" onclick="S.rosterLocked=!S.rosterLocked;render()" style="padding:5px 10px;border-radius:8px;border:1px solid '+(lk?'#f59e0b':'var(--border2)')+';background:'+(lk?'rgba(245,158,11,.12)':'var(--card2)')+';color:'+(lk?'#fbbf24':'var(--text3)')+';font-size:12px;cursor:pointer" title="Toggle roster lock">'+(lk?'🔒 Locked':'🔓 Unlocked')+'</button>';
-    if(!lk){h+='<button tabindex="-1" onclick="window.saveRosterToCloud()" style="padding:5px 12px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>';}
+    if(!lk){
+      var _hasDraft=S._rosterDraft&&Object.keys(S._rosterDraft).length>0;
+      var _undoLen=(S._rosterUndoStack||[]).length;
+      h+='<button tabindex="-1" onclick="window.saveRosterToCloud()" style="padding:5px 12px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>';
+      if(_hasDraft){h+='<button tabindex="-1" onclick="window.rosterDiscard()" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#f87171;font-size:11px;font-weight:600;cursor:pointer">Discard</button>';}
+      if(_undoLen>0){h+='<button tabindex="-1" onclick="window.rosterUndo()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:11px;cursor:pointer">Undo ('+_undoLen+')</button>';}
+    }
     var ce=!!S._rosterColorEdit;
     h+='<button tabindex="-1" onclick="S._rosterColorEdit=!S._rosterColorEdit;render()" style="padding:5px 10px;border-radius:8px;border:1px solid '+(ce?'rgba(99,102,241,.6)':'var(--border2)')+';background:'+(ce?'rgba(99,102,241,.15)':'var(--card2)')+';color:'+(ce?'#a5b4fc':'var(--text3)')+';font-size:12px;cursor:pointer;margin-left:auto">Colors</button>';
   }
@@ -164,7 +180,7 @@ function renderRosterView(){
   h+=_renderRosterColors(isAdminPlus);
 
   // ── Table ──
-  h+='<div style="overflow:auto">';
+  h+='<div style="overflow:auto;max-height:calc(100vh - 220px)">';
   h+='<table style="width:100%;border-collapse:collapse;min-width:560px">';
 
   // Sticky header
@@ -251,6 +267,16 @@ function renderRosterView(){
           var dispLbl=isOther?(otherNote||'?'):cfg.lbl;
           h+='<td style="padding:3px 2px;text-align:center;background:'+(isTdy?'rgba(124,58,237,.06)':(isWe?'rgba(255,255,255,.01)':'transparent'))+'">';
           if(isHidden){h+='<span style="display:inline-block;width:66px;height:24px"></span>';}else if(canEdit){
+            var _oe=S._rosterOtherEdit;
+            var _editingOther=_oe&&_oe.uid===u.id&&_oe.ds===ds;
+            if(_editingOther){
+              h+='<div style="display:flex;flex-direction:column;gap:3px;align-items:center;padding:2px">';
+              h+='<input id="_rOtherInput_'+ds+'_'+u.id+'" type="text" placeholder="Note..." autofocus style="width:62px;padding:3px 5px;border-radius:5px;border:1px solid rgba(167,139,250,.5);background:rgba(30,27,75,.8);color:#e2e8f0;font-size:10px" onkeydown="if(event.key===\'Enter\')window.rosterOtherConfirm(\''+u.id+'\',\''+ini+'\',\''+ds+'\');if(event.key===\'Escape\')window.rosterOtherCancel()">';
+              h+='<div style="display:flex;gap:3px">';
+              h+='<button tabindex="-1" onclick="window.rosterOtherConfirm(\''+u.id+'\',\''+ini+'\',\''+ds+'\')" style="padding:2px 6px;border-radius:4px;border:none;background:#22c55e;color:#fff;font-size:10px;font-weight:700;cursor:pointer">OK</button>';
+              h+='<button tabindex="-1" onclick="window.rosterOtherCancel()" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:10px;cursor:pointer">X</button>';
+              h+='</div></div>';
+            }else{
             h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?otherNote:'')+'" style="padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:66px;text-align:center">';
             ROSTER_ORDER.forEach(function(s){
               var c=_rSC(s);
@@ -258,6 +284,7 @@ function renderRosterView(){
             });
             h+='</select>';
             if(isOther&&otherNote){h+='<div style="font-size:8px;color:#94a3b8;line-height:1;margin-top:1px;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+otherNote+'</div>';}
+            }
           } else {
             h+='<span'+(isOther?' title="'+otherNote+'"':'')+' style="display:inline-block;padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.04)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.1)')+';font-size:11px;font-weight:700;min-width:56px">'+dispLbl+'</span>';
           }
@@ -422,24 +449,42 @@ function renderRosterBuild(){
 
 window.rosterSetCell=function(uid,ini,ds,val){
   if(val==='other'){
-    var note=prompt('Custom status note:','');
-    if(note===null){render();return;}
-    val=note?'other:'+note:'';
+    S._rosterOtherEdit={uid:uid,ini:ini,ds:ds};
+    render();
+    return;
   }
-  window.rosterSet(uid,ini,ds,val);
+  S._rosterOtherEdit=null;
+  window._rosterDraftSet(uid,ini,ds,val);
+};
+window.rosterOtherConfirm=function(uid,ini,ds){
+  var el=document.getElementById('_rOtherInput_'+ds+'_'+uid);
+  var note=el?el.value.trim():'';
+  S._rosterOtherEdit=null;
+  window._rosterDraftSet(uid,ini,ds,note?'other:'+note:'other');
+};
+window.rosterOtherCancel=function(){
+  S._rosterOtherEdit=null;
+  render();
 };
 window.rosterSet=function(uid,ini,ds,val){
-  if(val==='other'){
-    var note=prompt('Custom status note:','');
-    if(note===null){render();return;}
-    val=note?'other:'+note:'';
+  window._rosterDraftSet(uid,ini,ds,val);
+};
+window._rosterDraftSet=function(uid,ini,ds,val){
+  // Push current draft to undo stack (max 10)
+  if(!S._rosterUndoStack)S._rosterUndoStack=[];
+  S._rosterUndoStack.push(JSON.stringify(S._rosterDraft||{}));
+  if(S._rosterUndoStack.length>10)S._rosterUndoStack.shift();
+  // Apply to draft
+  if(!S._rosterDraft)S._rosterDraft={};
+  if(!S._rosterDraft[ds])S._rosterDraft[ds]={};
+  if(val){
+    S._rosterDraft[ds][uid]=val;
+    if(ini)S._rosterDraft[ds][ini]=val;
+  }else{
+    delete S._rosterDraft[ds][uid];
+    if(ini)delete S._rosterDraft[ds][ini];
+    if(!Object.keys(S._rosterDraft[ds]).length)delete S._rosterDraft[ds];
   }
-  if(!S.roster)S.roster={};
-  if(!S.roster[ds])S.roster[ds]={};
-  if(val){S.roster[ds][uid]=val;if(ini)S.roster[ds][ini]=val;}
-  else{delete S.roster[ds][uid];if(ini)delete S.roster[ds][ini];}
-  S._rosterSaved=false;
-  lsSet('ts_roster',S.roster);
   render();
 };
 
@@ -492,10 +537,20 @@ window.rosterApplyPattern=function(){
 };
 
 window.saveRosterToCloud=async function(){
+  // Merge draft into roster
+  var draft=S._rosterDraft||{};
+  if(!S.roster)S.roster={};
+  Object.keys(draft).forEach(function(ds){
+    if(!S.roster[ds])S.roster[ds]={};
+    Object.assign(S.roster[ds],draft[ds]);
+  });
+  S._rosterDraft={};
+  S._rosterUndoStack=[];
+  lsSet('ts_roster',S.roster);
   try{
     await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
-    S._rosterSaved=true;render();
-    setTimeout(function(){S._rosterSaved=false;render();},3000);
+    toast('Roster saved!','success');
+    render();
   }catch(e){toast('Roster save failed','err');}
 };
 
@@ -547,7 +602,7 @@ window.rosterJump=function(v){
   var iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   S.rosterWeek=iso;
   S._rosterLeaveWeek=null;
-  render();
+  setTimeout(render,0);
 };
 
 window.rosterVisAll=function(){
@@ -604,4 +659,27 @@ window.loadRosterColors=async function(){
       if(val&&typeof val==='object'){S.rosterColors=val;safeRender();}
     }
   }catch(e){}
+};
+
+window.rosterUndo=function(){
+  if(!S._rosterUndoStack||!S._rosterUndoStack.length)return;
+  S._rosterDraft=JSON.parse(S._rosterUndoStack.pop());
+  render();
+};
+
+window.rosterDiscard=function(){
+  if(!confirm('Discard all unsaved roster changes?'))return;
+  S._rosterDraft={};
+  S._rosterUndoStack=[];
+  render();
+};
+
+window.rosterToggleGroup=function(key){
+  var NEVER_SHOW=['maint','accounts'];
+  if(NEVER_SHOW.indexOf(key)>=0)return;
+  if(!S._rosterGroupHide)S._rosterGroupHide=[];
+  var idx=S._rosterGroupHide.indexOf(key);
+  if(idx>=0)S._rosterGroupHide.splice(idx,1);
+  else S._rosterGroupHide.push(key);
+  render();
 };

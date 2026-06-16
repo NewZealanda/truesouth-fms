@@ -145,16 +145,35 @@ function renderStep1(){
     const groupCol=p.group?.trim()
       ?`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="${_pillStyle};background:${gc};color:#fff;user-select:none;max-width:80px;overflow:hidden;text-overflow:ellipsis">${p.group}</div>`
       :`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text3)">🏷️</div>`;
+    const typeBtns=`<button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>`;
+    const wtPill=`<div id="wt-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'weight',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">⚖️ ${p.weight?p.weight+'kg':'—'}</div>`;
+    const bagPill=`<div id="bag-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'bag',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">🎒 ${p.bag?p.bag+'kg':'—'}</div>`;
+    const delBtn=`<button tabindex="-1" class="icon-btn red" onclick="rmPax(${oi})" style="width:28px;height:28px;font-size:13px">✕</button>`;
+    const payBtn=`<button tabindex="-1" onclick="setPaxField(${oi},'paymentReq',${!p.paymentReq})" style="padding:2px 7px;border-radius:20px;border:1px solid ${p.paymentReq?'#ef4444':'var(--border)'};background:${p.paymentReq?'rgba(239,68,68,.2)':'transparent'};color:${p.paymentReq?'#ef4444':'var(--text3)'};font-size:9px;font-weight:800;cursor:pointer;letter-spacing:.04em;flex-shrink:0">${p.paymentReq?'$ PAY REQ':'$'}</button>`;
+    if(S.mobileView){
+      // Mobile: name gets full row 1 width; controls on row 2
+      const mName=p.name
+        ?`<div onclick="window.openPaxFieldPopup(${oi},'name')" style="padding:5px 14px;border-radius:20px;background:${gc||'var(--card2)'};${gc?'':'border:1px solid var(--border2);'}color:${gc?'#fff':'var(--text1)'};font-size:14px;font-weight:700;cursor:pointer;user-select:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
+          ${p.infantName?`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;background:rgba(236,72,153,.15);border:1px solid rgba(236,72,153,.35);font-size:11px;font-weight:700;color:#ec4899;white-space:nowrap">👶 ${p.infantName}<button tabindex="-1" onclick="window.rmInfant(${oi})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7;margin-left:1px">×</button></span>`:''}`
+        :`<input class="fi" type="text" placeholder="Tap to enter name" value="" style="font-size:14px;flex:1;min-width:0" data-row="${i}" data-field="name" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'name');}" onblur="window.paxNameBlur(${oi},this.value)">`;
+      return `<div style="padding:8px 4px;border-bottom:1px solid var(--border);background:${rowBg}">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;min-width:0">
+          <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex:1;min-width:0">${mName}</div>${delBtn}
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+          <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center">${acBtns}</div>
+          ${typeBtns}${payBtn}
+          <div style="min-width:0">${groupCol}</div>
+          ${wtPill}${bagPill}
+        </div>
+      </div>`;
+    }
     return `<div style="display:grid;grid-template-columns:70px 46px 1fr 68px 52px 52px 26px;gap:4px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);border-radius:6px;min-width:0;overflow:hidden;background:${rowBg}">
       <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-width:0">${acBtns}</div>
-      <div style="display:flex;gap:2px;align-items:center;min-width:0">
-        <button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>
-      </div>
+      <div style="display:flex;gap:2px;align-items:center;min-width:0">${typeBtns}</div>
       ${nameCol}
       <div style="min-width:0;overflow:hidden">${groupCol}</div>
-      <div id="wt-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'weight',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">⚖️ ${p.weight?p.weight+'kg':'—'}</div>
-      <div id="bag-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'bag',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">🎒 ${p.bag?p.bag+'kg':'—'}</div>
-      <button tabindex="-1" class="icon-btn red" onclick="rmPax(${oi})" style="width:28px;height:28px;font-size:13px">✕</button>
+      ${wtPill}${bagPill}${delBtn}
     </div>`;
   });
   return ri.join('');
@@ -206,9 +225,9 @@ function renderStep1(){
       ${(()=>{const nonInf=d.pax.filter(p=>!p.infant).length;return nonInf>totalSeats&&totalSeats>0?`<span style="color:#ef4444;font-weight:700">⚠ ${nonInf-totalSeats} over capacity</span>`:'';})()} 
     </div>
   </div>
-    <div style="display:grid;grid-template-columns:80px 52px 1.5fr 72px 56px 56px 28px;gap:5px;padding:4px 0 6px;border-bottom:2px solid var(--border);margin-bottom:2px">
-      ${['AC','TYPE','NAME','GROUP','WT','BAG',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
-    </div></div>
+    ${!S.mobileView?`<div style="display:grid;grid-template-columns:80px 52px 1.5fr 72px 56px 56px 28px;gap:5px;padding:4px 0 6px;border-bottom:2px solid var(--border);margin-bottom:2px">
+      ${'AC,TYPE,NAME,GROUP,WT,BAG,'.split(',').map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}
+    </div>`:''}</div>
     ${paxRows}
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="addPax()">+ Add Passenger</button>
