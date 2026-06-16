@@ -358,7 +358,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.55';
+const APP_VER='v22.56';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -9409,7 +9409,7 @@ function renderRosterBuild(){
   h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Build from (week starting Monday)</label>'
     +'<div style="display:flex;align-items:center;gap:6px">'
     +'<button tabindex="-1" onclick="window.rosterBuildStep(-1)" style="padding:7px 11px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">◁</button>'
-    +'<span style="font-size:13px;font-weight:700;color:var(--accent);padding:6px 12px;border-radius:8px;border:1px solid rgba(167,139,250,.35);background:rgba(167,139,250,.08);white-space:nowrap;min-width:150px;text-align:center">'+_wkLbl+'</span>'
+    +'<label onclick="var i=this.querySelector(\'input\');try{i.showPicker&&i.showPicker()}catch(e){}" title="Click to jump to any week" style="position:relative;cursor:pointer"><span style="display:inline-block;font-size:13px;font-weight:700;color:var(--accent);padding:6px 12px;border-radius:8px;border:1px solid rgba(167,139,250,.35);background:rgba(167,139,250,.08);white-space:nowrap;min-width:150px;text-align:center">'+_wkLbl+'</span><input type="date" value="'+bs.startDate+'" onchange="window.rosterBuildJump(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;left:0;bottom:0"></label>'
     +'<button tabindex="-1" onclick="window.rosterBuildStep(1)" style="padding:7px 11px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>'
     +'<button tabindex="-1" onclick="window.rosterBuildStep(0)" style="padding:7px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.08);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">This week</button>'
     +'</div></div>';
@@ -9446,7 +9446,7 @@ function renderRosterBuild(){
       var togBg=enabled?'var(--accent)':'var(--card2)';
       var togCol=enabled?'#fff':'var(--text3)';
       h+='<td style="padding:5px 8px;text-align:center">';
-      h+='<button tabindex="-1" onclick="window.rosterBuildToggle('+JSON.stringify(u.id)+')" '
+      h+='<button tabindex="-1" onclick="window.rosterBuildToggle(\''+u.id+'\')" '
         +'style="width:42px;height:24px;border-radius:12px;border:none;background:'+togBg+';color:'+togCol+';font-size:10px;font-weight:800;cursor:pointer;transition:background .15s">';
       h+=(enabled?'ON':'OFF')+'</button></td>';
       // Name
@@ -9460,7 +9460,7 @@ function renderRosterBuild(){
         var cfg=ROSTER_SC[tst]||ROSTER_SC[''];
         h+='<td style="padding:3px 2px;text-align:center">';
         h+='<select tabindex="-1" '+(enabled?'':'disabled ')
-          +'onchange="window.rosterTplSet('+di+','+JSON.stringify(u.id)+',this.value,this)" '
+          +'onchange="window.rosterTplSet('+di+',\''+u.id+'\',this.value,this)" '
           +'style="width:68px;padding:4px 3px;border-radius:6px;border:1px solid '+(tst?cfg.bd:'var(--border2)')+';'
           +'background:'+(tst?cfg.bg:'var(--card2)')+';color:'+(tst?cfg.col:'var(--text3)')+';'
           +'font-size:11px;font-weight:700;cursor:pointer;text-align:center">';
@@ -9555,6 +9555,15 @@ window.rosterBuildStep=function(delta){
   var mon=_rMonday(base);
   if(delta)mon.setDate(mon.getDate()+delta*7);
   S.rosterBuild.startDate=_rIso(mon);
+  try{lsSet('ts_roster_build',S.rosterBuild);}catch(e){}
+  render();
+};
+// Build pattern: jump to any week via date picker (snaps to that week's Monday).
+window.rosterBuildJump=function(v){
+  if(!v)return;
+  var d=new Date(v+'T00:00:00'); if(isNaN(d.getTime()))return;
+  if(!S.rosterBuild)S.rosterBuild={};
+  S.rosterBuild.startDate=_rIso(_rMonday(d));
   try{lsSet('ts_roster_build',S.rosterBuild);}catch(e){}
   render();
 };
@@ -9882,20 +9891,6 @@ function _renderMyLeave(lv){
     if(f.startDate&&f.endDate&&days>0){
       h+='<div style="font-size:13px;color:#a78bfa;margin-bottom:12px">📅 '+days+' day'+(days!==1?'s':'')+' total</div>';
     }
-
-    // Partial day
-    h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
-    h+=_lvToggle(f.partialDay,"S._leave.form.partialDay=!S._leave.form.partialDay;render()");
-    h+='<span style="font-size:13px;color:var(--text)">Partial day</span>';
-    if(f.partialDay){
-      h+='<div style="display:flex;gap:6px">';
-      ['am','pm'].forEach(function(t){
-        var on=f.partialType===t;
-        h+='<button tabindex="-1" onclick="S._leave.form.partialType=\''+t+'\';render()" style="padding:4px 12px;border-radius:6px;border:1.5px solid '+(on?'#c084fc':'rgba(255,255,255,.15)')+';background:'+(on?'rgba(124,58,237,.2)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.4)')+';font-size:12px;font-weight:700;cursor:pointer">'+t.toUpperCase()+'</button>';
-      });
-      h+='</div>';
-    }
-    h+='</div>';
 
     // Reason
     h+='<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:6px">Reason / Comments</div>';

@@ -120,20 +120,6 @@ function _renderMyLeave(lv){
       h+='<div style="font-size:13px;color:#a78bfa;margin-bottom:12px">📅 '+days+' day'+(days!==1?'s':'')+' total</div>';
     }
 
-    // Partial day
-    h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
-    h+=_lvToggle(f.partialDay,"S._leave.form.partialDay=!S._leave.form.partialDay;render()");
-    h+='<span style="font-size:13px;color:var(--text)">Partial day</span>';
-    if(f.partialDay){
-      h+='<div style="display:flex;gap:6px">';
-      ['am','pm'].forEach(function(t){
-        var on=f.partialType===t;
-        h+='<button tabindex="-1" onclick="S._leave.form.partialType=\''+t+'\';render()" style="padding:4px 12px;border-radius:6px;border:1.5px solid '+(on?'#c084fc':'rgba(255,255,255,.15)')+';background:'+(on?'rgba(124,58,237,.2)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.4)')+';font-size:12px;font-weight:700;cursor:pointer">'+t.toUpperCase()+'</button>';
-      });
-      h+='</div>';
-    }
-    h+='</div>';
-
     // Reason
     h+='<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:6px">Reason / Comments</div>';
     h+='<textarea oninput="S._leave.form.reason=this.value" placeholder="Optional — add any relevant details" rows="3" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit">'+_lvEsc(f.reason||'')+'</textarea></div>';
