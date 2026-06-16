@@ -237,6 +237,11 @@ input[type=number]::-webkit-outer-spin-button {
   margin: 0;
 }
 input[type=number] { -moz-appearance: textfield; }
+@keyframes ts-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+@keyframes ts-fade-in{0%{opacity:0}100%{opacity:1}}
+#loading-overlay{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background-size:cover;background-position:center;animation:ts-fade-in .2s ease}
+#loading-overlay .ts-logo-spin{width:72px;height:72px;animation:ts-spin 1.1s linear infinite;filter:drop-shadow(0 0 18px rgba(255,255,255,.35))}
+#loading-overlay .ts-loading-text{margin-top:22px;font-size:13px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.6)}
 </style>
 </head>
 <body>

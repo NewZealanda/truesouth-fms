@@ -49,6 +49,7 @@ function _lvInit(){
     declineId:null,declineComment:'',
     notifOpen:false
   };
+  if(!S._leave.form)S._leave.form={show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''};
   return S._leave;
 }
 
@@ -429,7 +430,7 @@ window.withdrawLeave=async function(id){
 window._notifyLeaveApprovers=async function(requestId,requesterRole,requesterName,leaveType,startDate,endDate){
   var approverRoles=(requesterRole==='desk'||requesterRole==='ground_staff')
     ?['cx_manager','admin','superadmin']:['admin','superadmin'];
-  var approvers=(S.users||[]).filter(function(u){return approverRoles.indexOf(u.role)>=0;});
+  var approvers=(S.users||[]).filter(function(u){return approverRoles.indexOf(u.role)>=0&&!u.inactive;});
   if(!approvers.length)return;
   var lt=LEAVE_TYPES.find(function(t){return t.id===leaveType;});
   var msg=requesterName+' has requested '+(lt?lt.lbl:leaveType)+' from '+_lvFmt(startDate)+' to '+_lvFmt(endDate);

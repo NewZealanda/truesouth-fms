@@ -66,7 +66,9 @@ const DEFAULT_ROLE_PERMS={
   desk:        {operations:true, charter:true, maintenance:true, roster:true, leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
   maint:       {operations:false,charter:false,maintenance:true, roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
   maintenance: {operations:false,charter:false,maintenance:true, roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
-  ground_staff:{operations:false,charter:false,maintenance:false,roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false}
+  ground_staff:{operations:false,charter:false,maintenance:false,roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false},
+  accounts: {operations:false,charter:false,maintenance:false,roster:true, leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false},
+  marketing: {operations:false,charter:false,maintenance:false,roster:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false}
 };
 function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
 
@@ -101,7 +103,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.48';
+const APP_VER='v22.50';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -745,7 +747,7 @@ let S={
   // Audit
   auditLog:[],
   // Maintenance
-  maintenance:{},maintBookings:{},roster:null,rosterWeek:null,_rosterLoaded:false,_rosterSaved:false,_leave:null,_notifications:null,_notifOpen:false,uploadProgress:null,driveLastUpload:lsGet('ts_drive_last_upload')||null,wideMode:lsGet('ts_wide_mode')!==false,
+  maintenance:{},maintBookings:{},roster:null,rosterWeek:null,rosterTab:'view',rosterFilter:'all',rosterLocked:false,rosterBuild:null,_rosterLoaded:false,_rosterSaved:false,_rosterLeave:null,_rosterLeaveWeek:null,_appLoading:false,_leave:null,_notifications:null,_notifOpen:false,uploadProgress:null,driveLastUpload:lsGet('ts_drive_last_upload')||null,wideMode:lsGet('ts_wide_mode')!==false,
   // Drive
   driveQueue:[],
   // Manifest / Dispatch
@@ -878,7 +880,7 @@ async function loadAll(){
     const us=await sbF('ts_users');
     const _initPads=await sbF('ts_scratchpads');
     if(us&&us.length){
-      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,isPilot:r.is_pilot||r.role==='pilot'||false}));
+      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,isPilot:r.is_pilot||r.role==='pilot'||false,inactive:r.inactive||false}));
       lsSet('ts_users_cache',S.users);window.loadNotifications&&window.loadNotifications();
     } else {
       const cached=lsGet('ts_users_cache');
@@ -1291,7 +1293,7 @@ async function reloadTable(table){
       S.users=us.map(function(r){return{id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',
         passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,
         superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,
-        isPilot:r.is_pilot||r.role==='pilot'||false};});
+        isPilot:r.is_pilot||r.role==='pilot'||false,inactive:r.inactive||false};});
       lsSet('ts_users_cache',S.users);
       if(S.user){const fresh=S.users.find(function(u){return u.id===S.user.id;});if(fresh){S.user=Object.assign({},fresh);sessionStorage.setItem('ts_user',JSON.stringify(S.user));}}
       return true;
@@ -1666,7 +1668,7 @@ async function _doLogin(emailArg,passArg){
   ['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});
   // Update auth header to use user's session token if available (fixes RLS for writes)
   if(u.sessionToken) SH['Authorization']='Bearer '+u.sessionToken;
-  S.tab=u.role==='maint'?'maintenance':'manifest';render();initRealtime();setTimeout(function(){restoreWorkspace();},600);
+  S.tab=u.role==='maint'?'maintenance':'manifest';S._appLoading=true;render();initRealtime();setTimeout(function(){restoreWorkspace();},600);setTimeout(function(){S._appLoading=false;render();},1400);
   // Fetch latest audit log from Supabase after login
   if(u.superAdmin){
     (async()=>{try{
