@@ -18,7 +18,7 @@ function renderLsSeatGrid(f,a){
   // Build the seat rows column
   var _lsMode=S._lsSeatMode||'edit';
 
-  var seatsCol='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0">';
+  var seatsCol='<div style="display:flex;flex-direction:column;align-items:'+(isMob?'flex-start':'center')+';gap:8px;padding:4px 0">';
   layout.forEach(function(row){
     if(row==='spacer'){seatsCol+='<div style="height:6px"></div>';return;}
     var _rowWt=0;
@@ -269,6 +269,7 @@ function renderLoadsheet(){
 
   // ── Unified Seats section (SVG seatmap + editable cards) ──
   let seatsH='',cargoH='',fuelH='',loadingH='',calcH='',sigH='',unallocH='',isPod=false;
+  const isMob=window.innerWidth<=600;
   if(a){
     const cW=parseFloat(f.seats[0]||0);
     const picMom=(cW*(a.seats[0]?.arm||0)).toFixed(0);
@@ -460,13 +461,13 @@ function renderLoadsheet(){
       <div class="st">Passengers, Loading &amp; Fuel</div>
       ${wbSummary}
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button><button onclick="S._showUnalloc=!S._showUnalloc;autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._showUnalloc||((f._unallocated||[]).length>0)?'#f59e0b':'var(--border2)'};background:${S._showUnalloc||((f._unallocated||[]).length>0)?'rgba(245,158,11,.18)':'transparent'};color:${S._showUnalloc||((f._unallocated||[]).length>0)?'#f59e0b':'var(--text3)'}">&#x1f465; Unallocated${(f._unallocated||[]).length>0?' ('+f._unallocated.length+')':''}</button></div>
-      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-        <div style="flex:1;min-width:180px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <div style="display:flex;gap:${isMob?'8px':'14px'};align-items:flex-start;${isMob?'':'flex-wrap:wrap;'}">
+        <div style="${isMob?'flex:1 1 0;min-width:0':'flex:1;min-width:180px'};overflow-x:auto;-webkit-overflow-scrolling:touch">
           ${renderLsSeatGrid(f,a)}
-          ${!isPod?cargoSection:''}
+          ${(!isPod||isMob)?cargoSection:''}
         </div>
-        ${isPod?`<div style="flex:0 0 195px;min-width:150px">${cargoSection}</div>`:''}
-        <div style="flex:0 0 195px;min-width:160px">
+        ${(isPod&&!isMob)?`<div style="flex:0 0 195px;min-width:150px">${cargoSection}</div>`:''}
+        <div style="${isMob?'flex:0 0 112px;min-width:0':'flex:0 0 195px;min-width:160px'}">
           ${_fuelPanel}
         </div>
       </div>
@@ -642,7 +643,7 @@ function renderLoadsheet(){
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative" onclick="var i=this.querySelector('input[type=date]');try{i.showPicker&&i.showPicker()}catch(e){i.click()}">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;pointer-events:none">Date</div>
         <div style="font-size:13px;font-weight:600;color:var(--text1);pointer-events:none">${_fmtLsDate(f.date)}</div>
-        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();safeRender()" onclick="event.stopPropagation()" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;cursor:pointer;z-index:10;touch-action:manipulation">
+        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();safeRender()" onclick="event.stopPropagation();try{this.showPicker&&this.showPicker()}catch(e){}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;cursor:pointer;z-index:10;touch-action:manipulation">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">ETD</div>

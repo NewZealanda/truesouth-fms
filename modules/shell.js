@@ -29,7 +29,7 @@ function safeRender(){
   } else {render();}
 }
 // Auto-select input content on focus (type-to-overwrite behaviour)
-document.addEventListener('focusin',function(e){if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')e.target.select();});
+document.addEventListener('focusin',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&typeof t.select==='function'){try{t.select();}catch(_){}}});
 
 // Cmd+Z / Ctrl+Z global undo for loadsheet
 document.addEventListener('keydown',function(e){

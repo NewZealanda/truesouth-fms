@@ -2126,7 +2126,7 @@ function safeRender(){
   } else {render();}
 }
 // Auto-select input content on focus (type-to-overwrite behaviour)
-document.addEventListener('focusin',function(e){if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')e.target.select();});
+document.addEventListener('focusin',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&typeof t.select==='function'){try{t.select();}catch(_){}}});
 
 // Cmd+Z / Ctrl+Z global undo for loadsheet
 document.addEventListener('keydown',function(e){
@@ -2935,7 +2935,7 @@ function renderStep1(){
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative" onclick="var i=this.querySelector('input[type=date]');try{i.showPicker&&i.showPicker()}catch(e){i.click()}">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Date</div>
         <div style="font-size:13px;font-weight:600;color:var(--text1)">${_fmtLsDate(d.date)}</div>
-        <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" onclick="event.stopPropagation()" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;touch-action:manipulation;cursor:pointer">
+        <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" onclick="event.stopPropagation();try{this.showPicker&&this.showPicker()}catch(e){}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;touch-action:manipulation;cursor:pointer">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">ETD</div>
@@ -3207,7 +3207,7 @@ function renderLsSeatGrid(f,a){
   // Build the seat rows column
   var _lsMode=S._lsSeatMode||'edit';
 
-  var seatsCol='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0">';
+  var seatsCol='<div style="display:flex;flex-direction:column;align-items:'+(isMob?'flex-start':'center')+';gap:8px;padding:4px 0">';
   layout.forEach(function(row){
     if(row==='spacer'){seatsCol+='<div style="height:6px"></div>';return;}
     var _rowWt=0;
@@ -3458,6 +3458,7 @@ function renderLoadsheet(){
 
   // ── Unified Seats section (SVG seatmap + editable cards) ──
   let seatsH='',cargoH='',fuelH='',loadingH='',calcH='',sigH='',unallocH='',isPod=false;
+  const isMob=window.innerWidth<=600;
   if(a){
     const cW=parseFloat(f.seats[0]||0);
     const picMom=(cW*(a.seats[0]?.arm||0)).toFixed(0);
@@ -3649,13 +3650,13 @@ function renderLoadsheet(){
       <div class="st">Passengers, Loading &amp; Fuel</div>
       ${wbSummary}
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button><button onclick="S._showUnalloc=!S._showUnalloc;autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._showUnalloc||((f._unallocated||[]).length>0)?'#f59e0b':'var(--border2)'};background:${S._showUnalloc||((f._unallocated||[]).length>0)?'rgba(245,158,11,.18)':'transparent'};color:${S._showUnalloc||((f._unallocated||[]).length>0)?'#f59e0b':'var(--text3)'}">&#x1f465; Unallocated${(f._unallocated||[]).length>0?' ('+f._unallocated.length+')':''}</button></div>
-      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-        <div style="flex:1;min-width:180px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <div style="display:flex;gap:${isMob?'8px':'14px'};align-items:flex-start;${isMob?'':'flex-wrap:wrap;'}">
+        <div style="${isMob?'flex:1 1 0;min-width:0':'flex:1;min-width:180px'};overflow-x:auto;-webkit-overflow-scrolling:touch">
           ${renderLsSeatGrid(f,a)}
-          ${!isPod?cargoSection:''}
+          ${(!isPod||isMob)?cargoSection:''}
         </div>
-        ${isPod?`<div style="flex:0 0 195px;min-width:150px">${cargoSection}</div>`:''}
-        <div style="flex:0 0 195px;min-width:160px">
+        ${(isPod&&!isMob)?`<div style="flex:0 0 195px;min-width:150px">${cargoSection}</div>`:''}
+        <div style="${isMob?'flex:0 0 112px;min-width:0':'flex:0 0 195px;min-width:160px'}">
           ${_fuelPanel}
         </div>
       </div>
@@ -3831,7 +3832,7 @@ function renderLoadsheet(){
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative" onclick="var i=this.querySelector('input[type=date]');try{i.showPicker&&i.showPicker()}catch(e){i.click()}">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;pointer-events:none">Date</div>
         <div style="font-size:13px;font-weight:600;color:var(--text1);pointer-events:none">${_fmtLsDate(f.date)}</div>
-        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();safeRender()" onclick="event.stopPropagation()" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;cursor:pointer;z-index:10;touch-action:manipulation">
+        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();safeRender()" onclick="event.stopPropagation();try{this.showPicker&&this.showPicker()}catch(e){}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;cursor:pointer;z-index:10;touch-action:manipulation">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">ETD</div>
@@ -8852,7 +8853,7 @@ var ROSTER_SC={
   called_in:  {bg:'rgba(34,197,94,.25)',    bd:'#22c55e',               col:'#86efac',              lbl:'Called In'},
   half_day:   {bg:'rgba(34,197,94,.25)',    bd:'#22c55e',               col:'#86efac',              lbl:'1/2 Day'},
   gnd:        {bg:'rgba(100,116,139,.18)',  bd:'#64748b',               col:'#94a3b8',              lbl:'GND'},
-  mrktg:      {bg:'rgba(236,72,153,.18)',   bd:'#ec4899',               col:'#f472b6',              lbl:'MRKTG'},
+  mrktg:      {bg:'rgba(236,72,153,.18)',   bd:'#ec4899',               col:'#f472b6',              lbl:'Marketing'},
   off:        {bg:'rgba(100,116,139,.1)',   bd:'rgba(100,116,139,.4)',   col:'#94a3b8',              lbl:'Off'},
   rdo:        {bg:'rgba(148,163,184,.08)',  bd:'rgba(148,163,184,.3)',   col:'#64748b',              lbl:'RDO'},
   leave:      {bg:'rgba(245,158,11,.15)',   bd:'#f59e0b',               col:'#fbbf24',              lbl:'AL'},
@@ -8898,8 +8899,14 @@ var ROLE_GROUPS=[
 function _rMonday(d){var dd=new Date(d);dd.setHours(0,0,0,0);var dy=dd.getDay();dd.setDate(dd.getDate()+(dy===0?-6:1-dy));return dd;}
 function _rThursday(d){var dd=new Date(d);dd.setHours(0,0,0,0);dd.setDate(dd.getDate()-((dd.getDay()+3)%7));return dd;}
 function _rIso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function _rCode(u){
+  // Prefer the crew member's real code (e.g. Lily McLean -> "LL") over name initials.
+  var _c=(S.crew||[]).find(function(c){return c.n===u.name||c.n===u.linkedCrew;});
+  if(_c&&_c.code)return String(_c.code).toUpperCase();
+  return (u.name||'').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
+}
 function _rGetStatus(u,ds,roster){
-  var _ini=(u.name||'').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
+  var _ini=_rCode(u);
   var _draft=S._rosterDraft||{};
   if(_draft[ds]){
     var _dv=u.id!==undefined&&_draft[ds][u.id]!==undefined?_draft[ds][u.id]:(_ini&&_draft[ds][_ini]!==undefined?_draft[ds][_ini]:undefined);
@@ -8910,7 +8917,7 @@ function _rGetStatus(u,ds,roster){
   if(_lvReq){var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};st=_lvMap[_lvReq]||'leave';}
   return st;
 }
-function _rIni(u){return (u.name||'').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);}
+function _rIni(u){return _rCode(u);}
 
 // ── Main entry ──
 function renderRoster(){

@@ -10,7 +10,7 @@ var ROSTER_SC={
   called_in:  {bg:'rgba(34,197,94,.25)',    bd:'#22c55e',               col:'#86efac',              lbl:'Called In'},
   half_day:   {bg:'rgba(34,197,94,.25)',    bd:'#22c55e',               col:'#86efac',              lbl:'1/2 Day'},
   gnd:        {bg:'rgba(100,116,139,.18)',  bd:'#64748b',               col:'#94a3b8',              lbl:'GND'},
-  mrktg:      {bg:'rgba(236,72,153,.18)',   bd:'#ec4899',               col:'#f472b6',              lbl:'MRKTG'},
+  mrktg:      {bg:'rgba(236,72,153,.18)',   bd:'#ec4899',               col:'#f472b6',              lbl:'Marketing'},
   off:        {bg:'rgba(100,116,139,.1)',   bd:'rgba(100,116,139,.4)',   col:'#94a3b8',              lbl:'Off'},
   rdo:        {bg:'rgba(148,163,184,.08)',  bd:'rgba(148,163,184,.3)',   col:'#64748b',              lbl:'RDO'},
   leave:      {bg:'rgba(245,158,11,.15)',   bd:'#f59e0b',               col:'#fbbf24',              lbl:'AL'},
@@ -56,8 +56,14 @@ var ROLE_GROUPS=[
 function _rMonday(d){var dd=new Date(d);dd.setHours(0,0,0,0);var dy=dd.getDay();dd.setDate(dd.getDate()+(dy===0?-6:1-dy));return dd;}
 function _rThursday(d){var dd=new Date(d);dd.setHours(0,0,0,0);dd.setDate(dd.getDate()-((dd.getDay()+3)%7));return dd;}
 function _rIso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function _rCode(u){
+  // Prefer the crew member's real code (e.g. Lily McLean -> "LL") over name initials.
+  var _c=(S.crew||[]).find(function(c){return c.n===u.name||c.n===u.linkedCrew;});
+  if(_c&&_c.code)return String(_c.code).toUpperCase();
+  return (u.name||'').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
+}
 function _rGetStatus(u,ds,roster){
-  var _ini=(u.name||'').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
+  var _ini=_rCode(u);
   var _draft=S._rosterDraft||{};
   if(_draft[ds]){
     var _dv=u.id!==undefined&&_draft[ds][u.id]!==undefined?_draft[ds][u.id]:(_ini&&_draft[ds][_ini]!==undefined?_draft[ds][_ini]:undefined);
@@ -68,7 +74,7 @@ function _rGetStatus(u,ds,roster){
   if(_lvReq){var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};st=_lvMap[_lvReq]||'leave';}
   return st;
 }
-function _rIni(u){return (u.name||'').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);}
+function _rIni(u){return _rCode(u);}
 
 // ── Main entry ──
 function renderRoster(){
