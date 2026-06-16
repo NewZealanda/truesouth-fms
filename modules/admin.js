@@ -2975,7 +2975,9 @@ function acDisp(id){return(id||"").replace("ZK-","");}function acDisp(id){return
 window.toggleRolePerm=function(role,perm,val){
   if(!S.rolePerms)S.rolePerms={};
   if(!S.rolePerms[role])S.rolePerms[role]=Object.assign({},(DEFAULT_ROLE_PERMS[role])||{});
-  S.rolePerms[role][perm]=val;
+  if(perm==='roster_leave'){S.rolePerms[role]['roster']=val;S.rolePerms[role]['leave']=val;}
+  else{S.rolePerms[role][perm]=val;}
+  render();
 };
 
 window.saveRolePerms=async function(){

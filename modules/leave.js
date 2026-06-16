@@ -357,18 +357,31 @@ window.submitLeaveRequest=async function(){
     leave_type:f.type,start_date:f.startDate,end_date:f.endDate,
     total_days:days,partial_day:f.partialDay,partial_type:f.partialType||'am',
     reason:f.reason||null,status:'pending',submitted_at:new Date().toISOString()};
-  var res=await sbU('ts_leave_requests',[payload]);
-  if(res&&res[0]){
-    await sbU('ts_leave_audit',[{request_id:res[0].id,action:'submitted',performed_by:uid,performed_by_name:uname}]);
-    await window._notifyLeaveApprovers(res[0].id,urole,uname,f.type,f.startDate,f.endDate);
-    window._triggerLeaveEmail(res[0].id,'submitted').catch(function(){});
-    S._leave.form={show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''};
-    S._leave._myLoaded=false;S._leave._allLoaded=false;
-    toast('Leave request submitted!','success');
-    window.loadMyLeave();
-    if(_lvCanApprove(S.user?.role))window.loadAllLeave();
-  } else {
-    toast('Failed to submit request. Please try again.','error');
+  try{
+    var r=await fetch(SB+'/rest/v1/ts_leave_requests',{
+      method:'POST',
+      headers:{...SH,'Prefer':'return=representation'},
+      body:JSON.stringify([payload])
+    });
+    var res=r.ok?await r.json():null;
+    if(res&&res[0]){
+      try{await sbU('ts_leave_audit',[{request_id:res[0].id,action:'submitted',performed_by:uid,performed_by_name:uname}]);}catch(e){}
+      try{await window._notifyLeaveApprovers(res[0].id,urole,uname,f.type,f.startDate,f.endDate);}catch(e){}
+      try{window._triggerLeaveEmail(res[0].id,'submitted').catch(function(){});}catch(e){}
+      S._leave.form={show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''};
+      S._leave._myLoaded=false;S._leave._allLoaded=false;
+      toast('Leave request submitted!','success');
+      window.loadMyLeave();
+      if(_lvCanApprove(S.user?.role))window.loadAllLeave();
+    } else {
+      var errTxt='';
+      try{errTxt=await r.text();}catch(e){}
+      console.error('[submitLeave]',r&&r.status,errTxt);
+      toast('Failed to submit request ('+((r&&r.status)||'network error')+').','error');
+    }
+  }catch(e){
+    console.error('[submitLeave] exception:',e);
+    toast('Failed to submit request.','error');
   }
 };
 
