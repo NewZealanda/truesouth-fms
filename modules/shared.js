@@ -100,7 +100,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.42';
+const APP_VER='v22.44';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -755,7 +755,7 @@ let S={
   pads:[],padTabs:[],activePadId:null,_padMode:'text',_padDrawColor:'#ffffff',_padDrawWidth:3,_padEraser:false,
   _aeroSearch:'',_aeroSel:null,
   // UI state
-  tab:'manifest',
+  tab:'manifest',section:'operations',_drawerOpen:false,
   savedSearch:'',savedSort:'newest',savedTab:'loadsheets',savedSel:{},
   // Charter
   charter:{legs:[{from:'NZQN',to:'NZMF',acId:'',pax:1,note:''}],showQuote:false},
@@ -1063,7 +1063,19 @@ function initRealtime(){
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_tab_close'){
           var _closeId=msg.payload.payload&&msg.payload.payload.id;
-          if(_closeId){S.lsTabs=S.lsTabs.filter(function(t){return t.id!==_closeId;});if(S.activeTabId===_closeId){S.activeTabId=null;S.editId=null;S.tab='manifest';}safeRender();}
+          if(_closeId){
+            var _clTab=(S.lsTabs||[]).find(function(t){return t.id===_closeId;});
+            var _clAcCode=_clTab&&_clTab.acId?_clTab.acId.replace('ZK-',''):null;
+            S.lsTabs=(S.lsTabs||[]).filter(function(t){return t.id!==_closeId;});
+            if(S.activeTabId===_closeId){
+              S.activeTabId=null;S.editId=null;S.section='operations';S.tab='manifest';
+              S.form=bF();
+              if(_clAcCode)S.lsForms[_clAcCode]=bF_ac('ZK-'+_clAcCode);
+            } else if(_clAcCode&&!((S.lsTabs||[]).find(function(t){return t.acId&&t.acId.replace('ZK-','')===_clAcCode;}))){
+              S.lsForms[_clAcCode]=bF_ac('ZK-'+_clAcCode);
+            }
+            safeRender();
+          }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='manifest_tabs'){
           var _mtpl=msg.payload.payload;
@@ -1109,10 +1121,18 @@ function initRealtime(){
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_deleted'){
           var _dlpl=msg.payload.payload;
           if(_dlpl&&_dlpl.id&&_dlpl.sessionId!==_sessionId){
+            var _delTab=(S.lsTabs||[]).find(function(t){return t.id===_dlpl.id;});
+            var _delAcCode=_delTab&&_delTab.acId?_delTab.acId.replace('ZK-',''):null;
             S.saved=(S.saved||[]).filter(function(s){return s.id!==_dlpl.id;});
             lsSet('ts_loadsheets_cache',S.saved);
             S.lsTabs=(S.lsTabs||[]).filter(function(t){return t.id!==_dlpl.id;});
-            if(S.activeTabId===_dlpl.id){S.activeTabId=null;S.editId=null;S.tab='manifest';}
+            if(S.activeTabId===_dlpl.id){
+              S.activeTabId=null;S.editId=null;S.section='operations';S.tab='manifest';
+              S.form=bF();
+              if(_delAcCode)S.lsForms[_delAcCode]=bF_ac('ZK-'+_delAcCode);
+            } else if(_delAcCode&&!((S.lsTabs||[]).find(function(t){return t.acId&&t.acId.replace('ZK-','')===_delAcCode;}))){
+              S.lsForms[_delAcCode]=bF_ac('ZK-'+_delAcCode);
+            }
             safeRender();
           }
         }
@@ -1178,7 +1198,7 @@ function initRealtime(){
                   S.form=_lsp.form;
                   if(_lsp.form.ac)S.lsAc=_lsp.form.ac.replace('ZK-','');
                 }
-              } else if(_lsp.acCode&&S.lsAc===_lsp.acCode){
+              } else if(_lsp.acCode&&S.lsAc===_lsp.acCode&&S.activeTabId){
                 S.form=_lsp.form;
               }
             }
@@ -1419,15 +1439,16 @@ let _autoSaveLSTimer=null;
 let _ownLSSaveTs=0;
 function autoSaveLS(){
   const _id=S.editId;
+  const _acCode=S.lsAc;
   if(!S.user||!_id)return;
-  const _tab=S.lsTabs.find(function(t){return t.id===_id;});
   const _formSnap=dc(S.form);
   clearTimeout(_autoSaveLSTimer);
   _autoSaveLSTimer=setTimeout(function(){
     const form=_formSnap;
     const tab=S.lsTabs.find(function(t){return t.id===_id;});
-    if(tab){tab.form=form;}
-    broadcastLS(S.lsAc,form,_id);
+    if(!tab)return;
+    tab.form=form;
+    broadcastLS(_acCode,form,_id);
   },900);
 }
 async function saveLsToDb(id,form){

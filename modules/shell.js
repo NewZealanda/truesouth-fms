@@ -85,7 +85,7 @@ function render(){
   if(lo) lo.style.display='none';
   r.style.display='';
   // Maintenance-only users: redirect to maintenance if on wrong tab
-  if(S.user?.role==='maint'&&S.tab!=='maintenance') S.tab='maintenance';
+  if(S.user?.role==='maint'&&S.section!=='maintenance'){S.tab='maintenance';S.section='maintenance';}
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
@@ -316,27 +316,68 @@ window.changeMyPassword=async function(){
   render();
 };
 
-function renderApp(){
-  const sh={connecting:`<span class="sync-dot dot-spin"></span>Connecting`,ok:`<span class="sync-dot dot-ok"></span>Synced`,error:`<span class="sync-dot dot-err"></span>Offline`}[S.syncStatus]||'';
+function renderRosterPlaceholder(){
+  return '<div class="card" style="text-align:center;padding:48px 24px"><div style="font-size:32px;margin-bottom:12px">🗓️</div><div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Roster</div><div style="font-size:13px;color:var(--text3)">Coming soon — staff roster and scheduling.</div></div>';
+}
+function renderDrawer(){
   const role=S.user?.role||'desk';
-  // Tab visibility by role
-  // Top-level nav (Operations / Charter / Maintenance / Admin)
   const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
   const _canOps=role==='admin'||_navPerms.operations===true;
   const _canCharter=role==='admin'||_navPerms.charter===true;
   const _canMaint=role==='admin'||_navPerms.maintenance===true;
-  const _opsOn=['manifest','seatmap','saved','loadsheet'].includes(S.tab)||!!S.activeTabId||!!S._newLsTab;
-  let _navH='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;align-items:center">';
-  if(_canOps)_navH+='<button tabindex="-1" class="nav-tab '+(_opsOn?'on':'off')+'" onclick="setTab(\'operations\')">Operations</button>';
-  if(_canCharter)_navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='charter'?'on':'off')+'" onclick="setTab(\'charter\')">Charter</button>';
-  if(_canMaint)_navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='maintenance'?'on':'off')+'" onclick="setTab(\'maintenance\')">Maintenance</button>';
-  _navH+='<button tabindex="-1" class="nav-tab '+(S.tab==='admin'?'on':'off')+'" onclick="setTab(\'admin\')">'+(role==='admin'?'Admin':'Settings')+'</button>';
-  _navH+='</div>';
+  const _canRoster=role==='admin';
+  const sec=S.section||'operations';
+  const t=S.tab||'manifest';
+  const isLs=!!(S.activeTabId||S._newLsTab);
+  function _navBtn(label,section,icon,active){
+    return '<button tabindex="-1" onclick="S.section=\''+section+'\';S._drawerOpen=false;render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(active?'rgba(124,58,237,.22)':'transparent')+';color:'+(active?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(active?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px">'+icon+' <span>'+label+'</span></button>';
+  }
+  function _subBtn(label,tab,active,action){
+    var onclick=action||('S._drawerOpen=false;window.switchOpsTab(\''+tab+'\')');
+    return '<button tabindex="-1" onclick="'+onclick+'" style="width:100%;text-align:left;padding:7px 14px 7px 44px;border-radius:8px;border:none;background:'+(active?'rgba(255,255,255,.09)':'transparent')+';color:'+(active?'#fff':'rgba(255,255,255,.5)')+';font-size:13px;font-weight:'+(active?'600':'400')+';cursor:pointer;margin-bottom:1px">'+label+'</button>';
+  }
+  var h='<div style="position:fixed;inset:0;z-index:1000;display:flex" onclick="S._drawerOpen=false;render()">';
+  h+='<div onclick="event.stopPropagation()" style="width:270px;height:100%;background:linear-gradient(180deg,#080c17,#0d1526);border-right:1px solid rgba(255,255,255,.1);overflow-y:auto;display:flex;flex-direction:column;padding-top:max(0px,env(safe-area-inset-top));flex-shrink:0">';
+  // Drawer header
+  h+='<div style="padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px">';
+  h+='<div style="width:32px;height:32px;border-radius:7px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0"><img src="'+LOGO+'" style="width:27px;height:27px;object-fit:contain" alt=""></div>';
+  h+='<div style="flex:1"><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:16px;font-weight:800;letter-spacing:.06em;color:#fff">TRUE SOUTH</div><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:10px;font-weight:600;letter-spacing:.1em;color:rgba(255,255,255,.35)">FLIGHT MANAGEMENT</div></div>';
+  h+='<button onclick="S._drawerOpen=false;render()" style="background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;padding:5px 7px;border-radius:6px;flex-shrink:0;line-height:1">✕</button>';
+  h+='</div>';
+  // Nav items
+  h+='<nav style="flex:1;padding:10px 8px">';
+  if(_canOps){
+    var opsActive=sec==='operations';
+    h+=_navBtn('Operations','operations','✈️',opsActive);
+    if(opsActive){
+      h+=_subBtn('Manifest','manifest',t==='manifest'&&!isLs,null);
+      h+=_subBtn('Seatmap','seatmap',t==='seatmap'&&!isLs,null);
+      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window.switchToLoadsheets();" style="width:100%;text-align:left;padding:7px 14px 7px 44px;border-radius:8px;border:none;background:'+(isLs?'rgba(255,255,255,.09)':'transparent')+';color:'+(isLs?'#fff':'rgba(255,255,255,.5)')+';font-size:13px;font-weight:'+(isLs?'600':'400')+';cursor:pointer;margin-bottom:1px">Loadsheets</button>';
+      h+=_subBtn('Saved','saved',t==='saved'&&!isLs,null);
+      if(_canCharter)h+=_subBtn('Charter','charter',t==='charter'&&!isLs,null);
+    }
+  }
+  h+='<div style="height:1px;background:rgba(255,255,255,.07);margin:8px 6px"></div>';
+  if(_canRoster)h+=_navBtn('Roster','roster','🗓️',sec==='roster');
+  if(_canMaint)h+=_navBtn('Maintenance','maintenance','🔧',sec==='maintenance');
+  h+=_navBtn(role==='admin'?'Admin':'Settings','settings','⚙️',sec==='settings');
+  h+='</nav>';
+  h+='<div style="padding:10px 16px;font-size:10px;color:rgba(255,255,255,.18);font-family:monospace;border-top:1px solid rgba(255,255,255,.06)">'+APP_VER+'</div>';
+  h+='</div>';
+  // Backdrop
+  h+='<div style="flex:1;background:rgba(0,0,0,.5)"></div>';
+  h+='</div>';
+  return h;
+}
+function renderApp(){
+  const sh={connecting:`<span class="sync-dot dot-spin"></span>Connecting`,ok:`<span class="sync-dot dot-ok"></span>Synced`,error:`<span class="sync-dot dot-err"></span>Offline`}[S.syncStatus]||'';
+  const role=S.user?.role||'desk';
 
   return`<div style="min-height:100vh;background:var(--bg);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)">
     <div style="background:linear-gradient(135deg,#0a0e1a,#0f172a);border-bottom:1px solid var(--border);padding:max(14px,env(safe-area-inset-top)) 14px 0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:10px">
+          <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1" title="Menu">☰</button>
           <div style="width:38px;height:38px;border-radius:8px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden"><img src="${LOGO}" style="width:32px;height:32px;object-fit:contain" alt=""></div>
           <div>
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:800;letter-spacing:.06em;color:#fff">TRUE SOUTH</div>
@@ -358,8 +399,8 @@ function renderApp(){
           </button>
         </div>
       </div>
-      ${_navH}
     </div>
+    ${S._drawerOpen?renderDrawer():''}
     ${S._helpOpen?`<div onclick="S._helpOpen=false;render()" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
       <div onclick="event.stopPropagation()" style="background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:24px;max-width:480px;width:100%;max-height:85vh;overflow-y:auto">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -394,9 +435,10 @@ function renderApp(){
         <button onclick="S.appMsg=null;render()" style="padding:2px 8px;border-radius:4px;border:1px solid currentColor;background:transparent;cursor:pointer;font-size:11px;color:inherit">✕</button>
       </div>`:''}
       ${(function(){try{
-        if(S.tab==='charter')return'<div id="flash-charter">'+renderCharter()+'</div>';
-        if(S.tab==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';
-        if(S.tab==='admin')return'<div id="flash-admin">'+renderAdmin()+'</div>';
+        const _sec=S.section||'operations';
+        if(_sec==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';
+        if(_sec==='settings')return'<div id="flash-admin">'+renderAdmin()+'</div>';
+        if(_sec==='roster')return'<div id="flash-roster">'+renderRosterPlaceholder()+'</div>';
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
@@ -433,6 +475,7 @@ function _applyLsFlash(){
   _triggerFlash('flash-loadsheet');
 }
 function renderOperations(){
+  const role=S.user?.role||'desk';
   const opsTab=S.tab||'manifest';
   const isLsView=!!(S.activeTabId||S._newLsTab);
 
@@ -442,6 +485,8 @@ function renderOperations(){
   _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Seatmap</button>';
   _l2+='<button tabindex="-1" class="sub-tab '+(isLsView?'on':'')+'" onclick="window.switchToLoadsheets()" style="font-size:12px;padding:6px 12px;flex-shrink:0">Loadsheets</button>';
   _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Saved ('+((S.saved||[]).filter(function(s){return s.status!=='deleted';}).length)+')</button>';
+  var _opsNavPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
+  if(role==='admin'||_opsNavPerms.charter===true)_l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Charter</button>';
   _l2+='</div>';
 
   // Level 3 LS tab pills — only shown when loadsheets view is active
@@ -469,9 +514,10 @@ function renderOperations(){
 
   // Content routing
   if(isLsView&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return _l2+_l3+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return _l2+_l3+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
-  if(S._newLsTab&&opsTab!=='saved'&&opsTab!=='seatmap'){return _l2+_l3+renderNewLsPanel();}
+  if(S._newLsTab&&opsTab!=='saved'&&opsTab!=='seatmap'&&opsTab!=='charter'){return _l2+_l3+renderNewLsPanel();}
   if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return _l2+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
   if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return _l2+renderSaved();}
+  if(opsTab==='charter'){if(S._presSection)broadcastPresence(null);return _l2+'<div id="flash-charter">'+renderCharter()+'</div>';}
   startPresenceBroadcast('manifest');return _l2+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
 }
 
@@ -486,7 +532,7 @@ function renderNewLsPanel(){
   });
   h+='</div>';
   h+='<div style="margin-top:14px;border-top:1px solid var(--border2);padding-top:14px">';
-  h+='<button onclick="S.opsTab=\'saved\';S.savedTab=\'loadsheets\';S._newLsTab=false;render()" style="padding:10px 18px;border-radius:10px;border:1.5px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">📂 Open Saved Loadsheet</button>';
+  h+='<button onclick="S.section=\'operations\';S.tab=\'saved\';S.savedTab=\'loadsheets\';S._newLsTab=false;render()" style="padding:10px 18px;border-radius:10px;border:1.5px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">📂 Open Saved Loadsheet</button>';
   h+='</div>';
   h+='</div>';
   return h;
