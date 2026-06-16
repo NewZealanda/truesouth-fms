@@ -344,7 +344,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.47';
+const APP_VER='v22.48';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -9357,12 +9357,12 @@ function renderNotificationPanel(){
 
 window.loadMyLeave=async function(){
   var uid=S.user?.id;if(!uid)return;
-  var r=await fetch(SB+'/rest/v1/ts_leave_requests?user_id=eq.'+uid+'&order=submitted_at.desc',{headers:SH});
+  var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&user_id=eq.'+uid+'&order=submitted_at.desc',{headers:SH});
   if(r.ok){_lvInit().myReqs=await r.json();safeRender();}
 };
 
 window.loadAllLeave=async function(){
-  var r=await fetch(SB+'/rest/v1/ts_leave_requests?order=submitted_at.desc',{headers:SH});
+  var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&order=submitted_at.desc',{headers:SH});
   if(r.ok){_lvInit().allReqs=await r.json();safeRender();}
 };
 
@@ -9479,7 +9479,7 @@ window._triggerLeaveEmail=async function(requestId,action){
 
 window.loadNotifications=async function(){
   var uid=S.user?.id;if(!uid)return;
-  var r=await fetch(SB+'/rest/v1/ts_notifications?user_id=eq.'+uid+'&order=created_at.desc&limit=20',{headers:SH});
+  var r=await fetch(SB+'/rest/v1/ts_notifications?select=*&user_id=eq.'+uid+'&order=created_at.desc&limit=20',{headers:SH});
   if(r.ok){S._notifications=await r.json();safeRender();}
 };
 
