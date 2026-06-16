@@ -1012,7 +1012,7 @@ window.tapDropUnallocated=function(){
   const f=S.form;
   const nm=f.names[S._selFormSeat]||'';
   if(nm&&nm!==f.coPilot&&nm!==f.pic){
-    if(!f._unallocated)f._unallocated=[];
+    f._unallocated=_uaPool();
     f._unallocated.push({name:nm,weight:f.seats[S._selFormSeat]||'',bag:f.bags[S._selFormSeat]||'',infant:(f.infantNames||{})[S._selFormSeat]||'',group:(f.paxGroups||{})[S._selFormSeat]||''});
     delete f.names[S._selFormSeat];delete f.seats[S._selFormSeat];delete f.bags[S._selFormSeat];
     if(f.infantNames)delete f.infantNames[S._selFormSeat];
@@ -1021,20 +1021,21 @@ window.tapDropUnallocated=function(){
   S._selFormSeat=null;autoSaveLS();render();
 };
 window.removeUnallocated=function(idx){
-  if(S.form._unallocated)S.form._unallocated.splice(idx,1);
-  if(S._selUnalloc===idx)S._selUnalloc=null;render();
+  _uaPool().splice(idx,1);
+  if(S._selUnalloc===idx)S._selUnalloc=null;autoSaveDispatch();render();
 };
 window.clearUnallocated=function(){
-  const f=S.form;if(!f)return;
-  S._unallocUndo=(f._unallocated||[]).map(function(p){return Object.assign({},p);});
-  f._unallocated=[];S._selUnalloc=null;
-  autoSaveLS();render();
+  var pool=_uaPool();
+  S._unallocUndo=pool.map(function(p){return Object.assign({},p);});
+  pool.length=0;S._selUnalloc=null;
+  autoSaveDispatch();render();
 };
 window.undoClearUnallocated=function(){
-  if(!S._unallocUndo||!S.form)return;
-  S.form._unallocated=S._unallocUndo;
+  if(!S._unallocUndo)return;
+  var pool=_uaPool();pool.length=0;
+  S._unallocUndo.forEach(function(p){pool.push(p);});
   S._unallocUndo=null;
-  autoSaveLS();render();
+  autoSaveDispatch();render();
 };
 window.clearUnassigned=function(){
   if(!S.dispatch)return;
@@ -1102,7 +1103,7 @@ window.lsDropOnUnalloc=function(e){
   if(S._dragSeat!=null){
     const nm=f.names[S._dragSeat]||'';
     if(nm&&nm!==f.coPilot&&nm!==f.pic){
-      if(!f._unallocated)f._unallocated=[];
+      f._unallocated=_uaPool();
       f._unallocated.push({name:nm,weight:f.seats[S._dragSeat]||'',bag:f.bags[S._dragSeat]||'',infant:(f.infantNames||{})[S._dragSeat]||'',group:(f.paxGroups||{})[S._dragSeat]||''});
       delete f.names[S._dragSeat];delete f.seats[S._dragSeat];delete f.bags[S._dragSeat];
       if(f.infantNames)delete f.infantNames[S._dragSeat];
@@ -1459,7 +1460,7 @@ function generateLoadsheet(acId){
   const _newTabId='ls_'+_lsAcCode+'_'+Date.now();
   S.lsForms[_lsAcCode]=form;S.lsAc=_lsAcCode;S.form=form;S.editId=_newTabId;S.formDirty=false;
   // Populate _unallocated: pax pinned to this aircraft but not given a seat
-  {const _spIds=new Set(Object.values(sm));const _unass=(d.pax||[]).filter(function(p){return p.pinAc===acId&&!_spIds.has(p.id)&&!p.infant&&p.name;});if(_unass.length){form._unallocated=_unass.map(function(p){return{name:p.name,weight:p.weight,bag:p.bag||0,infant:p.infantName||null};});}}
+  {const _spIds=new Set(Object.values(sm));const _unass=(d.pax||[]).filter(function(p){return p.pinAc===acId&&!_spIds.has(p.id)&&!p.infant&&p.name;});var _pool=_uaPool();_unass.forEach(function(p){if(!_pool.some(function(x){return x.name===p.name&&String(x.weight)===String(p.weight);}))_pool.push({name:p.name,weight:p.weight,bag:p.bag||0,infant:p.infantName||null,group:p.group||'',type:p.type||'adult'});});form._unallocated=_pool;}
   // Fuel/burnOff defaults by aircraft type
   if(a.layout==='ga8'&&(!form.burnOff||parseFloat(form.burnOff)<30)){form.burnOff='35';}
   if(a.layout==='c208'){form.fuel=String(Math.round(800*0.453592));}
@@ -1497,7 +1498,7 @@ window.lsAc=v=>{
     // Move excess passengers to _unallocated instead of deleting
     excessIdxs.forEach(function(i){
       const nm=kN[i]||'';const wt=kS[i]||'';const bg=kB[i]||'';const inf=(kI||{})[i]||'';
-      if(nm||wt){if(!S.form._unallocated)S.form._unallocated=[];S.form._unallocated.push({name:nm,weight:wt,bag:bg,infant:inf||null});}
+      if(nm||wt){_uaPool().push({name:nm,weight:wt,bag:bg,infant:inf||null});}
     });
     [S.form.seats,S.form.bags,S.form.names,S.form.infantNames].forEach(obj=>{
       Object.keys(obj).forEach(i=>{if(parseInt(i)>=maxIdx)delete obj[i];});
@@ -1523,7 +1524,7 @@ window.lsCopyFlight=function(targetAc){
   const tgtSeatCount=tgtAc?tgtAc.seats.length:999;
   tgt.dep=src.dep;tgt.dest=src.dest;tgt.date=src.date;tgt.etd=src.etd;tgt.etdCustom=src.etdCustom||false;
   tgt.pic=src.pic;tgt.coPilot=src.coPilot;
-  tgt.names={};tgt.seats={};tgt.bags={};tgt.infantNames={};tgt._unallocated=[];
+  tgt.names={};tgt.seats={};tgt.bags={};tgt.infantNames={};tgt._unallocated=_uaPool();
   const srcInfants=src.infantNames||{};
   Object.keys(src.names||{}).forEach(function(k){
     const i=parseInt(k);
@@ -1538,11 +1539,7 @@ window.lsCopyFlight=function(targetAc){
     }
   });
   tgt.cargo=Object.assign({},src.cargo||{});
-  // Also carry over existing unallocated passengers from source
-  const srcUnalloc=src._unallocated||[];
-  if(srcUnalloc.length){
-    tgt._unallocated=(tgt._unallocated||[]).concat(srcUnalloc.map(function(p){return Object.assign({},p);}));
-  }
+  // Unallocated pool is shared across all loadsheets — nothing to carry over.
   // Fuel: copy increased fuel if same aircraft type, otherwise use target standard
   const srcAc=S.aircraft[src.ac];
   const srcType=(srcAc&&(srcAc.layout||srcAc.type||'')).toLowerCase();
@@ -1599,8 +1596,7 @@ window.lsCoPilot=v=>{
   const cr=anyCrewList().find(x=>x.n===v);
   if(v&&cr&&cr.w){
     if(wasPassenger){
-      if(!f._unallocated)f._unallocated=[];
-      f._unallocated.push({name:prevName,weight:prevWt,bag:prevBag,infant:prevInfant});
+      _uaPool().push({name:prevName,weight:prevWt,bag:prevBag,infant:prevInfant});
     }
     f.seats[1]=String(cr.w);f.names[1]=v;
   } else if(!v){

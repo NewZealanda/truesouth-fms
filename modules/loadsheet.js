@@ -246,6 +246,7 @@ window.lsSeatEditPopup=function(idx){
 
 function renderLoadsheet(){
   const f=S.form,a=S.aircraft[f.ac],r=a?calcFormWB(f):null,allOk=r&&r.towOk&&r.lwOk&&r.cogOk;
+  if(f)f._unallocated=_uaPool(); // every loadsheet tab shows the one shared unallocated pool
   const picCrew=pilotCrewList().find(c=>c.n===f.pic);
   if(picCrew&&String(f.seats[0])!==String(picCrew.w))f.seats[0]=String(picCrew.w);
 
