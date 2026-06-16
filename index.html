@@ -358,7 +358,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.56';
+const APP_VER='v22.57';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3233,7 +3233,7 @@ function renderStep2(){
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
         <div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0"></div>
         <span style="font-weight:700;font-size:13px">${(a?.name||id)+dispSuffix}</span>
-        <button onclick="window.removeAcFromSeatmap('${smKey}')" style="margin-left:auto;padding:2px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.1);color:#ef4444;font-size:11px;cursor:pointer" title="Remove from seatmap">&#x2715; Remove</button>
+        <button onclick="window.removeAcFromSeatmap('${smKey}')" style="margin-left:auto;padding:2px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.1);color:#ef4444;font-size:11px;cursor:pointer" title="Clear this aircraft's seat assignments (does not remove it from the manifest)">&#x2715; Clear seats</button>
       </div>
       ${sr?`<div style="display:flex;gap:6px;justify-content:center;margin-bottom:4px;flex-wrap:wrap">
         <span class="pill ${sr.towOk?'pill-green':sr.towFatal?'pill-red':'pill-warn'}">${sr.tow?.toFixed(0)}/${sr.mtow}kg</span>
@@ -6965,11 +6965,12 @@ window.clearSeatmap=function(){
   toast('Seatmap cleared','ok');
 };
 window.removeAcFromSeatmap=function(smKey){
-  S.dispatch.acSetup=(S.dispatch.acSetup||[]).filter(function(s){return(s._seatmapKey||s.acId)!==smKey;});
+  // Seatmap is a seating VIEW — it must not edit the manifest. This only clears
+  // this aircraft's seat assignments; the aircraft + passengers stay in the manifest.
+  // (Add/remove aircraft from the manifest itself on the Manifest tab.)
   if(S.dispatch.seatMap)delete S.dispatch.seatMap[smKey];
-  // If no aircraft left, go back to manifest
-  if(!(S.dispatch.acSetup||[]).length){S.tab='manifest';}
   autoSaveDispatch();render();
+  toast('Seats cleared for this aircraft','ok');
 };
 window.createBlankLsTab=function(acId){
   const a=S.aircraft[acId];if(!a)return;
@@ -9147,10 +9148,13 @@ function renderRosterView(){
   NEVER_SHOW.forEach(function(k){if(S._rosterGroupHide.indexOf(k)===-1)S._rosterGroupHide.push(k);});
   var _rGH=S._rosterGroupHide;
 
-  if(!S.rosterWeek){
-    S.rosterWeek=_rIso(_rMonday(today));
-  }
-  var weekStart=new Date(S.rosterWeek+'T00:00:00');
+  var _payAllowed=role==='superadmin'||role==='admin'||role==='accounts';
+  if(typeof S._rosterPayWeek==='undefined')S._rosterPayWeek=lsGet('ts_roster_payweek')||false;
+  var _payWeek=_payAllowed&&!!S._rosterPayWeek;
+  // Align the displayed week to the active mode: Mon–Sun normally, Thu–Wed for pay week.
+  var _anchor=S.rosterWeek?new Date(S.rosterWeek+'T00:00:00'):new Date(today);
+  var weekStart=_payWeek?_rThursday(_anchor):_rMonday(_anchor);
+  S.rosterWeek=_rIso(weekStart);
   var days=[];
   for(var _i=0;_i<7;_i++){var _d=new Date(weekStart);_d.setDate(_d.getDate()+_i);days.push(_d);}
   var prevStart=new Date(weekStart);prevStart.setDate(prevStart.getDate()-7);
@@ -9190,6 +9194,9 @@ function renderRosterView(){
   h+='</label>';
   h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(nextStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>';
   h+='<button tabindex="-1" onclick="S.rosterWeek=null;S._rosterLeaveWeek=null;render()" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.08);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">Today</button>';
+  if(_payAllowed){
+    h+='<button tabindex="-1" onclick="window.rosterTogglePayWeek()" title="Toggle pay-week display (Thursday–Wednesday)" style="padding:5px 10px;border-radius:8px;border:1px solid '+(_payWeek?'rgba(34,197,94,.5)':'var(--border2)')+';background:'+(_payWeek?'rgba(34,197,94,.12)':'var(--card2)')+';color:'+(_payWeek?'#4ade80':'var(--text3)')+';font-size:11px;font-weight:700;cursor:pointer">'+(_payWeek?'Pay wk · Thu–Wed':'Pay week')+'</button>';
+  }
   if(isAdminPlus){
     var lk=!!S.rosterLocked;
     h+='<button tabindex="-1" onclick="S.rosterLocked=!S.rosterLocked;render()" style="padding:5px 10px;border-radius:8px;border:1px solid '+(lk?'#f59e0b':'var(--border2)')+';background:'+(lk?'rgba(245,158,11,.12)':'var(--card2)')+';color:'+(lk?'#fbbf24':'var(--text3)')+';font-size:12px;cursor:pointer" title="Toggle roster lock">'+(lk?'🔒 Locked':'🔓 Unlocked')+'</button>';
@@ -9761,6 +9768,12 @@ window.rosterDiscard=function(){
   render();
 };
 
+window.rosterTogglePayWeek=function(){
+  S._rosterPayWeek=!S._rosterPayWeek;
+  try{lsSet('ts_roster_payweek',S._rosterPayWeek);}catch(e){}
+  S.rosterWeek=null; // re-anchor to the current period in the new mode
+  render();
+};
 window.rosterToggleGroup=function(key){
   var NEVER_SHOW=['maint','accounts'];
   if(NEVER_SHOW.indexOf(key)>=0)return;

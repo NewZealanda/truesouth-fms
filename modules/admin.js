@@ -1977,11 +1977,12 @@ window.clearSeatmap=function(){
   toast('Seatmap cleared','ok');
 };
 window.removeAcFromSeatmap=function(smKey){
-  S.dispatch.acSetup=(S.dispatch.acSetup||[]).filter(function(s){return(s._seatmapKey||s.acId)!==smKey;});
+  // Seatmap is a seating VIEW — it must not edit the manifest. This only clears
+  // this aircraft's seat assignments; the aircraft + passengers stay in the manifest.
+  // (Add/remove aircraft from the manifest itself on the Manifest tab.)
   if(S.dispatch.seatMap)delete S.dispatch.seatMap[smKey];
-  // If no aircraft left, go back to manifest
-  if(!(S.dispatch.acSetup||[]).length){S.tab='manifest';}
   autoSaveDispatch();render();
+  toast('Seats cleared for this aircraft','ok');
 };
 window.createBlankLsTab=function(acId){
   const a=S.aircraft[acId];if(!a)return;

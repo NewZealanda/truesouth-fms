@@ -120,10 +120,13 @@ function renderRosterView(){
   NEVER_SHOW.forEach(function(k){if(S._rosterGroupHide.indexOf(k)===-1)S._rosterGroupHide.push(k);});
   var _rGH=S._rosterGroupHide;
 
-  if(!S.rosterWeek){
-    S.rosterWeek=_rIso(_rMonday(today));
-  }
-  var weekStart=new Date(S.rosterWeek+'T00:00:00');
+  var _payAllowed=role==='superadmin'||role==='admin'||role==='accounts';
+  if(typeof S._rosterPayWeek==='undefined')S._rosterPayWeek=lsGet('ts_roster_payweek')||false;
+  var _payWeek=_payAllowed&&!!S._rosterPayWeek;
+  // Align the displayed week to the active mode: Mon–Sun normally, Thu–Wed for pay week.
+  var _anchor=S.rosterWeek?new Date(S.rosterWeek+'T00:00:00'):new Date(today);
+  var weekStart=_payWeek?_rThursday(_anchor):_rMonday(_anchor);
+  S.rosterWeek=_rIso(weekStart);
   var days=[];
   for(var _i=0;_i<7;_i++){var _d=new Date(weekStart);_d.setDate(_d.getDate()+_i);days.push(_d);}
   var prevStart=new Date(weekStart);prevStart.setDate(prevStart.getDate()-7);
@@ -163,6 +166,9 @@ function renderRosterView(){
   h+='</label>';
   h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(nextStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>';
   h+='<button tabindex="-1" onclick="S.rosterWeek=null;S._rosterLeaveWeek=null;render()" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.08);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">Today</button>';
+  if(_payAllowed){
+    h+='<button tabindex="-1" onclick="window.rosterTogglePayWeek()" title="Toggle pay-week display (Thursday–Wednesday)" style="padding:5px 10px;border-radius:8px;border:1px solid '+(_payWeek?'rgba(34,197,94,.5)':'var(--border2)')+';background:'+(_payWeek?'rgba(34,197,94,.12)':'var(--card2)')+';color:'+(_payWeek?'#4ade80':'var(--text3)')+';font-size:11px;font-weight:700;cursor:pointer">'+(_payWeek?'Pay wk · Thu–Wed':'Pay week')+'</button>';
+  }
   if(isAdminPlus){
     var lk=!!S.rosterLocked;
     h+='<button tabindex="-1" onclick="S.rosterLocked=!S.rosterLocked;render()" style="padding:5px 10px;border-radius:8px;border:1px solid '+(lk?'#f59e0b':'var(--border2)')+';background:'+(lk?'rgba(245,158,11,.12)':'var(--card2)')+';color:'+(lk?'#fbbf24':'var(--text3)')+';font-size:12px;cursor:pointer" title="Toggle roster lock">'+(lk?'🔒 Locked':'🔓 Unlocked')+'</button>';
@@ -734,6 +740,12 @@ window.rosterDiscard=function(){
   render();
 };
 
+window.rosterTogglePayWeek=function(){
+  S._rosterPayWeek=!S._rosterPayWeek;
+  try{lsSet('ts_roster_payweek',S._rosterPayWeek);}catch(e){}
+  S.rosterWeek=null; // re-anchor to the current period in the new mode
+  render();
+};
 window.rosterToggleGroup=function(key){
   var NEVER_SHOW=['maint','accounts'];
   if(NEVER_SHOW.indexOf(key)>=0)return;
