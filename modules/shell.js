@@ -234,7 +234,7 @@ function renderAccountModal(){
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <div>
           <div style="font-size:16px;font-weight:700">${u.name||u.email}</div>
-          <div style="font-size:12px;color:var(--text3)">${u.email} · <span style="color:${({'admin':'#f59e0b','pilot':'#7B9EC6','desk':'#10b981','maint':'#a78bfa'}[u.role]||'#888')}">${u.role}</span></div>
+          <div style="font-size:12px;color:var(--text3)">${u.email} · <span style="color:${({'superadmin':'#f43f5e','admin':'#f59e0b','pilot':'#7B9EC6','desk':'#10b981','maint':'#a78bfa','ground_staff':'#64748b'}[u.role]||'#888')}">${u.role}</span></div>
         </div>
         <button onclick="S.showAccount=false;S.changePwMsg=null;render()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">×</button>
       </div>
@@ -322,50 +322,143 @@ function renderRosterPlaceholder(){
 function renderDrawer(){
   const role=S.user?.role||'desk';
   const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
-  const _canOps=role==='admin'||_navPerms.operations===true;
-  const _canCharter=role==='admin'||_navPerms.charter===true;
-  const _canMaint=role==='admin'||_navPerms.maintenance===true;
-  const _canRoster=role==='admin';
+  const _isAdminPlus=role==='superadmin'||role==='admin';
+  const _canOps=_isAdminPlus||_navPerms.operations===true;
+  const _canCharter=_isAdminPlus||_navPerms.charter===true;
+  const _canMaint=_isAdminPlus||_navPerms.maintenance===true;
+  const _canRoster=_isAdminPlus||_navPerms.roster===true;
   const sec=S.section||'operations';
+  const exp=S._drawerSection||sec;
   const t=S.tab||'manifest';
   const isLs=!!(S.activeTabId||S._newLsTab);
-  function _navBtn(label,section,icon,active){
-    return '<button tabindex="-1" onclick="S.section=\''+section+'\';S._drawerOpen=false;render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(active?'rgba(124,58,237,.22)':'transparent')+';color:'+(active?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(active?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px">'+icon+' <span>'+label+'</span></button>';
+  function _secBtn(label,section,icon){
+    var isOn=sec===section;
+    var isExp=exp===section;
+    return '<button tabindex="-1" onclick="S._drawerSection=\''+section+'\';render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(isOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(isOn?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(isOn?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px">'+icon+' <span style="flex:1">'+label+'</span><span style="font-size:10px;opacity:.45">'+(isExp?'▲':'▼')+'</span></button>';
   }
-  function _subBtn(label,tab,active,action){
-    var onclick=action||('S._drawerOpen=false;window.switchOpsTab(\''+tab+'\')');
-    return '<button tabindex="-1" onclick="'+onclick+'" style="width:100%;text-align:left;padding:7px 14px 7px 44px;border-radius:8px;border:none;background:'+(active?'rgba(255,255,255,.09)':'transparent')+';color:'+(active?'#fff':'rgba(255,255,255,.5)')+';font-size:13px;font-weight:'+(active?'600':'400')+';cursor:pointer;margin-bottom:1px">'+label+'</button>';
+  function _subBtn(label,active,action){
+    return '<button tabindex="-1" onclick="'+action+'" style="width:100%;text-align:left;padding:7px 14px 7px 44px;border-radius:8px;border:none;background:'+(active?'rgba(255,255,255,.09)':'transparent')+';color:'+(active?'#fff':'rgba(255,255,255,.5)')+';font-size:13px;font-weight:'+(active?'600':'400')+';cursor:pointer;margin-bottom:1px">'+label+'</button>';
   }
-  var h='<div style="position:fixed;inset:0;z-index:1000;display:flex" onclick="S._drawerOpen=false;render()">';
+  var h='<div style="position:fixed;inset:0;z-index:1000;display:flex" onclick="S._drawerOpen=false;S._notifOpen=false;render()">';
   h+='<div onclick="event.stopPropagation()" style="width:270px;height:100%;background:linear-gradient(180deg,#080c17,#0d1526);border-right:1px solid rgba(255,255,255,.1);overflow-y:auto;display:flex;flex-direction:column;padding-top:max(0px,env(safe-area-inset-top));flex-shrink:0">';
-  // Drawer header
   h+='<div style="padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px">';
   h+='<div style="width:32px;height:32px;border-radius:7px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0"><img src="'+LOGO+'" style="width:27px;height:27px;object-fit:contain" alt=""></div>';
   h+='<div style="flex:1"><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:16px;font-weight:800;letter-spacing:.06em;color:#fff">TRUE SOUTH</div><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:10px;font-weight:600;letter-spacing:.1em;color:rgba(255,255,255,.35)">FLIGHT MANAGEMENT</div></div>';
   h+='<button onclick="S._drawerOpen=false;render()" style="background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;padding:5px 7px;border-radius:6px;flex-shrink:0;line-height:1">✕</button>';
   h+='</div>';
-  // Nav items
   h+='<nav style="flex:1;padding:10px 8px">';
   if(_canOps){
-    var opsActive=sec==='operations';
-    h+=_navBtn('Operations','operations','✈️',opsActive);
-    if(opsActive){
-      h+=_subBtn('Manifest','manifest',t==='manifest'&&!isLs,null);
-      h+=_subBtn('Seatmap','seatmap',t==='seatmap'&&!isLs,null);
-      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window.switchToLoadsheets();" style="width:100%;text-align:left;padding:7px 14px 7px 44px;border-radius:8px;border:none;background:'+(isLs?'rgba(255,255,255,.09)':'transparent')+';color:'+(isLs?'#fff':'rgba(255,255,255,.5)')+';font-size:13px;font-weight:'+(isLs?'600':'400')+';cursor:pointer;margin-bottom:1px">Loadsheets</button>';
-      h+=_subBtn('Saved','saved',t==='saved'&&!isLs,null);
-      if(_canCharter)h+=_subBtn('Charter','charter',t==='charter'&&!isLs,null);
+    h+=_secBtn('Operations','operations','✈️');
+    if(exp==='operations'){
+      h+=_subBtn('Manifest',t==='manifest'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('manifest')");
+      h+=_subBtn('Seatmap',t==='seatmap'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('seatmap')");
+      h+=_subBtn('Loadsheets',isLs&&sec==='operations',"S._drawerOpen=false;window.switchToLoadsheets()");
+      h+=_subBtn('Saved',t==='saved'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('saved')");
+      if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
     }
   }
   h+='<div style="height:1px;background:rgba(255,255,255,.07);margin:8px 6px"></div>';
-  if(_canRoster)h+=_navBtn('Roster','roster','🗓️',sec==='roster');
-  if(_canMaint)h+=_navBtn('Maintenance','maintenance','🔧',sec==='maintenance');
-  h+=_navBtn(role==='admin'?'Admin':'Settings','settings','⚙️',sec==='settings');
+  if(_canRoster){
+    h+=_secBtn('Roster','roster','🗓️');
+    if(exp==='roster'){
+      h+=_subBtn('Roster',sec==='roster',"S._drawerOpen=false;S.section='roster';render()");
+    }
+  }
+  // Leave
+  {var _canApproveLeaveNav=role==='superadmin'||role==='admin'||role==='cx_manager';
+  var _lvActive=sec==='leave';
+  var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending';}).length:0;
+  h+=_secBtn('Leave'+(_lvPendingCt>0?' ('+_lvPendingCt+')':''),'leave','📅');
+  if(exp==='leave'){
+    h+=_subBtn('My Leave',_lvActive&&(!S._leave||S._leave.tab==='my'),"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='my';render()");
+    if(_canApproveLeaveNav)h+=_subBtn('Approvals',_lvActive&&S._leave&&S._leave.tab==='approvals',"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='approvals';render()");
+  }}
+  if(_canMaint){
+    h+=_secBtn('Maintenance','maintenance','🔧');
+    if(exp==='maintenance'){
+      var msub=S.maintTab||'overview';
+      var _mn=function(lbl,id){return _subBtn(lbl,sec==='maintenance'&&msub===id,"S._drawerOpen=false;S.maintTab='"+id+"';window.setTab('maintenance')");};
+      h+=_mn('Overview','overview');
+      h+=_mn('Logs','log');
+      h+=_mn('Aircraft','aircraft');
+      if(_isAdminPlus){h+=_mn('Bookings','bookings');h+=_mn('Estimator','estimator');}
+      h+=_mn('Search','search');
+    }
+  }
+  {
+    h+=_secBtn((role==='admin'||role==='superadmin')?'Admin':'Settings','settings','⚙️');
+    if(exp==='settings'){
+      var adSec=(S.admin||{}).section||'people';
+      var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
+      if(_isAdminPlus){
+        h+=_sn('People','people');
+        h+=_sn('Permissions','perms');
+        h+=_sn('Drive','gdrive');
+        h+=_sn('Aerodromes','aerodromes');
+        h+=_sn('Statistics','statistics');
+        if(role==='superadmin')h+=_sn('Audit','audit');
+      } else {
+        h+=_subBtn('People',sec==='settings',"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='people';window.setTab('admin')");
+      }
+    }
+  }
   h+='</nav>';
   h+='<div style="padding:10px 16px;font-size:10px;color:rgba(255,255,255,.18);font-family:monospace;border-top:1px solid rgba(255,255,255,.06)">'+APP_VER+'</div>';
   h+='</div>';
-  // Backdrop
   h+='<div style="flex:1;background:rgba(0,0,0,.5)"></div>';
+  h+='</div>';
+  return h;
+}
+function renderOpsSubTabs(){
+  const role=S.user?.role||'desk';
+  const _opsNavPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
+  const _isOpsAdminPlus=role==='superadmin'||role==='admin';
+  const opsTab=S.tab||'manifest';
+  const isLsView=!!(S.activeTabId||S._newLsTab);
+  const savedCount=(S.saved||[]).filter(function(s){return s.status!=='deleted';}).length;
+  var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='manifest'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'manifest\')" style="flex-shrink:0">Manifest</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" style="flex-shrink:0">Seatmap</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(isLsView?'on':'')+'" onclick="window.switchToLoadsheets()" style="flex-shrink:0">Loadsheets</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="flex-shrink:0">Saved ('+savedCount+')</button>';
+  if(_isOpsAdminPlus||_opsNavPerms.charter===true)h+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="flex-shrink:0">Charter</button>';
+  h+='</div>';
+  return h;
+}
+
+function renderSettingsSubTabs(){
+  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
+  if(!isAdmin) return '';
+  const ad=S.admin||{};
+  const cur=ad.section||'people';
+  const sections=[
+    {id:'people',     lbl:'People'},
+    {id:'perms',      lbl:'Permissions'},
+    {id:'gdrive',     lbl:'Drive'},
+    {id:'aerodromes', lbl:'Aerodromes'},
+    {id:'statistics', lbl:'Statistics'},
+    ...(S.user?.superAdmin?[{id:'audit',lbl:'Audit'}]:[])
+  ];
+  var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
+  sections.forEach(function(s){
+    h+='<button tabindex="-1" class="sub-tab '+(cur===s.id?'on':'')+'" onclick="if(!S.admin)S.admin={};S.admin.section=\''+s.id+'\';render()" style="flex-shrink:0">'+s.lbl+'</button>';
+  });
+  h+='</div>';
+  return h;
+}
+function renderMaintenanceSubTabs(){
+  const isAdmin=hasRolePerm('maint_bookings');
+  const sub=S.maintTab||'overview';
+  const tabs=[
+    {id:'overview',  lbl:'Overview'},
+    {id:'log',       lbl:'Logs'},
+    {id:'aircraft',  lbl:'Aircraft'},
+    ...(isAdmin?[{id:'bookings',lbl:'Bookings'},{id:'estimator',lbl:'Estimator'},{id:'search',lbl:'Search'}]:[{id:'search',lbl:'Search'}])
+  ];
+  var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
+  tabs.forEach(function(t){
+    h+='<button tabindex="-1" class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.maintTab=\''+t.id+'\';render()" style="flex-shrink:0">'+t.lbl+'</button>';
+  });
   h+='</div>';
   return h;
 }
@@ -377,7 +470,7 @@ function renderApp(){
     <div style="background:linear-gradient(135deg,#0a0e1a,#0f172a);border-bottom:1px solid var(--border);padding:max(14px,env(safe-area-inset-top)) 14px 0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:10px">
-          <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1" title="Menu">☰</button>
+          <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;S._drawerSection=S.section;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1" title="Menu">☰</button>
           <div style="width:38px;height:38px;border-radius:8px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden"><img src="${LOGO}" style="width:32px;height:32px;object-fit:contain" alt=""></div>
           <div>
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:800;letter-spacing:.06em;color:#fff">TRUE SOUTH</div>
@@ -389,8 +482,7 @@ function renderApp(){
             <span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'}"></span>
             <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.04em">${APP_VER}</span>
           </div>
-          <button tabindex="-1" title="${S.wideMode?'Compact width':'Full width'}" onclick="event.stopPropagation();S.wideMode=!S.wideMode;lsSet('ts_wide_mode',S.wideMode);render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:11px;color:rgba(255,255,255,.4);cursor:pointer">${S.wideMode?'⇤⇥':'↔'}</button>
-          <button tabindex="-1" title="${S.mobileView?'Desktop layout':'Mobile layout'}" onclick="event.stopPropagation();S.mobileView=!S.mobileView;lsSet('ts_mobile_view',S.mobileView);render()" style="background:${S.mobileView?'rgba(124,58,237,.3)':'rgba(255,255,255,.07)'};border:${S.mobileView?'1px solid rgba(124,58,237,.5)':'none'};width:28px;height:28px;border-radius:6px;font-size:13px;color:${S.mobileView?'#c084fc':'rgba(255,255,255,.4)'};cursor:pointer">📱</button>
+          ${(function(){var _unc=(S._notifications||[]).filter(function(n){return !n.read;}).length;return '<div style="position:relative;display:inline-block">'+'<button tabindex="-1" onclick="event.stopPropagation();S._notifOpen=!S._notifOpen;if(S._notifOpen)window.loadNotifications();render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:14px;color:rgba(255,255,255,.5);cursor:pointer;position:relative" title="Notifications">\u{1F514}</button>'+(_unc>0?'<span style="position:absolute;top:-3px;right:-3px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;pointer-events:none;min-width:14px;text-align:center">'+_unc+'</span>':'')+'</div>'+(S._notifOpen?'<div onclick="event.stopPropagation()" style="position:absolute;top:calc(100% + 4px);right:0;z-index:2100">'+renderNotificationPanel()+'</div>':'');})()}
           <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:12px;color:rgba(255,255,255,.4);cursor:pointer;font-weight:700" title="Help">?</button>
           <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 10px 5px 6px;border-radius:20px;cursor:pointer;font-size:11px;color:rgba(255,255,255,.75)" title="Profile & Settings">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${(S.user.name.match(/\b\w/g)||['?']).slice(0,2).join('').toUpperCase()}</div>
@@ -399,6 +491,7 @@ function renderApp(){
           </button>
         </div>
       </div>
+      ${(function(){var sec=S.section||'operations';if(sec==='operations')return renderOpsSubTabs();if(sec==='maintenance')return renderMaintenanceSubTabs();if(sec==='settings')return renderSettingsSubTabs();return '';})()}
     </div>
     ${S._drawerOpen?renderDrawer():''}
     ${S._helpOpen?`<div onclick="S._helpOpen=false;render()" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
@@ -438,7 +531,8 @@ function renderApp(){
         const _sec=S.section||'operations';
         if(_sec==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';
         if(_sec==='settings')return'<div id="flash-admin">'+renderAdmin()+'</div>';
-        if(_sec==='roster')return'<div id="flash-roster">'+renderRosterPlaceholder()+'</div>';
+        if(_sec==='roster')return'<div id="flash-roster">'+renderRoster()+'</div>';
+        if(_sec==='leave')return'<div id="flash-leave">'+renderLeave()+'</div>';
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
@@ -479,15 +573,6 @@ function renderOperations(){
   const opsTab=S.tab||'manifest';
   const isLsView=!!(S.activeTabId||S._newLsTab);
 
-  // Level 2 sub-bar: Manifest | Seatmap | Loadsheets | Saved
-  var _l2='<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center">';
-  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='manifest'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'manifest\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Manifest</button>';
-  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Seatmap</button>';
-  _l2+='<button tabindex="-1" class="sub-tab '+(isLsView?'on':'')+'" onclick="window.switchToLoadsheets()" style="font-size:12px;padding:6px 12px;flex-shrink:0">Loadsheets</button>';
-  _l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Saved ('+((S.saved||[]).filter(function(s){return s.status!=='deleted';}).length)+')</button>';
-  var _opsNavPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
-  if(role==='admin'||_opsNavPerms.charter===true)_l2+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="font-size:12px;padding:6px 12px;flex-shrink:0">Charter</button>';
-  _l2+='</div>';
 
   // Level 3 LS tab pills — only shown when loadsheets view is active
   var _l3='';
@@ -513,12 +598,12 @@ function renderOperations(){
   }
 
   // Content routing
-  if(isLsView&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return _l2+_l3+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return _l2+_l3+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
-  if(S._newLsTab&&opsTab!=='saved'&&opsTab!=='seatmap'&&opsTab!=='charter'){return _l2+_l3+renderNewLsPanel();}
-  if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return _l2+presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
-  if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return _l2+renderSaved();}
-  if(opsTab==='charter'){if(S._presSection)broadcastPresence(null);return _l2+'<div id="flash-charter">'+renderCharter()+'</div>';}
-  startPresenceBroadcast('manifest');return _l2+presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
+  if(isLsView&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return _l3+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return _l3+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
+  if(S._newLsTab&&opsTab!=='saved'&&opsTab!=='seatmap'&&opsTab!=='charter'){return _l3+renderNewLsPanel();}
+  if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
+  if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return renderSaved();}
+  if(opsTab==='charter'){if(S._presSection)broadcastPresence(null);return '<div id="flash-charter">'+renderCharter()+'</div>';}
+  startPresenceBroadcast('manifest');return presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
 }
 
 function renderNewLsPanel(){

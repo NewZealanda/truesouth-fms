@@ -36,6 +36,8 @@ ORDER = [
     ('charter',     'js'),
     ('admin',       'js'),
     ('maintenance', 'js'),
+    ('roster',      'js'),
+    ('leave',       'js'),
     ('tail',        'html'),
 ]
 

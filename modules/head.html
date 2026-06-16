@@ -75,8 +75,9 @@ label{font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bot
 .nav-tab.off{background:rgba(255,255,255,.07);color:rgba(255,255,255,.75);}
 .nav-tab.off:hover{background:rgba(255,255,255,.12);}
 
-.sub-tab{padding:5px 12px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;font-size:12px;font-weight:600;background:transparent;color:var(--text2);}
-.sub-tab.on{background:var(--card);color:var(--text);border-color:var(--border2);}
+.sub-tab{padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.13);cursor:pointer;font-size:12px;font-weight:600;background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);white-space:nowrap;transition:background .15s,color .15s,border-color .15s;}
+.sub-tab:hover{background:rgba(255,255,255,.11);color:rgba(255,255,255,.75);}
+.sub-tab.on{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.3);color:#fff;font-weight:700;}
 
 /* ── Solver boxes ── */
 .solver-box{border-radius:10px;padding:12px 14px;margin-top:8px;border:1px solid;}
@@ -156,8 +157,8 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 .page{max-width:760px;margin:0 auto;padding:14px 12px 80px;}
 @keyframes lsFlash{0%{outline:3px solid #fbbf24;background:rgba(251,191,36,.18);}100%{outline:3px solid transparent;background:transparent;}}
 .ls-flash{animation:lsFlash 2s ease-out;border-radius:6px;}
-@media(min-width:900px){body.wide-mode .page{max-width:100%;padding:16px 28px 80px;}}
-@media(min-width:1400px){body.wide-mode .page{padding:16px 40px 80px;}}
+@media(min-width:900px){.page{max-width:1100px;padding:16px 28px 80px;}}
+@media(min-width:1400px){.page{max-width:1400px;padding:16px 48px 80px;}}
 
 .route-map{height:260px;border-radius:10px;border:1px solid var(--border);overflow:hidden;margin-top:10px;}
 #login-overlay{

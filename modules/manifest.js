@@ -1,4 +1,20 @@
 // === MODULE: manifest === v1.0 ===
+function renderManifestStickyBar(){
+  var h='<div style="height:68px"></div>';
+  h+='<div style="position:fixed;bottom:0;left:0;right:0;z-index:200;background:var(--card);border-top:1px solid var(--border2);padding:10px 14px;padding-bottom:max(10px,env(safe-area-inset-bottom));display:flex;gap:8px;align-items:center">';
+  var saveBdr=S._loadedManifestId?'rgba(74,222,128,.55)':'rgba(255,255,255,.15)';
+  var saveBg=S._loadedManifestId?'rgba(74,222,128,.1)':'transparent';
+  var saveTxt=S._loadedManifestId?'#4ade80':'var(--text2)';
+  var saveLbl=S._loadedManifestId?'Save':'Save New';
+  h+='<button tabindex="-1" onclick="saveManifest()" style="flex:2;padding:11px 10px;border-radius:10px;border:1.5px solid '+saveBdr+';background:'+saveBg+';color:'+saveTxt+';font-size:14px;font-weight:700;cursor:pointer">💾 '+saveLbl+'</button>';
+  if(S._loadedManifestId){
+    h+='<button tabindex="-1" onclick="window.saveManifestAs()" style="padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,.15);background:transparent;color:var(--text2);font-size:14px;font-weight:700;cursor:pointer">+ New</button>';
+    h+='<button tabindex="-1" onclick="window.deleteCurrentManifest()" style="padding:11px 12px;border-radius:10px;border:1.5px solid rgba(239,68,68,.35);background:transparent;color:#ef4444;font-size:14px;font-weight:700;cursor:pointer">🗑</button>';
+  }
+  h+='<button tabindex="-1" onclick="clearManifest()" style="padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,.15);background:transparent;color:var(--text2);font-size:14px;font-weight:700;cursor:pointer">✕</button>';
+  h+='</div>';
+  return h;
+}
 function renderManifest(){
   return renderStep1();
 }
@@ -147,15 +163,11 @@ function renderStep1(){
   const canNext=d.acSetup.length>0&&d.acSetup.every(s=>s.pic)&&d.pax.length>0;
 
   return _tabBar+`
-  <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+  <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
     ${(d.acSetup&&d.acSetup.length)?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(99,179,237,.5);color:#63b3ed" onclick="window.pullFromSeatmap()">🔄 Pull from Seatmap</button>`:''}
-    ${S._loadedManifestId
-      ?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="saveManifest()">💾 Save</button>
-        <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="window.saveManifestAs()">+ Save As New</button>
-        <button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(239,68,68,.4);color:#ef4444" onclick="window.deleteCurrentManifest()">🗑 Delete</button>`
-      :`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="saveManifest()">💾 Save</button>`}
-    <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="S.tab='saved';S.savedTab='manifests';render()">📂 Open</button>
-    <button tabindex="-1" class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>${S._undoLabel?'<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(245,158,11,.5);color:#f59e0b" onclick="undoManifest()">&#x21A9; Undo '+S._undoLabel+'</button>':''}
+    <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="S.section='operations';S.tab='saved';S.savedTab='manifests';render()">📂 Open Saved</button>
+    <button tabindex="-1" class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>
+    ${S._undoLabel?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(245,158,11,.5);color:#f59e0b" onclick="undoManifest()">&#x21A9; Undo ${S._undoLabel}</button>`:''}
   </div>
   <div class="card"><div class="st">Flight Details</div>
     <div style="display:flex;align-items:stretch;gap:6px;margin-bottom:8px">
@@ -204,132 +216,10 @@ function renderStep1(){
       ${(S._paxUndo&&S._paxUndo.length)?`<button tabindex="-1" class="btn btn-ghost" style="font-size:13px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.undoPax()">&#x21A9; Undo Delete (${S._paxUndo.length})</button>`:""}
     </div>
   </div>
-  <div style="display:flex;gap:8px;margin-bottom:8px">
-    ${S._loadedManifestId
-      ?`<button tabindex="-1" class="btn btn-ghost" style="flex:2;font-size:13px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="saveManifest()">💾 Save Manifest</button>
-        <button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:12px" onclick="window.saveManifestAs()">+ Save As New</button>`
-      :`<button tabindex="-1" class="btn btn-ghost" style="flex:1;font-size:13px" onclick="saveManifest()">💾 Save Manifest</button>`}
-  </div>
   <button tabindex="-1" class="btn-full ${canNext?'btn-primary':'btn-disabled'}" onclick="${canNext?'autoAllocate()':''}"
-    ${!canNext?'disabled':''}>Auto-Allocate & Open Seat Map →</button>`;
-}
-
-
-// ── Cabin SVG ── (proper aircraft shape)
-function renderCabinSVG(acId,interactive,form,_sz,_ht,seatmapKey){
-  if(typeof seatSz==='undefined'){var seatSz=_sz||64;var seatHt=_ht||52;}
-  const a=S.aircraft[acId];if(!a)return'';
-  const layout=acLayout(acId);
-  const isGA8=a.layout==='ga8';
-  const col=AC_COL[acId]||'#1e6b8c';
-  const d=S.dispatch;
-  const smKey=seatmapKey||acId;
-  const sm=interactive?d.seatMap[smKey]||{}:{};
-  const formSm=form?form.names:null; // for loadsheet view
-  const rows=layout.filter(r=>r!=='spacer');
-  const hasSpacerBefore=(idx)=>layout.slice(0,layout.indexOf(layout.filter(r=>r!=='spacer')[idx])).some(r=>r==='spacer');
-
-  // Build seat rows HTML
-  let seatRowsHTML='';
-  let rowIdx=0;
-  layout.forEach((row,li)=>{
-    if(row==='spacer'){seatRowsHTML+=`<div style="height:${isGA8?'16px':'10px'}"></div>`;return;}
-    // Compute row total weight
-    const rowWt=row.filter(c=>!c.crew&&c.i!==0&&!(c.i===1&&seat1IsCoPilot(acId))).reduce((s,c)=>{
-      if(interactive){
-        const pid=d.seatMap[smKey]?.[c.i];const p=pid?paxById(pid):null;
-        return s+(p?parseFloat(p.weight||0)+parseFloat(p.bag||0):0);
-      } else if(form){
-        return s+parseFloat(form.seats?.[c.i]||0)+parseFloat(form.bags?.[c.i]||0);
-      }
-      return s;
-    },0);
-    seatRowsHTML+=`<div style="display:flex;gap:7px;justify-content:center;align-items:center;margin-bottom:7px">`;
-    row.forEach(cell=>{
-      const isPIC=cell.i===0;
-      const isCoPilotSeat=cell.i===1&&seat1IsCoPilot(acId);
-      const isCrew=isPIC||isCoPilotSeat;
-      if(!interactive&&form){
-        // Loadsheet view — same style as manifest allocation cards
-        const nm=formSm?formSm[cell.i]||'':'';const isInfant=S.dispatch.pax.find(p=>p.name===nm)?.infant||false;
-        const wt=form?parseFloat(form.seats?.[cell.i]||0)+parseFloat(form.bags?.[cell.i]||0):0;
-        const grp=S.dispatch.pax.find(p=>p.name===nm)?.group||'';
-        const gc=grp?groupColor(grp):null;
-        // Match interactive card style: white bg + coloured left border when filled
-        const lsSeatStyle=isCrew?''
-          :nm?('background:rgba(255,255,255,.93);border-left:4px solid '+(gc||col)+';border-radius:8px')
-          :'background:rgba(255,255,255,.05);border-radius:8px';
-        const lsTextCol=nm&&!isCrew?'color:#1a2035':'color:rgba(255,255,255,.7)';
-        seatRowsHTML+=`<div class="seat ${isCrew?'crew':nm?'filled':''} ${S._selFormSeat===cell.i?'sel-src':''}" style="width:${seatSz}px;height:${seatHt}px;${lsSeatStyle}${S._selFormSeat===cell.i?';box-shadow:0 0 0 2px #f59e0b':''}" onclick="${!isCrew?`tapFormSeat(${cell.i},'${acId}')`:''}" draggable="${!isCrew&&nm?'true':'false'}" ondragstart="if(${!isCrew&&!!nm})startDragForm(event,${cell.i},'${acId}')" ondragover="event.preventDefault()" ondrop="dropFormSeat(event,${cell.i},'${acId}')">
-          <span class="seat-lbl" style="${nm&&!isCrew?'color:#475569;opacity:.7':''}font-size:9px">${cell.lbl}</span>
-          ${gc?`<div class="seat-dot" style="background:${gc};top:3px;right:3px"></div>`:''}
-          ${nm?`<div class="seat-name" style="${lsTextCol};font-weight:700;font-size:${seatSz<52?'7px':'9px'}">${nm.split(' ')[0].slice(0,seatSz<52?5:9)}${(form?.infantNames?.[cell.i])?'<span style="font-size:7px;font-weight:900;background:rgba(236,72,153,.25);color:#f472b6;border-radius:2px;padding:0 2px;margin-left:2px">i</span>':''}${(form?.paxType||{})[cell.i]==='C'?'<span style="font-size:7px;font-weight:900;background:rgba(251,146,60,.25);color:#fb923c;border-radius:2px;padding:0 2px;margin-left:2px">C</span>':''}</div><div class="seat-wt" style="${lsTextCol};font-size:${seatSz<52?'7px':'8px'}">${wt>0?wt+'kg':''}</div>`:isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.85);font-weight:700">${isPIC?'PIC':'CP'}</div>`:''}
-        </div>`;
-      } else {
-        // Manifest seat map view
-        const pid=sm[cell.i];const p=pid?paxById(pid):null;
-        const gc=p?.group?.trim()?groupColor(p.group.trim()):null;
-        const setup=d.acSetup.find(s=>(s._seatmapKey||s.acId)===smKey)||d.acSetup.find(s=>s.acId===acId);
-        const crewName=isPIC?(setup?.pic||'PIC'):(setup?.coPilot||'CP');
-        const isSrcSel=S.selectedPax&&p&&p.id===S.selectedPax;
-        const isDrop=S.selectedPax&&!p&&!isCrew;
-        const origAc=p&&d.origAcMap?d.origAcMap[p.id]:null;
-        const movedIn=origAc&&origAc!==acId;
-        const leftBorderCol=movedIn?(AC_COL[origAc]||col):col;
-        // Filled: white bg + dark text. Empty: dark bg + light text. Drop target: purple highlight. Crew: CSS handles.
-        const seatStyle=isCrew?''
-          :p?('background:rgba(255,255,255,'+(isSrcSel?'.97':'.93')+');'+(isSrcSel?'border:2px solid #ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.35);':'border-left:4px solid '+leftBorderCol+';')+'border-radius:8px')
-          :isDrop?'background:rgba(124,58,237,.18);border:1.5px solid rgba(124,58,237,.6);border-radius:8px;cursor:pointer'
-          :'background:rgba(255,255,255,.05);border-radius:8px';
-        // Text colour set per-seat based on background
-        const textCol=p&&!isCrew?'color:#1a2035':'color:rgba(255,255,255,.7)';
-        seatRowsHTML+=`<div class="seat ${isCrew?'crew':p?'filled':''} ${isSrcSel?'sel-src':''} ${isDrop?'drop-target':''}"
-          style="width:66px;height:54px;${seatStyle}"
-          onclick="tapSeat(${cell.i},'${smKey}')"
-          draggable="${!!p&&!isCrew}" ondragstart="if(${!!p&&!isCrew})startDrag(event,'${p?p.id:''}','${smKey}',${cell.i})"
-          ondragover="event.preventDefault()" ondrop="dropOnSeat(event,${cell.i},'${smKey}')">
-          <span class="seat-lbl" style="${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
-          ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
-          ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
-            :p?`${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':''}${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}${p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':''}<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`
-            :isDrop?`<div style="font-size:8px;color:rgba(167,139,250,.9);font-weight:700;line-height:1.3;padding-top:6px;text-align:center">tap<br>assign</div>`:''}
-        </div>`;
-      }
-    });
-    seatRowsHTML+=`<div style="font-size:10px;color:var(--text3);width:28px;min-width:28px;text-align:center;font-weight:600;line-height:1.2;margin-left:2px">${rowWt>0?rowWt.toFixed(0)+'<br><span style="font-weight:400;font-size:9px">kg</span>':''}</div>`;
-    seatRowsHTML+='</div>';
-    rowIdx++;
-  });
-
-  const cabinBg=col;
-  return`<div>
-    <div style="background:${cabinBg}22;border:2px solid ${cabinBg};border-radius:${isGA8?'16px 16px 10px 10px':'18px 18px 12px 12px'};padding:10px 8px;display:inline-block;min-width:${isGA8?'155px':'160px'}">
-      <div style="text-align:center;font-size:9px;color:${cabinBg};font-weight:700;letter-spacing:.1em;margin-bottom:6px">▲ FRONT</div>
-      ${seatRowsHTML}
-      <div style="text-align:center;font-size:9px;color:${cabinBg};font-weight:700;letter-spacing:.1em;margin-top:4px">▼ REAR</div>
-    </div>
-    ${(()=>{
-      // Show cargo/baggage zones if any values entered
-      const cargoItems=a.cargo||[];
-      if(!cargoItems.length) return "";
-      const cargoVals=interactive?(S.dispatch?.cargo?.[acId]||{}):form?(form.cargo||{}):(S.form?.cargo||{});
-      const hasVal=cargoItems.some((_,i)=>parseFloat(cargoVals[i]||0)>0);
-      if(!hasVal) return "";
-      const rows=cargoItems.map((c,i)=>{
-        const w=parseFloat(cargoVals[i]||0);
-        if(!w) return "";
-        return`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:rgba(0,0,0,.1);border-radius:4px;margin-bottom:2px">
-          <span style="font-size:10px;color:${cabinBg}">${c.lbl}</span>
-          <span style="font-size:11px;font-weight:700;color:var(--text)">${w}kg</span>
-        </div>`;
-      }).join("");
-      if(!rows) return "";
-      return`<div style="margin-top:6px;padding:6px;background:${cabinBg}15;border:1px solid ${cabinBg}44;border-radius:6px;min-width:155px">
-        <div style="font-size:9px;color:${cabinBg};font-weight:700;letter-spacing:.08em;margin-bottom:4px">CARGO / PODS</div>
-        ${rows}
-      </div>`;
-    })()}
-  </div>`;
+    ${!canNext?'disabled':''}>Auto-Allocate & Open Seat Map →</button>
+  ${renderManifestStickyBar()}
+`;
 }
 
 

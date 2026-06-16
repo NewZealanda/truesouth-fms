@@ -111,12 +111,15 @@ window.loadMoreAudit=async function(){
 
 
 function renderAdminPerms(){
-  const roles=['superadmin','admin','pilot','desk','maint','ground_staff'];
-  const roleLabels={superadmin:'Superadmin',admin:'Admin',pilot:'Pilot',desk:'Desk',maint:'Maintenance',ground_staff:'Ground Staff'};
+  const roles=['superadmin','admin','cx_manager','pilot','desk','maint','ground_staff'];
+  const roleLabels={superadmin:'Superadmin',admin:'Admin',cx_manager:'CX Manager',pilot:'Pilot',desk:'Desk',maint:'Maintenance',ground_staff:'Ground Staff'};
   const mainPages=[
     {id:'operations',     lbl:'Operations',         icon:'✈️', desc:'Manifest, Seatmap & Loadsheet'},
     {id:'charter',        lbl:'Charter',            icon:'💰', desc:'Charter pricing & bookings'},
     {id:'maintenance',    lbl:'Maintenance',        icon:'🔧', desc:'Aircraft logs & scheduling'},
+    {id:'roster',         lbl:'Roster',             icon:'🗓️', desc:'Staff roster and scheduling'},
+    {id:'leave',          lbl:'Leave',              icon:'📅', desc:'Submit and view leave requests'},
+    {id:'leave_approve',  lbl:'Leave Approvals',    icon:'✅', desc:'Approve/decline leave requests (CX Mgr/Admin)'},
     {id:'maint_bookings', lbl:'Maint Bookings',     icon:'🗓', desc:'Edit maintenance checks & bookings'},
     {id:'sign_loadsheet', lbl:'Sign Loadsheets',    icon:'✍️', desc:'PIC certification signature on loadsheets'},
   ];
@@ -127,7 +130,7 @@ function renderAdminPerms(){
     {id:'audit',       lbl:'Audit Log',      icon:'🔍', desc:'System audit log (superadmin only)'}
   ];
   const rp=S.rolePerms||{};
-  const ROLE_LEVEL={superadmin:1,admin:2,pilot:3,desk:3,maint:3,ground_staff:4};
+  const ROLE_LEVEL={superadmin:1,admin:2,cx_manager:2,pilot:3,desk:3,maint:3,ground_staff:4};
 
   function togStyle(on){
     return on
@@ -209,12 +212,8 @@ function renderAdmin(){
     return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
   }
   const ad=S.admin;
-  const sections=['people','perms','gdrive','aerodromes','statistics',...(S.user?.superAdmin?['audit']:[])];
-  const sectionLabels={people:'People',perms:'Permissions',gdrive:'Google Drive PDF',aerodromes:'Aerodromes',statistics:'Statistics',audit:'Audit Log'};
-  const tabBar=`<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
-    ${sections.map(s=>`<button class="sub-tab ${ad.section===s?'on':''}" onclick="S.admin.section='${s}';render()">${sectionLabels[s]}</button>`).join('')}
-  </div>`;
-  return tabBar+{people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad.section]?.()||renderAdminPeople();
+  const ad_section=ad.section||'people';
+  return {people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad_section]?.()||renderAdminPeople();
 }
 
 function renderAdminStatistics(){
@@ -479,7 +478,7 @@ function renderAdminPeople(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
   const ad=S.admin;
   const today=new Date();today.setHours(0,0,0,0);
-  const ROLE_LEVEL={superadmin:1,admin:2,pilot:3,desk:3,maint:3,ground_staff:4};
+  const ROLE_LEVEL={superadmin:1,admin:2,cx_manager:2,pilot:3,desk:3,maint:3,ground_staff:4};
 const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10b981',maint:'#a78bfa',ground_staff:'#64748b'};
   function expiryCol(v){if(!v)return'var(--text3)';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'#ef4444':dy<30?'#f59e0b':'#22c55e';}
   function expiryBg(v){if(!v)return'transparent';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'rgba(239,68,68,.08)':dy<30?'rgba(245,158,11,.08)':'transparent';}
@@ -519,7 +518,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10
     // Profile tab
     let bodyHtml='';
     if(tab==='profile'){
-      const isPilotOrAbove=['pilot','admin'].includes(d.role);
+      const isPilotOrAbove=['pilot','desk','admin','superadmin'].includes(d.role);
       const _expiryDefs=isPilotOrAbove?[['medExpiry','Medical Expiry','#22c55e'],['ocaDue','OCA Due','#7B9EC6'],['firstAid','First Aid','#f59e0b'],['avsecExpiry','AVSEC Expiry','#a78bfa']]:[['firstAid','First Aid','#f59e0b'],['avsecExpiry','AVSEC Expiry','#a78bfa']];
       const expiryRows=_expiryDefs.map(function(t){
         const k=t[0],lbl=t[1],col=t[2];
@@ -575,6 +574,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#10
         +'<select class="fi" style="font-size:13px" onchange="S.admin.personModal.draft.role=this.value">'
         +(S.user?.superAdmin?'<option value="superadmin"'+(d.role==='superadmin'?' selected':'')+'>Superadmin</option>':'')
         +'<option value="admin"'+(d.role==='admin'?' selected':'')+'>Admin</option>'
+        +'<option value="cx_manager"'+(d.role==='cx_manager'?' selected':'')+'>CX Manager</option>'
         +'<option value="pilot"'+(d.role==='pilot'?' selected':'')+'>Pilot</option>'
         +'<option value="desk"'+(d.role==='desk'?' selected':'')+'>Desk</option>'
         +'<option value="maint"'+(d.role==='maint'?' selected':'')+'>Maintenance</option>'
@@ -825,6 +825,8 @@ window.setTab=function(t){
     S.section='maintenance';S.tab='maintenance';
   } else if(t==='admin'){
     S.section='settings';S.tab='admin';
+  } else if(t==='leave'){
+    S.section='leave';
   } else if(t==='scratchpad'){
     S.tab=t;
     if(S.pads.length===0&&S.padTabs.length===0){
@@ -1326,10 +1328,10 @@ window.saveManifest=async()=>{
   // Update active tab's savedId
   const _curTab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
   if(_curTab)_curTab.savedId=id;
-  lsSet('ts_manifests_cache',S.manifests);render();
+  lsSet('ts_manifests_cache',S.manifests);
   await sbU('ts_manifests',[{id,name,saved_at:savedAt,data}]);
   auditLog('manifest_save',{name,pax:d.pax.length,aircraft:d.acSetup.map(s=>s.acId).join(',')});
-  S.appMsg={type:'ok',text:'Manifest "'+name+'" saved.'};
+  toast('Manifest "'+name+'" saved.','ok');
 };
 window.saveManifestAs=async function(){
   S._loadedManifestId=null;
@@ -1348,9 +1350,9 @@ window.deleteCurrentManifest=async function(){
   S._loadedManifestId=null;
   const _delTab=S.manifestTabs&&S.manifestTabs.find(function(t){return t.id===S.activeManifestTabId;});
   if(_delTab)_delTab.savedId=null;
-  lsSet('ts_manifests_cache',S.manifests);render();
+  lsSet('ts_manifests_cache',S.manifests);
   await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);
-  S.appMsg={type:'ok',text:'Manifest moved to Bin.'};
+  toast('Manifest moved to Bin.','ok');
 };
 
 function _autoSaveCurrent(reason){
@@ -2026,10 +2028,14 @@ window.pushLsToSeatmap=function(){
     _acsEntry={acId:acId,pic:'',coPilot:''};
     S.dispatch.acSetup.push(_acsEntry);
   }
+  // Use _seatmapKey if present (matches how seatmap render resolves the key)
+  const smKey=_acsEntry._seatmapKey||acId;
+  // Clear existing seat assignments for this aircraft — displaced pax stay in dispatch.pax (unassigned pool)
+  delete S.dispatch.seatMap[smKey];
   // Build name→id map from existing pax
   const nameMap={};
   S.dispatch.pax.forEach(function(p){if(p.name)nameMap[p.name.trim().toLowerCase()]=p.id;});
-  // Full replace — start from empty so removed pax don't persist
+  // Build fresh seatmap from loadsheet
   const sm={};
   Object.keys(f.names||{}).forEach(function(idx){
     if(parseInt(idx)===0)return; // Skip PIC — not pushed as pax
@@ -2037,7 +2043,7 @@ window.pushLsToSeatmap=function(){
     const key=nm.toLowerCase();
     let pid=nameMap[key];
     if(!pid){
-      // Pax in loadsheet but not in manifest — add them tagged
+      // Pax in loadsheet but not in manifest — add them
       pid='_ls_'+key.replace(/[^a-z0-9]/g,'_');
       if(!S.dispatch.pax.find(function(p){return p.id===pid;})){
         S.dispatch.pax.push({id:pid,name:nm,
@@ -2056,11 +2062,11 @@ window.pushLsToSeatmap=function(){
     var payReqVal=(f.paxPaymentReq||{})[idx];
     if(payReqVal!=null){var _dp2=S.dispatch.pax.find(function(px){return px.id===pid;});if(_dp2)_dp2.paymentReq=!!payReqVal;}
   });
-  S.dispatch.seatMap[acId]=sm;
+  S.dispatch.seatMap[smKey]=sm;
   runSolver();
   autoSaveDispatch();
   render();
-  toast('✅ Pushed to seatmap','ok');
+  toast('✅ Pushed to seatmap — displaced pax moved to unassigned','ok');
 };
 window.pushAllLsToSeatmap=function(){
   const tabs=S.lsTabs||[];

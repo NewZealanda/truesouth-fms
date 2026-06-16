@@ -9,24 +9,14 @@ function renderMaintenance(){
   const isAdmin=hasRolePerm('maint_bookings');
   const sub=S.maintTab||'overview';
 
-  // Sub tabs
-  const tabs=[
-    {id:'overview',lbl:'Overview'},
-    {id:'log',lbl:'Logs'},
-    {id:'aircraft',lbl:'Aircraft Data'},
-    ...(isAdmin?[{id:'bookings',lbl:'Bookings'},{id:'estimator',lbl:'Estimator'},{id:'search',lbl:'Search'}]:[{id:'search',lbl:'Search'}])
-  ];
-  const tabBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    tabs.map(t=>'<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.maintTab=\''+t.id+'\';render()">'+t.lbl+'</button>').join('')+
-    '</div>';
 
-  if(sub==='overview') return tabBar+renderMaintOverview();
-  if(sub==='log') return tabBar+renderMaintLog();
-  if(sub==='aircraft') return tabBar+renderMaintAircraftData();
+  if(sub==='overview') return renderMaintOverview();
+  if(sub==='log') return renderMaintLog();
+  if(sub==='aircraft') return renderMaintAircraftData();
 
-  if(sub==='bookings'&&isAdmin) return tabBar+renderMaintBookings();
-  if(sub==='estimator'&&isAdmin) return tabBar+renderMaintEstimator();
-  return tabBar+renderMaintSearch();
+  if(sub==='bookings'&&isAdmin) return renderMaintBookings();
+  if(sub==='estimator'&&isAdmin) return renderMaintEstimator();
+  return renderMaintSearch();
 }
 
 

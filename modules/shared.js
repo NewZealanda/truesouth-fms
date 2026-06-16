@@ -59,13 +59,14 @@ const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true},
-  admin:       {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true},
-  pilot:       {operations:true, charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true},
-  desk:        {operations:true, charter:true, maintenance:true, admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
-  maint:       {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
-  maintenance: {operations:false,charter:false,maintenance:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
-  ground_staff:{operations:false,charter:false,maintenance:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false}
+  superadmin:  {operations:true, charter:true, maintenance:true, roster:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true},
+  admin:       {operations:true, charter:true, maintenance:true, roster:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true},
+  cx_manager:  {operations:true, charter:false,maintenance:false,roster:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false},
+  pilot:       {operations:true, charter:false,maintenance:true, roster:true, leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true},
+  desk:        {operations:true, charter:true, maintenance:true, roster:true, leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
+  maint:       {operations:false,charter:false,maintenance:true, roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
+  maintenance: {operations:false,charter:false,maintenance:true, roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
+  ground_staff:{operations:false,charter:false,maintenance:false,roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false}
 };
 function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
 
@@ -100,7 +101,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.44';
+const APP_VER='v22.48';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -744,7 +745,7 @@ let S={
   // Audit
   auditLog:[],
   // Maintenance
-  maintenance:{},maintBookings:{},uploadProgress:null,driveLastUpload:lsGet('ts_drive_last_upload')||null,wideMode:lsGet('ts_wide_mode')!==false,
+  maintenance:{},maintBookings:{},roster:null,rosterWeek:null,_rosterLoaded:false,_rosterSaved:false,_leave:null,_notifications:null,_notifOpen:false,uploadProgress:null,driveLastUpload:lsGet('ts_drive_last_upload')||null,wideMode:lsGet('ts_wide_mode')!==false,
   // Drive
   driveQueue:[],
   // Manifest / Dispatch
@@ -878,7 +879,7 @@ async function loadAll(){
     const _initPads=await sbF('ts_scratchpads');
     if(us&&us.length){
       S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,isPilot:r.is_pilot||r.role==='pilot'||false}));
-      lsSet('ts_users_cache',S.users);
+      lsSet('ts_users_cache',S.users);window.loadNotifications&&window.loadNotifications();
     } else {
       const cached=lsGet('ts_users_cache');
       if(cached&&cached.length){S.users=cached;}
