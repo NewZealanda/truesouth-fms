@@ -995,7 +995,7 @@ let S={
   // Audit
   auditLog:[],
   // Maintenance
-  maintenance:{},maintBookings:{},roster:null,rosterWeek:null,rosterTab:'view',rosterFilter:'all',rosterLocked:true,rosterBuild:null,_rosterLoaded:false,_rosterSaved:false,_rosterLeave:null,_rosterLeaveWeek:null,_appLoading:false,_leave:null,_notifications:null,_notifOpen:false,uploadProgress:null,driveLastUpload:lsGet('ts_drive_last_upload')||null,wideMode:lsGet('ts_wide_mode')!==false,
+  maintenance:{},maintBookings:{},roster:null,rosterWeek:null,rosterTab:'view',rosterFilter:'all',rosterLocked:true,rosterBuild:null,_rosterLoaded:false,_rosterSaved:false,_rosterLeave:null,_rosterLeaveWeek:null,_rosterColorsLoaded:false,_rosterColorEdit:false,rosterColors:null,_appLoading:false,_leave:null,_notifications:null,_notifOpen:false,uploadProgress:null,driveLastUpload:lsGet('ts_drive_last_upload')||null,wideMode:lsGet('ts_wide_mode')!==false,
   // Drive
   driveQueue:[],
   // Manifest / Dispatch
@@ -8827,6 +8827,25 @@ var ROSTER_SC={
 var ROSTER_ORDER=['','c208b','ga8','desk','admin_duty','called_in','half_day','gnd','mrktg','off','rdo','leave','ul','sick','training','other'];
 var ROSTER_WORKING=new Set(['c208b','ga8','desk','admin_duty','called_in','half_day','gnd','mrktg']);
 
+// Color helpers
+var ROSTER_SC_HEX={
+  c208b:'#3b82f6',ga8:'#a855f7',desk:'#14b8a6',admin_duty:'#fbbf24',
+  called_in:'#22c55e',half_day:'#22c55e',gnd:'#64748b',mrktg:'#ec4899',
+  off:'#64748b',rdo:'#94a3b8',leave:'#f59e0b',ul:'#ef4444',
+  sick:'#ef4444',training:'#818cf8',other:'#94a3b8'
+};
+function _rSC(key){
+  var base=ROSTER_SC[key]||ROSTER_SC[''];
+  var hex=S.rosterColors&&S.rosterColors[key];
+  if(!hex)return base;
+  var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  function lc(v){return Math.min(255,v+Math.round((255-v)*0.3));}
+  var col='#'+[lc(r),lc(g),lc(b)].map(function(v){return v.toString(16).padStart(2,'0');}).join('');
+  return {bg:'rgba('+r+','+g+','+b+',.18)',bd:hex,col:col,lbl:base.lbl};
+}
+function _rAccent(key){return (S.rosterColors&&S.rosterColors[key])||ROSTER_SC_HEX[key]||'#666666';}
+
+
 // ── Role groups ──
 var ROLE_GROUPS=[
   {key:'pilot',    label:'Pilots',   roles:['pilot'],              col:'#7B9EC6'},
@@ -8891,6 +8910,7 @@ function renderRosterView(){
   var DNAMES=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   var filter=S.rosterFilter||'all';
   if(!S._rosterHide)S._rosterHide=[];var rHide=S._rosterHide;
+  if(!S._rosterColorsLoaded){S._rosterColorsLoaded=true;window.loadRosterColors();}
 
   if(!S.rosterWeek){
     S.rosterWeek=_rIso(filter==='accounts'?_rThursday(today):_rMonday(today));
@@ -8942,8 +8962,11 @@ function renderRosterView(){
     var lk=!!S.rosterLocked;
     h+='<button tabindex="-1" onclick="S.rosterLocked=!S.rosterLocked;render()" style="padding:5px 10px;border-radius:8px;border:1px solid '+(lk?'#f59e0b':'var(--border2)')+';background:'+(lk?'rgba(245,158,11,.12)':'var(--card2)')+';color:'+(lk?'#fbbf24':'var(--text3)')+';font-size:12px;cursor:pointer" title="Toggle roster lock">'+(lk?'🔒 Locked':'🔓 Unlocked')+'</button>';
     if(!lk){h+='<button tabindex="-1" onclick="window.saveRosterToCloud()" style="padding:5px 12px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>';}
+    var ce=!!S._rosterColorEdit;
+    h+='<button tabindex="-1" onclick="S._rosterColorEdit=!S._rosterColorEdit;render()" style="padding:5px 10px;border-radius:8px;border:1px solid '+(ce?'rgba(99,102,241,.6)':'var(--border2)')+';background:'+(ce?'rgba(99,102,241,.15)':'var(--card2)')+';color:'+(ce?'#a5b4fc':'var(--text3)')+';font-size:12px;cursor:pointer;margin-left:auto">Colors</button>';
   }
   h+='</div>';
+  h+=_renderRosterColors(isAdminPlus);
 
   // ── Table ──
   h+='<div style="overflow:auto">';
@@ -9029,13 +9052,13 @@ function renderRosterView(){
           var rawSt=isOther?'other':st;
           var isHidden=rawSt&&rHide.indexOf(rawSt)>-1;
           var otherNote=isOther?st.slice(6):'';
-          var cfg=ROSTER_SC[rawSt]||ROSTER_SC[''];
+          var cfg=_rSC(rawSt||'');
           var dispLbl=isOther?(otherNote||'?'):cfg.lbl;
           h+='<td style="padding:3px 2px;text-align:center;background:'+(isTdy?'rgba(124,58,237,.06)':(isWe?'rgba(255,255,255,.01)':'transparent'))+'">';
           if(isHidden){h+='<span style="display:inline-block;width:66px;height:24px"></span>';}else if(canEdit){
             h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?otherNote:'')+'" style="padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:66px;text-align:center">';
             ROSTER_ORDER.forEach(function(s){
-              var c=ROSTER_SC[s];
+              var c=_rSC(s);
               h+='<option value="'+s+'"'+(rawSt===s?' selected':'')+'>'+c.lbl+'</option>';
             });
             h+='</select>';
@@ -9061,12 +9084,35 @@ function renderRosterView(){
   h+='</div>';
   h+='<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">';
   ROSTER_ORDER.filter(function(s){return s!=='';}).forEach(function(s){
-    var c=ROSTER_SC[s];
+    var c=_rSC(s);
     var isHid=rHide.indexOf(s)>-1;
     h+='<span onclick="window.rosterToggleVis(\''+s+'\')" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;border:1px solid '+(isHid?'rgba(148,163,184,.2)':c.bd)+';background:'+(isHid?'rgba(148,163,184,.04)':c.bg)+';color:'+(isHid?'rgba(148,163,184,.3)':c.col)+';cursor:pointer;user-select:none;opacity:'+(isHid?'0.4':'1')+'" title="Click to '+(isHid?'show':'hide')+'">'+c.lbl+'</span>';
   });
   h+='</div>';
   h+='</div>';
+  return h;
+}
+
+// ── Color settings panel ──
+function _renderRosterColors(isAdminPlus){
+  if(!isAdminPlus||!S._rosterColorEdit)return '';
+  var keys=ROSTER_ORDER.filter(function(s){return s!=='';});
+  var h='<div style="padding:10px 14px 12px;border-bottom:1px solid var(--border2);background:rgba(99,102,241,.04)">';
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">';
+  h+='<span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Roster Colors</span>';
+  h+='<button tabindex="-1" onclick="window.saveRosterColors()" style="padding:3px 10px;border-radius:6px;border:none;background:#22c55e;color:#fff;font-size:11px;font-weight:700;cursor:pointer">Save</button>';
+  h+='<button tabindex="-1" onclick="window.resetRosterColors()" style="padding:3px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:11px;cursor:pointer">Reset Defaults</button>';
+  h+='</div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 12px">';
+  keys.forEach(function(s){
+    var c=_rSC(s);
+    var accent=_rAccent(s);
+    h+='<div style="display:flex;align-items:center;gap:5px">';
+    h+='<input type="color" value="'+accent+'" onchange="window.rosterSetColor(\''+s+'\',this.value)" style="width:22px;height:22px;flex-shrink:0;border:none;border-radius:4px;cursor:pointer;padding:1px;background:transparent">';
+    h+='<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid '+c.bd+';background:'+c.bg+';color:'+c.col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px">'+c.lbl+'</span>';
+    h+='</div>';
+  });
+  h+='</div></div>';
   return h;
 }
 
@@ -9148,7 +9194,7 @@ function renderRosterBuild(){
           +'style="width:68px;padding:4px 2px;border-radius:6px;border:1px solid var(--border2);'
           +'background:'+(tst?cfg.bg:'var(--card2)')+';color:'+(tst?cfg.col:'var(--text3)')+';'
           +'font-size:11px;font-weight:600;cursor:pointer;text-align:center">';
-        ROSTER_ORDER.forEach(function(s){var c=ROSTER_SC[s];h+='<option value="'+s+'"'+(tst===s?' selected':'')+'>'+c.lbl+'</option>';});
+        ROSTER_ORDER.forEach(function(s){var c=_rSC(s);h+='<option value="'+s+'"'+(tst===s?' selected':'')+'>'+c.lbl+'</option>';});
         h+='</select></td>';
       }
       h+='</tr>';
@@ -9332,6 +9378,37 @@ window.rosterToggleVis=function(key){
   if(idx>-1){S._rosterHide.splice(idx,1);}
   else{S._rosterHide.push(key);}
   render();
+};
+
+window.rosterSetColor=function(key,hex){
+  if(!S.rosterColors)S.rosterColors={};
+  S.rosterColors[key]=hex;
+  render();
+};
+
+window.resetRosterColors=function(){
+  if(!confirm('Reset all roster colors to defaults?'))return;
+  S.rosterColors={};
+  render();
+};
+
+window.saveRosterColors=async function(){
+  try{
+    await sbU('ts_settings',[{key:'roster_colors',value:JSON.stringify(S.rosterColors||{})}]);
+    toast('Colors saved!','success');
+  }catch(e){toast('Save failed','err');}
+};
+
+window.loadRosterColors=async function(){
+  try{
+    var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.roster_colors&select=value',{headers:SH});
+    if(!r.ok)return;
+    var rows=await r.json();
+    if(rows&&rows.length&&rows[0].value){
+      var val=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;
+      if(val&&typeof val==='object'){S.rosterColors=val;safeRender();}
+    }
+  }catch(e){}
 };
 
 var LEAVE_TYPES=[
