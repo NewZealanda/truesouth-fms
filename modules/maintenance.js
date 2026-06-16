@@ -435,6 +435,14 @@ function renderMaintBookings(){
             ${['50 Hour','100 Hour','200 Hour'].map(t=>`<option ${ct===t?'selected':''}>${t}</option>`).join('')}
           </select></div>
       </div>
+      <div class="g2" style="gap:8px;margin-bottom:10px">
+        <div><label style="font-size:11px;color:var(--text3)">Engine Last OH (hrs)</label>
+          <input type="number" class="fi" step="0.1" value="${m.engineLastOH?.[ac]??''}" placeholder="—"
+            onchange="window.saveMaintCheck('${ac}','engineLastOH',this.value===''?null:parseFloat(this.value))" style="font-size:12px"></div>
+        <div><label style="font-size:11px;color:var(--text3)">Prop Last OH (hrs)</label>
+          <input type="number" class="fi" step="0.1" value="${m.propLastOH?.[ac]??''}" placeholder="—"
+            onchange="window.saveMaintCheck('${ac}','propLastOH',this.value===''?null:parseFloat(this.value))" style="font-size:12px"></div>
+      </div>
       <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Maintenance Bookings</div>
       ${bks.map((b,bi)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;background:var(--card2);padding:6px 8px;border-radius:6px">
         <input type="date" class="fi" value="${b.date}" onchange="window.editBooking('${ac}',${bi},'date',this.value)" style="width:120px;font-size:11px">
@@ -784,6 +792,8 @@ window.saveMaintCheck=function(ac,field,val){
   initMaintenance();
   if(field==='nextCheck') S.maintenance.nextCheck[ac]=val;
   if(field==='checkType') S.maintenance.checkType[ac]=val;
+  if(field==='engineLastOH'){S.maintenance.engineLastOH=S.maintenance.engineLastOH||{};S.maintenance.engineLastOH[ac]=val;}
+  if(field==='propLastOH'){S.maintenance.propLastOH=S.maintenance.propLastOH||{};S.maintenance.propLastOH[ac]=val;}
   saveMaintenance();render();
 };
 

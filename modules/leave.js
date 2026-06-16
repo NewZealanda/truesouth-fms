@@ -462,11 +462,9 @@ window._notifyLeaveUser=async function(userId,action,leaveType,startDate,endDate
 };
 
 window._triggerLeaveEmail=async function(requestId,action){
-  return fetch(SB+'/functions/v1/send-leave-email',{
-    method:'POST',
-    headers:{...SH,'Content-Type':'application/json'},
-    body:JSON.stringify({requestId:requestId,action:action})
-  });
+  // Email disabled for now — in-app notifications only.
+  // To re-enable, restore the fetch to SB+'/functions/v1/send-leave-email'.
+  return Promise.resolve();
 };
 
 window.loadNotifications=async function(){

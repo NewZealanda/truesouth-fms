@@ -557,6 +557,10 @@ function renderAdminAircraft(){
       <div><label>Fuel (kg)</label><input class="fi" type="number" value="${d.fuelKg}" onblur="if(${ed}){S.admin.acDraft.fuelKg=parseFloat(this.value)||0}" ${ro}></div>
       <div><label>Fuel Arm (in)</label><input class="fi" type="number" value="${d.fuelArm}" onblur="if(${ed}){S.admin.acDraft.fuelArm=parseFloat(this.value)||0}" ${ro}></div>
     </div>
+    <div class="g2" style="margin-bottom:10px">
+      <div><label>Default Flight Burn</label><input class="fi" type="number" value="${d.burnDef||''}" placeholder="${d.layout==='ga8'?'35':'187'}" onblur="if(${ed}){S.admin.acDraft.burnDef=parseFloat(this.value)||0}" ${ro}></div>
+      <div><label>Burn Unit</label><select class="fi" onchange="if(${ed}){S.admin.acDraft.burnDefUnit=this.value}" ${ed?'':'disabled style=\"opacity:.5\"'}>${['L','lbs','kg'].map(u=>`<option ${(d.burnDefUnit||(d.layout==='ga8'?'L':'lbs'))===u?'selected':''}>${u}</option>`).join('')}</select></div>
+    </div>
     <div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Seats</div>
       <div style="display:grid;grid-template-columns:1.5fr 90px 90px 32px;gap:8px;margin-bottom:4px">${['Label','Arm (in)','Max (kg)',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}</div>
       ${sR}${ed?`<button class="btn btn-ghost" style="margin-top:8px;font-size:12px" onclick="S.admin.acDraft.seats.push({lbl:'Seat '+S.admin.acDraft.seats.length,arm:0});render()">+ Add Seat</button>`:''}
@@ -2973,22 +2977,28 @@ window.calcTTIS=function(){
 function acDisp(id){return(id||"").replace("ZK-","");}function acDisp(id){return(id||"").replace("ZK-","");}
 
 // --- Role Permissions Table ---
+let _permSaveTimer=null;
 window.toggleRolePerm=function(role,perm,val){
   if(!S.rolePerms)S.rolePerms={};
   if(!S.rolePerms[role])S.rolePerms[role]=Object.assign({},(DEFAULT_ROLE_PERMS[role])||{});
   if(perm==='roster_leave'){S.rolePerms[role]['roster']=val;S.rolePerms[role]['leave']=val;}
   else{S.rolePerms[role][perm]=val;}
+  // Mark as locally edited so a realtime ts_settings reload won't clobber it, and persist immediately (debounced).
+  S._permsEditTs=Date.now();
+  lsSet('ts_role_perms',S.rolePerms);
+  clearTimeout(_permSaveTimer);
+  _permSaveTimer=setTimeout(function(){window.saveRolePerms(true);},700);
   render();
 };
 
-window.saveRolePerms=async function(){
-  try{
-    await sbU('ts_settings',[{key:'role_perms',value:JSON.stringify(S.rolePerms||{})}]);
-    auditLog('role_perms_save','Saved role permissions');
-    toast('Permissions saved','success');
-  }catch(e){
-    toast('Save failed: '+String(e.message),'error');
-  }
+window.saveRolePerms=async function(silent){
+  S._permsEditTs=Date.now();
+  const res=await sbU('ts_settings',[{key:'role_perms',value:JSON.stringify(S.rolePerms||{})}]);
+  if(res===null){if(!silent)toast('Save failed — check connection and try again','error');return;}
+  lsSet('ts_role_perms',S.rolePerms);
+  S._permsEditTs=Date.now();
+  auditLog('role_perms_save','Saved role permissions');
+  if(!silent)toast('Permissions saved','success');
 };
 
 function renderAdminPerms(){
@@ -3077,14 +3087,38 @@ function renderAdminAudit(){
     return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});
   }
   function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  // Turn raw action+detail into a plain-English summary.
+  function _auditAction(a){
+    var M={session_restore:'Signed in',login:'Signed in',logout:'Signed out',login_fail:'Failed sign-in',
+      role_perms_save:'Updated permissions',admin_kick:'Signed a user out',
+      ls_save:'Saved loadsheet',ls_sign:'Signed loadsheet',manifest_save:'Saved manifest',
+      crew_save:'Updated crew profile',user_save:'Updated user account',aircraft_save:'Updated aircraft data',
+      leave_submit:'Submitted leave',leave_submitted:'Submitted leave',leave_approve:'Approved leave',leave_approved:'Approved leave',leave_decline:'Declined leave',leave_declined:'Declined leave'};
+    return M[a]||(a?a.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();}):'Activity');
+  }
+  function _auditDetail(e){
+    var raw=e.detail,obj=null;
+    if(raw&&typeof raw==='object')obj=raw;
+    else if(typeof raw==='string'){var t=raw.trim();if(t.charAt(0)==='{'||t.charAt(0)==='['){try{obj=JSON.parse(t);}catch(_){obj=null;}}}
+    if(!obj)return (typeof raw==='string'&&raw.charAt(0)!=='{')?raw:'';
+    var bits=[];
+    if(obj.via==='remember_me')bits.push('remembered device');
+    else if(obj.via==='session')bits.push('saved session');
+    if(obj.targetName||obj.target)bits.push('user: '+(obj.targetName||obj.target));
+    if(obj.name&&!obj.via)bits.push(obj.name);
+    if(obj.ac)bits.push(obj.ac);
+    if(obj.type)bits.push(obj.type);
+    return bits.join(' · ');
+  }
   var rows=log.slice(0,200).map(function(e){
-    var det=typeof e.detail==='object'?JSON.stringify(e.detail):String(e.detail||'');
+    var rawDet=typeof e.detail==='object'?JSON.stringify(e.detail):String(e.detail||'');
+    var det=_auditDetail(e);
     return'<tr style="border-bottom:1px solid var(--border)">'
       +'<td style="padding:7px 8px;font-size:11px;color:var(--text3);white-space:nowrap">'+fmtTime(e.time)+'</td>'
       +'<td style="padding:7px 8px;font-size:12px;font-weight:600;white-space:nowrap">'+esc(e.name||e.user||'')+'</td>'
       +'<td style="padding:7px 8px;font-size:11px;color:var(--text3)">'+esc(e.role||'')+'</td>'
-      +'<td style="padding:7px 8px;font-size:12px">'+esc(e.action||'')+'</td>'
-      +'<td style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(det)+'</td>'
+      +'<td style="padding:7px 8px;font-size:12px">'+esc(_auditAction(e.action))+'</td>'
+      +'<td title="'+esc(rawDet)+'" style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(det)+'</td>'
       +'</tr>';
   }).join('');
   return'<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'

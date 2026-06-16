@@ -263,9 +263,11 @@ function renderLoadsheet(){
   const fuelDisplay=a?String(Math.round(fromKg(fuelKgVal,f.ac))):'';
 
   // Burn-off display  
-  const burnVal=f.burnOff||(a?.burnDef||'');
-  const burnUnit_=a?.burnDefUnit||'kg';
-  const burnKgVal=f.burnOff?burnToKg(f.burnOff,f.ac):burnToKg(a?.burnDef||0,f.ac);
+  // Default flight burn per aircraft: configured burnDef, else 35 L (airvan) / 187 lb (caravan)
+  const _acDefBurn=a?(a.burnDef||(a.layout==='ga8'?35:187)):'';
+  const burnVal=f.burnOff||(_acDefBurn||'');
+  const burnUnit_=a?.burnDefUnit||(a?.layout==='ga8'?'L':'lbs');
+  const burnKgVal=f.burnOff?burnToKg(f.burnOff,f.ac):burnToKg(_acDefBurn||0,f.ac);
 
   // ── Unified Seats section (SVG seatmap + editable cards) ──
   let seatsH='',cargoH='',fuelH='',loadingH='',calcH='',sigH='',unallocH='',isPod=false;

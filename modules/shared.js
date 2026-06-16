@@ -110,7 +110,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.52';
+const APP_VER='v22.53';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1017,7 +1017,7 @@ function initRealtime(){
       _rtHb=setInterval(function(){
         if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(_rtRef)}));}
       },29000);
-      S.rtStatus='connecting';render();
+      S.rtStatus='connecting';safeRender();
     };
     _rtWs.onmessage=function(e){
       try{
@@ -1028,16 +1028,16 @@ function initRealtime(){
         }
         if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
           if(msg.payload&&msg.payload.status==='ok'){
-            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);render();
+            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);safeRender();
           } else if(msg.payload&&msg.payload.status==='error'){
-            S.rtStatus='offline';render();
+            S.rtStatus='offline';safeRender();
           }
         }
         if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
           if(msg.payload&&msg.payload.status==='ok'){
-            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);render();
+            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);safeRender();
           } else if(msg.payload&&msg.payload.status==='error'){
-            S.rtStatus='offline';render();
+            S.rtStatus='offline';safeRender();
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='dispatch'){
@@ -1061,11 +1061,11 @@ function initRealtime(){
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='crew_update'){
           if(msg.payload.payload&&msg.payload.payload.updatedBy!==S.user?.id){
-            Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){S._pendingFlash=(S._pendingFlash||[]).concat(['flash-admin']);render();});
+            Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){S._pendingFlash=(S._pendingFlash||[]).concat(['flash-admin']);safeRender();});
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_saved'){
-          if(S.tab==='saved'){reloadTable('ts_loadsheets');reloadTable('ts_scratchpads').then(function(){render();});}
+          if(S.tab==='saved'){reloadTable('ts_loadsheets');reloadTable('ts_scratchpads').then(function(){safeRender();});}
           else{reloadTable('ts_loadsheets');}
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_tab_open'){
@@ -1235,7 +1235,7 @@ function initRealtime(){
     };
     _rtWs.onclose=function(){
       clearInterval(_rtHb);
-      if(S.rtStatus!=='offline'){S.rtStatus='offline';render();}
+      if(S.rtStatus!=='offline'){S.rtStatus='offline';safeRender();}
       if(S.user)_rtRecon=setTimeout(initRealtime,8000);
     };
     _rtWs.onerror=function(){try{_rtWs.close();}catch{}};
@@ -1324,7 +1324,7 @@ async function reloadTable(table){
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
-          if(row.key==='role_perms'&&row.value){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
+          if(row.key==='role_perms'&&row.value&&Date.now()-(S._permsEditTs||0)>5000){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
           if(row.key==='maintenance'&&row.value){
             try{const m=JSON.parse(row.value);if(m&&m.hist){S.maintenance=m;lsSet('ts_maintenance',m);changed=true;}}catch(e){}

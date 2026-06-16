@@ -358,7 +358,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.52';
+const APP_VER='v22.53';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1265,7 +1265,7 @@ function initRealtime(){
       _rtHb=setInterval(function(){
         if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(_rtRef)}));}
       },29000);
-      S.rtStatus='connecting';render();
+      S.rtStatus='connecting';safeRender();
     };
     _rtWs.onmessage=function(e){
       try{
@@ -1276,16 +1276,16 @@ function initRealtime(){
         }
         if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
           if(msg.payload&&msg.payload.status==='ok'){
-            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);render();
+            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);safeRender();
           } else if(msg.payload&&msg.payload.status==='error'){
-            S.rtStatus='offline';render();
+            S.rtStatus='offline';safeRender();
           }
         }
         if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
           if(msg.payload&&msg.payload.status==='ok'){
-            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);render();
+            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);safeRender();
           } else if(msg.payload&&msg.payload.status==='error'){
-            S.rtStatus='offline';render();
+            S.rtStatus='offline';safeRender();
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='dispatch'){
@@ -1309,11 +1309,11 @@ function initRealtime(){
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='crew_update'){
           if(msg.payload.payload&&msg.payload.payload.updatedBy!==S.user?.id){
-            Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){S._pendingFlash=(S._pendingFlash||[]).concat(['flash-admin']);render();});
+            Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){S._pendingFlash=(S._pendingFlash||[]).concat(['flash-admin']);safeRender();});
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_saved'){
-          if(S.tab==='saved'){reloadTable('ts_loadsheets');reloadTable('ts_scratchpads').then(function(){render();});}
+          if(S.tab==='saved'){reloadTable('ts_loadsheets');reloadTable('ts_scratchpads').then(function(){safeRender();});}
           else{reloadTable('ts_loadsheets');}
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_tab_open'){
@@ -1483,7 +1483,7 @@ function initRealtime(){
     };
     _rtWs.onclose=function(){
       clearInterval(_rtHb);
-      if(S.rtStatus!=='offline'){S.rtStatus='offline';render();}
+      if(S.rtStatus!=='offline'){S.rtStatus='offline';safeRender();}
       if(S.user)_rtRecon=setTimeout(initRealtime,8000);
     };
     _rtWs.onerror=function(){try{_rtWs.close();}catch{}};
@@ -1572,7 +1572,7 @@ async function reloadTable(table){
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
-          if(row.key==='role_perms'&&row.value){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
+          if(row.key==='role_perms'&&row.value&&Date.now()-(S._permsEditTs||0)>5000){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
           if(row.key==='maintenance'&&row.value){
             try{const m=JSON.parse(row.value);if(m&&m.hist){S.maintenance=m;lsSet('ts_maintenance',m);changed=true;}}catch(e){}
@@ -3476,9 +3476,11 @@ function renderLoadsheet(){
   const fuelDisplay=a?String(Math.round(fromKg(fuelKgVal,f.ac))):'';
 
   // Burn-off display  
-  const burnVal=f.burnOff||(a?.burnDef||'');
-  const burnUnit_=a?.burnDefUnit||'kg';
-  const burnKgVal=f.burnOff?burnToKg(f.burnOff,f.ac):burnToKg(a?.burnDef||0,f.ac);
+  // Default flight burn per aircraft: configured burnDef, else 35 L (airvan) / 187 lb (caravan)
+  const _acDefBurn=a?(a.burnDef||(a.layout==='ga8'?35:187)):'';
+  const burnVal=f.burnOff||(_acDefBurn||'');
+  const burnUnit_=a?.burnDefUnit||(a?.layout==='ga8'?'L':'lbs');
+  const burnKgVal=f.burnOff?burnToKg(f.burnOff,f.ac):burnToKg(_acDefBurn||0,f.ac);
 
   // ── Unified Seats section (SVG seatmap + editable cards) ──
   let seatsH='',cargoH='',fuelH='',loadingH='',calcH='',sigH='',unallocH='',isPod=false;
@@ -5428,6 +5430,10 @@ function renderAdminAircraft(){
       <div><label>C of G Max (in)</label><input class="fi" type="number" value="${d.cogMax}" onblur="if(${ed}){S.admin.acDraft.cogMax=parseFloat(this.value)||0}" ${ro}></div>
       <div><label>Fuel (kg)</label><input class="fi" type="number" value="${d.fuelKg}" onblur="if(${ed}){S.admin.acDraft.fuelKg=parseFloat(this.value)||0}" ${ro}></div>
       <div><label>Fuel Arm (in)</label><input class="fi" type="number" value="${d.fuelArm}" onblur="if(${ed}){S.admin.acDraft.fuelArm=parseFloat(this.value)||0}" ${ro}></div>
+    </div>
+    <div class="g2" style="margin-bottom:10px">
+      <div><label>Default Flight Burn</label><input class="fi" type="number" value="${d.burnDef||''}" placeholder="${d.layout==='ga8'?'35':'187'}" onblur="if(${ed}){S.admin.acDraft.burnDef=parseFloat(this.value)||0}" ${ro}></div>
+      <div><label>Burn Unit</label><select class="fi" onchange="if(${ed}){S.admin.acDraft.burnDefUnit=this.value}" ${ed?'':'disabled style=\"opacity:.5\"'}>${['L','lbs','kg'].map(u=>`<option ${(d.burnDefUnit||(d.layout==='ga8'?'L':'lbs'))===u?'selected':''}>${u}</option>`).join('')}</select></div>
     </div>
     <div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Seats</div>
       <div style="display:grid;grid-template-columns:1.5fr 90px 90px 32px;gap:8px;margin-bottom:4px">${['Label','Arm (in)','Max (kg)',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}</div>
@@ -7845,22 +7851,28 @@ window.calcTTIS=function(){
 function acDisp(id){return(id||"").replace("ZK-","");}function acDisp(id){return(id||"").replace("ZK-","");}
 
 // --- Role Permissions Table ---
+let _permSaveTimer=null;
 window.toggleRolePerm=function(role,perm,val){
   if(!S.rolePerms)S.rolePerms={};
   if(!S.rolePerms[role])S.rolePerms[role]=Object.assign({},(DEFAULT_ROLE_PERMS[role])||{});
   if(perm==='roster_leave'){S.rolePerms[role]['roster']=val;S.rolePerms[role]['leave']=val;}
   else{S.rolePerms[role][perm]=val;}
+  // Mark as locally edited so a realtime ts_settings reload won't clobber it, and persist immediately (debounced).
+  S._permsEditTs=Date.now();
+  lsSet('ts_role_perms',S.rolePerms);
+  clearTimeout(_permSaveTimer);
+  _permSaveTimer=setTimeout(function(){window.saveRolePerms(true);},700);
   render();
 };
 
-window.saveRolePerms=async function(){
-  try{
-    await sbU('ts_settings',[{key:'role_perms',value:JSON.stringify(S.rolePerms||{})}]);
-    auditLog('role_perms_save','Saved role permissions');
-    toast('Permissions saved','success');
-  }catch(e){
-    toast('Save failed: '+String(e.message),'error');
-  }
+window.saveRolePerms=async function(silent){
+  S._permsEditTs=Date.now();
+  const res=await sbU('ts_settings',[{key:'role_perms',value:JSON.stringify(S.rolePerms||{})}]);
+  if(res===null){if(!silent)toast('Save failed — check connection and try again','error');return;}
+  lsSet('ts_role_perms',S.rolePerms);
+  S._permsEditTs=Date.now();
+  auditLog('role_perms_save','Saved role permissions');
+  if(!silent)toast('Permissions saved','success');
 };
 
 function renderAdminPerms(){
@@ -7949,14 +7961,38 @@ function renderAdminAudit(){
     return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});
   }
   function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  // Turn raw action+detail into a plain-English summary.
+  function _auditAction(a){
+    var M={session_restore:'Signed in',login:'Signed in',logout:'Signed out',login_fail:'Failed sign-in',
+      role_perms_save:'Updated permissions',admin_kick:'Signed a user out',
+      ls_save:'Saved loadsheet',ls_sign:'Signed loadsheet',manifest_save:'Saved manifest',
+      crew_save:'Updated crew profile',user_save:'Updated user account',aircraft_save:'Updated aircraft data',
+      leave_submit:'Submitted leave',leave_submitted:'Submitted leave',leave_approve:'Approved leave',leave_approved:'Approved leave',leave_decline:'Declined leave',leave_declined:'Declined leave'};
+    return M[a]||(a?a.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();}):'Activity');
+  }
+  function _auditDetail(e){
+    var raw=e.detail,obj=null;
+    if(raw&&typeof raw==='object')obj=raw;
+    else if(typeof raw==='string'){var t=raw.trim();if(t.charAt(0)==='{'||t.charAt(0)==='['){try{obj=JSON.parse(t);}catch(_){obj=null;}}}
+    if(!obj)return (typeof raw==='string'&&raw.charAt(0)!=='{')?raw:'';
+    var bits=[];
+    if(obj.via==='remember_me')bits.push('remembered device');
+    else if(obj.via==='session')bits.push('saved session');
+    if(obj.targetName||obj.target)bits.push('user: '+(obj.targetName||obj.target));
+    if(obj.name&&!obj.via)bits.push(obj.name);
+    if(obj.ac)bits.push(obj.ac);
+    if(obj.type)bits.push(obj.type);
+    return bits.join(' · ');
+  }
   var rows=log.slice(0,200).map(function(e){
-    var det=typeof e.detail==='object'?JSON.stringify(e.detail):String(e.detail||'');
+    var rawDet=typeof e.detail==='object'?JSON.stringify(e.detail):String(e.detail||'');
+    var det=_auditDetail(e);
     return'<tr style="border-bottom:1px solid var(--border)">'
       +'<td style="padding:7px 8px;font-size:11px;color:var(--text3);white-space:nowrap">'+fmtTime(e.time)+'</td>'
       +'<td style="padding:7px 8px;font-size:12px;font-weight:600;white-space:nowrap">'+esc(e.name||e.user||'')+'</td>'
       +'<td style="padding:7px 8px;font-size:11px;color:var(--text3)">'+esc(e.role||'')+'</td>'
-      +'<td style="padding:7px 8px;font-size:12px">'+esc(e.action||'')+'</td>'
-      +'<td style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(det)+'</td>'
+      +'<td style="padding:7px 8px;font-size:12px">'+esc(_auditAction(e.action))+'</td>'
+      +'<td title="'+esc(rawDet)+'" style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(det)+'</td>'
       +'</tr>';
   }).join('');
   return'<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
@@ -8411,6 +8447,14 @@ function renderMaintBookings(){
             ${['50 Hour','100 Hour','200 Hour'].map(t=>`<option ${ct===t?'selected':''}>${t}</option>`).join('')}
           </select></div>
       </div>
+      <div class="g2" style="gap:8px;margin-bottom:10px">
+        <div><label style="font-size:11px;color:var(--text3)">Engine Last OH (hrs)</label>
+          <input type="number" class="fi" step="0.1" value="${m.engineLastOH?.[ac]??''}" placeholder="—"
+            onchange="window.saveMaintCheck('${ac}','engineLastOH',this.value===''?null:parseFloat(this.value))" style="font-size:12px"></div>
+        <div><label style="font-size:11px;color:var(--text3)">Prop Last OH (hrs)</label>
+          <input type="number" class="fi" step="0.1" value="${m.propLastOH?.[ac]??''}" placeholder="—"
+            onchange="window.saveMaintCheck('${ac}','propLastOH',this.value===''?null:parseFloat(this.value))" style="font-size:12px"></div>
+      </div>
       <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Maintenance Bookings</div>
       ${bks.map((b,bi)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;background:var(--card2);padding:6px 8px;border-radius:6px">
         <input type="date" class="fi" value="${b.date}" onchange="window.editBooking('${ac}',${bi},'date',this.value)" style="width:120px;font-size:11px">
@@ -8760,6 +8804,8 @@ window.saveMaintCheck=function(ac,field,val){
   initMaintenance();
   if(field==='nextCheck') S.maintenance.nextCheck[ac]=val;
   if(field==='checkType') S.maintenance.checkType[ac]=val;
+  if(field==='engineLastOH'){S.maintenance.engineLastOH=S.maintenance.engineLastOH||{};S.maintenance.engineLastOH[ac]=val;}
+  if(field==='propLastOH'){S.maintenance.propLastOH=S.maintenance.propLastOH||{};S.maintenance.propLastOH[ac]=val;}
   saveMaintenance();render();
 };
 
@@ -8983,7 +9029,7 @@ function renderRosterView(){
   if(!S._rosterHide)S._rosterHide=[];var rHide=S._rosterHide;
   if(!S._rosterColorsLoaded){S._rosterColorsLoaded=true;window.loadRosterColors();}
   var NEVER_SHOW=['maint','accounts'];
-  if(!S._rosterGroupHide)S._rosterGroupHide=NEVER_SHOW.slice();
+  if(!S._rosterGroupHide)S._rosterGroupHide=lsGet('ts_roster_grouphide')||NEVER_SHOW.slice();
   NEVER_SHOW.forEach(function(k){if(S._rosterGroupHide.indexOf(k)===-1)S._rosterGroupHide.push(k);});
   var _rGH=S._rosterGroupHide;
 
@@ -9219,11 +9265,12 @@ function renderRosterBuild(){
   var allUsers=(S.users||[]).filter(function(u){return u.id&&u.name&&!u.inactive;}).slice().sort(function(a,b){
     return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');
   });
-  var bs=S.rosterBuild||(S.rosterBuild={});
+  var bs=S.rosterBuild||(S.rosterBuild=lsGet('ts_roster_build')||{});
   if(!bs.startDate)bs.startDate=_rIso(_rMonday(today));
   if(!bs.weeks)bs.weeks=4;
   if(!bs.template)bs.template={};
   if(!bs.enabled)bs.enabled={};
+  try{lsSet('ts_roster_build',bs);}catch(e){}
 
   var h='<div style="padding:14px">';
 
@@ -9285,10 +9332,10 @@ function renderRosterBuild(){
         var cfg=ROSTER_SC[tst]||ROSTER_SC[''];
         h+='<td style="padding:3px 2px;text-align:center">';
         h+='<select tabindex="-1" '+(enabled?'':'disabled ')
-          +'onchange="window.rosterTplSet('+di+','+JSON.stringify(u.id)+',this.value)" '
-          +'style="width:68px;padding:4px 2px;border-radius:6px;border:1px solid var(--border2);'
+          +'onchange="window.rosterTplSet('+di+','+JSON.stringify(u.id)+',this.value,this)" '
+          +'style="width:68px;padding:4px 3px;border-radius:6px;border:1px solid '+(tst?cfg.bd:'var(--border2)')+';'
           +'background:'+(tst?cfg.bg:'var(--card2)')+';color:'+(tst?cfg.col:'var(--text3)')+';'
-          +'font-size:11px;font-weight:600;cursor:pointer;text-align:center">';
+          +'font-size:11px;font-weight:700;cursor:pointer;text-align:center">';
         ROSTER_ORDER.forEach(function(s){var c=_rSC(s);h+='<option value="'+s+'"'+(tst===s?' selected':'')+'>'+c.lbl+'</option>';});
         h+='</select></td>';
       }
@@ -9361,13 +9408,15 @@ window._rosterDraftSet=function(uid,ini,ds,val){
   render();
 };
 
-window.rosterTplSet=function(di,uid,val){
+window.rosterTplSet=function(di,uid,val,el){
   if(!S.rosterBuild)S.rosterBuild={};
   if(!S.rosterBuild.template)S.rosterBuild.template={};
   if(!S.rosterBuild.template[di])S.rosterBuild.template[di]={};
   if(val)S.rosterBuild.template[di][uid]=val;
   else delete S.rosterBuild.template[di][uid];
-  render();
+  // Update the pill colour in place — no full re-render, so the page doesn't jump/close.
+  if(el){var c=_rSC(val||'');el.style.background=val?c.bg:'var(--card2)';el.style.borderColor=val?c.bd:'var(--border2)';el.style.color=val?c.col:'var(--text3)';}
+  try{lsSet('ts_roster_build',S.rosterBuild);}catch(e){}
 };
 
 window.rosterApplyPattern=function(){
@@ -9554,6 +9603,7 @@ window.rosterToggleGroup=function(key){
   var idx=S._rosterGroupHide.indexOf(key);
   if(idx>=0)S._rosterGroupHide.splice(idx,1);
   else S._rosterGroupHide.push(key);
+  try{lsSet('ts_roster_grouphide',S._rosterGroupHide);}catch(e){}
   render();
 };
 
@@ -10019,11 +10069,9 @@ window._notifyLeaveUser=async function(userId,action,leaveType,startDate,endDate
 };
 
 window._triggerLeaveEmail=async function(requestId,action){
-  return fetch(SB+'/functions/v1/send-leave-email',{
-    method:'POST',
-    headers:{...SH,'Content-Type':'application/json'},
-    body:JSON.stringify({requestId:requestId,action:action})
-  });
+  // Email disabled for now — in-app notifications only.
+  // To re-enable, restore the fetch to SB+'/functions/v1/send-leave-email'.
+  return Promise.resolve();
 };
 
 window.loadNotifications=async function(){

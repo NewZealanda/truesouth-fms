@@ -116,7 +116,7 @@ function renderRosterView(){
   if(!S._rosterHide)S._rosterHide=[];var rHide=S._rosterHide;
   if(!S._rosterColorsLoaded){S._rosterColorsLoaded=true;window.loadRosterColors();}
   var NEVER_SHOW=['maint','accounts'];
-  if(!S._rosterGroupHide)S._rosterGroupHide=NEVER_SHOW.slice();
+  if(!S._rosterGroupHide)S._rosterGroupHide=lsGet('ts_roster_grouphide')||NEVER_SHOW.slice();
   NEVER_SHOW.forEach(function(k){if(S._rosterGroupHide.indexOf(k)===-1)S._rosterGroupHide.push(k);});
   var _rGH=S._rosterGroupHide;
 
@@ -352,11 +352,12 @@ function renderRosterBuild(){
   var allUsers=(S.users||[]).filter(function(u){return u.id&&u.name&&!u.inactive;}).slice().sort(function(a,b){
     return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');
   });
-  var bs=S.rosterBuild||(S.rosterBuild={});
+  var bs=S.rosterBuild||(S.rosterBuild=lsGet('ts_roster_build')||{});
   if(!bs.startDate)bs.startDate=_rIso(_rMonday(today));
   if(!bs.weeks)bs.weeks=4;
   if(!bs.template)bs.template={};
   if(!bs.enabled)bs.enabled={};
+  try{lsSet('ts_roster_build',bs);}catch(e){}
 
   var h='<div style="padding:14px">';
 
@@ -418,10 +419,10 @@ function renderRosterBuild(){
         var cfg=ROSTER_SC[tst]||ROSTER_SC[''];
         h+='<td style="padding:3px 2px;text-align:center">';
         h+='<select tabindex="-1" '+(enabled?'':'disabled ')
-          +'onchange="window.rosterTplSet('+di+','+JSON.stringify(u.id)+',this.value)" '
-          +'style="width:68px;padding:4px 2px;border-radius:6px;border:1px solid var(--border2);'
+          +'onchange="window.rosterTplSet('+di+','+JSON.stringify(u.id)+',this.value,this)" '
+          +'style="width:68px;padding:4px 3px;border-radius:6px;border:1px solid '+(tst?cfg.bd:'var(--border2)')+';'
           +'background:'+(tst?cfg.bg:'var(--card2)')+';color:'+(tst?cfg.col:'var(--text3)')+';'
-          +'font-size:11px;font-weight:600;cursor:pointer;text-align:center">';
+          +'font-size:11px;font-weight:700;cursor:pointer;text-align:center">';
         ROSTER_ORDER.forEach(function(s){var c=_rSC(s);h+='<option value="'+s+'"'+(tst===s?' selected':'')+'>'+c.lbl+'</option>';});
         h+='</select></td>';
       }
@@ -494,13 +495,15 @@ window._rosterDraftSet=function(uid,ini,ds,val){
   render();
 };
 
-window.rosterTplSet=function(di,uid,val){
+window.rosterTplSet=function(di,uid,val,el){
   if(!S.rosterBuild)S.rosterBuild={};
   if(!S.rosterBuild.template)S.rosterBuild.template={};
   if(!S.rosterBuild.template[di])S.rosterBuild.template[di]={};
   if(val)S.rosterBuild.template[di][uid]=val;
   else delete S.rosterBuild.template[di][uid];
-  render();
+  // Update the pill colour in place — no full re-render, so the page doesn't jump/close.
+  if(el){var c=_rSC(val||'');el.style.background=val?c.bg:'var(--card2)';el.style.borderColor=val?c.bd:'var(--border2)';el.style.color=val?c.col:'var(--text3)';}
+  try{lsSet('ts_roster_build',S.rosterBuild);}catch(e){}
 };
 
 window.rosterApplyPattern=function(){
@@ -687,5 +690,6 @@ window.rosterToggleGroup=function(key){
   var idx=S._rosterGroupHide.indexOf(key);
   if(idx>=0)S._rosterGroupHide.splice(idx,1);
   else S._rosterGroupHide.push(key);
+  try{lsSet('ts_roster_grouphide',S._rosterGroupHide);}catch(e){}
   render();
 };
