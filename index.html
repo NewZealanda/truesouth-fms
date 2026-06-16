@@ -298,7 +298,14 @@ const LOGO='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAA
 const SB='https://wgycephyuwwfogggcbye.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndneWNlcGh5dXd3Zm9nZ2djYnllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NjEzNzAsImV4cCI6MjA5NjQzNzM3MH0.6ac1fI7NxOJla_cI6P2bMwBXr3qkBTaHoyipcG9r95Q';
 const SH={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK,'Prefer':'return=representation'};
-const sbF=async(t,q='')=>{try{const r=await fetch(`${SB}/rest/v1/${t}?select=*${q}&order=created_at.desc`,{headers:SH});return r.ok?r.json():null;}catch{return null;}};
+const sbF=async(t,q='',order='created_at')=>{try{const r=await fetch(`${SB}/rest/v1/${t}?select=*${q}&order=${order}.desc`,{headers:SH});if(!r.ok){console.error('[sbF]',t,'status:',r.status,await r.text());return null;}return r.json();}catch(e){console.error('[sbF]',t,'exception:',e);return null;}};
+// ── Fetch window: only load recent rows from large tables (tunable) ──
+const FETCH_DAYS=90;
+const _fetchSince=()=>new Date(Date.now()-FETCH_DAYS*864e5).toISOString().slice(0,10);
+// Loadsheets: last FETCH_DAYS only. Manifests: same, but ALWAYS include the
+// live_draft row and any ls_live_* realtime-collaboration rows regardless of age.
+const Q_LOADSHEETS=()=>`&created_at=gte.${_fetchSince()}`;
+const Q_MANIFESTS=()=>`&or=(created_at.gte.${_fetchSince()},id.eq.live_draft,id.like.ls_live_*)`;
 const sbU=async(t,d)=>{try{const r=await fetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);return null;}};
 const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:SH});return r.ok;}catch{return false;}};
 const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
@@ -1025,8 +1032,18 @@ function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch
 
 async function loadAll(){
   try{
+    // ── Launch all independent table reads in parallel (was a sequential waterfall) ──
+    const [_pCrew,_pAircraft,_pRates,_pLoadsheets,_pManifests,_pUsers,_pPads]=await Promise.all([
+      sbF('ts_crew'),
+      sbF('ts_aircraft'),
+      sbF('ts_charter_rates'),
+      sbF('ts_loadsheets',Q_LOADSHEETS()),
+      sbF('ts_manifests',Q_MANIFESTS()),
+      sbF('ts_users'),
+      sbF('ts_scratchpads','','saved_at')
+    ]);
     // ── Crew — Supabase is source of truth; localStorage is fast-load cache + offline fallback ──
-    let crew=await sbF('ts_crew');
+    let crew=_pCrew;
     if(crew&&crew.length){
       S.crew=crew.map(c=>({id:c.id,n:c.name,w:c.weight||0,
         endorse:c.endorsements?JSON.parse(c.endorsements):([]),
@@ -1049,7 +1066,7 @@ async function loadAll(){
     }
 
     // ── Aircraft ──
-    let acR=await sbF('ts_aircraft');
+    let acR=_pAircraft;
     if(acR&&acR.length){
       S.aircraft={};acR.forEach(r=>{S.aircraft[r.id]=r.data||r;});
       // Migration: re-sync any aircraft whose seat count doesn't match AC_DEF
@@ -1073,7 +1090,7 @@ async function loadAll(){
     }
 
     // ── Charter rates ──
-    let cr=await sbF('ts_charter_rates');
+    let cr=_pRates;
     if(cr&&cr.length){
       S.charterRates=Object.fromEntries(cr.map(r=>[r.acId,r.rates||dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})]));
       lsSet('ts_charter_rates_cache',S.charterRates);
@@ -1095,7 +1112,7 @@ async function loadAll(){
     }catch(e){}
 
     // ── Loadsheets ──
-    const ls=await sbF('ts_loadsheets');
+    const ls=_pLoadsheets;
     if(ls){
       S.saved=ls.map(r=>({id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete',driveUploaded:!!r.drive_uploaded}));
       lsSet('ts_loadsheets_cache',S.saved);
@@ -1105,7 +1122,7 @@ async function loadAll(){
     }
 
     // ── Manifests ──
-    const ms=await sbF('ts_manifests');
+    const ms=_pManifests;
     if(ms){
       S.manifests=ms.filter(r=>r.id!=='live_draft').map(r=>({id:r.id,name:r.name,savedAt:r.saved_at,data:r.data,_deleted:!!(r.data&&r.data._deleted)}));
       lsSet('ts_manifests_cache',S.manifests);
@@ -1125,8 +1142,8 @@ async function loadAll(){
     S.form=S.lsForms[S.lsAc||'SLA'];
 
     // ── Users ──
-    const us=await sbF('ts_users');
-    const _initPads=await sbF('ts_scratchpads');
+    const us=_pUsers;
+    const _initPads=_pPads;
     if(us&&us.length){
       S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,isPilot:r.is_pilot||r.role==='pilot'||false,inactive:r.inactive||false}));
       lsSet('ts_users_cache',S.users);window.loadNotifications&&window.loadNotifications();
@@ -1490,17 +1507,17 @@ async function flushRtUpdates(){
 
 async function reloadTable(table){
   if(table==='ts_loadsheets'){
-    const ls=await sbF('ts_loadsheets');
+    const ls=await sbF('ts_loadsheets',Q_LOADSHEETS());
     if(ls){
       S.saved=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});
       lsSet('ts_loadsheets_cache',S.saved);
       return true;
     }
   } else if(table==='ts_scratchpads'){
-    const ps=await sbF('ts_scratchpads');
+    const ps=await sbF('ts_scratchpads','','saved_at');
     if(ps){S.pads=ps.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});return true;}
   } else if(table==='ts_manifests'){
-    const ms=await sbF('ts_manifests');
+    const ms=await sbF('ts_manifests',Q_MANIFESTS());
     if(ms){
       const live=ms.find(function(r){return r.id==='live_draft';});
       var _lsForeignChange=false;
