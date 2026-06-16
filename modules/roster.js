@@ -163,12 +163,6 @@ function renderRosterView(){
   h+='</label>';
   h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(nextStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>';
   h+='<button tabindex="-1" onclick="S.rosterWeek=null;S._rosterLeaveWeek=null;render()" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.08);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">Today</button>';
-  h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-left:2px">';
-  ROLE_GROUPS.forEach(function(g){
-    var hidden=_rGH.indexOf(g.key)>=0;
-    h+='<button tabindex="-1" onclick="window.rosterToggleGroup(\''+g.key+'\')" style="padding:4px 10px;border-radius:20px;border:1px solid '+(hidden?'var(--border2)':g.col+'88')+';background:'+(hidden?'var(--card2)':g.col+'22')+';color:'+(hidden?'var(--text3)':g.col)+';font-size:11px;font-weight:700;cursor:pointer;opacity:'+(hidden?'0.45':'1')+'">'+g.label+'</button>';
-  });
-  h+='</div>';
   if(isAdminPlus){
     var lk=!!S.rosterLocked;
     h+='<button tabindex="-1" onclick="S.rosterLocked=!S.rosterLocked;render()" style="padding:5px 10px;border-radius:8px;border:1px solid '+(lk?'#f59e0b':'var(--border2)')+';background:'+(lk?'rgba(245,158,11,.12)':'var(--card2)')+';color:'+(lk?'#fbbf24':'var(--text3)')+';font-size:12px;cursor:pointer" title="Toggle roster lock">'+(lk?'🔒 Locked':'🔓 Unlocked')+'</button>';
@@ -179,10 +173,27 @@ function renderRosterView(){
       if(_hasDraft){h+='<button tabindex="-1" onclick="window.rosterDiscard()" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#f87171;font-size:11px;font-weight:600;cursor:pointer">Discard</button>';}
       if(_undoLen>0){h+='<button tabindex="-1" onclick="window.rosterUndo()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:11px;cursor:pointer">Undo ('+_undoLen+')</button>';}
     }
-    var ce=!!S._rosterColorEdit;
-    h+='<button tabindex="-1" onclick="S._rosterColorEdit=!S._rosterColorEdit;render()" style="padding:5px 10px;border-radius:8px;border:1px solid '+(ce?'rgba(99,102,241,.6)':'var(--border2)')+';background:'+(ce?'rgba(99,102,241,.15)':'var(--card2)')+';color:'+(ce?'#a5b4fc':'var(--text3)')+';font-size:12px;cursor:pointer;margin-left:auto">Colors</button>';
   }
+  // Right-aligned matching pills: Show (role filter) + Colours (admin)
+  var _showOn=!!S._rosterShowFilter, _ce=!!S._rosterColorEdit;
+  function _rTbPill(label,icon,active,onclick){
+    return '<button tabindex="-1" onclick="'+onclick+'" style="display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:9px;border:1px solid '+(active?'rgba(167,139,250,.55)':'var(--border2)')+';background:'+(active?'rgba(167,139,250,.16)':'var(--card2)')+';color:'+(active?'#c4b5fd':'var(--text2)')+';font-size:12px;font-weight:600;cursor:pointer">'+icon+' <span>'+label+'</span><span style="font-size:9px;opacity:.6">'+(active?'▴':'▾')+'</span></button>';
+  }
+  h+='<div style="margin-left:auto;display:flex;gap:8px;align-items:center">';
+  h+=_rTbPill('Show','👁',_showOn,"S._rosterShowFilter=!S._rosterShowFilter;render()");
+  if(isAdminPlus)h+=_rTbPill('Colours','🎨',_ce,"S._rosterColorEdit=!S._rosterColorEdit;render()");
   h+='</div>';
+  h+='</div>';
+  // Collapsible role-visibility panel
+  if(_showOn){
+    h+='<div style="padding:10px 14px;border-bottom:1px solid var(--border2);background:var(--card2);display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
+    h+='<span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-right:4px">Show roles</span>';
+    ROLE_GROUPS.filter(function(g){return ['maint','accounts'].indexOf(g.key)<0;}).forEach(function(g){
+      var hidden=_rGH.indexOf(g.key)>=0;
+      h+='<button tabindex="-1" onclick="window.rosterToggleGroup(\''+g.key+'\')" style="padding:4px 12px;border-radius:20px;border:1px solid '+(hidden?'var(--border2)':g.col+'88')+';background:'+(hidden?'var(--card2)':g.col+'22')+';color:'+(hidden?'var(--text3)':g.col)+';font-size:11px;font-weight:700;cursor:pointer;opacity:'+(hidden?'0.5':'1')+'">'+g.label+'</button>';
+    });
+    h+='</div>';
+  }
   h+=_renderRosterColors(isAdminPlus);
 
   // ── Table ──
@@ -353,30 +364,34 @@ function renderRosterBuild(){
     return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');
   });
   var bs=S.rosterBuild||(S.rosterBuild=lsGet('ts_roster_build')||{});
-  if(!bs.startDate)bs.startDate=_rIso(_rMonday(today));
+  // Build always starts on a Monday — snap whatever is stored to its week's Monday.
+  bs.startDate=_rIso(_rMonday(bs.startDate?new Date(bs.startDate+'T00:00:00'):today));
   if(!bs.weeks)bs.weeks=4;
   if(!bs.template)bs.template={};
   if(!bs.enabled)bs.enabled={};
   try{lsSet('ts_roster_build',bs);}catch(e){}
+  var _MTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var _bMon=new Date(bs.startDate+'T00:00:00');
+  var _bSun=new Date(_bMon); _bSun.setDate(_bSun.getDate()+6);
+  var _wkLbl=_bMon.getDate()+' '+_MTHS[_bMon.getMonth()]+' – '+_bSun.getDate()+' '+_MTHS[_bSun.getMonth()];
 
   var h='<div style="padding:14px">';
 
   // Controls row
   h+='<div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px">';
-  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Apply from date</label>'
-    +'<input type="date" value="'+(bs.startDate||'')+'" onchange="S.rosterBuild.startDate=this.value;render()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:13px"></div>';
+  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Build from (week starting Monday)</label>'
+    +'<div style="display:flex;align-items:center;gap:6px">'
+    +'<button tabindex="-1" onclick="window.rosterBuildStep(-1)" style="padding:7px 11px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">◁</button>'
+    +'<span style="font-size:13px;font-weight:700;color:var(--accent);padding:6px 12px;border-radius:8px;border:1px solid rgba(167,139,250,.35);background:rgba(167,139,250,.08);white-space:nowrap;min-width:150px;text-align:center">'+_wkLbl+'</span>'
+    +'<button tabindex="-1" onclick="window.rosterBuildStep(1)" style="padding:7px 11px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>'
+    +'<button tabindex="-1" onclick="window.rosterBuildStep(0)" style="padding:7px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.08);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">This week</button>'
+    +'</div></div>';
   h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Weeks to fill</label>'
     +'<input type="number" min="1" max="52" value="'+(bs.weeks||4)+'" onchange="S.rosterBuild.weeks=Math.max(1,parseInt(this.value)||4);render()" style="width:70px;padding:7px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:13px"></div>';
   // Enable-all / disable-all
   h+='<div style="display:flex;gap:6px;padding-bottom:2px">';
-  h+='<button tabindex="-1" onclick="allUsers=(S.users||[]).filter(function(u){return u.id&&!u.inactive;});'
-    +'if(!S.rosterBuild)S.rosterBuild={};if(!S.rosterBuild.enabled)S.rosterBuild.enabled={};'
-    +'allUsers.forEach(function(u){S.rosterBuild.enabled[u.id]=true;});render();"'
-    +' style="padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">All On</button>';
-  h+='<button tabindex="-1" onclick="allUsers=(S.users||[]).filter(function(u){return u.id&&!u.inactive;});'
-    +'if(!S.rosterBuild)S.rosterBuild={};if(!S.rosterBuild.enabled)S.rosterBuild.enabled={};'
-    +'allUsers.forEach(function(u){S.rosterBuild.enabled[u.id]=false;});render();"'
-    +' style="padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text3);font-size:11px;font-weight:700;cursor:pointer">All Off</button>';
+  h+='<button tabindex="-1" onclick="window.rosterBuildAll(true)" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">All On</button>';
+  h+='<button tabindex="-1" onclick="window.rosterBuildAll(false)" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text3);font-size:11px;font-weight:700;cursor:pointer">All Off</button>';
   h+='</div>';
   h+='</div>';
 
@@ -404,9 +419,8 @@ function renderRosterBuild(){
       var togBg=enabled?'var(--accent)':'var(--card2)';
       var togCol=enabled?'#fff':'var(--text3)';
       h+='<td style="padding:5px 8px;text-align:center">';
-      h+='<button tabindex="-1" onclick="if(!S.rosterBuild)S.rosterBuild={};if(!S.rosterBuild.enabled)S.rosterBuild.enabled={};'
-        +'S.rosterBuild.enabled['+JSON.stringify(u.id)+']='+(!enabled)+';render();" '
-        +'style="width:36px;height:22px;border-radius:11px;border:none;background:'+togBg+';color:'+togCol+';font-size:10px;font-weight:800;cursor:pointer;transition:background .15s">';
+      h+='<button tabindex="-1" onclick="window.rosterBuildToggle('+JSON.stringify(u.id)+')" '
+        +'style="width:42px;height:24px;border-radius:12px;border:none;background:'+togBg+';color:'+togCol+';font-size:10px;font-weight:800;cursor:pointer;transition:background .15s">';
       h+=(enabled?'ON':'OFF')+'</button></td>';
       // Name
       h+='<td style="padding:5px 10px;white-space:nowrap">';
@@ -440,7 +454,7 @@ function renderRosterBuild(){
   h+='<button tabindex="-1" onclick="window.rosterApplyPattern()" '
     +'style="padding:10px 22px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer">'
     +'Push to Roster</button>';
-  h+='<button tabindex="-1" onclick="if(confirm(\x22Clear all week templates?\x22)){S.rosterBuild.template={};render();}" '
+  h+='<button tabindex="-1" onclick="if(confirm(\x22Clear all week templates?\x22)){S.rosterBuild.template={};try{lsSet(\x27ts_roster_build\x27,S.rosterBuild);}catch(e){}render();}" '
     +'style="padding:10px 16px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">'
     +'Clear Templates</button>';
   h+='<span style="font-size:12px;color:var(--text3)">';
@@ -504,6 +518,34 @@ window.rosterTplSet=function(di,uid,val,el){
   // Update the pill colour in place — no full re-render, so the page doesn't jump/close.
   if(el){var c=_rSC(val||'');el.style.background=val?c.bg:'var(--card2)';el.style.borderColor=val?c.bd:'var(--border2)';el.style.color=val?c.col:'var(--text3)';}
   try{lsSet('ts_roster_build',S.rosterBuild);}catch(e){}
+};
+
+// Build pattern: step the build week (always lands on a Monday). delta 0 = this week.
+window.rosterBuildStep=function(delta){
+  if(!S.rosterBuild)S.rosterBuild={};
+  var base=(delta===0||!S.rosterBuild.startDate)?new Date():new Date(S.rosterBuild.startDate+'T00:00:00');
+  base.setHours(0,0,0,0);
+  var mon=_rMonday(base);
+  if(delta)mon.setDate(mon.getDate()+delta*7);
+  S.rosterBuild.startDate=_rIso(mon);
+  try{lsSet('ts_roster_build',S.rosterBuild);}catch(e){}
+  render();
+};
+// Build pattern: enable/disable everyone (does NOT touch the day templates).
+window.rosterBuildAll=function(on){
+  if(!S.rosterBuild)S.rosterBuild={};
+  if(!S.rosterBuild.enabled)S.rosterBuild.enabled={};
+  (S.users||[]).filter(function(u){return u.id&&!u.inactive;}).forEach(function(u){S.rosterBuild.enabled[u.id]=!!on;});
+  try{lsSet('ts_roster_build',S.rosterBuild);}catch(e){}
+  render();
+};
+// Build pattern: toggle one person's inclusion (default is included/ON).
+window.rosterBuildToggle=function(uid){
+  if(!S.rosterBuild)S.rosterBuild={};
+  if(!S.rosterBuild.enabled)S.rosterBuild.enabled={};
+  S.rosterBuild.enabled[uid]=(S.rosterBuild.enabled[uid]===false);
+  try{lsSet('ts_roster_build',S.rosterBuild);}catch(e){}
+  render();
 };
 
 window.rosterApplyPattern=function(){
