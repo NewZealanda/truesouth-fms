@@ -841,8 +841,8 @@ window.onload=()=>{
 </script>
 
 <div id="ptr-indicator" style="position:fixed;top:0;left:0;right:0;z-index:99999;display:flex;align-items:center;justify-content:center;height:0;overflow:hidden;background:var(--bg,#0f172a);transition:height .15s;pointer-events:none">
-  <div id="ptr-inner" style="display:flex;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,.5);padding:10px 0">
-    <span id="ptr-icon" style="font-size:18px;transition:transform .3s">↓</span>
+  <div id="ptr-inner" style="display:flex;align-items:center;gap:14px;font-size:22px;color:rgba(255,255,255,.6);padding:18px 0">
+    <span id="ptr-icon" style="font-size:42px;transition:transform .3s">↓</span>
     <span id="ptr-label">Pull to refresh</span>
   </div>
 </div>
@@ -860,7 +860,7 @@ window.onload=()=>{
     if(!pulling||triggered) return;
     var dy=e.touches[0].clientY-startY;
     if(dy<=0){indicator.style.height='0';return;}
-    var h=Math.min(dy*0.45,52);
+    var h=Math.min(dy*0.7,156);
     indicator.style.height=h+'px';
     if(dy>=THRESHOLD){icon.style.transform='rotate(180deg)';label.textContent='Release to refresh';}
     else{icon.style.transform='rotate(0deg)';label.textContent='Pull to refresh';}
@@ -871,7 +871,7 @@ window.onload=()=>{
     var dy=e.changedTouches[0].clientY-startY;
     if(dy>=THRESHOLD&&!triggered){
       triggered=true;if(navigator.vibrate)navigator.vibrate(50);icon.textContent='↻';icon.style.transform='rotate(0deg)';
-      label.textContent='Refreshing…';indicator.style.height='52px';
+      label.textContent='Refreshing…';indicator.style.height='156px';
       setTimeout(function(){window.location.reload();},400);
     } else {indicator.style.height='0';}
   },{passive:true});

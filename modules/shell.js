@@ -332,6 +332,21 @@ window.changeMyPassword=async function(){
 function renderRosterPlaceholder(){
   return '<div class="card" style="text-align:center;padding:48px 24px"><div style="font-size:32px;margin-bottom:12px">🗓️</div><div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Roster</div><div style="font-size:13px;color:var(--text3)">Coming soon — staff roster and scheduling.</div></div>';
 }
+function renderRezdy(){
+  if((S.user?.role||'')!=='superadmin')return'<div class="page"><div class="card" style="text-align:center;padding:40px">Not available.</div></div>';
+  return `<div class="card" style="max-width:760px;margin:0 auto">
+    <div class="st">Rezdy Integration</div>
+    <div style="text-align:center;padding:30px 10px">
+      <div style="font-size:40px;margin-bottom:10px">🔗</div>
+      <div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Coming soon</div>
+      <div style="font-size:13px;color:var(--text3);line-height:1.7;max-width:520px;margin:0 auto">
+        Placeholder for the upcoming Rezdy integration: pulling bookings (passengers, weights, pick-ups, booking number, date, departure and payment details) into True South.
+        This will run through a secure server-side connection — the API key will never live in the app.
+      </div>
+      <div style="margin-top:18px;font-size:11px;color:var(--text3);opacity:.7">Visible to superadmin only while in development.</div>
+    </div>
+  </div>`;
+}
 function renderDrawer(){
   const role=S.user?.role||'desk';
   const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
@@ -341,13 +356,15 @@ function renderDrawer(){
   const _canMaint=_isAdminPlus||_navPerms.maintenance===true;
   const _canRoster=_isAdminPlus||_navPerms.roster===true;
   const sec=S.section||'operations';
-  const exp=S._drawerSection||sec;
+  // Drawer sections expand/collapse independently; default all closed (shut on login). Kept in memory so reopening the burger shows the same state.
+  S._drawerExp=S._drawerExp||{};
+  const _isExp=function(k){return !!S._drawerExp[k];};
   const t=S.tab||'manifest';
   const isLs=!!(S.activeTabId||S._newLsTab);
   function _secBtn(label,section,icon){
     var isOn=sec===section;
-    var isExp=exp===section;
-    return '<button tabindex="-1" onclick="S._drawerSection=\''+section+'\';render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(isOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(isOn?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(isOn?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px">'+icon+' <span style="flex:1">'+label+'</span><span style="font-size:10px;opacity:.45">'+(isExp?'▲':'▼')+'</span></button>';
+    var isExp=_isExp(section);
+    return '<button tabindex="-1" onclick="S._drawerExp[\''+section+'\']=!S._drawerExp[\''+section+'\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(isOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(isOn?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(isOn?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px">'+icon+' <span style="flex:1">'+label+'</span><span style="font-size:10px;opacity:.45">'+(isExp?'▲':'▼')+'</span></button>';
   }
   function _subBtn(label,active,action){
     return '<button tabindex="-1" onclick="'+action+'" style="width:100%;text-align:left;padding:7px 14px 7px 44px;border-radius:8px;border:none;background:'+(active?'rgba(255,255,255,.09)':'transparent')+';color:'+(active?'#fff':'rgba(255,255,255,.5)')+';font-size:13px;font-weight:'+(active?'600':'400')+';cursor:pointer;margin-bottom:1px">'+label+'</button>';
@@ -362,7 +379,7 @@ function renderDrawer(){
   h+='<nav style="flex:1;padding:10px 8px">';
   if(_canOps){
     h+=_secBtn('Operations','operations','✈️');
-    if(exp==='operations'){
+    if(_isExp('operations')){
       h+=_subBtn('Manifest',t==='manifest'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('manifest')");
       h+=_subBtn('Seatmap',t==='seatmap'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('seatmap')");
       h+=_subBtn('Loadsheets',isLs&&sec==='operations',"S._drawerOpen=false;window.switchToLoadsheets()");
@@ -370,14 +387,13 @@ function renderDrawer(){
       if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
     }
   }
-  h+='<div style="height:1px;background:rgba(255,255,255,.07);margin:8px 6px"></div>';
   // Roster & Leave combined
   {var _canApproveLeaveNav=role==='superadmin'||role==='admin'||role==='cx_manager';
   var _lvActive=sec==='leave';
   var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending';}).length:0;
   var _rlOn=sec==='roster'||sec==='leave';
-  var _rlExp=exp==='roster'||exp==='leave';
-  h+='<button tabindex="-1" onclick="S._drawerSection=\'roster\';render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_rlOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_rlOn?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(_rlOn?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px">🗓️ Roster'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</button>';
+  var _rlExp=_isExp('roster');
+  h+='<button tabindex="-1" onclick="S._drawerExp[\'roster\']=!S._drawerExp[\'roster\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_rlOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_rlOn?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(_rlOn?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px"><span style="flex:1">🗓️ Roster'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_rlExp?'▲':'▼')+'</span></button>';
   if(_rlExp){
     if(_canRoster)h+=_subBtn('Roster',sec==='roster',"S._drawerOpen=false;S.section='roster';render()");
     h+=_subBtn('My Leave',_lvActive&&(!S._leave||S._leave.tab==='my'),"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='my';render()");
@@ -385,7 +401,7 @@ function renderDrawer(){
   }}
   if(_canMaint){
     h+=_secBtn('Maintenance','maintenance','🔧');
-    if(exp==='maintenance'){
+    if(_isExp('maintenance')){
       var msub=S.maintTab||'overview';
       var _mn=function(lbl,id){return _subBtn(lbl,sec==='maintenance'&&msub===id,"S._drawerOpen=false;S.maintTab='"+id+"';window.setTab('maintenance')");};
       h+=_mn('Overview','overview');
@@ -397,7 +413,7 @@ function renderDrawer(){
   }
   {
     h+=_secBtn('Settings','settings','⚙️');
-    if(exp==='settings'){
+    if(_isExp('settings')){
       var adSec=(S.admin||{}).section||'people';
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
       if(_isAdminPlus){
@@ -410,6 +426,13 @@ function renderDrawer(){
       } else {
         h+=_subBtn('People',sec==='settings',"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='people';window.setTab('admin')");
       }
+    }
+  }
+  // Rezdy integration — superadmin only (work in progress)
+  if(role==='superadmin'){
+    h+=_secBtn('Rezdy','rezdy','🔗');
+    if(_isExp('rezdy')){
+      h+=_subBtn('Integration',sec==='rezdy',"S._drawerOpen=false;S.section='rezdy';render()");
     }
   }
   h+='</nav>';
@@ -543,6 +566,7 @@ function renderApp(){
         if(_sec==='settings')return'<div id="flash-admin">'+renderAdmin()+'</div>';
         if(_sec==='roster')return'<div id="flash-roster">'+renderRoster()+'</div>';
         if(_sec==='leave')return'<div id="flash-leave">'+renderLeave()+'</div>';
+        if(_sec==='rezdy')return renderRezdy();
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
