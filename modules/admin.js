@@ -1,5 +1,3 @@
-// === MODULE: admin.js ===
-
 function renderAdmin(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
   // Non-admin: show sub-tabs based on their role permissions
@@ -2971,4 +2969,123 @@ window.calcTTIS=function(){
   }
 };
 
-function acDisp(id){return(id||"").replace("ZK-","");}
+function acDisp(id){return(id||"").replace("ZK-","");}function acDisp(id){return(id||"").replace("ZK-","");}
+
+// --- Role Permissions Table ---
+window.toggleRolePerm=function(role,perm,val){
+  if(!S.rolePerms)S.rolePerms={};
+  if(!S.rolePerms[role])S.rolePerms[role]=Object.assign({},(DEFAULT_ROLE_PERMS[role])||{});
+  S.rolePerms[role][perm]=val;
+};
+
+window.saveRolePerms=async function(){
+  try{
+    await sbU('ts_settings',[{key:'role_perms',value:JSON.stringify(S.rolePerms||{})}]);
+    auditLog('role_perms_save','Saved role permissions');
+    toast('Permissions saved','success');
+  }catch(e){
+    toast('Save failed: '+String(e.message),'error');
+  }
+};
+
+function renderAdminPerms(){
+  var PERM_COLS=[
+    {k:'operations',    lbl:'Ops'},
+    {k:'charter',       lbl:'Charter'},
+    {k:'maintenance',   lbl:'Maint'},
+    {k:'roster',        lbl:'Roster'},
+    {k:'leave',         lbl:'Leave'},
+    {k:'leave_approve', lbl:'Approve'},
+    {k:'admin_crew',    lbl:'Crew'},
+    {k:'admin_users',   lbl:'Users'},
+    {k:'sign_loadsheet',lbl:'Sign'},
+    {k:'maint_bookings',lbl:'Bookings'},
+    {k:'audit',         lbl:'Audit'}
+  ];
+  var ROLE_ROWS=[
+    {k:'admin',        lbl:'Admin'},
+    {k:'cx_manager',   lbl:'CX Mgr'},
+    {k:'pilot',        lbl:'Pilot'},
+    {k:'desk',         lbl:'Desk'},
+    {k:'maint',        lbl:'Maint'},
+    {k:'ground_staff', lbl:'Ground'},
+    {k:'accounts',     lbl:'Accounts'},
+    {k:'marketing',    lbl:'Marketing'}
+  ];
+  var rp=S.rolePerms||{};
+  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+    +'<div class="st" style="margin-bottom:0">Role Permissions</div>'
+    +'<button onclick="window.saveRolePerms()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>'
+    +'</div>'
+    +'<div style="overflow-x:auto">'
+    +'<table style="border-collapse:collapse;min-width:100%;font-size:12px">'
+    +'<thead><tr><th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:600;white-space:nowrap">Role</th>';
+  PERM_COLS.forEach(function(col){
+    h+='<th style="padding:6px 4px;color:var(--text3);font-weight:600;text-align:center;white-space:nowrap">'+col.lbl+'</th>';
+  });
+  h+='</tr></thead><tbody>';
+  ROLE_ROWS.forEach(function(row,ri){
+    var base=DEFAULT_ROLE_PERMS[row.k]||{};
+    var over=rp[row.k]||{};
+    var bg=ri%2===0?'background:var(--card2)':'';
+    h+='<tr style="'+bg+'">'
+      +'<td style="padding:7px 8px;font-weight:600;white-space:nowrap;color:var(--text1)">'+row.lbl+'</td>';
+    PERM_COLS.forEach(function(col){
+      var eff=over[col.k]!==undefined?over[col.k]:base[col.k]||false;
+      h+='<td style="text-align:center;padding:4px">'
+        +'<input type="checkbox" '+(eff?'checked':'')+' '
+        +'onchange="window.toggleRolePerm('+JSON.stringify(row.k)+','+JSON.stringify(col.k)+',this.checked)" '
+        +'style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">'
+        +'</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>'
+    +'<p style="font-size:11px;color:var(--text3);margin-top:12px">Superadmin always has full access. Changes apply after Save.</p>'
+    +'</div>';
+  return h;
+}
+
+// --- Audit Log ---
+function renderAdminAudit(){
+  var log=(S.auditLog||[]).slice().sort(function(a,b){return b.time>a.time?1:-1;});
+  if(!log.length){
+    return'<div class="card"><div class="st">Audit Log</div><p style="color:var(--text3)">No audit entries yet.</p></div>';
+  }
+  function fmtTime(t){
+    if(!t)return'';
+    var d=new Date(t);
+    var now=new Date();
+    var diff=now-d;
+    if(diff<60000)return'just now';
+    if(diff<3600000)return Math.floor(diff/60000)+'m ago';
+    if(diff<86400000)return Math.floor(diff/3600000)+'h ago';
+    return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});
+  }
+  function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  var rows=log.slice(0,200).map(function(e){
+    var det=typeof e.detail==='object'?JSON.stringify(e.detail):String(e.detail||'');
+    return'<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:7px 8px;font-size:11px;color:var(--text3);white-space:nowrap">'+fmtTime(e.time)+'</td>'
+      +'<td style="padding:7px 8px;font-size:12px;font-weight:600;white-space:nowrap">'+esc(e.name||e.user||'')+'</td>'
+      +'<td style="padding:7px 8px;font-size:11px;color:var(--text3)">'+esc(e.role||'')+'</td>'
+      +'<td style="padding:7px 8px;font-size:12px">'+esc(e.action||'')+'</td>'
+      +'<td style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(det)+'</td>'
+      +'</tr>';
+  }).join('');
+  return'<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+    +'<div class="st" style="margin-bottom:0">Audit Log</div>'
+    +'<span style="font-size:11px;color:var(--text3)">Last '+Math.min(log.length,200)+' of '+log.length+' entries</span>'
+    +'</div>'
+    +'<div style="overflow-x:auto">'
+    +'<table style="border-collapse:collapse;width:100%;font-size:12px">'
+    +'<thead><tr>'
+    +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600;white-space:nowrap">When</th>'
+    +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600">Name</th>'
+    +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600">Role</th>'
+    +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600">Action</th>'
+    +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600">Detail</th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div></div>';
+}

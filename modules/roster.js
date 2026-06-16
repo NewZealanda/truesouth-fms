@@ -259,56 +259,78 @@ function renderRosterBuild(){
   var allUsers=(S.users||[]).filter(function(u){return u.id&&u.name&&!u.inactive;}).slice().sort(function(a,b){
     return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');
   });
-
   var bs=S.rosterBuild||(S.rosterBuild={});
   if(!bs.startDate)bs.startDate=_rIso(_rMonday(today));
   if(!bs.weeks)bs.weeks=4;
   if(!bs.template)bs.template={};
+  if(!bs.enabled)bs.enabled={};
 
   var h='<div style="padding:14px">';
-  h+='<div style="font-size:12px;color:var(--text3);margin-bottom:12px;padding:10px 14px;border-radius:8px;border:1px solid var(--border2);background:rgba(124,58,237,.06)">Design a template week below. Click Apply to stamp it forward. Existing leave &amp; sick entries are never overwritten.</div>';
 
+  // Controls row
   h+='<div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px">';
-  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Apply from date</label><input type="date" value="'+bs.startDate+'" onchange="S.rosterBuild.startDate=this.value" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px"></div>';
-  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Weeks to fill</label><input type="number" value="'+bs.weeks+'" min="1" max="52" onchange="S.rosterBuild.weeks=Math.max(1,parseInt(this.value)||1)" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px;width:72px"></div>';
-  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Quick-fill person</label><select id="qf-user" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px;cursor:pointer"><option value="">Select...</option>';
-  allUsers.forEach(function(u){h+='<option value="'+u.id+'">'+u.name+'</option>';});
-  h+='</select></div>';
-  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Pattern</label><select id="qf-pat" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px;cursor:pointer">';
-  h+='<option value="5on2off">5 on / 2 off (Mon–Fri)</option>';
-  h+='<option value="4on3off_mth">4 on / 3 off (Mon–Thu)</option>';
-  h+='<option value="4on3off_tfs">4 on / 3 off (Thu–Sun)</option>';
-  h+='<option value="set_mth">Set days: Mon–Thu on</option>';
-  h+='<option value="set_fssu">Set days: Fri–Sun on</option>';
-  h+='<option value="all_rdo">All RDO</option>';
-  h+='</select></div>';
-  h+='<button tabindex="-1" onclick="window.rosterQuickFill()" style="padding:7px 14px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer;align-self:flex-end">Fill ›</button>';
+  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Apply from date</label>'
+    +'<input type="date" value="'+(bs.startDate||'')+'" onchange="S.rosterBuild.startDate=this.value;render()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:13px"></div>';
+  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Weeks to fill</label>'
+    +'<input type="number" min="1" max="52" value="'+(bs.weeks||4)+'" onchange="S.rosterBuild.weeks=Math.max(1,parseInt(this.value)||4);render()" style="width:70px;padding:7px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:13px"></div>';
+  // Enable-all / disable-all
+  h+='<div style="display:flex;gap:6px;padding-bottom:2px">';
+  h+='<button tabindex="-1" onclick="allUsers=(S.users||[]).filter(function(u){return u.id&&!u.inactive;});'
+    +'if(!S.rosterBuild)S.rosterBuild={};if(!S.rosterBuild.enabled)S.rosterBuild.enabled={};'
+    +'allUsers.forEach(function(u){S.rosterBuild.enabled[u.id]=true;});render();"'
+    +' style="padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">All On</button>';
+  h+='<button tabindex="-1" onclick="allUsers=(S.users||[]).filter(function(u){return u.id&&!u.inactive;});'
+    +'if(!S.rosterBuild)S.rosterBuild={};if(!S.rosterBuild.enabled)S.rosterBuild.enabled={};'
+    +'allUsers.forEach(function(u){S.rosterBuild.enabled[u.id]=false;});render();"'
+    +' style="padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text3);font-size:11px;font-weight:700;cursor:pointer">All Off</button>';
+  h+='</div>';
   h+='</div>';
 
+  // Template grid
   h+='<div style="overflow:auto;border:1px solid var(--border2);border-radius:10px;margin-bottom:14px">';
-  h+='<table style="width:100%;border-collapse:collapse;min-width:560px">';
+  h+='<table style="width:100%;border-collapse:collapse;min-width:620px">';
   h+='<thead><tr style="background:rgba(255,255,255,.04);border-bottom:1px solid var(--border2)">';
-  h+='<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:155px">Name</th>';
-  DNAMES.forEach(function(dn){h+='<th style="padding:6px 3px;text-align:center;font-size:11px;font-weight:700;color:var(--text3);min-width:66px">'+dn+'</th>';});
+  h+='<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:48px">Inc.</th>';
+  h+='<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:140px">Name</th>';
+  DNAMES.forEach(function(dn){
+    h+='<th style="padding:6px 3px;text-align:center;font-size:11px;font-weight:700;color:var(--text3);min-width:70px">'+dn+'</th>';
+  });
   h+='</tr></thead><tbody>';
 
   if(!allUsers.length){
-    h+='<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--text3)">No users.</td></tr>';
+    h+='<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--text3)">No users.</td></tr>';
   } else {
     allUsers.forEach(function(u){
       var rc=ROLE_GROUPS.filter(function(g){return g.roles.indexOf(u.role)>=0;})[0];
       var rowCol=rc?rc.col:'#94a3b8';
-      var ini=_rIni(u);
-      h+='<tr style="border-top:1px solid rgba(255,255,255,.04)">';
-      h+='<td style="padding:5px 10px;white-space:nowrap"><div style="font-size:12px;font-weight:600;color:var(--text1)">'+u.name+'</div><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:'+rowCol+'1a;color:'+rowCol+'">'+ini+'</span></td>';
+      var enabled=bs.enabled[u.id]!==false;  // default on
+      var rowOpacity=enabled?'1':'0.38';
+      h+='<tr style="border-top:1px solid rgba(255,255,255,.04);opacity:'+rowOpacity+'">';
+      // Toggle button
+      var togBg=enabled?'var(--accent)':'var(--card2)';
+      var togCol=enabled?'#fff':'var(--text3)';
+      h+='<td style="padding:5px 8px;text-align:center">';
+      h+='<button tabindex="-1" onclick="if(!S.rosterBuild)S.rosterBuild={};if(!S.rosterBuild.enabled)S.rosterBuild.enabled={};'
+        +'S.rosterBuild.enabled['+JSON.stringify(u.id)+']='+(!enabled)+';render();" '
+        +'style="width:36px;height:22px;border-radius:11px;border:none;background:'+togBg+';color:'+togCol+';font-size:10px;font-weight:800;cursor:pointer;transition:background .15s">';
+      h+=(enabled?'ON':'OFF')+'</button></td>';
+      // Name
+      h+='<td style="padding:5px 10px;white-space:nowrap">';
+      h+='<div style="font-size:12px;font-weight:600;color:var(--text1)">'+u.name+'</div>';
+      h+='<div style="font-size:10px;color:'+rowCol+';font-weight:600;text-transform:uppercase;letter-spacing:.04em">'+u.role+'</div>';
+      h+='</td>';
+      // Day cells
       for(var di=0;di<7;di++){
         var tst=(bs.template[di]&&bs.template[di][u.id])||'';
         var cfg=ROSTER_SC[tst]||ROSTER_SC[''];
         h+='<td style="padding:3px 2px;text-align:center">';
-        h+='<select tabindex="-1" onchange="window.rosterTplSet('+di+',\''+u.id+'\',this.value)" style="appearance:none;-webkit-appearance:none;padding:4px 3px;border-radius:6px;border:1px solid '+(tst?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(tst?cfg.bg:'transparent')+';color:'+(tst?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:62px;text-align:center">';
+        h+='<select tabindex="-1" '+(enabled?'':'disabled ')
+          +'onchange="window.rosterTplSet('+di+','+JSON.stringify(u.id)+',this.value)" '
+          +'style="width:68px;padding:4px 2px;border-radius:6px;border:1px solid var(--border2);'
+          +'background:'+(tst?cfg.bg:'var(--card2)')+';color:'+(tst?cfg.col:'var(--text3)')+';'
+          +'font-size:11px;font-weight:600;cursor:pointer;text-align:center">';
         ROSTER_ORDER.forEach(function(s){var c=ROSTER_SC[s];h+='<option value="'+s+'"'+(tst===s?' selected':'')+'>'+c.lbl+'</option>';});
-        h+='</select>';
-        h+='</td>';
+        h+='</select></td>';
       }
       h+='</tr>';
     });
@@ -319,11 +341,17 @@ function renderRosterBuild(){
   endD.setDate(endD.getDate()+(bs.weeks||4)*7-1);
   var MTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var endLabel=endD.getDate()+' '+MTHS[endD.getMonth()]+' '+endD.getFullYear();
-  var configDays=Object.keys(bs.template).filter(function(k){return Object.keys(bs.template[k]||{}).length>0;}).length;
-  h+='<div style="display:flex;gap:10px;align-items:center">';
-  h+='<button tabindex="-1" onclick="window.rosterApplyPattern()" style="padding:10px 22px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer">Apply → '+endLabel+'</button>';
-  h+='<button tabindex="-1" onclick="if(confirm(\'Clear template?\'))S.rosterBuild.template={};render()" style="padding:10px 16px;border-radius:10px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">Clear</button>';
-  h+='<span style="font-size:12px;color:var(--text3)">'+((bs.weeks)||4)+' week'+((bs.weeks||4)!==1?'s':'')+' • '+configDays+' days configured</span>';
+  var enabledCount=allUsers.filter(function(u){return bs.enabled[u.id]!==false;}).length;
+  h+='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">';
+  h+='<button tabindex="-1" onclick="window.rosterApplyPattern()" '
+    +'style="padding:10px 22px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer">'
+    +'Push to Roster</button>';
+  h+='<button tabindex="-1" onclick="if(confirm(\x22Clear all week templates?\x22)){S.rosterBuild.template={};render();}" '
+    +'style="padding:10px 16px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">'
+    +'Clear Templates</button>';
+  h+='<span style="font-size:12px;color:var(--text3)">';
+  h+=enabledCount+' person'+(enabledCount!==1?'s':'')+' included &bull; '+(bs.weeks||4)+' week'+((bs.weeks||4)!==1?'s':'')+' &bull; until '+endLabel;
+  h+='</span>';
   h+='</div></div>';
   return h;
 }
@@ -354,33 +382,10 @@ window.rosterTplSet=function(di,uid,val){
   render();
 };
 
-window.rosterQuickFill=function(){
-  var el=document.getElementById('qf-user');
-  var pe=document.getElementById('qf-pat');
-  if(!el||!el.value||!pe)return;
-  var uid=el.value;
-  var pat=pe.value;
-  var PATS={
-    '5on2off':      ['on','on','on','on','on','rdo','rdo'],
-    '4on3off_mth':  ['on','on','on','on','off','rdo','rdo'],
-    '4on3off_tfs':  ['rdo','rdo','rdo','on','on','on','on'],
-    'set_mth':      ['on','on','on','on','off','rdo','rdo'],
-    'set_fssu':     ['rdo','rdo','rdo','rdo','on','on','on'],
-    'all_rdo':      ['rdo','rdo','rdo','rdo','rdo','rdo','rdo'],
-  };
-  var days=PATS[pat]||PATS['5on2off'];
-  if(!S.rosterBuild)S.rosterBuild={};
-  if(!S.rosterBuild.template)S.rosterBuild.template={};
-  for(var di=0;di<7;di++){
-    if(!S.rosterBuild.template[di])S.rosterBuild.template[di]={};
-    S.rosterBuild.template[di][uid]=days[di];
-  }
-  render();
-};
-
 window.rosterApplyPattern=function(){
   var bs=S.rosterBuild||{};
   var tpl=bs.template||{};
+  var enabled=bs.enabled||{};
   var startStr=bs.startDate;
   var weeks=bs.weeks||4;
   if(!startStr){alert('Set a start date.');return;}
@@ -397,6 +402,7 @@ window.rosterApplyPattern=function(){
       if(!S.roster[ds])S.roster[ds]={};
       var dayTpl=tpl[di]||{};
       Object.keys(dayTpl).forEach(function(uid){
+        if(enabled[uid]===false)return;  // skip toggled-off people
         var newSt=dayTpl[uid];
         if(!newSt)return;
         var ex=S.roster[ds][uid]||'';
@@ -409,7 +415,7 @@ window.rosterApplyPattern=function(){
   }
   lsSet('ts_roster',S.roster);
   window.saveRosterToCloud();
-  alert('Applied '+count+' cells across '+weeks+' week'+(weeks!==1?'s':'')+'. Saved to cloud.');
+  toast('Pushed '+count+' cells across '+weeks+' week'+(weeks!==1?'s':'')+'.','success');
   S.rosterTab='view';
   S.rosterWeek=startStr;
   render();

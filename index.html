@@ -4809,7 +4809,6 @@ function renderCharterRates(){
 
 
 // ── ADMIN ──
-
 function renderAdmin(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
   // Non-admin: show sub-tabs based on their role permissions
@@ -7782,6 +7781,126 @@ window.calcTTIS=function(){
 };
 
 function acDisp(id){return(id||"").replace("ZK-","");}function acDisp(id){return(id||"").replace("ZK-","");}
+
+// --- Role Permissions Table ---
+window.toggleRolePerm=function(role,perm,val){
+  if(!S.rolePerms)S.rolePerms={};
+  if(!S.rolePerms[role])S.rolePerms[role]=Object.assign({},(DEFAULT_ROLE_PERMS[role])||{});
+  S.rolePerms[role][perm]=val;
+};
+
+window.saveRolePerms=async function(){
+  try{
+    await sbU('ts_settings',[{key:'role_perms',value:JSON.stringify(S.rolePerms||{})}]);
+    auditLog('role_perms_save','Saved role permissions');
+    toast('Permissions saved','success');
+  }catch(e){
+    toast('Save failed: '+String(e.message),'error');
+  }
+};
+
+function renderAdminPerms(){
+  var PERM_COLS=[
+    {k:'operations',    lbl:'Ops'},
+    {k:'charter',       lbl:'Charter'},
+    {k:'maintenance',   lbl:'Maint'},
+    {k:'roster',        lbl:'Roster'},
+    {k:'leave',         lbl:'Leave'},
+    {k:'leave_approve', lbl:'Approve'},
+    {k:'admin_crew',    lbl:'Crew'},
+    {k:'admin_users',   lbl:'Users'},
+    {k:'sign_loadsheet',lbl:'Sign'},
+    {k:'maint_bookings',lbl:'Bookings'},
+    {k:'audit',         lbl:'Audit'}
+  ];
+  var ROLE_ROWS=[
+    {k:'admin',        lbl:'Admin'},
+    {k:'cx_manager',   lbl:'CX Mgr'},
+    {k:'pilot',        lbl:'Pilot'},
+    {k:'desk',         lbl:'Desk'},
+    {k:'maint',        lbl:'Maint'},
+    {k:'ground_staff', lbl:'Ground'},
+    {k:'accounts',     lbl:'Accounts'},
+    {k:'marketing',    lbl:'Marketing'}
+  ];
+  var rp=S.rolePerms||{};
+  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+    +'<div class="st" style="margin-bottom:0">Role Permissions</div>'
+    +'<button onclick="window.saveRolePerms()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>'
+    +'</div>'
+    +'<div style="overflow-x:auto">'
+    +'<table style="border-collapse:collapse;min-width:100%;font-size:12px">'
+    +'<thead><tr><th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:600;white-space:nowrap">Role</th>';
+  PERM_COLS.forEach(function(col){
+    h+='<th style="padding:6px 4px;color:var(--text3);font-weight:600;text-align:center;white-space:nowrap">'+col.lbl+'</th>';
+  });
+  h+='</tr></thead><tbody>';
+  ROLE_ROWS.forEach(function(row,ri){
+    var base=DEFAULT_ROLE_PERMS[row.k]||{};
+    var over=rp[row.k]||{};
+    var bg=ri%2===0?'background:var(--card2)':'';
+    h+='<tr style="'+bg+'">'
+      +'<td style="padding:7px 8px;font-weight:600;white-space:nowrap;color:var(--text1)">'+row.lbl+'</td>';
+    PERM_COLS.forEach(function(col){
+      var eff=over[col.k]!==undefined?over[col.k]:base[col.k]||false;
+      h+='<td style="text-align:center;padding:4px">'
+        +'<input type="checkbox" '+(eff?'checked':'')+' '
+        +'onchange="window.toggleRolePerm('+JSON.stringify(row.k)+','+JSON.stringify(col.k)+',this.checked)" '
+        +'style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">'
+        +'</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>'
+    +'<p style="font-size:11px;color:var(--text3);margin-top:12px">Superadmin always has full access. Changes apply after Save.</p>'
+    +'</div>';
+  return h;
+}
+
+// --- Audit Log ---
+function renderAdminAudit(){
+  var log=(S.auditLog||[]).slice().sort(function(a,b){return b.time>a.time?1:-1;});
+  if(!log.length){
+    return'<div class="card"><div class="st">Audit Log</div><p style="color:var(--text3)">No audit entries yet.</p></div>';
+  }
+  function fmtTime(t){
+    if(!t)return'';
+    var d=new Date(t);
+    var now=new Date();
+    var diff=now-d;
+    if(diff<60000)return'just now';
+    if(diff<3600000)return Math.floor(diff/60000)+'m ago';
+    if(diff<86400000)return Math.floor(diff/3600000)+'h ago';
+    return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});
+  }
+  function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  var rows=log.slice(0,200).map(function(e){
+    var det=typeof e.detail==='object'?JSON.stringify(e.detail):String(e.detail||'');
+    return'<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:7px 8px;font-size:11px;color:var(--text3);white-space:nowrap">'+fmtTime(e.time)+'</td>'
+      +'<td style="padding:7px 8px;font-size:12px;font-weight:600;white-space:nowrap">'+esc(e.name||e.user||'')+'</td>'
+      +'<td style="padding:7px 8px;font-size:11px;color:var(--text3)">'+esc(e.role||'')+'</td>'
+      +'<td style="padding:7px 8px;font-size:12px">'+esc(e.action||'')+'</td>'
+      +'<td style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(det)+'</td>'
+      +'</tr>';
+  }).join('');
+  return'<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+    +'<div class="st" style="margin-bottom:0">Audit Log</div>'
+    +'<span style="font-size:11px;color:var(--text3)">Last '+Math.min(log.length,200)+' of '+log.length+' entries</span>'
+    +'</div>'
+    +'<div style="overflow-x:auto">'
+    +'<table style="border-collapse:collapse;width:100%;font-size:12px">'
+    +'<thead><tr>'
+    +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600;white-space:nowrap">When</th>'
+    +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600">Name</th>'
+    +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600">Role</th>'
+    +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600">Action</th>'
+    +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600">Detail</th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div></div>';
+}
+function acDisp(id){return(id||"").replace("ZK-","");}
 function renderMaintenance(){
   initMaintenance();
   const m=S.maintenance||{};
@@ -8932,56 +9051,78 @@ function renderRosterBuild(){
   var allUsers=(S.users||[]).filter(function(u){return u.id&&u.name&&!u.inactive;}).slice().sort(function(a,b){
     return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');
   });
-
   var bs=S.rosterBuild||(S.rosterBuild={});
   if(!bs.startDate)bs.startDate=_rIso(_rMonday(today));
   if(!bs.weeks)bs.weeks=4;
   if(!bs.template)bs.template={};
+  if(!bs.enabled)bs.enabled={};
 
   var h='<div style="padding:14px">';
-  h+='<div style="font-size:12px;color:var(--text3);margin-bottom:12px;padding:10px 14px;border-radius:8px;border:1px solid var(--border2);background:rgba(124,58,237,.06)">Design a template week below. Click Apply to stamp it forward. Existing leave &amp; sick entries are never overwritten.</div>';
 
+  // Controls row
   h+='<div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px">';
-  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Apply from date</label><input type="date" value="'+bs.startDate+'" onchange="S.rosterBuild.startDate=this.value" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px"></div>';
-  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Weeks to fill</label><input type="number" value="'+bs.weeks+'" min="1" max="52" onchange="S.rosterBuild.weeks=Math.max(1,parseInt(this.value)||1)" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px;width:72px"></div>';
-  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Quick-fill person</label><select id="qf-user" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px;cursor:pointer"><option value="">Select...</option>';
-  allUsers.forEach(function(u){h+='<option value="'+u.id+'">'+u.name+'</option>';});
-  h+='</select></div>';
-  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Pattern</label><select id="qf-pat" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:12px;cursor:pointer">';
-  h+='<option value="5on2off">5 on / 2 off (Mon–Fri)</option>';
-  h+='<option value="4on3off_mth">4 on / 3 off (Mon–Thu)</option>';
-  h+='<option value="4on3off_tfs">4 on / 3 off (Thu–Sun)</option>';
-  h+='<option value="set_mth">Set days: Mon–Thu on</option>';
-  h+='<option value="set_fssu">Set days: Fri–Sun on</option>';
-  h+='<option value="all_rdo">All RDO</option>';
-  h+='</select></div>';
-  h+='<button tabindex="-1" onclick="window.rosterQuickFill()" style="padding:7px 14px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer;align-self:flex-end">Fill ›</button>';
+  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Apply from date</label>'
+    +'<input type="date" value="'+(bs.startDate||'')+'" onchange="S.rosterBuild.startDate=this.value;render()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:13px"></div>';
+  h+='<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Weeks to fill</label>'
+    +'<input type="number" min="1" max="52" value="'+(bs.weeks||4)+'" onchange="S.rosterBuild.weeks=Math.max(1,parseInt(this.value)||4);render()" style="width:70px;padding:7px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:13px"></div>';
+  // Enable-all / disable-all
+  h+='<div style="display:flex;gap:6px;padding-bottom:2px">';
+  h+='<button tabindex="-1" onclick="allUsers=(S.users||[]).filter(function(u){return u.id&&!u.inactive;});'
+    +'if(!S.rosterBuild)S.rosterBuild={};if(!S.rosterBuild.enabled)S.rosterBuild.enabled={};'
+    +'allUsers.forEach(function(u){S.rosterBuild.enabled[u.id]=true;});render();"'
+    +' style="padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">All On</button>';
+  h+='<button tabindex="-1" onclick="allUsers=(S.users||[]).filter(function(u){return u.id&&!u.inactive;});'
+    +'if(!S.rosterBuild)S.rosterBuild={};if(!S.rosterBuild.enabled)S.rosterBuild.enabled={};'
+    +'allUsers.forEach(function(u){S.rosterBuild.enabled[u.id]=false;});render();"'
+    +' style="padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text3);font-size:11px;font-weight:700;cursor:pointer">All Off</button>';
+  h+='</div>';
   h+='</div>';
 
+  // Template grid
   h+='<div style="overflow:auto;border:1px solid var(--border2);border-radius:10px;margin-bottom:14px">';
-  h+='<table style="width:100%;border-collapse:collapse;min-width:560px">';
+  h+='<table style="width:100%;border-collapse:collapse;min-width:620px">';
   h+='<thead><tr style="background:rgba(255,255,255,.04);border-bottom:1px solid var(--border2)">';
-  h+='<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:155px">Name</th>';
-  DNAMES.forEach(function(dn){h+='<th style="padding:6px 3px;text-align:center;font-size:11px;font-weight:700;color:var(--text3);min-width:66px">'+dn+'</th>';});
+  h+='<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:48px">Inc.</th>';
+  h+='<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:140px">Name</th>';
+  DNAMES.forEach(function(dn){
+    h+='<th style="padding:6px 3px;text-align:center;font-size:11px;font-weight:700;color:var(--text3);min-width:70px">'+dn+'</th>';
+  });
   h+='</tr></thead><tbody>';
 
   if(!allUsers.length){
-    h+='<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--text3)">No users.</td></tr>';
+    h+='<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--text3)">No users.</td></tr>';
   } else {
     allUsers.forEach(function(u){
       var rc=ROLE_GROUPS.filter(function(g){return g.roles.indexOf(u.role)>=0;})[0];
       var rowCol=rc?rc.col:'#94a3b8';
-      var ini=_rIni(u);
-      h+='<tr style="border-top:1px solid rgba(255,255,255,.04)">';
-      h+='<td style="padding:5px 10px;white-space:nowrap"><div style="font-size:12px;font-weight:600;color:var(--text1)">'+u.name+'</div><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:'+rowCol+'1a;color:'+rowCol+'">'+ini+'</span></td>';
+      var enabled=bs.enabled[u.id]!==false;  // default on
+      var rowOpacity=enabled?'1':'0.38';
+      h+='<tr style="border-top:1px solid rgba(255,255,255,.04);opacity:'+rowOpacity+'">';
+      // Toggle button
+      var togBg=enabled?'var(--accent)':'var(--card2)';
+      var togCol=enabled?'#fff':'var(--text3)';
+      h+='<td style="padding:5px 8px;text-align:center">';
+      h+='<button tabindex="-1" onclick="if(!S.rosterBuild)S.rosterBuild={};if(!S.rosterBuild.enabled)S.rosterBuild.enabled={};'
+        +'S.rosterBuild.enabled['+JSON.stringify(u.id)+']='+(!enabled)+';render();" '
+        +'style="width:36px;height:22px;border-radius:11px;border:none;background:'+togBg+';color:'+togCol+';font-size:10px;font-weight:800;cursor:pointer;transition:background .15s">';
+      h+=(enabled?'ON':'OFF')+'</button></td>';
+      // Name
+      h+='<td style="padding:5px 10px;white-space:nowrap">';
+      h+='<div style="font-size:12px;font-weight:600;color:var(--text1)">'+u.name+'</div>';
+      h+='<div style="font-size:10px;color:'+rowCol+';font-weight:600;text-transform:uppercase;letter-spacing:.04em">'+u.role+'</div>';
+      h+='</td>';
+      // Day cells
       for(var di=0;di<7;di++){
         var tst=(bs.template[di]&&bs.template[di][u.id])||'';
         var cfg=ROSTER_SC[tst]||ROSTER_SC[''];
         h+='<td style="padding:3px 2px;text-align:center">';
-        h+='<select tabindex="-1" onchange="window.rosterTplSet('+di+',\''+u.id+'\',this.value)" style="appearance:none;-webkit-appearance:none;padding:4px 3px;border-radius:6px;border:1px solid '+(tst?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(tst?cfg.bg:'transparent')+';color:'+(tst?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:62px;text-align:center">';
+        h+='<select tabindex="-1" '+(enabled?'':'disabled ')
+          +'onchange="window.rosterTplSet('+di+','+JSON.stringify(u.id)+',this.value)" '
+          +'style="width:68px;padding:4px 2px;border-radius:6px;border:1px solid var(--border2);'
+          +'background:'+(tst?cfg.bg:'var(--card2)')+';color:'+(tst?cfg.col:'var(--text3)')+';'
+          +'font-size:11px;font-weight:600;cursor:pointer;text-align:center">';
         ROSTER_ORDER.forEach(function(s){var c=ROSTER_SC[s];h+='<option value="'+s+'"'+(tst===s?' selected':'')+'>'+c.lbl+'</option>';});
-        h+='</select>';
-        h+='</td>';
+        h+='</select></td>';
       }
       h+='</tr>';
     });
@@ -8992,11 +9133,17 @@ function renderRosterBuild(){
   endD.setDate(endD.getDate()+(bs.weeks||4)*7-1);
   var MTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var endLabel=endD.getDate()+' '+MTHS[endD.getMonth()]+' '+endD.getFullYear();
-  var configDays=Object.keys(bs.template).filter(function(k){return Object.keys(bs.template[k]||{}).length>0;}).length;
-  h+='<div style="display:flex;gap:10px;align-items:center">';
-  h+='<button tabindex="-1" onclick="window.rosterApplyPattern()" style="padding:10px 22px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer">Apply → '+endLabel+'</button>';
-  h+='<button tabindex="-1" onclick="if(confirm(\'Clear template?\'))S.rosterBuild.template={};render()" style="padding:10px 16px;border-radius:10px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">Clear</button>';
-  h+='<span style="font-size:12px;color:var(--text3)">'+((bs.weeks)||4)+' week'+((bs.weeks||4)!==1?'s':'')+' • '+configDays+' days configured</span>';
+  var enabledCount=allUsers.filter(function(u){return bs.enabled[u.id]!==false;}).length;
+  h+='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">';
+  h+='<button tabindex="-1" onclick="window.rosterApplyPattern()" '
+    +'style="padding:10px 22px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer">'
+    +'Push to Roster</button>';
+  h+='<button tabindex="-1" onclick="if(confirm(\x22Clear all week templates?\x22)){S.rosterBuild.template={};render();}" '
+    +'style="padding:10px 16px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">'
+    +'Clear Templates</button>';
+  h+='<span style="font-size:12px;color:var(--text3)">';
+  h+=enabledCount+' person'+(enabledCount!==1?'s':'')+' included &bull; '+(bs.weeks||4)+' week'+((bs.weeks||4)!==1?'s':'')+' &bull; until '+endLabel;
+  h+='</span>';
   h+='</div></div>';
   return h;
 }
@@ -9027,33 +9174,10 @@ window.rosterTplSet=function(di,uid,val){
   render();
 };
 
-window.rosterQuickFill=function(){
-  var el=document.getElementById('qf-user');
-  var pe=document.getElementById('qf-pat');
-  if(!el||!el.value||!pe)return;
-  var uid=el.value;
-  var pat=pe.value;
-  var PATS={
-    '5on2off':      ['on','on','on','on','on','rdo','rdo'],
-    '4on3off_mth':  ['on','on','on','on','off','rdo','rdo'],
-    '4on3off_tfs':  ['rdo','rdo','rdo','on','on','on','on'],
-    'set_mth':      ['on','on','on','on','off','rdo','rdo'],
-    'set_fssu':     ['rdo','rdo','rdo','rdo','on','on','on'],
-    'all_rdo':      ['rdo','rdo','rdo','rdo','rdo','rdo','rdo'],
-  };
-  var days=PATS[pat]||PATS['5on2off'];
-  if(!S.rosterBuild)S.rosterBuild={};
-  if(!S.rosterBuild.template)S.rosterBuild.template={};
-  for(var di=0;di<7;di++){
-    if(!S.rosterBuild.template[di])S.rosterBuild.template[di]={};
-    S.rosterBuild.template[di][uid]=days[di];
-  }
-  render();
-};
-
 window.rosterApplyPattern=function(){
   var bs=S.rosterBuild||{};
   var tpl=bs.template||{};
+  var enabled=bs.enabled||{};
   var startStr=bs.startDate;
   var weeks=bs.weeks||4;
   if(!startStr){alert('Set a start date.');return;}
@@ -9070,6 +9194,7 @@ window.rosterApplyPattern=function(){
       if(!S.roster[ds])S.roster[ds]={};
       var dayTpl=tpl[di]||{};
       Object.keys(dayTpl).forEach(function(uid){
+        if(enabled[uid]===false)return;  // skip toggled-off people
         var newSt=dayTpl[uid];
         if(!newSt)return;
         var ex=S.roster[ds][uid]||'';
@@ -9082,7 +9207,7 @@ window.rosterApplyPattern=function(){
   }
   lsSet('ts_roster',S.roster);
   window.saveRosterToCloud();
-  alert('Applied '+count+' cells across '+weeks+' week'+(weeks!==1?'s':'')+'. Saved to cloud.');
+  toast('Pushed '+count+' cells across '+weeks+' week'+(weeks!==1?'s':'')+'.','success');
   S.rosterTab='view';
   S.rosterWeek=startStr;
   render();
