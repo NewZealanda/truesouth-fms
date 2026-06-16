@@ -358,7 +358,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.53';
+const APP_VER='v22.54';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3068,6 +3068,120 @@ window.applySwapFix=function(acId,fromIdx,toIdx){
   render();
 };
 
+// === restored: cabin seatmap renderer (was lost in modularization, caused 'something went wrong' on Seatmap) ===
+function renderCabinSVG(acId,interactive,form,_sz,_ht){
+  if(typeof seatSz==='undefined'){var seatSz=_sz||64;var seatHt=_ht||52;}
+  const a=S.aircraft[acId];if(!a)return'';
+  const layout=acLayout(acId);
+  const isGA8=a.layout==='ga8';
+  const col=AC_COL[acId]||'#1e6b8c';
+  const d=S.dispatch;
+  const sm=interactive?d.seatMap[acId]||{}:{};
+  const formSm=form?form.names:null; // for loadsheet view
+  const rows=layout.filter(r=>r!=='spacer');
+  const hasSpacerBefore=(idx)=>layout.slice(0,layout.indexOf(layout.filter(r=>r!=='spacer')[idx])).some(r=>r==='spacer');
+
+  // Build seat rows HTML
+  let seatRowsHTML='';
+  let rowIdx=0;
+  layout.forEach((row,li)=>{
+    if(row==='spacer'){seatRowsHTML+=`<div style="height:${isGA8?'16px':'10px'}"></div>`;return;}
+    // Compute row total weight
+    const rowWt=row.filter(c=>!c.crew&&c.i!==0&&!(c.i===1&&seat1IsCoPilot(acId))).reduce((s,c)=>{
+      if(interactive){
+        const pid=d.seatMap[acId]?.[c.i];const p=pid?paxById(pid):null;
+        return s+(p?parseFloat(p.weight||0)+parseFloat(p.bag||0):0);
+      } else if(form){
+        return s+parseFloat(form.seats?.[c.i]||0)+parseFloat(form.bags?.[c.i]||0);
+      }
+      return s;
+    },0);
+    seatRowsHTML+=`<div style="display:flex;gap:7px;justify-content:center;align-items:center;margin-bottom:7px">`;
+    row.forEach(cell=>{
+      const isPIC=cell.i===0;
+      const isCoPilotSeat=cell.i===1&&seat1IsCoPilot(acId);
+      const isCrew=isPIC||isCoPilotSeat;
+      if(!interactive&&form){
+        // Loadsheet view — same style as manifest allocation cards
+        const nm=formSm?formSm[cell.i]||'':'';const isInfant=S.dispatch.pax.find(p=>p.name===nm)?.infant||false;
+        const wt=form?parseFloat(form.seats?.[cell.i]||0)+parseFloat(form.bags?.[cell.i]||0):0;
+        const grp=S.dispatch.pax.find(p=>p.name===nm)?.group||'';
+        const gc=grp?groupColor(grp):null;
+        // Match interactive card style: white bg + coloured left border when filled
+        const lsSeatStyle=isCrew?''
+          :nm?('background:rgba(255,255,255,.93);border-left:4px solid '+(gc||col)+';border-radius:8px')
+          :'background:rgba(255,255,255,.05);border-radius:8px';
+        const lsTextCol=nm&&!isCrew?'color:#1a2035':'color:rgba(255,255,255,.7)';
+        seatRowsHTML+=`<div class="seat ${isCrew?'crew':nm?'filled':''} ${S._selFormSeat===cell.i?'sel-src':''}" style="width:${seatSz}px;height:${seatHt}px;${lsSeatStyle}${S._selFormSeat===cell.i?';box-shadow:0 0 0 2px #f59e0b':''}" onclick="${!isCrew?`tapFormSeat(${cell.i},'${acId}')`:''}" draggable="${!isCrew&&nm?'true':'false'}" ondragstart="if(${!isCrew&&!!nm})startDragForm(event,${cell.i},'${acId}')" ondragover="event.preventDefault()" ondrop="dropFormSeat(event,${cell.i},'${acId}')">
+          <span class="seat-lbl" style="${nm&&!isCrew?'color:#475569;opacity:.7':''}font-size:9px">${cell.lbl}</span>
+          ${gc?`<div class="seat-dot" style="background:${gc};top:3px;right:3px"></div>`:''}
+          ${nm?`<div class="seat-name" style="${lsTextCol};font-weight:700;font-size:${seatSz<52?'7px':'9px'}">${nm.split(' ')[0].slice(0,seatSz<52?5:9)}${(form?.infantNames?.[cell.i])?' 👶':''}</div><div class="seat-wt" style="${lsTextCol};font-size:${seatSz<52?'7px':'8px'}">${wt>0?wt+'kg':''}</div>`:isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.85);font-weight:700">${isPIC?'PIC':'CP'}</div>`:''}
+        </div>`;
+      } else {
+        // Manifest seat map view
+        const pid=sm[cell.i];const p=pid?paxById(pid):null;
+        const gc=p?.group?.trim()?groupColor(p.group.trim()):null;
+        const setup=d.acSetup.find(s=>s.acId===acId);
+        const crewName=isPIC?(setup?.pic||'PIC'):(setup?.coPilot||'CP');
+        const isSrcSel=S.selectedPax&&p&&p.id===S.selectedPax;
+        const isDrop=S.selectedPax&&!p&&!isCrew;
+        const origAc=p&&d.origAcMap?d.origAcMap[p.id]:null;
+        const movedIn=origAc&&origAc!==acId;
+        const leftBorderCol=movedIn?(AC_COL[origAc]||col):col;
+        // Filled: white bg + dark text. Empty: dark bg + light text. Crew: CSS handles.
+        const seatStyle=isCrew?''
+          :p?('background:rgba(255,255,255,.93);border-left:4px solid '+leftBorderCol+';border-radius:8px')
+          :'background:rgba(255,255,255,.05);border-radius:8px';
+        // Text colour set per-seat based on background
+        const textCol=p&&!isCrew?'color:#1a2035':'color:rgba(255,255,255,.7)';
+        seatRowsHTML+=`<div class="seat ${isCrew?'crew':p?'filled':''} ${isSrcSel?'sel-src':''} ${isDrop?'drop-target':''}"
+          style="width:66px;height:54px;${seatStyle}" 
+          onclick="tapSeat(${cell.i},'${acId}')"
+          draggable="${!!p&&!isCrew}" ondragstart="if(${!!p&&!isCrew})startDrag(event,'${p?p.id:''}','${acId}',${cell.i})"
+          ondragover="event.preventDefault()" ondrop="dropOnSeat(event,${cell.i},'${acId}')">
+          <span class="seat-lbl" style="${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
+          ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
+          ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
+            :p?`<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?' 👶':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
+        </div>`;
+      }
+    });
+    seatRowsHTML+=`<div style="font-size:10px;color:var(--text3);width:28px;min-width:28px;text-align:center;font-weight:600;line-height:1.2;margin-left:2px">${rowWt>0?rowWt.toFixed(0)+'<br><span style="font-weight:400;font-size:9px">kg</span>':''}</div>`;
+    seatRowsHTML+='</div>';
+    rowIdx++;
+  });
+
+  const cabinBg=col;
+  return`<div>
+    <div style="background:${cabinBg}22;border:2px solid ${cabinBg};border-radius:${isGA8?'16px 16px 10px 10px':'18px 18px 12px 12px'};padding:10px 8px;display:inline-block;min-width:${isGA8?'155px':'160px'}">
+      <div style="text-align:center;font-size:9px;color:${cabinBg};font-weight:700;letter-spacing:.1em;margin-bottom:6px">▲ FRONT</div>
+      ${seatRowsHTML}
+      <div style="text-align:center;font-size:9px;color:${cabinBg};font-weight:700;letter-spacing:.1em;margin-top:4px">▼ REAR</div>
+    </div>
+    ${(()=>{
+      // Show cargo/baggage zones if any values entered
+      const cargoItems=a.cargo||[];
+      if(!cargoItems.length) return "";
+      const cargoVals=interactive?(S.dispatch?.cargo?.[acId]||{}):form?(form.cargo||{}):(S.form?.cargo||{});
+      const hasVal=cargoItems.some((_,i)=>parseFloat(cargoVals[i]||0)>0);
+      if(!hasVal) return "";
+      const rows=cargoItems.map((c,i)=>{
+        const w=parseFloat(cargoVals[i]||0);
+        if(!w) return "";
+        return`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:rgba(0,0,0,.1);border-radius:4px;margin-bottom:2px">
+          <span style="font-size:10px;color:${cabinBg}">${c.lbl}</span>
+          <span style="font-size:11px;font-weight:700;color:var(--text)">${w}kg</span>
+        </div>`;
+      }).join("");
+      if(!rows) return "";
+      return`<div style="margin-top:6px;padding:6px;background:${cabinBg}15;border:1px solid ${cabinBg}44;border-radius:6px;min-width:155px">
+        <div style="font-size:9px;color:${cabinBg};font-weight:700;letter-spacing:.08em;margin-bottom:4px">CARGO / PODS</div>
+        ${rows}
+      </div>`;
+    })()}
+  </div>`;
+}
+
 function renderStep2(){
   const d=S.dispatch;
   const setups=d.acSetup||[];
@@ -5637,10 +5751,10 @@ window.openPaxFieldPopup=function(pidx,field){
   window._paxFldPidx=pidx;window._paxFldField=field;
   var ov=document.createElement('div');
   ov.id='pax-fld-overlay';
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:0';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
   var fi='width:100%;padding:14px 12px;font-size:18px;border:1px solid var(--border);border-radius:10px;background:var(--bg3);color:var(--text1);box-sizing:border-box';
   var inner=document.createElement('div');
-  inner.style.cssText='background:var(--bg2);border-top:1px solid var(--border);border-radius:16px 16px 0 0;padding:20px 16px 36px;width:100%;max-width:480px;box-sizing:border-box';
+  inner.style.cssText='background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:20px 16px 22px;width:100%;max-width:420px;box-sizing:border-box;box-shadow:0 12px 40px rgba(0,0,0,.5)';
   var title=document.createElement('div');
   title.style.cssText='font-weight:700;font-size:15px;margin-bottom:14px;color:var(--text1)';
   title.textContent=lbl;

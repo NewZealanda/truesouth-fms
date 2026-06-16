@@ -763,10 +763,10 @@ window.openPaxFieldPopup=function(pidx,field){
   window._paxFldPidx=pidx;window._paxFldField=field;
   var ov=document.createElement('div');
   ov.id='pax-fld-overlay';
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:0';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
   var fi='width:100%;padding:14px 12px;font-size:18px;border:1px solid var(--border);border-radius:10px;background:var(--bg3);color:var(--text1);box-sizing:border-box';
   var inner=document.createElement('div');
-  inner.style.cssText='background:var(--bg2);border-top:1px solid var(--border);border-radius:16px 16px 0 0;padding:20px 16px 36px;width:100%;max-width:480px;box-sizing:border-box';
+  inner.style.cssText='background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:20px 16px 22px;width:100%;max-width:420px;box-sizing:border-box;box-shadow:0 12px 40px rgba(0,0,0,.5)';
   var title=document.createElement('div');
   title.style.cssText='font-weight:700;font-size:15px;margin-bottom:14px;color:var(--text1)';
   title.textContent=lbl;
