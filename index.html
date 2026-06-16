@@ -75,8 +75,9 @@ label{font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bot
 .nav-tab.off{background:rgba(255,255,255,.07);color:rgba(255,255,255,.75);}
 .nav-tab.off:hover{background:rgba(255,255,255,.12);}
 
-.sub-tab{padding:5px 12px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;font-size:12px;font-weight:600;background:transparent;color:var(--text2);}
-.sub-tab.on{background:var(--card);color:var(--text);border-color:var(--border2);}
+.sub-tab{padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.13);cursor:pointer;font-size:12px;font-weight:600;background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);white-space:nowrap;transition:background .15s,color .15s,border-color .15s;}
+.sub-tab:hover{background:rgba(255,255,255,.11);color:rgba(255,255,255,.75);}
+.sub-tab.on{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.3);color:#fff;font-weight:700;}
 
 /* ── Solver boxes ── */
 .solver-box{border-radius:10px;padding:12px 14px;margin-top:8px;border:1px solid;}
@@ -2458,6 +2459,42 @@ function renderOpsSubTabs(){
   return h;
 }
 
+function renderSettingsSubTabs(){
+  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
+  if(!isAdmin) return '';
+  const ad=S.admin||{};
+  const cur=ad.section||'people';
+  const sections=[
+    {id:'people',     lbl:'People'},
+    {id:'perms',      lbl:'Permissions'},
+    {id:'gdrive',     lbl:'Drive'},
+    {id:'aerodromes', lbl:'Aerodromes'},
+    {id:'statistics', lbl:'Statistics'},
+    ...(S.user?.superAdmin?[{id:'audit',lbl:'Audit'}]:[])
+  ];
+  var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
+  sections.forEach(function(s){
+    h+='<button tabindex="-1" class="sub-tab '+(cur===s.id?'on':'')+'" onclick="if(!S.admin)S.admin={};S.admin.section=\''+s.id+'\';render()" style="flex-shrink:0">'+s.lbl+'</button>';
+  });
+  h+='</div>';
+  return h;
+}
+function renderMaintenanceSubTabs(){
+  const isAdmin=hasRolePerm('maint_bookings');
+  const sub=S.maintTab||'overview';
+  const tabs=[
+    {id:'overview',  lbl:'Overview'},
+    {id:'log',       lbl:'Logs'},
+    {id:'aircraft',  lbl:'Aircraft'},
+    ...(isAdmin?[{id:'bookings',lbl:'Bookings'},{id:'estimator',lbl:'Estimator'},{id:'search',lbl:'Search'}]:[{id:'search',lbl:'Search'}])
+  ];
+  var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
+  tabs.forEach(function(t){
+    h+='<button tabindex="-1" class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.maintTab=\''+t.id+'\';render()" style="flex-shrink:0">'+t.lbl+'</button>';
+  });
+  h+='</div>';
+  return h;
+}
 function renderApp(){
   const sh={connecting:`<span class="sync-dot dot-spin"></span>Connecting`,ok:`<span class="sync-dot dot-ok"></span>Synced`,error:`<span class="sync-dot dot-err"></span>Offline`}[S.syncStatus]||'';
   const role=S.user?.role||'desk';
@@ -2486,7 +2523,7 @@ function renderApp(){
           </button>
         </div>
       </div>
-      ${(S.section||'operations')==='operations'?renderOpsSubTabs():''}
+      ${(function(){var sec=S.section||'operations';if(sec==='operations')return renderOpsSubTabs();if(sec==='maintenance')return renderMaintenanceSubTabs();if(sec==='settings')return renderSettingsSubTabs();return '';})()}
     </div>
     ${S._drawerOpen?renderDrawer():''}
     ${S._helpOpen?`<div onclick="S._helpOpen=false;render()" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
@@ -4924,12 +4961,8 @@ function renderAdmin(){
     return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
   }
   const ad=S.admin;
-  const sections=['people','perms','gdrive','aerodromes','statistics',...(S.user?.superAdmin?['audit']:[])];
-  const sectionLabels={people:'People',perms:'Permissions',gdrive:'Google Drive PDF',aerodromes:'Aerodromes',statistics:'Statistics',audit:'Audit Log'};
-  const tabBar=`<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
-    ${sections.map(s=>`<button class="sub-tab ${ad.section===s?'on':''}" onclick="S.admin.section='${s}';render()">${sectionLabels[s]}</button>`).join('')}
-  </div>`;
-  return tabBar+{people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad.section]?.()||renderAdminPeople();
+  const ad_section=ad.section||'people';
+  return {people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad_section]?.()||renderAdminPeople();
 }
 
 function renderAdminStatistics(){
@@ -7876,24 +7909,14 @@ function renderMaintenance(){
   const isAdmin=hasRolePerm('maint_bookings');
   const sub=S.maintTab||'overview';
 
-  // Sub tabs
-  const tabs=[
-    {id:'overview',lbl:'Overview'},
-    {id:'log',lbl:'Logs'},
-    {id:'aircraft',lbl:'Aircraft Data'},
-    ...(isAdmin?[{id:'bookings',lbl:'Bookings'},{id:'estimator',lbl:'Estimator'},{id:'search',lbl:'Search'}]:[{id:'search',lbl:'Search'}])
-  ];
-  const tabBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    tabs.map(t=>'<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.maintTab=\''+t.id+'\';render()">'+t.lbl+'</button>').join('')+
-    '</div>';
 
-  if(sub==='overview') return tabBar+renderMaintOverview();
-  if(sub==='log') return tabBar+renderMaintLog();
-  if(sub==='aircraft') return tabBar+renderMaintAircraftData();
+  if(sub==='overview') return renderMaintOverview();
+  if(sub==='log') return renderMaintLog();
+  if(sub==='aircraft') return renderMaintAircraftData();
 
-  if(sub==='bookings'&&isAdmin) return tabBar+renderMaintBookings();
-  if(sub==='estimator'&&isAdmin) return tabBar+renderMaintEstimator();
-  return tabBar+renderMaintSearch();
+  if(sub==='bookings'&&isAdmin) return renderMaintBookings();
+  if(sub==='estimator'&&isAdmin) return renderMaintEstimator();
+  return renderMaintSearch();
 }
 
 
