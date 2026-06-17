@@ -160,7 +160,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.68';
+const APP_VER='v22.69';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -620,34 +620,37 @@ function _pushManifest(mode){
   const ws=seatmapWS();
   if(_wsHasContent(ws)){
     // Seatmap already has people — let the user choose Merge / Replace / Cancel.
-    _showPushPrompt(mode);
+    _seatmapChoicePrompt({onMerge:function(){_doPush(mode,false);},onReplace:function(){_doPush(mode,true);}});
     return;
   }
   _doPush(mode,true);
 }
-// 3-way push prompt (Merge adds, Replace clears first, Cancel aborts).
-function _showPushPrompt(mode){
+// Generic 3-way seatmap push prompt (Merge adds, Replace clears first, Cancel aborts).
+// Used by both manifest→seatmap and loadsheet→seatmap pushes.
+function _seatmapChoicePrompt(opts){
+  opts=opts||{};
   var ex=document.getElementById('push-prompt-ov');if(ex)ex.remove();
-  S._pushPromptMode=mode;
+  S._smChoice={merge:opts.onMerge,replace:opts.onReplace};
   var ov=document.createElement('div');
   ov.id='push-prompt-ov';
   ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
   ov.innerHTML='<div style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:22px;max-width:380px;width:100%;box-shadow:0 12px 44px rgba(0,0,0,.55)">'
-    +'<div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Seatmap already has passengers</div>'
-    +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px;line-height:1.5">Add this manifest to what is already on the seatmap, or replace everything first? Your manifests are not affected either way.</div>'
+    +'<div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">'+(opts.title||'Seatmap already has passengers')+'</div>'
+    +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px;line-height:1.5">'+(opts.body||'Add to what is already on the seatmap, or replace everything first? Your manifests and loadsheets are not affected.')+'</div>'
     +'<div style="display:flex;flex-direction:column;gap:8px">'
-    +'<button onclick="window._pushChoose(\'merge\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(99,179,237,.6);background:rgba(99,179,237,.12);color:#63b3ed;font-size:14px;font-weight:700;cursor:pointer">➕ Merge — add to seatmap</button>'
-    +'<button onclick="window._pushChoose(\'replace\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(239,68,68,.5);background:rgba(239,68,68,.12);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer">🗑 Replace — clear, then push</button>'
-    +'<button onclick="window._pushChoose(\'cancel\')" style="padding:11px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Cancel</button>'
+    +'<button onclick="window._smChoose(\'merge\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(99,179,237,.6);background:rgba(99,179,237,.12);color:#63b3ed;font-size:14px;font-weight:700;cursor:pointer">➕ '+(opts.mergeLabel||'Merge — add to seatmap')+'</button>'
+    +'<button onclick="window._smChoose(\'replace\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(239,68,68,.5);background:rgba(239,68,68,.12);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer">🗑 '+(opts.replaceLabel||'Replace — clear, then push')+'</button>'
+    +'<button onclick="window._smChoose(\'cancel\')" style="padding:11px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Cancel</button>'
     +'</div></div>';
-  ov.addEventListener('click',function(e){if(e.target===ov)window._pushChoose('cancel');});
+  ov.addEventListener('click',function(e){if(e.target===ov)window._smChoose('cancel');});
   document.body.appendChild(ov);
 }
-window._pushChoose=function(choice){
+window._seatmapChoicePrompt=_seatmapChoicePrompt;
+window._smChoose=function(choice){
   var ov=document.getElementById('push-prompt-ov');if(ov)ov.remove();
-  var mode=S._pushPromptMode||'seat';S._pushPromptMode=null;
-  if(choice==='cancel')return; // abort the push entirely — stay on the manifest
-  _doPush(mode,choice==='replace');
+  var h=S._smChoice||{};S._smChoice=null;
+  if(choice==='merge'&&h.merge)h.merge();
+  else if(choice==='replace'&&h.replace)h.replace();
 };
 function _doPush(mode,replace){
   const m=S.dispatch; // active manifest

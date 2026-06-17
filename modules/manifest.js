@@ -417,8 +417,8 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,smKey){
           onclick="tapSeat(${cell.i},'${_key}')"
           draggable="${!!p&&!isCrew}" ondragstart="if(${!!p&&!isCrew})startDrag(event,'${p?p.id:''}','${_key}',${cell.i})"
           ondragover="event.preventDefault()" ondrop="dropOnSeat(event,${cell.i},'${_key}')">
-          ${needPay?`<div style="position:absolute;top:0;left:0;right:0;background:#ef4444;color:#fff;font-size:8px;font-weight:900;letter-spacing:.04em;text-align:center;line-height:1.5;padding:0 2px">$ TO PAY</div>`:''}
-          <span class="seat-lbl" style="${needPay?'margin-top:11px;':''}${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
+          ${needPay?`<div style="position:absolute;top:0;left:0;right:0;background:#ef4444;color:#fff;font-size:10px;font-weight:900;letter-spacing:.06em;text-align:center;line-height:1.7;padding:0 2px">$ TO PAY</div>`:''}
+          <span class="seat-lbl" style="${needPay?'margin-top:15px;':''}${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc}${needPay?';top:13px':''}"></div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
             :p?`<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?' 👶':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
@@ -469,14 +469,9 @@ function renderStep2(){
   const _lsTabs=S.lsTabs||[];
   const _inSeatmap=new Set((setups).map(s=>s.acId));
   const _notInSeatmap=_lsTabs.filter(t=>t.form&&t.form.ac&&!_inSeatmap.has(t.form.ac));
-  const _lsBanner=_notInSeatmap.length?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;margin-bottom:12px;flex-wrap:wrap">
-    <span style="font-size:13px;font-weight:600;color:#93c5fd;flex:1">📋 ${_notInSeatmap.length} open loadsheet${_notInSeatmap.length!==1?'s':''} not yet in seatmap: ${_notInSeatmap.map(t=>t.form.ac).join(', ')}</span>
-    <button onclick="window.pushAllLsToSeatmap()" style="padding:5px 12px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Pull all into Seatmap</button>
-  </div>`:'';
+  const _lsBanner='';
   const _poolNoAc=(d.pax||[]).filter(p=>!p.infant).length;
   if(!setups.length){
-    // No aircraft in seatmap — if we have open loadsheets, show pull prompt
-    if(_notInSeatmap.length) return _lsBanner+`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Click "Pull all into Seatmap" above to get started, or <button class="btn btn-ghost" style="font-size:13px" onclick="S.opsTab='manifest';render()">go to Manifest</button> to set up aircraft.</div>`;
     // Passengers were sent to the pool but no aircraft chosen yet — show the pool
     if(_poolNoAc){
       const ua=(d.pax||[]).filter(p=>!p.infant);
@@ -590,7 +585,6 @@ function renderStep2(){
   </div>`:''}
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
     <button class="btn btn-ghost" onclick="S.tab='manifest';window.scrollTo(0,0);render()">&#x2190; Back to Manifest</button>
-    ${hasLsTabs?`<button class="btn btn-primary" onclick="window.pushAllLsToSeatmap()" style="flex:1">&#x2191; Merge All Loadsheets</button>`:''}
     <button class="btn btn-ghost" onclick="window.clearSeatmap()" style="border-color:rgba(245,158,11,.4);color:#f59e0b" title="Unseat everyone — they drop to the pool">&#x2715; Clear Seats</button>
     <button class="btn btn-ghost" onclick="window.resetSeatmap()" style="border-color:rgba(239,68,68,.5);color:#ef4444" title="Empty the whole seatmap (manifests are not affected)">&#x1F5D1; Clear Seatmap</button>
   </div>`;

@@ -408,7 +408,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.68';
+const APP_VER='v22.69';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -868,34 +868,37 @@ function _pushManifest(mode){
   const ws=seatmapWS();
   if(_wsHasContent(ws)){
     // Seatmap already has people — let the user choose Merge / Replace / Cancel.
-    _showPushPrompt(mode);
+    _seatmapChoicePrompt({onMerge:function(){_doPush(mode,false);},onReplace:function(){_doPush(mode,true);}});
     return;
   }
   _doPush(mode,true);
 }
-// 3-way push prompt (Merge adds, Replace clears first, Cancel aborts).
-function _showPushPrompt(mode){
+// Generic 3-way seatmap push prompt (Merge adds, Replace clears first, Cancel aborts).
+// Used by both manifest→seatmap and loadsheet→seatmap pushes.
+function _seatmapChoicePrompt(opts){
+  opts=opts||{};
   var ex=document.getElementById('push-prompt-ov');if(ex)ex.remove();
-  S._pushPromptMode=mode;
+  S._smChoice={merge:opts.onMerge,replace:opts.onReplace};
   var ov=document.createElement('div');
   ov.id='push-prompt-ov';
   ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
   ov.innerHTML='<div style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:22px;max-width:380px;width:100%;box-shadow:0 12px 44px rgba(0,0,0,.55)">'
-    +'<div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Seatmap already has passengers</div>'
-    +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px;line-height:1.5">Add this manifest to what is already on the seatmap, or replace everything first? Your manifests are not affected either way.</div>'
+    +'<div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">'+(opts.title||'Seatmap already has passengers')+'</div>'
+    +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px;line-height:1.5">'+(opts.body||'Add to what is already on the seatmap, or replace everything first? Your manifests and loadsheets are not affected.')+'</div>'
     +'<div style="display:flex;flex-direction:column;gap:8px">'
-    +'<button onclick="window._pushChoose(\'merge\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(99,179,237,.6);background:rgba(99,179,237,.12);color:#63b3ed;font-size:14px;font-weight:700;cursor:pointer">➕ Merge — add to seatmap</button>'
-    +'<button onclick="window._pushChoose(\'replace\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(239,68,68,.5);background:rgba(239,68,68,.12);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer">🗑 Replace — clear, then push</button>'
-    +'<button onclick="window._pushChoose(\'cancel\')" style="padding:11px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Cancel</button>'
+    +'<button onclick="window._smChoose(\'merge\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(99,179,237,.6);background:rgba(99,179,237,.12);color:#63b3ed;font-size:14px;font-weight:700;cursor:pointer">➕ '+(opts.mergeLabel||'Merge — add to seatmap')+'</button>'
+    +'<button onclick="window._smChoose(\'replace\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(239,68,68,.5);background:rgba(239,68,68,.12);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer">🗑 '+(opts.replaceLabel||'Replace — clear, then push')+'</button>'
+    +'<button onclick="window._smChoose(\'cancel\')" style="padding:11px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Cancel</button>'
     +'</div></div>';
-  ov.addEventListener('click',function(e){if(e.target===ov)window._pushChoose('cancel');});
+  ov.addEventListener('click',function(e){if(e.target===ov)window._smChoose('cancel');});
   document.body.appendChild(ov);
 }
-window._pushChoose=function(choice){
+window._seatmapChoicePrompt=_seatmapChoicePrompt;
+window._smChoose=function(choice){
   var ov=document.getElementById('push-prompt-ov');if(ov)ov.remove();
-  var mode=S._pushPromptMode||'seat';S._pushPromptMode=null;
-  if(choice==='cancel')return; // abort the push entirely — stay on the manifest
-  _doPush(mode,choice==='replace');
+  var h=S._smChoice||{};S._smChoice=null;
+  if(choice==='merge'&&h.merge)h.merge();
+  else if(choice==='replace'&&h.replace)h.replace();
 };
 function _doPush(mode,replace){
   const m=S.dispatch; // active manifest
@@ -3332,8 +3335,8 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,smKey){
           onclick="tapSeat(${cell.i},'${_key}')"
           draggable="${!!p&&!isCrew}" ondragstart="if(${!!p&&!isCrew})startDrag(event,'${p?p.id:''}','${_key}',${cell.i})"
           ondragover="event.preventDefault()" ondrop="dropOnSeat(event,${cell.i},'${_key}')">
-          ${needPay?`<div style="position:absolute;top:0;left:0;right:0;background:#ef4444;color:#fff;font-size:8px;font-weight:900;letter-spacing:.04em;text-align:center;line-height:1.5;padding:0 2px">$ TO PAY</div>`:''}
-          <span class="seat-lbl" style="${needPay?'margin-top:11px;':''}${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
+          ${needPay?`<div style="position:absolute;top:0;left:0;right:0;background:#ef4444;color:#fff;font-size:10px;font-weight:900;letter-spacing:.06em;text-align:center;line-height:1.7;padding:0 2px">$ TO PAY</div>`:''}
+          <span class="seat-lbl" style="${needPay?'margin-top:15px;':''}${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc}${needPay?';top:13px':''}"></div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
             :p?`<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?' 👶':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
@@ -3384,14 +3387,9 @@ function renderStep2(){
   const _lsTabs=S.lsTabs||[];
   const _inSeatmap=new Set((setups).map(s=>s.acId));
   const _notInSeatmap=_lsTabs.filter(t=>t.form&&t.form.ac&&!_inSeatmap.has(t.form.ac));
-  const _lsBanner=_notInSeatmap.length?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;margin-bottom:12px;flex-wrap:wrap">
-    <span style="font-size:13px;font-weight:600;color:#93c5fd;flex:1">📋 ${_notInSeatmap.length} open loadsheet${_notInSeatmap.length!==1?'s':''} not yet in seatmap: ${_notInSeatmap.map(t=>t.form.ac).join(', ')}</span>
-    <button onclick="window.pushAllLsToSeatmap()" style="padding:5px 12px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Pull all into Seatmap</button>
-  </div>`:'';
+  const _lsBanner='';
   const _poolNoAc=(d.pax||[]).filter(p=>!p.infant).length;
   if(!setups.length){
-    // No aircraft in seatmap — if we have open loadsheets, show pull prompt
-    if(_notInSeatmap.length) return _lsBanner+`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Click "Pull all into Seatmap" above to get started, or <button class="btn btn-ghost" style="font-size:13px" onclick="S.opsTab='manifest';render()">go to Manifest</button> to set up aircraft.</div>`;
     // Passengers were sent to the pool but no aircraft chosen yet — show the pool
     if(_poolNoAc){
       const ua=(d.pax||[]).filter(p=>!p.infant);
@@ -3505,7 +3503,6 @@ function renderStep2(){
   </div>`:''}
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
     <button class="btn btn-ghost" onclick="S.tab='manifest';window.scrollTo(0,0);render()">&#x2190; Back to Manifest</button>
-    ${hasLsTabs?`<button class="btn btn-primary" onclick="window.pushAllLsToSeatmap()" style="flex:1">&#x2191; Merge All Loadsheets</button>`:''}
     <button class="btn btn-ghost" onclick="window.clearSeatmap()" style="border-color:rgba(245,158,11,.4);color:#f59e0b" title="Unseat everyone — they drop to the pool">&#x2715; Clear Seats</button>
     <button class="btn btn-ghost" onclick="window.resetSeatmap()" style="border-color:rgba(239,68,68,.5);color:#ef4444" title="Empty the whole seatmap (manifests are not affected)">&#x1F5D1; Clear Seatmap</button>
   </div>`;
@@ -3875,7 +3872,7 @@ function renderLoadsheet(){
       const selUnalloc=S._selUnalloc!=null;const selSeat=S._selFormSeat===idx;
       const isCp=idx===1&&!!f.coPilot;
       return`<div onclick="window.tapFormSeat(${idx},'${f.ac}',event)" draggable="${nm?'true':'false'}" ondragstart="window.lsSeatDragStart(${idx},event)" ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'" ondragleave="event.currentTarget.style.outline=''" ondrop="window.lsDropOnSeat(${idx},event)" style="position:relative;cursor:${selUnalloc||nm?'pointer':'default'};background:${selSeat?'rgba(245,158,11,.4)':selUnalloc&&!nm?'rgba(124,58,237,.15)':'var(--card2)'};border-radius:7px;padding:4px 6px;border:${payReq?'2px solid #ef4444':selSeat?'2px solid #f59e0b':selUnalloc&&!nm?'2px dashed var(--accent)':'1px solid var(--border2)'};outline:${selSeat?'3px solid rgba(245,158,11,.3)':'none'};transition:outline .1s">
-        ${payReq?`<div onclick="event.stopPropagation();window.lsTogglePayReq(${idx})" style="background:#ef4444;color:#fff;font-size:10px;font-weight:900;letter-spacing:.06em;text-align:center;border-radius:5px;padding:2px 0;margin:0 0 4px;cursor:pointer">💲 PAYMENT REQUIRED</div>`:''}
+        ${payReq?`<div onclick="event.stopPropagation();window.lsTogglePayReq(${idx})" style="background:#ef4444;color:#fff;font-size:13px;font-weight:900;letter-spacing:.1em;text-align:center;border-radius:5px;padding:5px 0;margin:0 0 5px;cursor:pointer;box-shadow:0 1px 4px rgba(239,68,68,.5)">💲 PAYMENT REQUIRED</div>`:''}
         <div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;margin-bottom:2px">
           <span style="font-size:9px;font-weight:700;color:var(--text3);min-width:16px;flex-shrink:0">${s.lbl}</span>
           ${nm
@@ -7074,57 +7071,59 @@ window.deleteSelectedLsTabs=function(){
 window.createLsTab=function(acId){S._newLsTab=false;generateLoadsheet(acId);};
 window.pushLsToSeatmap=function(){
   const f=S.form;if(!f||!f.ac)return;
-  const acId=f.ac;
-  const _D=curDisp();
-  _D.acSetup=_D.acSetup||[];
-  _D.seatMap=_D.seatMap||{};
-  _D.pax=_D.pax||[];
-  // Auto-add aircraft to seatmap if not already present — PIC/coPilot NOT overwritten (manifest owns those)
-  var _acsEntry=_D.acSetup.find(function(s){return s.acId===acId;});
-  if(!_acsEntry){
-    _acsEntry={acId:acId,pic:'',coPilot:''};
-    _D.acSetup.push(_acsEntry);
+  const ws=seatmapWS();
+  if(_wsHasContent(ws)){
+    _seatmapChoicePrompt({
+      title:'Seatmap already has passengers',
+      body:'Add this loadsheet to the seatmap as another aircraft, or replace everything first?',
+      mergeLabel:'Merge — add this loadsheet',
+      onMerge:function(){_doPushLs(f,false,true);},
+      onReplace:function(){_doPushLs(f,true,false);}
+    });
+    return;
   }
-  // Use _seatmapKey if present (matches how seatmap render resolves the key)
-  const smKey=_acsEntry._seatmapKey||acId;
-  // Clear existing seat assignments for this aircraft — displaced pax stay in workspace pax (unassigned pool)
-  delete _D.seatMap[smKey];
-  // Build name→id map from existing pax
-  const nameMap={};
-  _D.pax.forEach(function(p){if(p.name)nameMap[p.name.trim().toLowerCase()]=p.id;});
-  // Build fresh seatmap from loadsheet
+  _doPushLs(f,false,false);
+};
+// Push a loadsheet form into the seatmap workspace, replicating its exact seating.
+// duplicate=true → add as a NEW aircraft instance (keeps existing seatmap intact).
+function _doPushLs(f,replace,duplicate){
+  let ws=seatmapWS();
+  if(replace){S.smWS=bD();ws=S.smWS;}
+  ws.acSetup=ws.acSetup||[];ws.seatMap=ws.seatMap||{};ws.pax=ws.pax||[];
+  const phys=f.ac;
+  let smKey;
+  if(duplicate){
+    const existing=ws.acSetup.filter(function(x){return _ac(x._seatmapKey||x.acId)===phys;});
+    if(existing.length){
+      if(existing.length===1&&!existing[0]._displaySuffix){existing[0]._seatmapKey=existing[0]._seatmapKey||existing[0].acId;existing[0]._displaySuffix='(1)';}
+      smKey=phys+'_'+(existing.length+1);
+    } else smKey=phys;
+  } else {
+    const ex=ws.acSetup.find(function(x){return _ac(x._seatmapKey||x.acId)===phys;});
+    smKey=ex?(ex._seatmapKey||ex.acId):phys;
+  }
+  const src='LS '+phys.replace('ZK-','');
+  let acs=ws.acSetup.find(function(x){return (x._seatmapKey||x.acId)===smKey;});
+  if(!acs){acs={acId:phys,_seatmapKey:smKey,pic:f.pic||'',coPilot:f.coPilot||'',fuelInput:(f.fuel?fromKg(parseFloat(f.fuel)||0,phys):null),_srcManifest:src};if(smKey!==phys)acs._displaySuffix='('+smKey.split('_').pop()+')';ws.acSetup.push(acs);}
+  else{acs.pic=f.pic||acs.pic;acs.coPilot=f.coPilot||acs.coPilot;acs._srcManifest=src;}
+  if(replace||!ws.dep){ws.dep=f.dep;ws.dest=f.dest;ws.date=f.date;ws.etd=f.etd;ws.etdCustom=f.etdCustom||false;}
+  // Replicate the loadsheet's seat positions exactly into this instance
   const sm={};
   Object.keys(f.names||{}).forEach(function(idx){
-    if(parseInt(idx)===0)return; // Skip PIC — not pushed as pax
-    const nm=(f.names[idx]||'').trim();if(!nm)return;
-    const key=nm.toLowerCase();
-    let pid=nameMap[key];
-    if(!pid){
-      // Pax in loadsheet but not in workspace — add them
-      pid='_ls_'+key.replace(/[^a-z0-9]/g,'_');
-      if(!_D.pax.find(function(p){return p.id===pid;})){
-        _D.pax.push({id:pid,name:nm,
-          weight:parseFloat((f.seats||{})[idx]||0)||0,
-          bag:parseFloat((f.bags||{})[idx]||0)||0,
-          type:((f.paxType||{})[idx]==='C'?'child':'adult'),
-          group:(f.paxGroups||{})[idx]||'',
-          paymentReq:!!((f.paxPaymentReq||{})[idx]),
-          _pushedFrom:acId});
-      }
-      nameMap[key]=pid;
-    }
-    sm[parseInt(idx)]=pid;
-    var grpVal=(f.paxGroups||{})[idx];
-    if(grpVal!=null){var _dp=_D.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
-    var payReqVal=(f.paxPaymentReq||{})[idx];
-    if(payReqVal!=null){var _dp2=_D.pax.find(function(px){return px.id===pid;});if(_dp2)_dp2.paymentReq=!!payReqVal;}
+    const i=parseInt(idx);
+    if(i===0)return;                 // PIC seat
+    if(i===1&&f.coPilot)return;      // co-pilot seat
+    const nm=(f.names[i]||'').trim();if(!nm)return;
+    const pid='p_'+Date.now()+'_'+Math.floor(Math.random()*1e6);
+    ws.pax.push({id:pid,name:nm,weight:parseFloat((f.seats||{})[i]||0)||0,bag:parseFloat((f.bags||{})[i]||0)||0,group:(f.paxGroups||{})[i]||'',type:((f.paxType||{})[i]==='C'?'child':'adult'),paymentReq:!!((f.paxPaymentReq||{})[i]),infantName:(f.infantNames||{})[i]||null,pinAc:phys,_smPin:smKey,_src:src,_ts:Date.now()});
+    sm[i]=pid;
   });
-  _D.seatMap[smKey]=sm;
-  runSolver();
-  saveSeatmapWS();
-  render();
-  toast('✅ Pushed to seatmap — displaced pax moved to unassigned','ok');
-};
+  ws.seatMap[smKey]=sm;
+  S.tab='seatmap';S.selectedPax=null;window.scrollTo(0,0);
+  _seatmapSyncPool();
+  S.solverAutoApply=true;runSolver();saveSeatmapWS();render();
+  toast('✅ Loadsheet pushed to seatmap','ok');
+}
 window.pushAllLsToSeatmap=function(){
   const tabs=S.lsTabs||[];
   if(!tabs.length){toast('No open loadsheets to push.','warn');return;}

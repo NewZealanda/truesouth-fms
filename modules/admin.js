@@ -1875,57 +1875,59 @@ window.deleteSelectedLsTabs=function(){
 window.createLsTab=function(acId){S._newLsTab=false;generateLoadsheet(acId);};
 window.pushLsToSeatmap=function(){
   const f=S.form;if(!f||!f.ac)return;
-  const acId=f.ac;
-  const _D=curDisp();
-  _D.acSetup=_D.acSetup||[];
-  _D.seatMap=_D.seatMap||{};
-  _D.pax=_D.pax||[];
-  // Auto-add aircraft to seatmap if not already present — PIC/coPilot NOT overwritten (manifest owns those)
-  var _acsEntry=_D.acSetup.find(function(s){return s.acId===acId;});
-  if(!_acsEntry){
-    _acsEntry={acId:acId,pic:'',coPilot:''};
-    _D.acSetup.push(_acsEntry);
+  const ws=seatmapWS();
+  if(_wsHasContent(ws)){
+    _seatmapChoicePrompt({
+      title:'Seatmap already has passengers',
+      body:'Add this loadsheet to the seatmap as another aircraft, or replace everything first?',
+      mergeLabel:'Merge — add this loadsheet',
+      onMerge:function(){_doPushLs(f,false,true);},
+      onReplace:function(){_doPushLs(f,true,false);}
+    });
+    return;
   }
-  // Use _seatmapKey if present (matches how seatmap render resolves the key)
-  const smKey=_acsEntry._seatmapKey||acId;
-  // Clear existing seat assignments for this aircraft — displaced pax stay in workspace pax (unassigned pool)
-  delete _D.seatMap[smKey];
-  // Build name→id map from existing pax
-  const nameMap={};
-  _D.pax.forEach(function(p){if(p.name)nameMap[p.name.trim().toLowerCase()]=p.id;});
-  // Build fresh seatmap from loadsheet
+  _doPushLs(f,false,false);
+};
+// Push a loadsheet form into the seatmap workspace, replicating its exact seating.
+// duplicate=true → add as a NEW aircraft instance (keeps existing seatmap intact).
+function _doPushLs(f,replace,duplicate){
+  let ws=seatmapWS();
+  if(replace){S.smWS=bD();ws=S.smWS;}
+  ws.acSetup=ws.acSetup||[];ws.seatMap=ws.seatMap||{};ws.pax=ws.pax||[];
+  const phys=f.ac;
+  let smKey;
+  if(duplicate){
+    const existing=ws.acSetup.filter(function(x){return _ac(x._seatmapKey||x.acId)===phys;});
+    if(existing.length){
+      if(existing.length===1&&!existing[0]._displaySuffix){existing[0]._seatmapKey=existing[0]._seatmapKey||existing[0].acId;existing[0]._displaySuffix='(1)';}
+      smKey=phys+'_'+(existing.length+1);
+    } else smKey=phys;
+  } else {
+    const ex=ws.acSetup.find(function(x){return _ac(x._seatmapKey||x.acId)===phys;});
+    smKey=ex?(ex._seatmapKey||ex.acId):phys;
+  }
+  const src='LS '+phys.replace('ZK-','');
+  let acs=ws.acSetup.find(function(x){return (x._seatmapKey||x.acId)===smKey;});
+  if(!acs){acs={acId:phys,_seatmapKey:smKey,pic:f.pic||'',coPilot:f.coPilot||'',fuelInput:(f.fuel?fromKg(parseFloat(f.fuel)||0,phys):null),_srcManifest:src};if(smKey!==phys)acs._displaySuffix='('+smKey.split('_').pop()+')';ws.acSetup.push(acs);}
+  else{acs.pic=f.pic||acs.pic;acs.coPilot=f.coPilot||acs.coPilot;acs._srcManifest=src;}
+  if(replace||!ws.dep){ws.dep=f.dep;ws.dest=f.dest;ws.date=f.date;ws.etd=f.etd;ws.etdCustom=f.etdCustom||false;}
+  // Replicate the loadsheet's seat positions exactly into this instance
   const sm={};
   Object.keys(f.names||{}).forEach(function(idx){
-    if(parseInt(idx)===0)return; // Skip PIC — not pushed as pax
-    const nm=(f.names[idx]||'').trim();if(!nm)return;
-    const key=nm.toLowerCase();
-    let pid=nameMap[key];
-    if(!pid){
-      // Pax in loadsheet but not in workspace — add them
-      pid='_ls_'+key.replace(/[^a-z0-9]/g,'_');
-      if(!_D.pax.find(function(p){return p.id===pid;})){
-        _D.pax.push({id:pid,name:nm,
-          weight:parseFloat((f.seats||{})[idx]||0)||0,
-          bag:parseFloat((f.bags||{})[idx]||0)||0,
-          type:((f.paxType||{})[idx]==='C'?'child':'adult'),
-          group:(f.paxGroups||{})[idx]||'',
-          paymentReq:!!((f.paxPaymentReq||{})[idx]),
-          _pushedFrom:acId});
-      }
-      nameMap[key]=pid;
-    }
-    sm[parseInt(idx)]=pid;
-    var grpVal=(f.paxGroups||{})[idx];
-    if(grpVal!=null){var _dp=_D.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
-    var payReqVal=(f.paxPaymentReq||{})[idx];
-    if(payReqVal!=null){var _dp2=_D.pax.find(function(px){return px.id===pid;});if(_dp2)_dp2.paymentReq=!!payReqVal;}
+    const i=parseInt(idx);
+    if(i===0)return;                 // PIC seat
+    if(i===1&&f.coPilot)return;      // co-pilot seat
+    const nm=(f.names[i]||'').trim();if(!nm)return;
+    const pid='p_'+Date.now()+'_'+Math.floor(Math.random()*1e6);
+    ws.pax.push({id:pid,name:nm,weight:parseFloat((f.seats||{})[i]||0)||0,bag:parseFloat((f.bags||{})[i]||0)||0,group:(f.paxGroups||{})[i]||'',type:((f.paxType||{})[i]==='C'?'child':'adult'),paymentReq:!!((f.paxPaymentReq||{})[i]),infantName:(f.infantNames||{})[i]||null,pinAc:phys,_smPin:smKey,_src:src,_ts:Date.now()});
+    sm[i]=pid;
   });
-  _D.seatMap[smKey]=sm;
-  runSolver();
-  saveSeatmapWS();
-  render();
-  toast('✅ Pushed to seatmap — displaced pax moved to unassigned','ok');
-};
+  ws.seatMap[smKey]=sm;
+  S.tab='seatmap';S.selectedPax=null;window.scrollTo(0,0);
+  _seatmapSyncPool();
+  S.solverAutoApply=true;runSolver();saveSeatmapWS();render();
+  toast('✅ Loadsheet pushed to seatmap','ok');
+}
 window.pushAllLsToSeatmap=function(){
   const tabs=S.lsTabs||[];
   if(!tabs.length){toast('No open loadsheets to push.','warn');return;}
