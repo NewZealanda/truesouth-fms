@@ -160,7 +160,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.63';
+const APP_VER='v22.65';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -521,12 +521,17 @@ function _wsHasContent(ws){
   return Object.keys(ws.seatMap||{}).some(function(k){return Object.keys(ws.seatMap[k]||{}).length;});
 }
 function _copyManifestIntoWS(m,ws,replace){
-  ws.acSetup=ws.acSetup||[];ws.pax=ws.pax||[];ws.seatMap=ws.seatMap||{};ws.origAcMap=ws.origAcMap||{};
-  if(replace||!ws.dep){ws.dep=m.dep;ws.dest=m.dest;ws.date=m.date;ws.etd=m.etd;ws.etdCustom=m.etdCustom||false;}
-  // Aircraft come from the pushed manifest
+  ws.acSetup=ws.acSetup||[];ws.pax=ws.pax||[];ws.seatMap=ws.seatMap||{};ws.origAcMap=ws.origAcMap||{};ws.cargo=ws.cargo||{};
+  // Flight details (departure, destination, date, ETD) come from the pushed manifest
+  // on the first/replace push. On a merge we keep the seatmap's existing details.
+  if(replace||!_wsHasContent(ws)){ws.dep=m.dep;ws.dest=m.dest;ws.date=m.date;ws.etd=m.etd;ws.etdCustom=m.etdCustom||false;ws.name=m.name||'';}
+  // Cargo/pod values carry across too
+  if(m.cargo)Object.keys(m.cargo).forEach(function(k){ws.cargo[k]=JSON.parse(JSON.stringify(m.cargo[k]));});
+  // Aircraft come from the pushed manifest — full setup: PIC, co-pilot, fuel and
+  // every other field (fuelInput, burn, etc.). Preserve the workspace seat-key only.
   (m.acSetup||[]).forEach(function(s){
     var ex=ws.acSetup.find(function(x){return (x._seatmapKey||x.acId)===s.acId||x.acId===s.acId;});
-    if(ex){ex.pic=s.pic;ex.coPilot=s.coPilot;ex.fuelInput=s.fuelInput;}
+    if(ex){var _k=ex._seatmapKey,_sfx=ex._displaySuffix;Object.assign(ex,JSON.parse(JSON.stringify(s)));if(_k)ex._seatmapKey=_k;if(_sfx)ex._displaySuffix=_sfx;}
     else{ws.acSetup.push(JSON.parse(JSON.stringify(s)));}
   });
   // Passengers — fresh copies (skip legacy infant rows), dedup ids on Add
@@ -579,14 +584,44 @@ function _pushManifest(mode){
     const okAcs=(m.acSetup||[]).filter(s=>S.aircraft[s.acId]&&s.pic);
     if(!okAcs.length){toast('Select an aircraft with a PIC to auto-allocate — or use Send to Pool.','warn');return;}
   }
-  let ws=seatmapWS();
+  const ws=seatmapWS();
   if(_wsHasContent(ws)){
-    const rep=confirm('The seatmap already has passengers.\n\nOK = Replace the seatmap with this manifest.\nCancel = Add this manifest to what is already there.');
-    if(rep){S.smWS=bD();ws=S.smWS;}
-    _copyManifestIntoWS(m,ws,rep);
-  } else {
-    _copyManifestIntoWS(m,ws,true);
+    // Seatmap already has people — let the user choose Merge / Replace / Cancel.
+    _showPushPrompt(mode);
+    return;
   }
+  _doPush(mode,true);
+}
+// 3-way push prompt (Merge adds, Replace clears first, Cancel aborts).
+function _showPushPrompt(mode){
+  var ex=document.getElementById('push-prompt-ov');if(ex)ex.remove();
+  S._pushPromptMode=mode;
+  var ov=document.createElement('div');
+  ov.id='push-prompt-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML='<div style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:22px;max-width:380px;width:100%;box-shadow:0 12px 44px rgba(0,0,0,.55)">'
+    +'<div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Seatmap already has passengers</div>'
+    +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px;line-height:1.5">Add this manifest to what is already on the seatmap, or replace everything first? Your manifests are not affected either way.</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px">'
+    +'<button onclick="window._pushChoose(\'merge\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(99,179,237,.6);background:rgba(99,179,237,.12);color:#63b3ed;font-size:14px;font-weight:700;cursor:pointer">➕ Merge — add to seatmap</button>'
+    +'<button onclick="window._pushChoose(\'replace\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(239,68,68,.5);background:rgba(239,68,68,.12);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer">🗑 Replace — clear, then push</button>'
+    +'<button onclick="window._pushChoose(\'cancel\')" style="padding:11px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Cancel</button>'
+    +'</div></div>';
+  ov.addEventListener('click',function(e){if(e.target===ov)window._pushChoose('cancel');});
+  document.body.appendChild(ov);
+}
+window._pushChoose=function(choice){
+  var ov=document.getElementById('push-prompt-ov');if(ov)ov.remove();
+  var mode=S._pushPromptMode||'seat';S._pushPromptMode=null;
+  if(choice==='cancel')return; // abort the push entirely — stay on the manifest
+  _doPush(mode,choice==='replace');
+};
+function _doPush(mode,replace){
+  const m=S.dispatch; // active manifest
+  const mpax=(m&&m.pax||[]).filter(p=>!p.infant);
+  let ws=seatmapWS();
+  if(replace){S.smWS=bD();ws=S.smWS;}
+  _copyManifestIntoWS(m,ws,replace);
   // Enter the seatmap (workspace) context
   S.tab='seatmap';S.lockedAcs=[];S.mobileAcIdx=0;S.selectedPax=null;
   S.viewAcs=(ws.acSetup||[]).map(s=>s._seatmapKey||s.acId);window.scrollTo(0,0);

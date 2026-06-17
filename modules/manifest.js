@@ -183,6 +183,8 @@ function renderStep1(){
 
   return _tabBar+`
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+    <button tabindex="-1" class="btn btn-primary" style="font-size:12px" onclick="saveManifest()">💾 Save${S._loadedManifestId?'':' New'}</button>
+    ${S._loadedManifestId?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="window.saveManifestAs()" title="Save as a new manifest">💾 Save As New</button>`:''}
     <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="S.section='operations';S.tab='saved';S.savedTab='manifests';render()">📂 Open Saved</button>
     <button tabindex="-1" class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>
     ${S._undoLabel?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(245,158,11,.5);color:#f59e0b" onclick="undoManifest()">&#x21A9; Undo ${S._undoLabel}</button>`:''}
@@ -497,7 +499,7 @@ function renderStep2(){
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
         <div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0"></div>
         <span style="font-weight:700;font-size:13px">${(a?.name||id)+dispSuffix}</span>
-        <button onclick="window.removeAcFromSeatmap('${smKey}')" style="margin-left:auto;padding:2px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.1);color:#ef4444;font-size:11px;cursor:pointer" title="Clear this aircraft's seat assignments (does not remove it from the manifest)">&#x2715; Clear seats</button>
+        <button onclick="window.removeAcFromSeatmap('${smKey}')" style="margin-left:auto;padding:2px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.1);color:#ef4444;font-size:11px;cursor:pointer" title="Remove this aircraft from the seatmap — its card disappears and its passengers go to the pool (manifest not affected)">&#x2715; Remove aircraft</button>
       </div>
       ${sr?`<div style="display:flex;gap:6px;justify-content:center;margin-bottom:4px;flex-wrap:wrap">
         <span class="pill ${sr.towOk?'pill-green':sr.towFatal?'pill-red':'pill-warn'}">${sr.tow?.toFixed(0)}/${sr.mtow}kg</span>

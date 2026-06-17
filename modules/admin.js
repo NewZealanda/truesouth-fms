@@ -2006,13 +2006,15 @@ window.resetSeatmap=function(){
   toast('Seatmap cleared. Push a manifest when ready.','ok');
 };
 window.removeAcFromSeatmap=function(smKey){
-  // Seatmap is a working area — it must not edit the manifest. This only clears
-  // this aircraft's seat assignments in the workspace; the manifest is untouched.
+  // Remove this aircraft from the seatmap WORKSPACE entirely — its card disappears.
+  // Its seated passengers fall back to the pool. The manifest is never touched.
   const _D=curDisp();
   if(_D.seatMap)delete _D.seatMap[smKey];
+  if(Array.isArray(_D.acSetup))_D.acSetup=_D.acSetup.filter(function(s){return (s._seatmapKey||s.acId)!==smKey;});
+  S.selectedPax=null;
   _seatmapSyncPool();
-  runSolver();saveSeatmapWS();render();
-  toast('Seats cleared for this aircraft','ok');
+  S.solverAutoApply=true;runSolver();saveSeatmapWS();render();
+  toast('Aircraft removed from seatmap (passengers moved to the pool)','ok');
 };
 window.createBlankLsTab=function(acId){
   const a=S.aircraft[acId];if(!a)return;
