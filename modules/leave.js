@@ -398,7 +398,7 @@ function renderNotificationPanel(){
         h+='<div><button tabindex="-1" onclick="S.section=\'leave\';_lvInit();S._leave.tab=\'approvals\';S._notifOpen=false;render()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">View request →</button></div>';
       }
       if(n.type==='loadsheet_pic'&&n.reference_id){
-        h+='<div style="margin-top:6px"><button tabindex="-1" onclick="window.openLoadsheetFromNotif(\''+n.reference_id+'\')" style="font-size:12px;font-weight:700;color:#fff;background:#7c3aed;border:none;cursor:pointer;padding:6px 12px;border-radius:7px">Open loadsheet to sign →</button></div>';
+        h+='<div><button tabindex="-1" onclick="window.openLoadsheetFromNotif(\''+n.reference_id+'\')" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">Open loadsheet →</button></div>';
       }
       h+='</div>';
     });

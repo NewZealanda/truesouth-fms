@@ -411,7 +411,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.82';
+const APP_VER='v22.83';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2827,7 +2827,7 @@ function renderApp(){
             <span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'}"></span>
             <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.04em">${APP_VER}</span>
           </div>
-          ${(function(){var _unc=(S._notifications||[]).filter(function(n){return !n.read;}).length;return '<div style="position:relative;display:inline-block">'+'<button tabindex="-1" onclick="event.stopPropagation();S._notifOpen=!S._notifOpen;if(S._notifOpen)window.loadNotifications();render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:14px;color:rgba(255,255,255,.5);cursor:pointer;position:relative" title="Notifications">\u{1F514}</button>'+(_unc>0?'<span style="position:absolute;top:-3px;right:-3px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;pointer-events:none;min-width:14px;text-align:center">'+_unc+'</span>':'')+(S._notifOpen?renderNotificationPanel():'')+'</div>';})()}
+          ${(function(){var _unc=(S._notifications||[]).filter(function(n){return !n.read;}).length;return '<div style="position:relative;display:inline-block">'+'<button tabindex="-1" onclick="event.stopPropagation();S._notifOpen=!S._notifOpen;if(S._notifOpen)window.loadNotifications();render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:14px;color:rgba(255,255,255,.5);cursor:pointer;position:relative" title="Notifications">\u{1F514}</button>'+(_unc>0?'<span style="position:absolute;top:-3px;right:-3px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;pointer-events:none;min-width:14px;text-align:center">'+_unc+'</span>':'')+(S._notifOpen?('<div onclick="S._notifOpen=false;render()" style="position:fixed;inset:0;z-index:2050"></div>'+renderNotificationPanel()):'')+'</div>';})()}
           <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:12px;color:rgba(255,255,255,.4);cursor:pointer;font-weight:700" title="Help">?</button>
           <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 10px 5px 6px;border-radius:20px;cursor:pointer;font-size:11px;color:rgba(255,255,255,.75)" title="Profile & Settings">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${(S.user.name.match(/\b\w/g)||['?']).slice(0,2).join('').toUpperCase()}</div>
@@ -10801,7 +10801,7 @@ function renderNotificationPanel(){
         h+='<div><button tabindex="-1" onclick="S.section=\'leave\';_lvInit();S._leave.tab=\'approvals\';S._notifOpen=false;render()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">View request →</button></div>';
       }
       if(n.type==='loadsheet_pic'&&n.reference_id){
-        h+='<div style="margin-top:6px"><button tabindex="-1" onclick="window.openLoadsheetFromNotif(\''+n.reference_id+'\')" style="font-size:12px;font-weight:700;color:#fff;background:#7c3aed;border:none;cursor:pointer;padding:6px 12px;border-radius:7px">Open loadsheet to sign →</button></div>';
+        h+='<div><button tabindex="-1" onclick="window.openLoadsheetFromNotif(\''+n.reference_id+'\')" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">Open loadsheet →</button></div>';
       }
       h+='</div>';
     });
