@@ -688,7 +688,19 @@ window.lsNamePopup=function(idx){
 window.lsTogglePayReq=function(idx){
   const f=S.form;if(!f)return;
   if(!f.paxPaymentReq)f.paxPaymentReq={};
-  f.paxPaymentReq[idx]=!f.paxPaymentReq[idx];
+  var newVal=!f.paxPaymentReq[idx];
+  var grp=((f.paxGroups||{})[idx]||'').trim();
+  if(grp){
+    // Pay flag is locked to the group: toggling any member toggles them all
+    var gk=grp.toLowerCase();
+    Object.keys(f.names||{}).forEach(function(k){
+      if((((f.paxGroups||{})[k]||'').trim().toLowerCase())===gk){
+        if(newVal)f.paxPaymentReq[k]=true;else delete f.paxPaymentReq[k];
+      }
+    });
+  } else {
+    if(newVal)f.paxPaymentReq[idx]=true;else delete f.paxPaymentReq[idx];
+  }
   S.formDirty=true;autoSaveLS();safeRender();
 };
 window.lsInlineWt=function(idx,el){

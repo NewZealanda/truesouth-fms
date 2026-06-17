@@ -819,7 +819,7 @@ window.savePaxFieldPopup=function(){
 ;
 window.rmInfant=function(i){if(!S.dispatch.pax[i])return;S.dispatch.pax[i].infantName=null;S.dispatch.pax[i]._ts=Date.now();autoSaveDispatch();render();};
 window.lsRmInfant=function(idx){if(S.form.infantNames)delete S.form.infantNames[idx];// also clear from name field if encoded there
-var nm=S.form.names&&S.form.names[idx]||'';if(nm.includes(' + '))S.form.names[idx]=nm.split(' + ')[0].trim();render();};
+var nm=S.form.names&&S.form.names[idx]||'';if(nm.includes(' + '))S.form.names[idx]=nm.split(' + ')[0].trim();autoSaveLS();render();};
 window.rmPax=i=>{S._paxUndo=S._paxUndo||[];var removed=S.dispatch.pax.splice(i,1)[0];if(removed)S._paxUndo.push(removed);autoSaveDispatch();render();};
 window.undoPax=function(){if(!S._paxUndo||!S._paxUndo.length)return;var p=S._paxUndo.pop();p._ts=Date.now();S.dispatch.pax.push(p);autoSaveDispatch();render();};
 window.removeEmptyPax=function(){
@@ -1644,10 +1644,10 @@ window.lsGrp=function(idx,val){
   }
   autoSaveLS();_lsSafeRender();
 };
-window.lsN=(i,v)=>{S.form.names[i]=v;};window.lsS=(i,v)=>{S.form.seats[i]=v;setTimeout(_lsSafeRender,150);};window.lsB=(i,v)=>{S.form.bags[i]=v;setTimeout(_lsSafeRender,150);};window.lsC=(i,v)=>{if(!S.form.cargo)S.form.cargo={};S.form.cargo[i]=v;S.formDirty=true;setTimeout(_lsSafeRender,150);};
-window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));setTimeout(_lsSafeRender,150);};
-window.lsBurn=(v,acId)=>{if(!v||v===''){const _a=S.aircraft[acId];S.form.burnOff=(_a&&_a.layout==='ga8')?'35':(_a&&_a.burnDef?String(_a.burnDef):'');}else{S.form.burnOff=v;}setTimeout(_lsSafeRender,150);};
-window.lsGndBurn=(v,acId)=>{const n=parseFloat(v);S.form.gndBurn=isNaN(n)?null:String(toKg(n,acId));setTimeout(_lsSafeRender,150);};
+window.lsN=(i,v)=>{S.form.names[i]=v;autoSaveLS();};window.lsS=(i,v)=>{S.form.seats[i]=v;autoSaveLS();setTimeout(_lsSafeRender,150);};window.lsB=(i,v)=>{S.form.bags[i]=v;autoSaveLS();setTimeout(_lsSafeRender,150);};window.lsC=(i,v)=>{if(!S.form.cargo)S.form.cargo={};S.form.cargo[i]=v;S.formDirty=true;autoSaveLS();setTimeout(_lsSafeRender,150);};
+window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));autoSaveLS();setTimeout(_lsSafeRender,150);};
+window.lsBurn=(v,acId)=>{if(!v||v===''){const _a=S.aircraft[acId];S.form.burnOff=(_a&&_a.layout==='ga8')?'35':(_a&&_a.burnDef?String(_a.burnDef):'');}else{S.form.burnOff=v;}autoSaveLS();setTimeout(_lsSafeRender,150);};
+window.lsGndBurn=(v,acId)=>{const n=parseFloat(v);S.form.gndBurn=isNaN(n)?null:String(toKg(n,acId));autoSaveLS();setTimeout(_lsSafeRender,150);};
 window.clearSig=()=>{S.form.sig=null;S.sigTypedName='';autoSaveLS();render();};
 
 // Apply typed name as a signature
