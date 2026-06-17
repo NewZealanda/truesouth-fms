@@ -220,7 +220,7 @@ function renderLoginInner(){
           <label style="display:block;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase">Email</label>
           <div style="display:flex;align-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;overflow:hidden">
             <input id="li_e" type="text" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
-              style="flex:1;padding:11px 14px;background:transparent;border:none;color:#fff;font-size:14px;outline:none;min-width:0;max-width:calc(100% - 160px)"
+              style="flex:1;padding:11px 14px;background:transparent;border:none;color:#fff;font-size:14px;outline:none;min-width:0;width:100%"
               oninput="window.updateLoginSuffix()" onfocus="document.getElementById('li_e_sfx').style.display='inline';window.updateLoginSuffix()" onblur="if(!this.value)document.getElementById('li_e_sfx').style.display='none';" onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
             <span id="li_e_sfx" style="display:none;flex-shrink:0;padding:0 12px 0 0;color:rgba(255,255,255,.45);font-size:12px;white-space:nowrap;align-self:center">@truesouthflights.co.nz</span>
           </div>

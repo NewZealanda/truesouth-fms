@@ -3125,7 +3125,8 @@ window.calcTTIS=function(){
 // --- Role Permissions Table ---
 let _permSaveTimer=null;
 window.toggleRolePerm=function(role,perm,val){
-  if(typeof hasRolePerm==='function'&&!hasRolePerm('admin_users')){toast('Not authorised to change permissions.','warn');return;}
+  var _permOk=(S.user&&(S.user.superAdmin||S.user.role==='superadmin'))||(typeof hasRolePerm==='function'&&hasRolePerm('admin_users'));
+  if(!_permOk){toast('Not authorised to change permissions.','warn');return;}
   if(!S.rolePerms)S.rolePerms={};
   if(!S.rolePerms[role])S.rolePerms[role]=Object.assign({},(DEFAULT_ROLE_PERMS[role])||{});
   if(perm==='roster_leave'){S.rolePerms[role]['roster']=val;S.rolePerms[role]['leave']=val;}

@@ -280,7 +280,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.96';
+const APP_VER='v22.98';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1197,8 +1197,14 @@ async function loadAll(){
     try{
       const _rpCached=lsGet('ts_role_perms');
       if(_rpCached) S.rolePerms=_rpCached;
-      const _rpRow=await fetch(`${SB}/rest/v1/ts_settings?key=eq.role_perms&select=value`,{headers:SH});
-      if(_rpRow.ok){const _rpData=await _rpRow.json();if(_rpData[0]?.value){S.rolePerms=JSON.parse(_rpData[0].value);lsSet('ts_role_perms',S.rolePerms);}}
+      // Don't clobber an in-progress permissions edit. A reconnect (e.g. switching
+      // devices/backgrounding) can re-run loadAll mid-edit; without this guard the DB
+      // re-fetch overwrites S.rolePerms before the debounced save fires, silently
+      // dropping the toggle the user just made.
+      if(Date.now()-(S._permsEditTs||0)>5000){
+        const _rpRow=await fetch(`${SB}/rest/v1/ts_settings?key=eq.role_perms&select=value`,{headers:SH});
+        if(_rpRow.ok){const _rpData=await _rpRow.json();if(_rpData[0]?.value){S.rolePerms=JSON.parse(_rpData[0].value);lsSet('ts_role_perms',S.rolePerms);}}
+      }
     }catch(e){}
 
     S.syncStatus='ok';
@@ -2067,7 +2073,14 @@ async function _doLogin(emailArg,passArg){
   }
 }
 
-window.tryLogin=function(){_doLogin();};
+window.tryLogin=async function(){
+  if(S._loggingIn)return;                 // guard against double-submit
+  S._loggingIn=true;
+  var _b=document.querySelector('#login-form button[type=submit]');
+  if(_b){_b.disabled=true;_b.textContent='Signing in…';_b.style.opacity='.7';}
+  try{await _doLogin();}
+  finally{S._loggingIn=false;if(_b&&document.body.contains(_b)){_b.disabled=false;_b.innerHTML='✈ Sign In';_b.style.opacity='1';}}
+};
 window.updateLoginSuffix=function(){var s=document.getElementById('li_e_sfx');var e=document.getElementById('li_e');if(s&&e)s.style.display=e.value.includes('@')?'none':'';};
 function logout(){
   if(AUTH_PHASE_C){
