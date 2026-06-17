@@ -377,7 +377,11 @@ function _renderApprovals(lv,role){
 function renderNotificationPanel(){
   var notifs=S._notifications||[];
   var unread=notifs.filter(function(n){return !n.read;}).length;
-  var h='<div id="notif-panel" onclick="event.stopPropagation()" style="position:absolute;top:calc(100% + 6px);right:0;width:320px;max-height:420px;overflow-y:auto;background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);z-index:2100">';
+  var _nMob=!!S.mobileView||(typeof window!=='undefined'&&window.innerWidth<560);
+  var _nPos=_nMob
+    ?'position:fixed;top:56px;right:8px;left:8px;width:auto;max-height:75vh'
+    :'position:absolute;top:calc(100% + 6px);right:0;width:320px;max-width:calc(100vw - 16px);max-height:420px';
+  var h='<div id="notif-panel" onclick="event.stopPropagation()" style="'+_nPos+';overflow-y:auto;background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);z-index:2100">';
   h+='<div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#111827">';
   h+='<span style="font-size:13px;font-weight:700;color:var(--text)">🔔 Notifications</span>';
   if(unread>0){h+='<button tabindex="-1" onclick="window.markNotificationsRead()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0">Mark all read</button>';}
