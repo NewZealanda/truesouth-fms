@@ -367,16 +367,16 @@ const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true, charter:true, maintenance:true, roster:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true},
-  admin:       {operations:true, charter:true, maintenance:true, roster:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true},
-  cx_manager:  {operations:true, charter:false,maintenance:false,roster:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false},
-  pilot:       {operations:true, charter:false,maintenance:true, roster:true, leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true},
-  desk:        {operations:true, charter:true, maintenance:true, roster:true, leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
-  maint:       {operations:false,charter:false,maintenance:true, roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
-  maintenance: {operations:false,charter:false,maintenance:true, roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
-  ground_staff:{operations:false,charter:false,maintenance:false,roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false},
-  accounts: {operations:false,charter:false,maintenance:false,roster:true, leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false},
-  marketing: {operations:false,charter:false,maintenance:false,roster:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false}
+  superadmin:  {operations:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true},
+  admin:       {operations:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true},
+  cx_manager:  {operations:true, charter:false,maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false},
+  pilot:       {operations:true, charter:false,maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true},
+  desk:        {operations:true, charter:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
+  maint:       {operations:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
+  maintenance: {operations:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
+  ground_staff:{operations:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false},
+  accounts: {operations:false,charter:false,maintenance:false,roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false},
+  marketing: {operations:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false}
 };
 function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
 
@@ -411,7 +411,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.76';
+const APP_VER='v22.77';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2192,7 +2192,36 @@ function _applyWorkspace(ws){
       _render=true;
     }
   });
+  _restoreLastView();
   if(_render)safeRender();
+}
+// Return to the same page (section / tab / open loadsheet or manifest) after a reload,
+// as long as that item is still open.
+function _restoreLastView(){
+  try{
+    var v=JSON.parse(localStorage.getItem('ts_lastview')||'null');
+    if(!v||!v.section)return;
+    if(v.section==='operations'){
+      S.section='operations';
+      if(v.activeTabId&&(S.lsTabs||[]).find(function(t){return t.id===v.activeTabId;})){
+        var t=S.lsTabs.find(function(x){return x.id===v.activeTabId;});
+        S.activeTabId=t.id;S.form=t.form;S.lsAc=(t.acId||'').replace('ZK-','');S.editId=t.id;S.tab='loadsheet';S._newLsTab=false;
+        return;
+      }
+      S.tab=v.tab||'manifest';
+      if(v.savedTab)S.savedTab=v.savedTab;
+      if((v.tab==='manifest'||v.tab==='seatmap')&&v.activeManifestTabId&&S._manifestDispatches&&S._manifestDispatches[v.activeManifestTabId]&&(S.manifestTabs||[]).find(function(t){return t.id===v.activeManifestTabId;})){
+        if(S.activeManifestTabId&&S._manifestDispatches[S.activeManifestTabId])S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+        S.activeManifestTabId=v.activeManifestTabId;
+        S.dispatch=JSON.parse(JSON.stringify(S._manifestDispatches[v.activeManifestTabId]));
+      }
+    } else {
+      // Non-operations sections (roster, leave, settings, maintenance, charter…)
+      S.section=v.section;
+      if(v.tab)S.tab=v.tab;
+      if(v.savedTab)S.savedTab=v.savedTab;
+    }
+  }catch(e){}
 }
 
 window.addEventListener('pagehide',function(){saveWorkspace();});
@@ -2333,6 +2362,8 @@ function render(){
   // Auto-detect mobile on first render
   if(typeof S._mobileInit==='undefined'){S._mobileInit=true;if(typeof S.mobileView==='undefined')S.mobileView=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)&&window.innerWidth<800;}
   document.body.classList.toggle('mobile-view',!!S.mobileView);
+  // ── Remember the current view so a reload returns to the same page ──
+  if(S.user){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'manifest',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
   // ── Preserve focused input across re-renders ──
   const _ae=document.activeElement;
   const _aeId=_ae?.id||null;
@@ -2792,7 +2823,7 @@ function renderApp(){
             <span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'}"></span>
             <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.04em">${APP_VER}</span>
           </div>
-          ${(function(){var _unc=(S._notifications||[]).filter(function(n){return !n.read;}).length;return '<div style="position:relative;display:inline-block">'+'<button tabindex="-1" onclick="event.stopPropagation();S._notifOpen=!S._notifOpen;if(S._notifOpen)window.loadNotifications();render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:14px;color:rgba(255,255,255,.5);cursor:pointer;position:relative" title="Notifications">\u{1F514}</button>'+(_unc>0?'<span style="position:absolute;top:-3px;right:-3px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;pointer-events:none;min-width:14px;text-align:center">'+_unc+'</span>':'')+'</div>'+(S._notifOpen?'<div onclick="event.stopPropagation()" style="position:absolute;top:calc(100% + 4px);right:0;z-index:2100">'+renderNotificationPanel()+'</div>':'');})()}
+          ${(function(){var _unc=(S._notifications||[]).filter(function(n){return !n.read;}).length;return '<div style="position:relative;display:inline-block">'+'<button tabindex="-1" onclick="event.stopPropagation();S._notifOpen=!S._notifOpen;if(S._notifOpen)window.loadNotifications();render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:14px;color:rgba(255,255,255,.5);cursor:pointer;position:relative" title="Notifications">\u{1F514}</button>'+(_unc>0?'<span style="position:absolute;top:-3px;right:-3px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;pointer-events:none;min-width:14px;text-align:center">'+_unc+'</span>':'')+(S._notifOpen?renderNotificationPanel():'')+'</div>';})()}
           <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:12px;color:rgba(255,255,255,.4);cursor:pointer;font-weight:700" title="Help">?</button>
           <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 10px 5px 6px;border-radius:20px;cursor:pointer;font-size:11px;color:rgba(255,255,255,.75)" title="Profile & Settings">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${(S.user.name.match(/\b\w/g)||['?']).slice(0,2).join('').toUpperCase()}</div>
@@ -6926,6 +6957,7 @@ window.saveUnsigned=async()=>{
   if(_savingTab)delete _savingTab.originalForm;
   lsSet('ts_loadsheets_cache',S.saved);
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned'}]);
+  window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog(isEdit?'loadsheet_edit':'loadsheet_save',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Draft saved.','ok');
@@ -6957,6 +6989,7 @@ window.submitLsInPlace=async function(){
   S.editId=id;S.formDirty=false;
   var _t=S.lsTabs.find(function(t){return t.id===id;});if(_t)delete _t.originalForm;
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
+  window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Loadsheet submitted ✓','ok');
@@ -8355,6 +8388,7 @@ function renderAdminPerms(){
     {k:'charter',       lbl:'Charter',        tip:'View and manage charter quotes'},
     {k:'maintenance',   lbl:'Maint',          tip:'Access to the maintenance section'},
     {k:'roster_leave',  lbl:'Roster & Leave', tip:'View the roster and submit/view own leave requests'},
+    {k:'roster_edit',   lbl:'Roster Edit',    tip:'Edit the roster and build patterns (otherwise view-only)'},
     {k:'leave_approve', lbl:'Approvals',      tip:'Approve or decline leave requests from staff'},
     {k:'admin_crew',    lbl:'Crew',           tip:'View and edit crew profiles and endorsements'},
     {k:'admin_users',   lbl:'Users',          tip:'Manage user accounts, roles and passwords'},
@@ -9621,10 +9655,13 @@ function renderRoster(){
     window.loadRosterLeave&&window.loadRosterLeave();
   }
   var tab=S.rosterTab||'view';
+  var _rRole=S.user&&S.user.role||'desk';
+  var _canEditRoster=_rRole==='superadmin'||_rRole==='admin'||hasRolePerm('roster_edit');
+  if(tab==='build'&&!_canEditRoster)tab='view'; // build pattern is edit-only
   var h='<div class="card" style="padding:0;overflow:hidden">';
   h+='<div style="display:flex;align-items:center;border-bottom:2px solid var(--border2)">';
   h+=_rTabBtn('📅 Roster','view',tab==='view');
-  h+=_rTabBtn('🔨 Build Pattern','build',tab==='build');
+  if(_canEditRoster)h+=_rTabBtn('🔨 Build Pattern','build',tab==='build');
   h+='<div style="flex:1"></div>';
   h+='</div>';
   h+=(tab==='build'?renderRosterBuild():renderRosterView());
@@ -9640,7 +9677,8 @@ function _rTabBtn(label,id,active){
 function renderRosterView(){
   var role=S.user&&S.user.role||'desk';
   var isAdminPlus=role==='superadmin'||role==='admin';
-  var canEdit=isAdminPlus&&!S.rosterLocked;
+  var canEditRoster=isAdminPlus||hasRolePerm('roster_edit'); // view = roster perm; edit = roster_edit perm
+  var canEdit=canEditRoster&&!S.rosterLocked;
   var today=new Date();today.setHours(0,0,0,0);
   var todayStr=_rIso(today);
   var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -9701,7 +9739,7 @@ function renderRosterView(){
   if(_payAllowed){
     h+='<button tabindex="-1" onclick="window.rosterTogglePayWeek()" title="Toggle pay-week display (Thursday–Wednesday)" style="padding:5px 10px;border-radius:8px;border:1px solid '+(_payWeek?'rgba(34,197,94,.5)':'var(--border2)')+';background:'+(_payWeek?'rgba(34,197,94,.12)':'var(--card2)')+';color:'+(_payWeek?'#4ade80':'var(--text3)')+';font-size:11px;font-weight:700;cursor:pointer">'+(_payWeek?'Pay wk · Thu–Wed':'Pay week')+'</button>';
   }
-  if(isAdminPlus){
+  if(canEditRoster){
     var lk=!!S.rosterLocked;
     h+='<button tabindex="-1" onclick="S.rosterLocked=!S.rosterLocked;render()" style="padding:5px 10px;border-radius:8px;border:1px solid '+(lk?'#f59e0b':'var(--border2)')+';background:'+(lk?'rgba(245,158,11,.12)':'var(--card2)')+';color:'+(lk?'#fbbf24':'var(--text3)')+';font-size:12px;cursor:pointer" title="Toggle roster lock">'+(lk?'🔒 Locked':'🔓 Unlocked')+'</button>';
     if(!lk){
@@ -10478,9 +10516,9 @@ function _renderMyLeave(lv){
     // Dates
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">';
     h+='<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:6px">Start Date</div>';
-    h+='<input type="date" value="'+f.startDate+'" oninput="S._leave.form.startDate=this.value;render()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+    h+='<input type="date" value="'+f.startDate+'" onchange="S._leave.form.startDate=this.value;safeRender()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
     h+='<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:6px">End Date</div>';
-    h+='<input type="date" value="'+f.endDate+'" oninput="S._leave.form.endDate=this.value;render()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+    h+='<input type="date" value="'+f.endDate+'" onchange="S._leave.form.endDate=this.value;safeRender()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
     h+='</div>';
     if(f.startDate&&f.endDate&&days>0){
       var _wd=_lvWorkingDays(S.user&&S.user.id,f.startDate,f.endDate);
@@ -10500,6 +10538,7 @@ function _renderMyLeave(lv){
   }
 
   var reqs=lv.myReqs;
+  if(reqs)reqs=reqs.filter(function(r){return r&&r.user_id===(S.user&&S.user.id);}); // My Leave = own requests only
   if(reqs===null){
     return h+'<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Loading...</div>';
   }
@@ -10571,9 +10610,9 @@ function _renderApprovals(lv,role){
     h+='<button tabindex="-1" onclick="S._leave.filter.status=\''+s.id+'\';render()" style="padding:5px 12px;border-radius:7px;border:1.5px solid '+(on?'#c084fc':'rgba(255,255,255,.12)')+';background:'+(on?'rgba(124,58,237,.18)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.45)')+';font-size:12px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+s.lbl+(cnt>0?' ('+cnt+')':'')+'</button>';
   });
   h+='<div style="display:flex;gap:6px;align-items:center;margin-left:auto">';
-  h+='<input type="date" value="'+f.dateFrom+'" oninput="S._leave.filter.dateFrom=this.value;render()" title="From" style="padding:5px 9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--text);font-size:12px">';
+  h+='<input type="date" value="'+f.dateFrom+'" onchange="S._leave.filter.dateFrom=this.value;safeRender()" title="From" style="padding:5px 9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--text);font-size:12px">';
   h+='<span style="color:var(--text3);font-size:12px">to</span>';
-  h+='<input type="date" value="'+f.dateTo+'" oninput="S._leave.filter.dateTo=this.value;render()" title="To" style="padding:5px 9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--text);font-size:12px">';
+  h+='<input type="date" value="'+f.dateTo+'" onchange="S._leave.filter.dateTo=this.value;safeRender()" title="To" style="padding:5px 9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--text);font-size:12px">';
   h+='<button tabindex="-1" onclick="S._leave._allLoaded=false;window.loadAllLeave()" style="padding:5px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;color:rgba(255,255,255,.5);font-size:12px;cursor:pointer">⟳</button>';
   h+='</div>';
   h+='</div>';
@@ -10827,6 +10866,23 @@ window._notifyLeaveUser=async function(userId,action,leaveType,startDate,endDate
     +(action==='approved'?'approved ✓':'declined'+(comment?' — '+comment:''));
   await sbU('ts_notifications',[{user_id:userId,type:'leave_'+action,message:msg,read:false,created_at:new Date().toISOString()}]);
   if(S.user?.id===userId)window.loadNotifications();
+};
+
+// Notify the PIC's user account when a loadsheet is saved with them as PIC.
+// Message format: "BF has created a loadsheet for you. ZK-SLA QN-MF 0930"
+window._notifyPicLoadsheet=async function(f){
+  try{
+    if(!f||!f.pic)return;
+    var pic=String(f.pic).trim();
+    var picUser=(S.users||[]).find(function(u){return u&&(u.name===pic||u.linkedCrew===pic||(u.name&&u.name.toLowerCase()===pic.toLowerCase()));});
+    if(!picUser||!picUser.id)return;
+    if(S.user&&picUser.id===S.user.id)return; // don't notify yourself
+    var code=(typeof _rCode==='function'&&S.user)?_rCode(S.user):((S.user&&S.user.name&&S.user.name.split(' ')[0])||'Someone');
+    var route=((f.dep||'').replace(/^NZ/,''))+'-'+((f.dest||'').replace(/^NZ/,''));
+    var etd=(f.etd||'').replace(':','');
+    var msg=code+' has created a loadsheet for you. '+(f.ac||'')+' '+route+(etd?' '+etd:'');
+    await sbU('ts_notifications',[{user_id:picUser.id,type:'loadsheet_pic',message:msg,read:false,created_at:new Date().toISOString()}]);
+  }catch(e){}
 };
 
 window._triggerLeaveEmail=async function(requestId,action){

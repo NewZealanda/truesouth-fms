@@ -128,10 +128,13 @@ function renderRoster(){
     window.loadRosterLeave&&window.loadRosterLeave();
   }
   var tab=S.rosterTab||'view';
+  var _rRole=S.user&&S.user.role||'desk';
+  var _canEditRoster=_rRole==='superadmin'||_rRole==='admin'||hasRolePerm('roster_edit');
+  if(tab==='build'&&!_canEditRoster)tab='view'; // build pattern is edit-only
   var h='<div class="card" style="padding:0;overflow:hidden">';
   h+='<div style="display:flex;align-items:center;border-bottom:2px solid var(--border2)">';
   h+=_rTabBtn('📅 Roster','view',tab==='view');
-  h+=_rTabBtn('🔨 Build Pattern','build',tab==='build');
+  if(_canEditRoster)h+=_rTabBtn('🔨 Build Pattern','build',tab==='build');
   h+='<div style="flex:1"></div>';
   h+='</div>';
   h+=(tab==='build'?renderRosterBuild():renderRosterView());
@@ -147,7 +150,8 @@ function _rTabBtn(label,id,active){
 function renderRosterView(){
   var role=S.user&&S.user.role||'desk';
   var isAdminPlus=role==='superadmin'||role==='admin';
-  var canEdit=isAdminPlus&&!S.rosterLocked;
+  var canEditRoster=isAdminPlus||hasRolePerm('roster_edit'); // view = roster perm; edit = roster_edit perm
+  var canEdit=canEditRoster&&!S.rosterLocked;
   var today=new Date();today.setHours(0,0,0,0);
   var todayStr=_rIso(today);
   var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -208,7 +212,7 @@ function renderRosterView(){
   if(_payAllowed){
     h+='<button tabindex="-1" onclick="window.rosterTogglePayWeek()" title="Toggle pay-week display (Thursday–Wednesday)" style="padding:5px 10px;border-radius:8px;border:1px solid '+(_payWeek?'rgba(34,197,94,.5)':'var(--border2)')+';background:'+(_payWeek?'rgba(34,197,94,.12)':'var(--card2)')+';color:'+(_payWeek?'#4ade80':'var(--text3)')+';font-size:11px;font-weight:700;cursor:pointer">'+(_payWeek?'Pay wk · Thu–Wed':'Pay week')+'</button>';
   }
-  if(isAdminPlus){
+  if(canEditRoster){
     var lk=!!S.rosterLocked;
     h+='<button tabindex="-1" onclick="S.rosterLocked=!S.rosterLocked;render()" style="padding:5px 10px;border-radius:8px;border:1px solid '+(lk?'#f59e0b':'var(--border2)')+';background:'+(lk?'rgba(245,158,11,.12)':'var(--card2)')+';color:'+(lk?'#fbbf24':'var(--text3)')+';font-size:12px;cursor:pointer" title="Toggle roster lock">'+(lk?'🔒 Locked':'🔓 Unlocked')+'</button>';
     if(!lk){

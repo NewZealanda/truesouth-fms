@@ -116,16 +116,16 @@ const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true, charter:true, maintenance:true, roster:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true},
-  admin:       {operations:true, charter:true, maintenance:true, roster:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true},
-  cx_manager:  {operations:true, charter:false,maintenance:false,roster:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false},
-  pilot:       {operations:true, charter:false,maintenance:true, roster:true, leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true},
-  desk:        {operations:true, charter:true, maintenance:true, roster:true, leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
-  maint:       {operations:false,charter:false,maintenance:true, roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
-  maintenance: {operations:false,charter:false,maintenance:true, roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
-  ground_staff:{operations:false,charter:false,maintenance:false,roster:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false},
-  accounts: {operations:false,charter:false,maintenance:false,roster:true, leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false},
-  marketing: {operations:false,charter:false,maintenance:false,roster:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false}
+  superadmin:  {operations:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true},
+  admin:       {operations:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true},
+  cx_manager:  {operations:true, charter:false,maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false},
+  pilot:       {operations:true, charter:false,maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true},
+  desk:        {operations:true, charter:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
+  maint:       {operations:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
+  maintenance: {operations:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
+  ground_staff:{operations:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false},
+  accounts: {operations:false,charter:false,maintenance:false,roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false},
+  marketing: {operations:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false}
 };
 function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
 
@@ -160,7 +160,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.76';
+const APP_VER='v22.77';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1941,7 +1941,36 @@ function _applyWorkspace(ws){
       _render=true;
     }
   });
+  _restoreLastView();
   if(_render)safeRender();
+}
+// Return to the same page (section / tab / open loadsheet or manifest) after a reload,
+// as long as that item is still open.
+function _restoreLastView(){
+  try{
+    var v=JSON.parse(localStorage.getItem('ts_lastview')||'null');
+    if(!v||!v.section)return;
+    if(v.section==='operations'){
+      S.section='operations';
+      if(v.activeTabId&&(S.lsTabs||[]).find(function(t){return t.id===v.activeTabId;})){
+        var t=S.lsTabs.find(function(x){return x.id===v.activeTabId;});
+        S.activeTabId=t.id;S.form=t.form;S.lsAc=(t.acId||'').replace('ZK-','');S.editId=t.id;S.tab='loadsheet';S._newLsTab=false;
+        return;
+      }
+      S.tab=v.tab||'manifest';
+      if(v.savedTab)S.savedTab=v.savedTab;
+      if((v.tab==='manifest'||v.tab==='seatmap')&&v.activeManifestTabId&&S._manifestDispatches&&S._manifestDispatches[v.activeManifestTabId]&&(S.manifestTabs||[]).find(function(t){return t.id===v.activeManifestTabId;})){
+        if(S.activeManifestTabId&&S._manifestDispatches[S.activeManifestTabId])S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+        S.activeManifestTabId=v.activeManifestTabId;
+        S.dispatch=JSON.parse(JSON.stringify(S._manifestDispatches[v.activeManifestTabId]));
+      }
+    } else {
+      // Non-operations sections (roster, leave, settings, maintenance, charter…)
+      S.section=v.section;
+      if(v.tab)S.tab=v.tab;
+      if(v.savedTab)S.savedTab=v.savedTab;
+    }
+  }catch(e){}
 }
 
 window.addEventListener('pagehide',function(){saveWorkspace();});

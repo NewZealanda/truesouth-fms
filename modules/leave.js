@@ -132,9 +132,9 @@ function _renderMyLeave(lv){
     // Dates
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">';
     h+='<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:6px">Start Date</div>';
-    h+='<input type="date" value="'+f.startDate+'" oninput="S._leave.form.startDate=this.value;render()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+    h+='<input type="date" value="'+f.startDate+'" onchange="S._leave.form.startDate=this.value;safeRender()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
     h+='<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:6px">End Date</div>';
-    h+='<input type="date" value="'+f.endDate+'" oninput="S._leave.form.endDate=this.value;render()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+    h+='<input type="date" value="'+f.endDate+'" onchange="S._leave.form.endDate=this.value;safeRender()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
     h+='</div>';
     if(f.startDate&&f.endDate&&days>0){
       var _wd=_lvWorkingDays(S.user&&S.user.id,f.startDate,f.endDate);
@@ -154,6 +154,7 @@ function _renderMyLeave(lv){
   }
 
   var reqs=lv.myReqs;
+  if(reqs)reqs=reqs.filter(function(r){return r&&r.user_id===(S.user&&S.user.id);}); // My Leave = own requests only
   if(reqs===null){
     return h+'<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Loading...</div>';
   }
@@ -225,9 +226,9 @@ function _renderApprovals(lv,role){
     h+='<button tabindex="-1" onclick="S._leave.filter.status=\''+s.id+'\';render()" style="padding:5px 12px;border-radius:7px;border:1.5px solid '+(on?'#c084fc':'rgba(255,255,255,.12)')+';background:'+(on?'rgba(124,58,237,.18)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.45)')+';font-size:12px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+s.lbl+(cnt>0?' ('+cnt+')':'')+'</button>';
   });
   h+='<div style="display:flex;gap:6px;align-items:center;margin-left:auto">';
-  h+='<input type="date" value="'+f.dateFrom+'" oninput="S._leave.filter.dateFrom=this.value;render()" title="From" style="padding:5px 9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--text);font-size:12px">';
+  h+='<input type="date" value="'+f.dateFrom+'" onchange="S._leave.filter.dateFrom=this.value;safeRender()" title="From" style="padding:5px 9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--text);font-size:12px">';
   h+='<span style="color:var(--text3);font-size:12px">to</span>';
-  h+='<input type="date" value="'+f.dateTo+'" oninput="S._leave.filter.dateTo=this.value;render()" title="To" style="padding:5px 9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--text);font-size:12px">';
+  h+='<input type="date" value="'+f.dateTo+'" onchange="S._leave.filter.dateTo=this.value;safeRender()" title="To" style="padding:5px 9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--text);font-size:12px">';
   h+='<button tabindex="-1" onclick="S._leave._allLoaded=false;window.loadAllLeave()" style="padding:5px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;color:rgba(255,255,255,.5);font-size:12px;cursor:pointer">⟳</button>';
   h+='</div>';
   h+='</div>';
@@ -481,6 +482,23 @@ window._notifyLeaveUser=async function(userId,action,leaveType,startDate,endDate
     +(action==='approved'?'approved ✓':'declined'+(comment?' — '+comment:''));
   await sbU('ts_notifications',[{user_id:userId,type:'leave_'+action,message:msg,read:false,created_at:new Date().toISOString()}]);
   if(S.user?.id===userId)window.loadNotifications();
+};
+
+// Notify the PIC's user account when a loadsheet is saved with them as PIC.
+// Message format: "BF has created a loadsheet for you. ZK-SLA QN-MF 0930"
+window._notifyPicLoadsheet=async function(f){
+  try{
+    if(!f||!f.pic)return;
+    var pic=String(f.pic).trim();
+    var picUser=(S.users||[]).find(function(u){return u&&(u.name===pic||u.linkedCrew===pic||(u.name&&u.name.toLowerCase()===pic.toLowerCase()));});
+    if(!picUser||!picUser.id)return;
+    if(S.user&&picUser.id===S.user.id)return; // don't notify yourself
+    var code=(typeof _rCode==='function'&&S.user)?_rCode(S.user):((S.user&&S.user.name&&S.user.name.split(' ')[0])||'Someone');
+    var route=((f.dep||'').replace(/^NZ/,''))+'-'+((f.dest||'').replace(/^NZ/,''));
+    var etd=(f.etd||'').replace(':','');
+    var msg=code+' has created a loadsheet for you. '+(f.ac||'')+' '+route+(etd?' '+etd:'');
+    await sbU('ts_notifications',[{user_id:picUser.id,type:'loadsheet_pic',message:msg,read:false,created_at:new Date().toISOString()}]);
+  }catch(e){}
 };
 
 window._triggerLeaveEmail=async function(requestId,action){
