@@ -178,7 +178,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.86';
+const APP_VER='v22.87';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -261,7 +261,7 @@ function calcFormWB(form){
   const tow=wt,towCog=wt?mom/wt:0;
   const burnKg=form.burnOff?burnToKg(parseFloat(form.burnOff)||0,form.ac):burnToKg(a.burnDef,form.ac);
   wt-=burnKg;mom-=burnKg*a.fuelArm;
-  return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn:a.gndBurn,tow,towCog,burnKg,lw:wt,lwCog:mom/wt,
+  return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn:a.gndBurn,tow,towCog,burnKg,lw:wt,lwCog:wt?mom/wt:0,
     towOk:tow<=a.mtow,lwOk:wt<=a.mlw,cogOk:towCog>=a.cogMin&&towCog<=a.cogMax,
     mtow:a.mtow,mlw:a.mlw,cogMin:a.cogMin,cogMax:a.cogMax};
 }
@@ -867,7 +867,7 @@ function runSolver(){
         newSm[1]=pid;
         if(prev1) newSm[i]=prev1; else delete newSm[i];
         // Recalc CoG with this swap
-        const setup=(_D.acSetup||[]).find(s=>s.acId===acId);
+        const setup=(_D.acSetup||[]).find(s=>(s._seatmapKey||s.acId)===acId);
         const picW=setup?S.crew.find(c=>c.n===setup.pic)?.w||0:0;
         let wt=a.ew+picW, mom=a.em+picW*a.seats[0].arm;
         const fW=fuelKgForSetup(acId);
@@ -917,7 +917,7 @@ function runSolver(){
 
 // ── State ──
 function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
-function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',paxType:{},paxGroups:{},sig:null};}
+function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',paxType:{},paxGroups:{},paxPaymentReq:{},sig:null};}
 function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
 let S={
@@ -1200,13 +1200,6 @@ function initRealtime(){
         if(msg.event==='postgres_changes'){
           const tbl=msg.payload&&msg.payload.data&&msg.payload.data.table;
           if(tbl){_rtPending.add(tbl);clearTimeout(_rtFlush);_rtFlush=setTimeout(flushRtUpdates,500);}
-        }
-        if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
-          if(msg.payload&&msg.payload.status==='ok'){
-            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);safeRender();
-          } else if(msg.payload&&msg.payload.status==='error'){
-            S.rtStatus='offline';safeRender();
-          }
         }
         if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
           if(msg.payload&&msg.payload.status==='ok'){
@@ -1694,7 +1687,7 @@ document.addEventListener('visibilitychange',function(){
     if(S.user&&awayMs>60000&&!_rUnsaved){location.reload();return;}
     // Brief switch — just reconnect realtime if it dropped, and resume presence.
     if(S.user&&(!_rtWs||_rtWs.readyState!==1)){try{initRealtime();}catch(e){}}
-    if(S._presSection){broadcastPresence(S._presSection);_presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},9000);}
+    if(S._presSection){clearInterval(_presInterval);broadcastPresence(S._presSection);_presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},9000);}
   }
 });
 window.addEventListener('beforeunload',function(e){if(S._presSection)broadcastPresence(null);if(typeof _rosterUnsaved==='function'&&_rosterUnsaved()){e.preventDefault();e.returnValue='';return '';}});
@@ -1907,7 +1900,7 @@ async function _doLogin(emailArg,passArg){
 
 window.tryLogin=function(){_doLogin();};
 window.updateLoginSuffix=function(){var s=document.getElementById('li_e_sfx');var e=document.getElementById('li_e');if(s&&e)s.style.display=e.value.includes('@')?'none':'';};
-function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.removeItem('ts_remembered_user');broadcastPresence(null);if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}S.rtStatus='offline';S.rtPresence={};S._presSection=null;clearInterval(_presInterval);render();}
+function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.removeItem('ts_remembered_user');S._notifications=[];S.__notifStr='';S._notifOpen=false;broadcastPresence(null);if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}S.rtStatus='offline';S.rtPresence={};S._presSection=null;clearInterval(_presInterval);render();}
 
 // ── Shared Workspace Persistence ──
 async function saveWorkspace(){

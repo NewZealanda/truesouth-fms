@@ -14,7 +14,7 @@ var LEAVE_SC={
 };
 
 function _lvEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function _lvDays(s,e,partial){if(!s||!e)return 0;var d=Math.round((new Date(e)-new Date(s))/86400000)+1;return partial?Math.max(0.5,d-0.5):d;}
+function _lvDays(s,e,partial){if(!s||!e)return 0;var d=Math.round((new Date(e+'T00:00:00')-new Date(s+'T00:00:00'))/86400000)+1;return partial?Math.max(0.5,d-0.5):d;}
 // Count the actual leave days used = days in range the person is rostered ON
 // (excludes RDOs / days already off per the roster).
 function _lvWorkingDays(userId,s,e){
@@ -22,10 +22,13 @@ function _lvWorkingDays(userId,s,e){
   var roster=S.roster||{};
   var u=(S.users||[]).find(function(x){return x.id===userId;})||{id:userId,name:''};
   var off={rdo:1,off:1};
+  var ini=(typeof _rCode==='function')?_rCode(u):'';
   var cur=new Date(s+'T00:00:00'),end=new Date(e+'T00:00:00'),n=0,guard=0;
   while(cur<=end&&guard++<3660){
     var ds=(typeof _rIso==='function')?_rIso(cur):cur.toISOString().slice(0,10);
-    var st=(typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):((roster[ds]||{})[userId]||'');
+    // Read the PERSISTED roster only — never the unsaved draft or leave overlay —
+    // so a stored leave-day total is deterministic regardless of transient UI state.
+    var st=(roster[ds]&&(roster[ds][userId]||(ini&&roster[ds][ini])))||'';
     if(!off[st])n++;
     cur.setDate(cur.getDate()+1);
   }
@@ -719,6 +722,7 @@ window.markNotificationsRead=async function(){
     method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify({read:true})
   });
   (S._notifications||[]).forEach(function(n){n.read=true;});
+  S.__notifStr=JSON.stringify(S._notifications||[]);
   S._notifOpen=false;
   safeRender();
 };

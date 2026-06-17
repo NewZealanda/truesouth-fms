@@ -1581,15 +1581,19 @@ window.lsCopyFlight=function(targetAc){
 window.lsTrimExcess=()=>{
   const a=S.aircraft[S.form.ac];if(!a)return;
   const max=a.seats.length;
-  [S.form.seats,S.form.bags,S.form.names,S.form.infantNames].forEach(obj=>{
+  [S.form.seats,S.form.bags,S.form.names,S.form.infantNames,S.form.paxGroups,S.form.paxType,S.form.paxPaymentReq].forEach(obj=>{
+    if(!obj)return;
     Object.keys(obj).forEach(i=>{if(parseInt(i)>=max)delete obj[i];});
   });
-  render();
+  autoSaveLS();render();
 };
 window.lsDelPax=idx=>{
   _lsUndoPush();
   delete S.form.names[idx];delete S.form.seats[idx];delete S.form.bags[idx];
   if(S.form.infantNames)delete S.form.infantNames[idx];
+  if(S.form.paxGroups)delete S.form.paxGroups[idx];
+  if(S.form.paxType)delete S.form.paxType[idx];
+  if(S.form.paxPaymentReq)delete S.form.paxPaymentReq[idx];
   autoSaveLS();render();
 };
 window.lsUndo=function(){
