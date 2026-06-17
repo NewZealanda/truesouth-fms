@@ -1750,6 +1750,23 @@ window.handleSubmit=async()=>{
 };
 window.newSheet=function(){S._newLsTab=true;S.activeTabId=null;S.tab='manifest';render();};
 
+// ── Drag-to-reorder loadsheet tabs ──
+window._lsDragStart=function(e,id){S._lsDrag=id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}};
+window._lsDragEnd=function(){S._lsDrag=null;};
+window._lsDrop=function(e,toId){
+  if(e){e.preventDefault();e.stopPropagation();}
+  var from=S._lsDrag||(e&&e.dataTransfer&&e.dataTransfer.getData('text/plain'));
+  S._lsDrag=null;
+  if(!from||from===toId)return;
+  var arr=S.lsTabs||[];
+  var fi=arr.findIndex(function(t){return t.id===from;});
+  if(fi<0)return;
+  var moved=arr.splice(fi,1)[0];
+  var ti=arr.findIndex(function(t){return t.id===toId;});
+  if(ti<0)arr.push(moved);else arr.splice(ti,0,moved);
+  window.saveWorkspace&&window.saveWorkspace();
+  render();
+};
 window.switchLsTab=function(id){
   var tab=S.lsTabs.find(function(t){return t.id===id;});
   if(!tab)return;

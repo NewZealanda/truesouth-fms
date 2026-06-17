@@ -408,7 +408,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.65';
+const APP_VER='v22.66';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2837,7 +2837,7 @@ function renderOperations(){
       if(S._lsManageMode){
         _l3+='<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;border:1px solid '+(_sel?'#ef4444':_col+'55')+';background:'+(_sel?'rgba(239,68,68,.15)':_col+'18')+';cursor:pointer;flex-shrink:0;font-size:11px;font-weight:700;color:'+(_sel?'#fca5a5':_col)+'"><input type="checkbox" '+(_sel?'checked':'')+' onchange="window.toggleLsTabSel(\''+tab.id+'\')" style="cursor:pointer">'+_ac+'</label>';
       } else {
-        _l3+='<div style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1.5px solid '+(_isAct?_col:_col+'55')+';flex-shrink:0"><button tabindex="-1" onclick="window.switchLsTab(\''+tab.id+'\')" style="padding:4px 9px;font-size:11px;font-weight:700;background:'+(_isAct?_col+'55':_col+'18')+';border:none;cursor:pointer;color:'+(_isAct?_col:_col+'cc')+';white-space:nowrap">'+_ac+(_signed?' ✓':'')+' </button><button tabindex="-1" onclick="window.closeLsTab(\''+tab.id+'\')" style="padding:4px 7px;font-size:13px;line-height:1;background:'+(_isAct?_col+'33':_col+'0f')+';border:none;border-left:1px solid '+(_isAct?_col:_col+'44')+';cursor:pointer;color:'+(_isAct?_col:_col+'99')+'" title="Close">&#xd7;</button></div>';
+        _l3+='<div draggable="true" ondragstart="window._lsDragStart(event,\''+tab.id+'\')" ondragover="event.preventDefault()" ondrop="window._lsDrop(event,\''+tab.id+'\')" ondragend="window._lsDragEnd&&window._lsDragEnd()" style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1.5px solid '+(_isAct?_col:_col+'55')+';flex-shrink:0;cursor:grab"><button tabindex="-1" onclick="window.switchLsTab(\''+tab.id+'\')" style="padding:4px 9px;font-size:11px;font-weight:700;background:'+(_isAct?_col+'55':_col+'18')+';border:none;cursor:pointer;color:'+(_isAct?_col:_col+'cc')+';white-space:nowrap">'+_ac+(_signed?' ✓':'')+' </button><button tabindex="-1" onclick="window.closeLsTab(\''+tab.id+'\')" style="padding:4px 7px;font-size:13px;line-height:1;background:'+(_isAct?_col+'33':_col+'0f')+';border:none;border-left:1px solid '+(_isAct?_col:_col+'44')+';cursor:pointer;color:'+(_isAct?_col:_col+'99')+'" title="Close">&#xd7;</button></div>';
       }
     });
     if(S._lsManageMode){
@@ -2914,6 +2914,23 @@ function _manifestTabLabel(tab){
   const ac=(d.acSetup||[]).map(function(s){return s.acId.replace('ZK-','');}).filter(Boolean);
   return ac.length?ac.join('+'):'New';
 }
+// ── Drag-to-reorder manifest tabs ──
+window._mtDragStart=function(e,id){S._mtDrag=id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}};
+window._mtDragEnd=function(){S._mtDrag=null;};
+window._mtDrop=function(e,toId){
+  if(e){e.preventDefault();e.stopPropagation();}
+  var from=S._mtDrag||(e&&e.dataTransfer&&e.dataTransfer.getData('text/plain'));
+  S._mtDrag=null;
+  if(!from||from===toId)return;
+  var arr=S.manifestTabs||[];
+  var fi=arr.findIndex(function(t){return t.id===from;});
+  if(fi<0)return;
+  var moved=arr.splice(fi,1)[0];
+  var ti=arr.findIndex(function(t){return t.id===toId;});
+  if(ti<0)arr.push(moved);else arr.splice(ti,0,moved);
+  window.saveWorkspace&&window.saveWorkspace();
+  render();
+};
 function renderStep1(){
   _initManifestTabs();
   // Empty state — all tabs closed
@@ -2941,8 +2958,8 @@ function renderStep1(){
           <span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>
         </div>`;
       }
-      return`<div onclick="window.switchManifestTab('${tab.id}')" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid ${active?'var(--acc)':'var(--border2)'};background:${active?'rgba(124,58,237,.15)':'var(--card2)'};cursor:pointer;white-space:nowrap;flex-shrink:0;font-size:12px;font-weight:${active?'700':'500'};color:${active?'var(--acc)':'var(--text2)'}">
-        <span style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${lbl}</span>
+      return`<div draggable="true" ondragstart="window._mtDragStart(event,'${tab.id}')" ondragover="event.preventDefault()" ondrop="window._mtDrop(event,'${tab.id}')" ondragend="window._mtDragEnd&&window._mtDragEnd()" onclick="window.switchManifestTab('${tab.id}')" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid ${active?'var(--acc)':'var(--border2)'};background:${active?'rgba(124,58,237,.15)':'var(--card2)'};cursor:grab;white-space:nowrap;flex-shrink:0;font-size:12px;font-weight:${active?'700':'500'};color:${active?'var(--acc)':'var(--text2)'}">
+        <span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;pointer-events:none">${lbl}</span>
         <span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>
       </div>`;
     }).join('')}
@@ -6878,6 +6895,23 @@ window.handleSubmit=async()=>{
 };
 window.newSheet=function(){S._newLsTab=true;S.activeTabId=null;S.tab='manifest';render();};
 
+// ── Drag-to-reorder loadsheet tabs ──
+window._lsDragStart=function(e,id){S._lsDrag=id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}};
+window._lsDragEnd=function(){S._lsDrag=null;};
+window._lsDrop=function(e,toId){
+  if(e){e.preventDefault();e.stopPropagation();}
+  var from=S._lsDrag||(e&&e.dataTransfer&&e.dataTransfer.getData('text/plain'));
+  S._lsDrag=null;
+  if(!from||from===toId)return;
+  var arr=S.lsTabs||[];
+  var fi=arr.findIndex(function(t){return t.id===from;});
+  if(fi<0)return;
+  var moved=arr.splice(fi,1)[0];
+  var ti=arr.findIndex(function(t){return t.id===toId;});
+  if(ti<0)arr.push(moved);else arr.splice(ti,0,moved);
+  window.saveWorkspace&&window.saveWorkspace();
+  render();
+};
 window.switchLsTab=function(id){
   var tab=S.lsTabs.find(function(t){return t.id===id;});
   if(!tab)return;

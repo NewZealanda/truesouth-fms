@@ -38,6 +38,23 @@ function _manifestTabLabel(tab){
   const ac=(d.acSetup||[]).map(function(s){return s.acId.replace('ZK-','');}).filter(Boolean);
   return ac.length?ac.join('+'):'New';
 }
+// ── Drag-to-reorder manifest tabs ──
+window._mtDragStart=function(e,id){S._mtDrag=id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}};
+window._mtDragEnd=function(){S._mtDrag=null;};
+window._mtDrop=function(e,toId){
+  if(e){e.preventDefault();e.stopPropagation();}
+  var from=S._mtDrag||(e&&e.dataTransfer&&e.dataTransfer.getData('text/plain'));
+  S._mtDrag=null;
+  if(!from||from===toId)return;
+  var arr=S.manifestTabs||[];
+  var fi=arr.findIndex(function(t){return t.id===from;});
+  if(fi<0)return;
+  var moved=arr.splice(fi,1)[0];
+  var ti=arr.findIndex(function(t){return t.id===toId;});
+  if(ti<0)arr.push(moved);else arr.splice(ti,0,moved);
+  window.saveWorkspace&&window.saveWorkspace();
+  render();
+};
 function renderStep1(){
   _initManifestTabs();
   // Empty state — all tabs closed
@@ -65,8 +82,8 @@ function renderStep1(){
           <span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>
         </div>`;
       }
-      return`<div onclick="window.switchManifestTab('${tab.id}')" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid ${active?'var(--acc)':'var(--border2)'};background:${active?'rgba(124,58,237,.15)':'var(--card2)'};cursor:pointer;white-space:nowrap;flex-shrink:0;font-size:12px;font-weight:${active?'700':'500'};color:${active?'var(--acc)':'var(--text2)'}">
-        <span style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${lbl}</span>
+      return`<div draggable="true" ondragstart="window._mtDragStart(event,'${tab.id}')" ondragover="event.preventDefault()" ondrop="window._mtDrop(event,'${tab.id}')" ondragend="window._mtDragEnd&&window._mtDragEnd()" onclick="window.switchManifestTab('${tab.id}')" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid ${active?'var(--acc)':'var(--border2)'};background:${active?'rgba(124,58,237,.15)':'var(--card2)'};cursor:grab;white-space:nowrap;flex-shrink:0;font-size:12px;font-weight:${active?'700':'500'};color:${active?'var(--acc)':'var(--text2)'}">
+        <span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;pointer-events:none">${lbl}</span>
         <span onclick="event.stopPropagation();window.closeManifestTab('${tab.id}')" style="font-size:11px;opacity:.5;line-height:1;cursor:pointer;padding:0 1px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">&#x2715;</span>
       </div>`;
     }).join('')}
