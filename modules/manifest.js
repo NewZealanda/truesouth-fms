@@ -343,14 +343,15 @@ window.applySwapFix=function(acId,fromIdx,toIdx){
 };
 
 // === restored: cabin seatmap renderer (was lost in modularization, caused 'something went wrong' on Seatmap) ===
-function renderCabinSVG(acId,interactive,form,_sz,_ht){
+function renderCabinSVG(acId,interactive,form,_sz,_ht,smKey){
   if(typeof seatSz==='undefined'){var seatSz=_sz||64;var seatHt=_ht||52;}
-  const a=S.aircraft[acId];if(!a)return'';
+  const a=_acSpec(acId);if(!a)return'';
+  const _key=smKey||acId; // seat-data key: the duplicate-instance key if there is one
   const layout=acLayout(acId);
   const isGA8=a.layout==='ga8';
-  const col=AC_COL[acId]||'#1e6b8c';
+  const col=AC_COL[_ac(acId)]||'#1e6b8c';
   const d=curDisp();
-  const sm=interactive?(d.seatMap||{})[acId]||{}:{};
+  const sm=interactive?(d.seatMap||{})[_key]||{}:{};
   const formSm=form?form.names:null; // for loadsheet view
   const rows=layout.filter(r=>r!=='spacer');
   const hasSpacerBefore=(idx)=>layout.slice(0,layout.indexOf(layout.filter(r=>r!=='spacer')[idx])).some(r=>r==='spacer');
@@ -363,7 +364,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
     // Compute row total weight
     const rowWt=row.filter(c=>!c.crew&&c.i!==0&&!(c.i===1&&seat1IsCoPilot(acId))).reduce((s,c)=>{
       if(interactive){
-        const pid=d.seatMap[acId]?.[c.i];const p=pid?paxById(pid):null;
+        const pid=sm[c.i];const p=pid?paxById(pid):null;
         return s+(p?parseFloat(p.weight||0)+parseFloat(p.bag||0):0);
       } else if(form){
         return s+parseFloat(form.seats?.[c.i]||0)+parseFloat(form.bags?.[c.i]||0);
@@ -386,8 +387,10 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
           :nm?('background:rgba(255,255,255,.93);border-left:4px solid '+(gc||col)+';border-radius:8px')
           :'background:rgba(255,255,255,.05);border-radius:8px';
         const lsTextCol=nm&&!isCrew?'color:#1a2035':'color:rgba(255,255,255,.7)';
-        seatRowsHTML+=`<div class="seat ${isCrew?'crew':nm?'filled':''} ${S._selFormSeat===cell.i?'sel-src':''}" style="width:${seatSz}px;height:${seatHt}px;${lsSeatStyle}${S._selFormSeat===cell.i?';box-shadow:0 0 0 2px #f59e0b':''}" onclick="${!isCrew?`tapFormSeat(${cell.i},'${acId}')`:''}" draggable="${!isCrew&&nm?'true':'false'}" ondragstart="if(${!isCrew&&!!nm})startDragForm(event,${cell.i},'${acId}')" ondragover="event.preventDefault()" ondrop="dropFormSeat(event,${cell.i},'${acId}')">
-          <span class="seat-lbl" style="${nm&&!isCrew?'color:#475569;opacity:.7':''}font-size:9px">${cell.lbl}</span>
+        const _payF=!isCrew&&nm&&(form.paxPaymentReq||{})[cell.i];
+        seatRowsHTML+=`<div class="seat ${isCrew?'crew':nm?'filled':''} ${S._selFormSeat===cell.i?'sel-src':''}" style="position:relative;overflow:hidden;width:${seatSz}px;height:${seatHt}px;${lsSeatStyle}${_payF?';border:2px solid #ef4444':''}${S._selFormSeat===cell.i?';box-shadow:0 0 0 2px #f59e0b':''}" onclick="${!isCrew?`tapFormSeat(${cell.i},'${acId}')`:''}" draggable="${!isCrew&&nm?'true':'false'}" ondragstart="if(${!isCrew&&!!nm})startDragForm(event,${cell.i},'${acId}')" ondragover="event.preventDefault()" ondrop="dropFormSeat(event,${cell.i},'${acId}')">
+          ${_payF?`<div style="position:absolute;top:0;left:0;right:0;background:#ef4444;color:#fff;font-size:7px;font-weight:900;text-align:center;line-height:1.5">$ TO PAY</div>`:''}
+          <span class="seat-lbl" style="${_payF?'margin-top:10px;':''}${nm&&!isCrew?'color:#475569;opacity:.7':''}font-size:9px">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc};top:3px;right:3px"></div>`:''}
           ${nm?`<div class="seat-name" style="${lsTextCol};font-weight:700;font-size:${seatSz<52?'7px':'9px'}">${nm.split(' ')[0].slice(0,seatSz<52?5:9)}${(form?.infantNames?.[cell.i])?' 👶':''}</div><div class="seat-wt" style="${lsTextCol};font-size:${seatSz<52?'7px':'8px'}">${wt>0?wt+'kg':''}</div>`:isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.85);font-weight:700">${isPIC?'PIC':'CP'}</div>`:''}
         </div>`;
@@ -395,13 +398,14 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
         // Manifest seat map view
         const pid=sm[cell.i];const p=pid?paxById(pid):null;
         const gc=p?.group?.trim()?groupColor(p.group.trim()):null;
-        const setup=d.acSetup.find(s=>s.acId===acId);
+        const setup=d.acSetup.find(s=>(s._seatmapKey||s.acId)===_key);
         const crewName=isPIC?(setup?.pic||'PIC'):(setup?.coPilot||'CP');
         const isSrcSel=S.selectedPax&&p&&p.id===S.selectedPax;
         const isDrop=S.selectedPax&&!p&&!isCrew;
         const origAc=p&&d.origAcMap?d.origAcMap[p.id]:null;
-        const movedIn=origAc&&origAc!==acId;
-        const leftBorderCol=movedIn?(AC_COL[origAc]||col):col;
+        const movedIn=origAc&&origAc!==_key;
+        const leftBorderCol=movedIn?(AC_COL[_ac(origAc)]||col):col;
+        const needPay=p&&!isCrew&&p.paymentReq;
         // Filled: white bg + dark text. Empty: dark bg + light text. Crew: CSS handles.
         const seatStyle=isCrew?''
           :p?('background:rgba(255,255,255,.93);border-left:4px solid '+leftBorderCol+';border-radius:8px')
@@ -409,12 +413,13 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
         // Text colour set per-seat based on background
         const textCol=p&&!isCrew?'color:#1a2035':'color:rgba(255,255,255,.7)';
         seatRowsHTML+=`<div class="seat ${isCrew?'crew':p?'filled':''} ${isSrcSel?'sel-src':''} ${isDrop?'drop-target':''}"
-          style="width:66px;height:54px;${seatStyle}" 
-          onclick="tapSeat(${cell.i},'${acId}')"
-          draggable="${!!p&&!isCrew}" ondragstart="if(${!!p&&!isCrew})startDrag(event,'${p?p.id:''}','${acId}',${cell.i})"
-          ondragover="event.preventDefault()" ondrop="dropOnSeat(event,${cell.i},'${acId}')">
-          <span class="seat-lbl" style="${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
-          ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
+          style="width:66px;height:54px;position:relative;overflow:hidden;${seatStyle}${needPay?';border:2px solid #ef4444':''}"
+          onclick="tapSeat(${cell.i},'${_key}')"
+          draggable="${!!p&&!isCrew}" ondragstart="if(${!!p&&!isCrew})startDrag(event,'${p?p.id:''}','${_key}',${cell.i})"
+          ondragover="event.preventDefault()" ondrop="dropOnSeat(event,${cell.i},'${_key}')">
+          ${needPay?`<div style="position:absolute;top:0;left:0;right:0;background:#ef4444;color:#fff;font-size:8px;font-weight:900;letter-spacing:.04em;text-align:center;line-height:1.5;padding:0 2px">$ TO PAY</div>`:''}
+          <span class="seat-lbl" style="${needPay?'margin-top:11px;':''}${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
+          ${gc?`<div class="seat-dot" style="background:${gc}${needPay?';top:13px':''}"></div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
             :p?`<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?' 👶':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
         </div>`;
@@ -511,6 +516,11 @@ function renderStep2(){
     const sr=S.solverRes[smKey];
     const paxCount=paxSeatIdxs(id).filter(i=>(d.seatMap[smKey]||{})[i]).length;
     const paxTotal=paxSeatIdxs(id).length;
+    // Pax breakdown in AC format, e.g. 12A1C1i
+    let _A=0,_C=0,_I=0;
+    Object.values(d.seatMap[smKey]||{}).forEach(function(pidv){var pp=paxById(pidv);if(!pp)return;if(pp.type==='child')_C++;else _A++;if(pp.infantName)_I++;});
+    const paxFmt=((_A?_A+'A':'')+(_C?_C+'C':'')+(_I?_I+'i':''))||'0';
+    const _srcTag=(setup._srcManifest||'').replace(/[<>&"]/g,'');
     const _ok=sr?.towOk&&sr?.lwOk&&sr?.cogOk;const _warn=sr&&!_ok&&!sr?.towFatal&&!sr?.lwFatal;
     return`<div style="margin-bottom:16px;width:fit-content">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
@@ -522,12 +532,13 @@ function renderStep2(){
         <span class="pill ${sr.towOk?'pill-green':sr.towFatal?'pill-red':'pill-warn'}">${sr.tow?.toFixed(0)}/${sr.mtow}kg</span>
         <span class="pill ${cogPillClass(sr.cog,sr.cogMin,sr.cogMax)}">CoG ${sr.cog?.toFixed(2)}"</span>
       </div>`:''}
-      <div style="display:flex;justify-content:center;margin-bottom:8px">
-        <span class="pill pill-blue">${paxCount}/${paxTotal} pax</span>
+      <div style="display:flex;justify-content:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+        <span class="pill pill-blue">${paxFmt} · ${paxCount}/${paxTotal}</span>
+        ${_srcTag?`<span class="pill" style="background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.45);color:#c4b5fd" title="Pushed from this manifest">📋 ${_srcTag}</span>`:''}
       </div>
       <div style="display:inline-flex;flex-direction:column" ondragover="event.preventDefault()" ondrop="dropOnPool(event,'${smKey}')">
         ${renderCabinSVG(id,true,null,undefined,undefined,smKey)}
-        <button onclick="window.createLsTab('${id}')" style="margin-top:8px;padding:9px;border-radius:8px;border:none;background:${_ok?'linear-gradient(135deg,#166534,#15803d)':_warn?'linear-gradient(135deg,#78350f,#92400e)':'#7f1d1d'};color:#fff;font-size:13px;font-weight:700;cursor:pointer;align-self:stretch">
+        <button onclick="window.createLsTab('${smKey}')" style="margin-top:8px;padding:9px;border-radius:8px;border:none;background:${_ok?'linear-gradient(135deg,#166534,#15803d)':_warn?'linear-gradient(135deg,#78350f,#92400e)':'#7f1d1d'};color:#fff;font-size:13px;font-weight:700;cursor:pointer;align-self:stretch">
           Create Loadsheet ${_ok?'&#x2713;':_warn?'&#x26a0;':'&#x26d4;'}
         </button>
       </div>

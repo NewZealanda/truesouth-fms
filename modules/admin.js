@@ -1456,9 +1456,11 @@ window.closeManifestTab=function(id){
 // ── Generate loadsheet from manifest ──
 window.openAcLoadsheet=function(acId){generateLoadsheet(acId);};
 function generateLoadsheet(acId){
-  const a=S.aircraft[acId];const d=curDisp();if(!a)return;
-  const setup=d.acSetup.find(s=>s.acId===acId);const form=bF();
-  form.ac=acId;form.dep=d.dep;form.dest=d.dest;form.date=d.date;form.etd=d.etd;form.etdCustom=d.etdCustom||false;
+  // acId may be a duplicate-instance seat key (e.g. "ZK-SLA_2"); resolve specs/physical.
+  const d=curDisp();const a=_acSpec(acId);if(!a)return;
+  const phys=_ac(acId);
+  const setup=d.acSetup.find(s=>(s._seatmapKey||s.acId)===acId)||d.acSetup.find(s=>s.acId===phys);const form=bF();
+  form.ac=phys;form.dep=d.dep;form.dest=d.dest;form.date=d.date;form.etd=d.etd;form.etdCustom=d.etdCustom||false;
   form.paxPaymentReq={};
   form.pic=setup?.pic||'';form.coPilot=setup?.coPilot||'';
   const picCrew=anyCrewList().find(c=>c.n===form.pic);if(picCrew&&picCrew.w){form.seats[0]=String(picCrew.w);form.names[0]=form.pic;}
@@ -1471,16 +1473,16 @@ function generateLoadsheet(acId){
   const seatIdxs=paxSeatIdxs(acId)||[];seatIdxs.forEach(function(i){if(i<=1)return;const p=sm[i]?paxById(sm[i]):null;if(p){form.seats[i]=p.weight||'';form.bags[i]=p.bag||'';form.names[i]=p.name||'';if(p.infantName)form.infantNames[i]=p.infantName;if(p.type==='child')form.paxType[i]='C';form.paxGroups[i]=p.group||'';if(p.paymentReq)form.paxPaymentReq[i]=true;}});
   // seat 1 infant (non-copilot)
   {const p=sm[1]?paxById(sm[1]):null;if(p&&p.infantName)form.infantNames[1]=p.infantName;}
-  const _lsAcCode=acId.replace('ZK-','');
+  const _lsAcCode=phys.replace('ZK-','');
   const _newTabId='ls_'+_lsAcCode+'_'+Date.now();
   S.lsForms[_lsAcCode]=form;S.lsAc=_lsAcCode;S.form=form;S.editId=_newTabId;S.formDirty=false;
   // Populate _unallocated: pax pinned to this aircraft but not given a seat
-  {const _spIds=new Set(Object.values(sm));const _unass=(d.pax||[]).filter(function(p){return p.pinAc===acId&&!_spIds.has(p.id)&&!p.infant&&p.name;});var _pool=_uaPool();_unass.forEach(function(p){if(!_pool.some(function(x){return x.name===p.name&&String(x.weight)===String(p.weight);}))_pool.push({name:p.name,weight:p.weight,bag:p.bag||0,infant:p.infantName||null,group:p.group||'',type:p.type||'adult',paymentReq:!!p.paymentReq});});form._unallocated=_pool;}
+  {const _spIds=new Set(Object.values(sm));const _unass=(d.pax||[]).filter(function(p){return p.pinAc===phys&&!_spIds.has(p.id)&&!p.infant&&p.name;});var _pool=_uaPool();_unass.forEach(function(p){if(!_pool.some(function(x){return x.name===p.name&&String(x.weight)===String(p.weight);}))_pool.push({name:p.name,weight:p.weight,bag:p.bag||0,infant:p.infantName||null,group:p.group||'',type:p.type||'adult',paymentReq:!!p.paymentReq});});form._unallocated=_pool;}
   // Fuel/burnOff defaults by aircraft type
   if(a.layout==='ga8'&&(!form.burnOff||parseFloat(form.burnOff)<30)){form.burnOff='35';}
   if(a.layout==='c208'){form.fuel=String(Math.round(800*0.453592));}
   var _savedAt=new Date().toISOString();
-  S.lsTabs.push({id:_newTabId,acId:acId,form:form,status:'draft',savedAt:_savedAt,isNew:true});
+  S.lsTabs.push({id:_newTabId,acId:phys,form:form,status:'draft',savedAt:_savedAt,isNew:true});
   S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
   // Save as draft — use clone so S.saved entry is not aliased to live edit buffer
   var _formSnap=dc(form);
@@ -1513,10 +1515,10 @@ window.lsAc=v=>{
     // Move excess passengers to _unallocated instead of deleting
     excessIdxs.forEach(function(i){
       const nm=kN[i]||'';const wt=kS[i]||'';const bg=kB[i]||'';const inf=(kI||{})[i]||'';
-      if(nm||wt){_uaPool().push({name:nm,weight:wt,bag:bg,infant:inf||null});}
+      if(nm||wt){_uaPool().push({name:nm,weight:wt,bag:bg,infant:inf||null,group:(S.form.paxGroups||{})[i]||'',type:((S.form.paxType||{})[i]==='C'?'child':'adult'),paymentReq:!!((S.form.paxPaymentReq||{})[i])});}
     });
-    [S.form.seats,S.form.bags,S.form.names,S.form.infantNames].forEach(obj=>{
-      Object.keys(obj).forEach(i=>{if(parseInt(i)>=maxIdx)delete obj[i];});
+    [S.form.seats,S.form.bags,S.form.names,S.form.infantNames,S.form.paxGroups,S.form.paxType,S.form.paxPaymentReq].forEach(obj=>{
+      if(obj)Object.keys(obj).forEach(i=>{if(parseInt(i)>=maxIdx)delete obj[i];});
     });
     if(excessIdxs.size>0){
       toast('⚠ '+excessIdxs.size+' passenger(s) removed — '+acDisp(v)+' only has '+(maxIdx-1)+' pax seats.','warn');
@@ -1539,18 +1541,19 @@ window.lsCopyFlight=function(targetAc){
   const tgtSeatCount=tgtAc?tgtAc.seats.length:999;
   tgt.dep=src.dep;tgt.dest=src.dest;tgt.date=src.date;tgt.etd=src.etd;tgt.etdCustom=src.etdCustom||false;
   tgt.pic=src.pic;tgt.coPilot=src.coPilot;
-  tgt.names={};tgt.seats={};tgt.bags={};tgt.infantNames={};
-  const srcInfants=src.infantNames||{};
+  tgt.names={};tgt.seats={};tgt.bags={};tgt.infantNames={};tgt.paxGroups={};tgt.paxType={};tgt.paxPaymentReq={};
+  const srcInfants=src.infantNames||{},srcGroups=src.paxGroups||{},srcTypes=src.paxType||{},srcPay=src.paxPaymentReq||{};
   Object.keys(src.names||{}).forEach(function(k){
     const i=parseInt(k);
     const nm=src.names[i]||'';const wt=src.seats[i]||'';
-    const bg=src.bags[i]||'';const inf=srcInfants[i]||'';
+    const bg=src.bags[i]||'';const inf=srcInfants[i]||'';const grp=srcGroups[i]||'';const typ=srcTypes[i]||'';const pay=!!srcPay[i];
     if(!nm&&!wt)return;
     if(i<tgtSeatCount){
       tgt.names[i]=nm;tgt.seats[i]=wt;tgt.bags[i]=bg;
       if(inf){if(!tgt.infantNames)tgt.infantNames={};tgt.infantNames[i]=inf;}
+      if(grp)tgt.paxGroups[i]=grp;if(typ==='C')tgt.paxType[i]='C';if(pay)tgt.paxPaymentReq[i]=true;
     } else {
-      _uaPool().push({name:nm,weight:wt,bag:bg,infant:inf});
+      _uaPool().push({name:nm,weight:wt,bag:bg,infant:inf||null,group:grp,type:(typ==='C'?'child':'adult'),paymentReq:pay});
     }
   });
   tgt.cargo=Object.assign({},src.cargo||{});
@@ -1611,13 +1614,15 @@ window.lsCoPilot=v=>{
   const prevWt=f.seats[1]||'';
   const prevBag=f.bags[1]||'';
   const prevInfant=(f.infantNames||{})[1]||'';
+  const prevGroup=(f.paxGroups||{})[1]||'';const prevType=(f.paxType||{})[1]||'';const prevPay=!!((f.paxPaymentReq||{})[1]);
   const wasPassenger=prevName&&prevName!==f.coPilot;
   f.coPilot=v;
   const cr=anyCrewList().find(x=>x.n===v);
   if(v&&cr&&cr.w){
     if(wasPassenger){
-      _uaPool().push({name:prevName,weight:prevWt,bag:prevBag,infant:prevInfant});
+      _uaPool().push({name:prevName,weight:prevWt,bag:prevBag,infant:prevInfant||null,group:prevGroup,type:(prevType==='C'?'child':'adult'),paymentReq:prevPay});
     }
+    if(f.paxGroups)delete f.paxGroups[1];if(f.paxType)delete f.paxType[1];if(f.paxPaymentReq)delete f.paxPaymentReq[1];
     f.seats[1]=String(cr.w);f.names[1]=v;
   } else if(!v){
     // Copilot cleared - seat 1 becomes empty pax seat

@@ -160,7 +160,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.67';
+const APP_VER='v22.68';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -187,17 +187,22 @@ const dc=x=>JSON.parse(JSON.stringify(x));
 const ap=k=>APS.map(x=>`<option value="${x}"${S[k]===x||''?' selected':''}>${x}</option>`).join('');
 function paxById(id){var d=curDisp();return(d&&d.pax||[]).find(p=>p.id===id);}
 function groupColor(g,paxList){const gs=[...new Set((paxList||(curDisp()||{}).pax||[]).map(p=>p.group).filter(Boolean))];const i=gs.indexOf(g);return i>=0?GRP_COLOURS[i%GRP_COLOURS.length]:'#64748b';}
-function fuelUnit(acId){return S.aircraft[acId]?.layout==='ga8'?'L':'lbs';}
-function toKg(v,acId){const n=parseFloat(v)||0;const a=S.aircraft[acId];if(!a)return n;return a.layout==='ga8'?n*AVGAS:n*LB;}
-function fromKg(kg,acId){return S.aircraft[acId]?.layout==='ga8'?kg/AVGAS:kg/LB;}
-function fuelKgForSetup(acId){const a=S.aircraft[acId];if(!a)return 0;const s=(curDisp().acSetup||[]).find(x=>(x._seatmapKey||x.acId)===acId||x.acId===acId);const raw=s?.fuelInput!=null?s.fuelInput:fromKg(a.fuelKg,acId);return toKg(raw,acId);}
-function burnToKg(v,acId){const a=S.aircraft[acId];if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.layout==='ga8'||a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*AVGAS;if(a.burnDefUnit==='kg') return val;return val*LB;}
+// Seatmap instances: a seatMap key (smKey) may be a physical aircraft id ("ZK-SLA")
+// or a duplicate-instance key ("ZK-SLA_2"). _ac() resolves any key to its physical
+// aircraft id so spec/layout lookups (S.aircraft[...]) always work.
+function _ac(key){if(!key)return key;if(S.aircraft[key])return key;var s=((curDisp()||{}).acSetup||[]).find(function(x){return (x._seatmapKey||x.acId)===key;});if(s&&S.aircraft[s.acId])return s.acId;return String(key).replace(/_\d+$/,'');}
+function _acSpec(acId){return S.aircraft[acId]||S.aircraft[_ac(acId)];}
+function fuelUnit(acId){return _acSpec(acId)?.layout==='ga8'?'L':'lbs';}
+function toKg(v,acId){const n=parseFloat(v)||0;const a=_acSpec(acId);if(!a)return n;return a.layout==='ga8'?n*AVGAS:n*LB;}
+function fromKg(kg,acId){return _acSpec(acId)?.layout==='ga8'?kg/AVGAS:kg/LB;}
+function fuelKgForSetup(acId){const a=_acSpec(acId);if(!a)return 0;const s=(curDisp().acSetup||[]).find(x=>(x._seatmapKey||x.acId)===acId||x.acId===acId);const raw=s?.fuelInput!=null?s.fuelInput:fromKg(a.fuelKg,acId);return toKg(raw,acId);}
+function burnToKg(v,acId){const a=_acSpec(acId);if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.layout==='ga8'||a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*AVGAS;if(a.burnDefUnit==='kg') return val;return val*LB;}
 function seat1IsCoPilot(acId){return !!((curDisp().acSetup||[]).find(s=>(s._seatmapKey||s.acId)===acId||s.acId===acId)?.coPilot);}
-function paxSeatIdxs(acId){const a=S.aircraft[acId];if(!a||!a.seats)return[];const removed=a.removedSeats||[];return a.seats.map((_,i)=>i).filter(i=>i!==0&&!(i===1&&seat1IsCoPilot(acId))&&!removed.includes(i));}
+function paxSeatIdxs(acId){const a=_acSpec(acId);if(!a||!a.seats)return[];const removed=a.removedSeats||[];return a.seats.map((_,i)=>i).filter(i=>i!==0&&!(i===1&&seat1IsCoPilot(acId))&&!removed.includes(i));}
 
 // Row pairs = seats at same arm (same physical row)
 function rowPairsForAc(acId){
-  const a=S.aircraft[acId];if(!a||!a.seats)return[];
+  const a=_acSpec(acId);if(!a||!a.seats)return[];
   const idxs=paxSeatIdxs(acId);
   const byArm={};
   idxs.forEach(i=>{if(!a.seats[i])return;const k=a.seats[i].arm.toFixed(4);if(!byArm[k])byArm[k]=[];byArm[k].push(i);});
@@ -206,7 +211,7 @@ function rowPairsForAc(acId){
 
 // ── W&B Calculations ──
 function calcAcWB(acId,paxList,fuelKgOverride){
-  const a=S.aircraft[acId];if(!a)return null;
+  const a=_acSpec(acId);if(!a)return null;
   const _D=curDisp();
   const setup=(_D.acSetup||[]).find(s=>(s._seatmapKey||s.acId)===acId||s.acId===acId);
   const picW=setup?S.crew.find(c=>c.n===setup.pic)?.w||0:0;
@@ -520,60 +525,88 @@ function _wsHasContent(ws){
   if((ws._unallocated||[]).length)return true;
   return Object.keys(ws.seatMap||{}).some(function(k){return Object.keys(ws.seatMap[k]||{}).length;});
 }
-function _copyManifestIntoWS(m,ws,replace){
+// Copy a manifest into the seatmap workspace. Returns the "batch" of seat keys and
+// pax ids that were just added, so a merge can seat them into their own instances.
+// duplicate=true (merge of a seated push): each pushed aircraft becomes a NEW
+// instance (e.g. a 2nd "ZK-SLA"), and its pax are pinned (_smPin) to it so the
+// existing aircraft's seating is never disturbed.
+function _copyManifestIntoWS(m,ws,replace,duplicate){
   ws.acSetup=ws.acSetup||[];ws.pax=ws.pax||[];ws.seatMap=ws.seatMap||{};ws.origAcMap=ws.origAcMap||{};ws.cargo=ws.cargo||{};
-  // Flight details (departure, destination, date, ETD) come from the pushed manifest
-  // on the first/replace push. On a merge we keep the seatmap's existing details.
   if(replace||!_wsHasContent(ws)){ws.dep=m.dep;ws.dest=m.dest;ws.date=m.date;ws.etd=m.etd;ws.etdCustom=m.etdCustom||false;ws.name=m.name||'';}
-  // Cargo/pod values carry across too
   if(m.cargo)Object.keys(m.cargo).forEach(function(k){ws.cargo[k]=JSON.parse(JSON.stringify(m.cargo[k]));});
-  // Aircraft come from the pushed manifest — full setup: PIC, co-pilot, fuel and
-  // every other field (fuelInput, burn, etc.). Preserve the workspace seat-key only.
+  var src=(m.name||'').trim()||('Manifest'+(m.date?' '+m.date:''));
+  var acKeyMap={};   // manifest physical acId -> assigned smKey in workspace
+  var batchKeys=[];
   (m.acSetup||[]).forEach(function(s){
-    var ex=ws.acSetup.find(function(x){return (x._seatmapKey||x.acId)===s.acId||x.acId===s.acId;});
-    if(ex){var _k=ex._seatmapKey,_sfx=ex._displaySuffix;Object.assign(ex,JSON.parse(JSON.stringify(s)));if(_k)ex._seatmapKey=_k;if(_sfx)ex._displaySuffix=_sfx;}
-    else{ws.acSetup.push(JSON.parse(JSON.stringify(s)));}
+    var ns=JSON.parse(JSON.stringify(s));ns._srcManifest=src;
+    if(duplicate){
+      var existing=ws.acSetup.filter(function(x){return _ac(x._seatmapKey||x.acId)===s.acId;});
+      if(existing.length){
+        // Tag the existing first instance too, so both read e.g. "(1)" and "(2)"
+        if(existing.length===1&&!existing[0]._displaySuffix){existing[0]._seatmapKey=existing[0]._seatmapKey||existing[0].acId;existing[0]._displaySuffix='(1)';}
+        var n=existing.length+1;
+        ns._seatmapKey=s.acId+'_'+n;ns._displaySuffix='('+n+')';
+      } else {
+        ns._seatmapKey=s.acId;
+      }
+      ws.acSetup.push(ns);acKeyMap[s.acId]=ns._seatmapKey;batchKeys.push(ns._seatmapKey);
+    } else {
+      var ex=ws.acSetup.find(function(x){return (x._seatmapKey||x.acId)===s.acId||x.acId===s.acId;});
+      if(ex){var _k=ex._seatmapKey,_sfx=ex._displaySuffix;Object.assign(ex,ns);if(_k)ex._seatmapKey=_k;if(_sfx)ex._displaySuffix=_sfx;acKeyMap[s.acId]=_k||ex.acId;}
+      else{ws.acSetup.push(ns);acKeyMap[s.acId]=ns._seatmapKey||s.acId;batchKeys.push(ns._seatmapKey||s.acId);}
+    }
   });
-  // Passengers — fresh copies (skip legacy infant rows), dedup ids on Add
   var ids={};ws.pax.forEach(function(p){ids[p.id]=1;});
+  var batchPax=[];
   (m.pax||[]).filter(function(p){return !p.infant;}).forEach(function(p){
     var np=JSON.parse(JSON.stringify(p));
     if(ids[np.id])np.id='p_'+Date.now()+'_'+Math.floor(Math.random()*1e5);
-    ids[np.id]=1;np._ts=Date.now();
-    ws.pax.push(np);
+    ids[np.id]=1;np._ts=Date.now();np._src=src;
+    if(duplicate&&np.pinAc&&acKeyMap[np.pinAc])np._smPin=acKeyMap[np.pinAc];
+    ws.pax.push(np);batchPax.push(np.id);
   });
+  return {keys:batchKeys,paxIds:batchPax};
 }
-// Seat any unseated workspace passengers (heavy-front, groups together).
-function _seatWorkspaceUnseated(){
+// Seat unseated workspace passengers (heavy-front, groups together).
+// Instance-aware: acs are seat keys (smKey). Optional restrictKeys/restrictPax limit
+// the pass to a single push's new instances + pax (used by merge).
+function _seatWorkspaceUnseated(restrictKeys,restrictPax){
   const d=seatmapWS();
-  const acs=(d.acSetup||[]).map(s=>s.acId).filter(id=>S.aircraft[id]);
+  let acs=(d.acSetup||[]).map(s=>s._seatmapKey||s.acId).filter(k=>_acSpec(k));
+  if(restrictKeys&&restrictKeys.length)acs=acs.filter(k=>restrictKeys.indexOf(k)>=0);
   if(!acs.length)return;
   d.seatMap=d.seatMap||{};d.origAcMap=d.origAcMap||{};
   const alreadySeated=new Set(Object.values(d.seatMap).flatMap(sm=>Object.values(sm||{})));
-  const unseated=d.pax.filter(p=>!p.infant&&!alreadySeated.has(p.id));
-  const acPax={};acs.forEach(id=>{acPax[id]=[];});
-  const pinned=unseated.filter(p=>p.pinAc&&acs.includes(p.pinAc));
-  const unpinned=unseated.filter(p=>!p.pinAc||!acs.includes(p.pinAc));
-  pinned.forEach(p=>acPax[p.pinAc].push(p));
-  const caps={};
-  acs.forEach(id=>{const occupied=Object.keys(d.seatMap[id]||{}).length;caps[id]=Math.max(0,paxSeatIdxs(id).length-occupied);});
-  const remaining=[...unpinned];
-  remaining.sort((a,b)=>{
+  let unseated=d.pax.filter(p=>!p.infant&&!alreadySeated.has(p.id));
+  if(restrictPax)unseated=unseated.filter(p=>restrictPax.has(p.id));
+  const acPax={};acs.forEach(k=>{acPax[k]=[];});
+  const caps={};acs.forEach(k=>{const occ=Object.keys(d.seatMap[k]||{}).length;caps[k]=Math.max(0,paxSeatIdxs(k).length-occ);});
+  const unpinned=[];
+  unseated.forEach(p=>{
+    let target=null;
+    if(p._smPin&&acs.indexOf(p._smPin)>=0){target=p._smPin;}
+    else if(p.pinAc){
+      const cands=acs.filter(k=>_ac(k)===p.pinAc).sort((a,b)=>(caps[b]-acPax[b].length)-(caps[a]-acPax[a].length));
+      if(cands.length&&acPax[cands[0]].length<caps[cands[0]])target=cands[0];
+    }
+    if(target)acPax[target].push(p);else unpinned.push(p);
+  });
+  unpinned.sort((a,b)=>{
     if((a.group||'')!==(b.group||'')) return (a.group||'').localeCompare(b.group||'');
     return (parseFloat(b.weight||0)+parseFloat(b.bag||0))-(parseFloat(a.weight||0)+parseFloat(a.bag||0));
   });
-  remaining.forEach(p=>{
-    const best=acs.filter(id=>acPax[id].length<caps[id])
+  unpinned.forEach(p=>{
+    const best=acs.filter(k=>acPax[k].length<caps[k])
       .sort((a,b)=>(caps[b]-acPax[b].length)-(caps[a]-acPax[a].length))[0];
-    if(best) acPax[best].push(p);
+    if(best)acPax[best].push(p);
   });
-  acs.forEach(id=>{
-    const existing=d.seatMap[id]||{};
-    const toSeat=acPax[id]||[];
-    if(!toSeat.length){d.seatMap[id]=existing;return;}
-    const newAssignment=assignSeatsHeavyFront(id,toSeat);
+  acs.forEach(k=>{
+    const existing=d.seatMap[k]||{};
+    const toSeat=acPax[k]||[];
+    if(!toSeat.length){d.seatMap[k]=existing;return;}
+    const newAssignment=assignSeatsHeavyFront(k,toSeat);
     Object.entries(newAssignment).forEach(([idx,pid])=>{const i=parseInt(idx);if(!existing[i])existing[i]=pid;});
-    d.seatMap[id]=existing;
+    d.seatMap[k]=existing;
   });
 }
 function _pushManifest(mode){
@@ -621,18 +654,23 @@ function _doPush(mode,replace){
   const mpax=(m&&m.pax||[]).filter(p=>!p.infant);
   let ws=seatmapWS();
   if(replace){S.smWS=bD();ws=S.smWS;}
-  _copyManifestIntoWS(m,ws,replace);
+  const duplicate=!replace&&mode==='seat'; // merge of a seated push → duplicate aircraft
+  const batch=_copyManifestIntoWS(m,ws,replace,duplicate);
   // Enter the seatmap (workspace) context
   S.tab='seatmap';S.lockedAcs=[];S.mobileAcIdx=0;S.selectedPax=null;
   S.viewAcs=(ws.acSetup||[]).map(s=>s._seatmapKey||s.acId);window.scrollTo(0,0);
-  if(mode==='seat')_seatWorkspaceUnseated();
+  if(mode==='seat'){
+    if(duplicate)_seatWorkspaceUnseated(batch.keys,new Set(batch.paxIds));
+    else _seatWorkspaceUnseated();
+  }
   _seatmapSyncPool();
   S.solverAutoApply=true;runSolver();
   const issues=[];
-  (ws.acSetup||[]).map(s=>s.acId).filter(id=>S.aircraft[id]).forEach(id=>{
-    const r=S.solverRes[id];if(!r)return;
-    if(r.towOver>0)issues.push(id+' overweight by '+r.towOver.toFixed(0)+'kg');
-    if(!r.cogOk)issues.push(id+' CoG out of limits ('+(r.cog!=null?r.cog.toFixed(1):'?')+'")');
+  (ws.acSetup||[]).map(s=>s._seatmapKey||s.acId).filter(k=>_acSpec(k)).forEach(k=>{
+    const r=S.solverRes[k];if(!r)return;
+    const lbl=_ac(k);
+    if(r.towOver>0)issues.push(lbl+' overweight by '+r.towOver.toFixed(0)+'kg');
+    if(!r.cogOk)issues.push(lbl+' CoG out of limits ('+(r.cog!=null?r.cog.toFixed(1):'?')+'")');
   });
   if(mode==='pool')toast('Sent '+mpax.length+' pax to the seatmap pool.','ok');
   else if(issues.length)toast('⚠ W&B issues: '+issues.join(' · '),'warn');
@@ -668,14 +706,14 @@ function assignSeatsHeavyFront(acId, paxList){
   //    - If odd group size: heaviest member of group goes to Seat 1 if available
   // 3. CoG within limits (heaviest forward is the primary mechanism)
 
-  const a=S.aircraft[acId];
+  const a=_acSpec(acId);
   if(!a||!paxList.length) return{};
 
   const paxIdxs=paxSeatIdxs(acId);
   if(!paxIdxs.length) return{};
 
   // Seat layout: sorted front-to-back by arm
-  const seatsByArm=[...paxIdxs].sort((a,b)=>(S.aircraft[acId].seats[a]?.arm||999)-(S.aircraft[acId].seats[b]?.arm||999));
+  const seatsByArm=[...paxIdxs].sort((x,y)=>(a.seats[x]?.arm||999)-(a.seats[y]?.arm||999));
   const seat1Idx=seatsByArm[0]; // frontmost pax seat
   const hasSeat1=!seat1IsCoPilot(acId);
 
@@ -777,8 +815,9 @@ function assignSeatsHeavyFront(acId, paxList){
 function runSolver(){
   const res={};
   const _D=curDisp();
-  (_D.acSetup||[]).map(s=>s.acId).filter(id=>S.aircraft[id]).forEach(acId=>{
-    const a=S.aircraft[acId]; if(!a){res[acId]={err:true};return;}
+  (_D.acSetup||[]).map(s=>s._seatmapKey||s.acId).filter(k=>_acSpec(k)).forEach(acId=>{
+    // acId here is the seatmap key (smKey) — may be a duplicate instance like "ZK-SLA_2".
+    const a=_acSpec(acId); if(!a){res[acId]={err:true};return;}
     const cog=calcAcWB(acId,[]); if(!cog){res[acId]={err:true};return;}
     let r={...cog}; const over=a.fuelOver||50;
 
@@ -1957,7 +1996,7 @@ function updatePresBar(section){
 // ── Layouts ──
 const GA8_LAYOUT=[[{i:0,lbl:'PIC'},{i:1,lbl:'1'}],[{i:2,lbl:'2'},{i:3,lbl:'3'}],[{i:4,lbl:'4'},{i:5,lbl:'5'}],'spacer',[{i:6,lbl:'6'},{i:7,lbl:'7'}]];
 const C208_LAYOUT=[[{i:0,lbl:'PIC'},{i:1,lbl:'1'}],[{i:2,lbl:'2'},{i:3,lbl:'3'}],[{i:4,lbl:'4'},{i:5,lbl:'5'}],[{i:6,lbl:'6'},{i:7,lbl:'7'}],[{i:8,lbl:'8'},{i:9,lbl:'9'}],[{i:10,lbl:'10'},{i:11,lbl:'11'}],'spacer',[{i:12,lbl:'12'},{i:13,lbl:'13'}]];
-function acLayout(acId){if(S.aircraft[acId]?.layout==='ga8')return GA8_LAYOUT;const _a=S.aircraft[acId];if(!_a)return C208_LAYOUT;const _mx=_a.seats.length;return C208_LAYOUT.map(r=>r==='spacer'?r:r.filter(c=>c.i<_mx)).filter(r=>r==='spacer'||r.length>0);}
+function acLayout(acId){const _a=_acSpec(acId);if(_a?.layout==='ga8')return GA8_LAYOUT;if(!_a)return C208_LAYOUT;const _mx=_a.seats.length;return C208_LAYOUT.map(r=>r==='spacer'?r:r.filter(c=>c.i<_mx)).filter(r=>r==='spacer'||r.length>0);}
 
 
 // ═══════════════════════ RENDER FUNCTIONS ═══════════════════════
