@@ -571,7 +571,7 @@ window.rosterBuildToggle=function(uid){
   render();
 };
 
-window.rosterApplyPattern=function(){
+window.rosterApplyPattern=async function(){
   var bs=S.rosterBuild||{};
   var tpl=bs.template||{};
   var enabled=bs.enabled||{};
@@ -580,34 +580,89 @@ window.rosterApplyPattern=function(){
   if(!startStr){alert('Set a start date.');return;}
   var startD=new Date(startStr+'T00:00:00');
   if(isNaN(startD.getTime())){alert('Invalid start date.');return;}
+  var endD=new Date(startD);endD.setDate(endD.getDate()+weeks*7-1);
+  var endStr=_rIso(endD);
+  // Fetch APPROVED leave across the whole build range (not just the visible week)
+  var leaveLookup={};
+  try{
+    var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&status=eq.approved&start_date=lte.'+endStr+'&end_date=gte.'+startStr,{headers:SH});
+    if(r.ok){(await r.json()).forEach(function(req){
+      var s=new Date(req.start_date+'T00:00:00'),e=new Date(req.end_date+'T00:00:00');
+      for(var d=new Date(s);d<=e;d.setDate(d.getDate()+1)){var ds=_rIso(d);if(!leaveLookup[ds])leaveLookup[ds]={};leaveLookup[ds][req.user_id]={type:req.leave_type,name:req.user_name};}
+    });}
+  }catch(e){}
+  // Detect cells where the pattern would write over an approved-leave day
+  var conflicts=[];
+  for(var w=0;w<weeks;w++)for(var di=0;di<7;di++){
+    var d2=new Date(startD);d2.setDate(d2.getDate()+w*7+di);var ds2=_rIso(d2);
+    var dayTpl=tpl[di]||{};
+    Object.keys(dayTpl).forEach(function(uid){
+      if(enabled[uid]===false||!dayTpl[uid])return;
+      if(leaveLookup[ds2]&&leaveLookup[ds2][uid]){
+        conflicts.push({uid:uid,ds:ds2,name:leaveLookup[ds2][uid].name||uid,type:leaveLookup[ds2][uid].type});
+      }
+    });
+  }
+  if(conflicts.length){S._rBuildLeave=leaveLookup;_rShowBuildLeavePrompt(conflicts);return;}
+  _rDoApplyBuild('skip',leaveLookup);
+};
+function _rDoApplyBuild(mode,leaveLookup){
+  var bs=S.rosterBuild||{};var tpl=bs.template||{};var enabled=bs.enabled||{};
+  var startStr=bs.startDate;var weeks=bs.weeks||4;
+  var startD=new Date(startStr+'T00:00:00');
   var PROTECTED=new Set(['leave','sick']);
   if(!S.roster)S.roster={};
-  var count=0;
+  leaveLookup=leaveLookup||{};
+  var count=0,skipped=0;
   for(var w=0;w<weeks;w++){
     for(var di=0;di<7;di++){
-      var d=new Date(startD);
-      d.setDate(d.getDate()+w*7+di);
-      var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      var d=new Date(startD);d.setDate(d.getDate()+w*7+di);
+      var ds=_rIso(d);
       if(!S.roster[ds])S.roster[ds]={};
       var dayTpl=tpl[di]||{};
       Object.keys(dayTpl).forEach(function(uid){
-        if(enabled[uid]===false)return;  // skip toggled-off people
-        var newSt=dayTpl[uid];
-        if(!newSt)return;
+        if(enabled[uid]===false)return;
+        var newSt=dayTpl[uid];if(!newSt)return;
         var ex=S.roster[ds][uid]||'';
         var exRaw=ex.indexOf('other:')===0?'other':ex;
         if(PROTECTED.has(exRaw))return;
-        S.roster[ds][uid]=newSt;
-        count++;
+        if(mode==='skip'&&leaveLookup[ds]&&leaveLookup[ds][uid]){skipped++;return;}
+        S.roster[ds][uid]=newSt;count++;
       });
     }
   }
   lsSet('ts_roster',S.roster);
   window.saveRosterToCloud();
-  toast('Pushed '+count+' cells across '+weeks+' week'+(weeks!==1?'s':'')+'.','success');
-  S.rosterTab='view';
-  S.rosterWeek=startStr;
-  render();
+  toast('Pushed '+count+' cells'+(skipped?' · skipped '+skipped+' approved-leave day'+(skipped!==1?'s':''):'')+' across '+weeks+' week'+(weeks!==1?'s':'')+'.','success');
+  S.rosterTab='view';S.rosterWeek=startStr;render();
+}
+function _rShowBuildLeavePrompt(conflicts){
+  var ex=document.getElementById('rbuild-leave-ov');if(ex)ex.remove();
+  var byPerson={};conflicts.forEach(function(c){(byPerson[c.name]=byPerson[c.name]||[]).push(c);});
+  var list=Object.keys(byPerson).map(function(nm){
+    var ds=byPerson[nm].map(function(c){return c.ds;}).sort();
+    var rng=(typeof _lvFmt==='function'?_lvFmt(ds[0]):ds[0])+(ds.length>1?' → '+(typeof _lvFmt==='function'?_lvFmt(ds[ds.length-1]):ds[ds.length-1]):'');
+    return '<div style="font-size:12px;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border)"><strong style="color:var(--text1)">'+nm+'</strong> · '+byPerson[nm].length+' day'+(byPerson[nm].length!==1?'s':'')+' <span style="color:var(--text3)">('+rng+')</span></div>';
+  }).join('');
+  var ov=document.createElement('div');ov.id='rbuild-leave-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML='<div style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:22px;max-width:440px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 12px 44px rgba(0,0,0,.55)">'
+    +'<div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">⚠ '+conflicts.length+' day'+(conflicts.length!==1?'s':'')+' clash with approved leave</div>'
+    +'<div style="font-size:13px;color:var(--text3);margin-bottom:12px;line-height:1.5">This pattern would write a roster code over days these people already have <strong>approved leave</strong>:</div>'
+    +'<div style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:6px 12px;margin-bottom:16px">'+list+'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px">'
+    +'<button onclick="window._rBuildChoose(\'skip\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(34,197,94,.55);background:rgba(34,197,94,.12);color:#4ade80;font-size:14px;font-weight:700;cursor:pointer">✓ Skip those days — keep their leave (recommended)</button>'
+    +'<button onclick="window._rBuildChoose(\'overwrite\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(239,68,68,.5);background:rgba(239,68,68,.12);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer">Overwrite the leave days anyway</button>'
+    +'<button onclick="window._rBuildChoose(\'cancel\')" style="padding:11px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Cancel</button>'
+    +'</div></div>';
+  ov.addEventListener('click',function(e){if(e.target===ov)window._rBuildChoose('cancel');});
+  document.body.appendChild(ov);
+}
+window._rBuildChoose=function(c){
+  var ov=document.getElementById('rbuild-leave-ov');if(ov)ov.remove();
+  if(c==='cancel'){S._rBuildLeave=null;return;}
+  _rDoApplyBuild(c==='skip'?'skip':'overwrite',S._rBuildLeave||{});
+  S._rBuildLeave=null;
 };
 
 window.saveRosterToCloud=async function(){
