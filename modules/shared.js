@@ -160,7 +160,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.81';
+const APP_VER='v22.82';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1284,7 +1284,7 @@ function initRealtime(){
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_signed'){
           var _sipl=msg.payload.payload;
           if(_sipl&&_sipl.sessionId!==_sessionId){
-            if(_sipl.by&&S.user&&_sipl.by!==S.user.name)toast((_sipl.by||'Someone')+' signed '+(_sipl.acCode||'')+' loadsheet','ok');
+            if(_sipl.by&&S.user&&_sipl.by!==S.user.name)toast((_sipl.by||'Someone')+' created '+(_sipl.acCode||'')+' loadsheet','ok');
             reloadTable('ts_loadsheets').then(function(){
               // Update open tab form so signature shows live
               if(_sipl.id){
@@ -1385,7 +1385,11 @@ function initRealtime(){
               if(_lsp.meta._lsSeatMode)S._lsSeatMode=_lsp.meta._lsSeatMode;
             }
             if(S.tab==='saved')reloadTable('ts_loadsheets').then(function(){safeRender();});
-            else safeRender();
+            else{
+              // If we're viewing this loadsheet and not actively typing, refresh it now.
+              var _ae=document.activeElement,_aet=_ae&&_ae.tagName;
+              if(_aet==='INPUT'||_aet==='SELECT'||_aet==='TEXTAREA')safeRender();else render();
+            }
           }
         }
       }catch(err){}

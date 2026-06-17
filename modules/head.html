@@ -158,8 +158,8 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 
 /* ── Scrollable content ── */
 .page{max-width:760px;margin:0 auto;padding:14px 12px 80px;}
-@keyframes lsFlash{0%{outline:3px solid #fbbf24;background:rgba(251,191,36,.18);}100%{outline:3px solid transparent;background:transparent;}}
-.ls-flash{animation:lsFlash 2s ease-out;border-radius:6px;}
+@keyframes lsFlash{0%{outline:0 solid transparent;}100%{outline:0 solid transparent;}}
+.ls-flash{border-radius:6px;}
 @media(min-width:900px){.page{max-width:1100px;padding:16px 28px 80px;}}
 @media(min-width:1400px){.page{max-width:1400px;padding:16px 48px 80px;}}
 
