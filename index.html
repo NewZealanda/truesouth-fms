@@ -411,7 +411,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.77';
+const APP_VER='v22.79';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -6970,6 +6970,9 @@ window.saveUnsigned=async()=>{
     }
     S.lsTabs.splice(_idx,1);
   }
+  // Close the tab on every other device too
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_close',payload:{id:_tid}},ref:String(_rtRef)}));}
+  window.saveWorkspace&&window.saveWorkspace();
   try{window.scrollTo(0,0);}catch(e){} // jump to the top of the now-active loadsheet
   render();
 };
@@ -6993,6 +6996,18 @@ window.submitLsInPlace=async function(){
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Loadsheet submitted ✓','ok');
+  // Submitting closes the tab everywhere (only the tabs still being worked on stay open)
+  var _sidx=S.lsTabs.findIndex(function(t){return t.id===id;});
+  if(_sidx!==-1){
+    if(S.activeTabId===id){
+      if(S.lsTabs.length>1){var _snx=S.lsTabs[_sidx>0?_sidx-1:1];S.activeTabId=_snx.id;S.form=_snx.form;S.lsAc=(_snx.acId||'').replace('ZK-','');S.editId=_snx.id;}
+      else{S.activeTabId=null;S.editId=null;S._newLsTab=false;S.tab='saved';}
+    }
+    S.lsTabs.splice(_sidx,1);
+  }
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_close',payload:{id:id}},ref:String(_rtRef)}));}
+  window.saveWorkspace&&window.saveWorkspace();
+  try{window.scrollTo(0,0);}catch(e){}
   render();
 };
 // handleSubmit for signed loadsheets
@@ -10417,6 +10432,27 @@ function _lvWorkingDays(userId,s,e){
 }
 // RDO/off days within a range (the days NOT counted against leave).
 function _lvRdoDays(userId,s,e){return Math.max(0,_lvDays(s,e,false)-_lvWorkingDays(userId,s,e));}
+// Conflicts straight from the ROSTER (catches leave that was imported/added directly
+// on the calendar, not just in-app leave requests). Returns who is on AL/UL/Sick during the range.
+function _lvRosterConflicts(req){
+  var out=[];var roster=S.roster||{};
+  if(!req||!req.start_date||!req.end_date)return out;
+  var away={leave:'Annual',ul:'Unpaid',sick:'Sick'};
+  var users=(S.users||[]).filter(function(u){return u&&!u.inactive&&u.id!==req.user_id;});
+  var s=new Date(req.start_date+'T00:00:00'),e=new Date(req.end_date+'T00:00:00');
+  users.forEach(function(u){
+    var ini=(typeof _rCode==='function')?_rCode(u):'';
+    var hitDays=[],code=null;
+    for(var d=new Date(s);d<=e;d.setDate(d.getDate()+1)){
+      var ds=(typeof _rIso==='function')?_rIso(d):d.toISOString().slice(0,10);
+      var st=(roster[ds]&&(roster[ds][u.id]||(ini&&roster[ds][ini])))||'';
+      if(typeof st==='string'&&st.indexOf('other:')===0)st='other';
+      if(away[st]){hitDays.push(ds);code=st;}
+    }
+    if(hitDays.length)out.push({name:u.name||u.email||'Unknown',role:u.role||'',code:code,label:away[code],days:hitDays});
+  });
+  return out;
+}
 function _lvFmt(ds){if(!ds)return '';var d=new Date(ds+'T00:00:00');return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'});}
 function _lvCanApprove(role){return role==='superadmin'||role==='admin'||role==='cx_manager';}
 function _lvCanApproveRole(myRole,reqRole){
@@ -10584,11 +10620,16 @@ function _lvCard(r,showUser){
   h+='</div>';
   h+='<div style="flex-shrink:0">'+_lvStatusBadge(r.status)+'</div>';
   h+='</div>';
-  if(r.status==='pending'){
-    h+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.06)">';
-    h+='<button tabindex="-1" onclick="window.withdrawLeave(\''+r.id+'\')" style="padding:5px 12px;border-radius:7px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:#f87171;font-size:12px;cursor:pointer">Withdraw</button>';
-    h+='</div>';
+  h+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:8px;flex-wrap:wrap">';
+  if(r.status==='pending'||r.status==='approved'){
+    h+='<button tabindex="-1" onclick="window.leaveEditOpen(\''+r.id+'\')" style="padding:5px 12px;border-radius:7px;border:1px solid rgba(124,58,237,.4);background:rgba(124,58,237,.1);color:#c084fc;font-size:12px;cursor:pointer">✎ Edit</button>';
   }
+  if(r.status==='pending'){
+    h+='<button tabindex="-1" onclick="window.withdrawLeave(\''+r.id+'\')" style="padding:5px 12px;border-radius:7px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:#f87171;font-size:12px;cursor:pointer">Withdraw</button>';
+  }
+  h+='<button tabindex="-1" onclick="window.toggleLeaveHistory(\''+r.id+'\')" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">🕑 History</button>';
+  h+='</div>';
+  h+=_lvHistoryHtml(r.id);
   h+='</div>';
   return h;
 }
@@ -10614,6 +10655,7 @@ function _renderApprovals(lv,role){
   h+='<span style="color:var(--text3);font-size:12px">to</span>';
   h+='<input type="date" value="'+f.dateTo+'" onchange="S._leave.filter.dateTo=this.value;safeRender()" title="To" style="padding:5px 9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--text);font-size:12px">';
   h+='<button tabindex="-1" onclick="S._leave._allLoaded=false;window.loadAllLeave()" style="padding:5px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;color:rgba(255,255,255,.5);font-size:12px;cursor:pointer">⟳</button>';
+  if(role==='superadmin')h+='<button tabindex="-1" onclick="window.deleteAllLeave()" title="Permanently delete ALL leave requests (superadmin — for clearing test data)" style="padding:5px 10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.4);border-radius:7px;color:#f87171;font-size:12px;font-weight:600;cursor:pointer">🗑 Delete all</button>';
   h+='</div>';
   h+='</div>';
 
@@ -10664,10 +10706,14 @@ function _renderApprovals(lv,role){
     h+='<div style="flex-shrink:0">'+_lvStatusBadge(r.status)+'</div>';
     h+='</div>';
 
-    // Conflicts — show everyone else off during this period (approved + pending)
-    if(overlaps.length>0){
+    // Conflicts — anyone else off during this period. Pulls from the ROSTER (catches
+    // leave imported from CSV or added directly on the calendar) PLUS in-app leave requests.
+    var _ovNames={};overlaps.forEach(function(o){_ovNames[(o.user_name||'').toLowerCase()]=1;});
+    var rConf=_lvRosterConflicts(r).filter(function(c){return !_ovNames[(c.name||'').toLowerCase()];});
+    var _totalConf=overlaps.length+rConf.length;
+    if(_totalConf>0){
       h+='<div style="margin-top:10px;padding:9px 11px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px">';
-      h+='<div style="font-size:12px;font-weight:700;color:#fbbf24;margin-bottom:6px">⚠ '+overlaps.length+' conflict'+(overlaps.length!==1?'s':'')+' — others off during this period</div>';
+      h+='<div style="font-size:12px;font-weight:700;color:#fbbf24;margin-bottom:6px">⚠ '+_totalConf+' conflict'+(_totalConf!==1?'s':'')+' — others off during this period</div>';
       overlaps.sort(function(a,b){return (a.start_date<b.start_date?-1:1);}).forEach(function(o){
         var osc=LEAVE_SC[o.status]||LEAVE_SC.pending;
         var olt=LEAVE_TYPES.find(function(t){return t.id===o.leave_type;})||{icon:'📝'};
@@ -10677,6 +10723,15 @@ function _renderApprovals(lv,role){
           +'<span>'+olt.icon+'</span>'
           +'<span style="color:var(--text3)">'+_lvFmt(o.start_date)+' → '+_lvFmt(o.end_date)+'</span>'
           +'<span style="padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:'+osc.bg+';color:'+osc.col+';border:1px solid '+osc.bd+'">'+osc.lbl+'</span>'
+          +'</div>';
+      });
+      rConf.forEach(function(c){
+        var dr=c.days.length>1?(_lvFmt(c.days[0])+' → '+_lvFmt(c.days[c.days.length-1])):_lvFmt(c.days[0]);
+        h+='<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);padding:2px 0;flex-wrap:wrap">'
+          +'<span style="font-weight:700;color:var(--text)">'+_lvEsc(c.name)+'</span>'
+          +'<span style="color:var(--text3);font-size:10px;text-transform:uppercase">'+(c.role||'')+'</span>'
+          +'<span style="color:var(--text3)">'+dr+'</span>'
+          +'<span style="padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(148,163,184,.18);color:#cbd5e1;border:1px solid rgba(148,163,184,.4)">'+c.label+' · roster</span>'
           +'</div>';
       });
       h+='</div>';
@@ -10705,6 +10760,13 @@ function _renderApprovals(lv,role){
       }
       h+='</div>';
     }
+    // Approver tools: edit the request directly + view full history
+    h+='<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">';
+    h+='<button tabindex="-1" onclick="window.leaveEditOpen(\''+r.id+'\')" style="padding:6px 13px;border-radius:7px;border:1px solid rgba(124,58,237,.4);background:rgba(124,58,237,.1);color:#c084fc;font-size:12px;font-weight:600;cursor:pointer">✎ Edit</button>';
+    h+='<button tabindex="-1" onclick="window.toggleLeaveHistory(\''+r.id+'\')" style="padding:6px 13px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">🕑 History</button>';
+    if(role==='superadmin')h+='<button tabindex="-1" onclick="window.deleteLeaveRequest(\''+r.id+'\')" style="padding:6px 11px;border-radius:7px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#f87171;font-size:12px;cursor:pointer" title="Permanently delete (superadmin)">🗑</button>';
+    h+='</div>';
+    h+=_lvHistoryHtml(r.id);
     h+='</div>';
   });
   return h;
@@ -10846,6 +10908,125 @@ window.withdrawLeave=async function(id){
   }
 };
 
+// ── Superadmin: permanently delete leave requests (for clearing test data) ──
+window.deleteLeaveRequest=async function(id){
+  if((S.user&&S.user.role)!=='superadmin'){toast('Only a superadmin can delete leave requests.','warn');return;}
+  if(!confirm('Permanently delete this leave request? This cannot be undone.'))return;
+  try{
+    await fetch(SB+'/rest/v1/ts_leave_requests?id=eq.'+id,{method:'DELETE',headers:SH});
+    await fetch(SB+'/rest/v1/ts_leave_audit?request_id=eq.'+id,{method:'DELETE',headers:SH});
+  }catch(e){}
+  if(S._leave){
+    if(S._leave.allReqs)S._leave.allReqs=S._leave.allReqs.filter(function(r){return r.id!==id;});
+    if(S._leave.myReqs)S._leave.myReqs=S._leave.myReqs.filter(function(r){return r.id!==id;});
+    if(S._leave._audit)delete S._leave._audit[id];
+  }
+  toast('Leave request deleted.','ok');
+  render();
+};
+window.deleteAllLeave=async function(){
+  if((S.user&&S.user.role)!=='superadmin'){toast('Only a superadmin can do this.','warn');return;}
+  var n=((S._leave&&S._leave.allReqs)||[]).length;
+  if(!confirm('Permanently delete ALL '+n+' leave request(s) and their history? This cannot be undone.'))return;
+  if(!confirm('Are you absolutely sure? This wipes every leave request in the system.'))return;
+  try{
+    await fetch(SB+'/rest/v1/ts_leave_requests?id=neq.__none__',{method:'DELETE',headers:SH});
+    await fetch(SB+'/rest/v1/ts_leave_audit?id=neq.__none__',{method:'DELETE',headers:SH});
+  }catch(e){}
+  if(S._leave){S._leave.allReqs=[];S._leave.myReqs=[];S._leave._audit={};}
+  toast('All leave requests deleted.','ok');
+  render();
+};
+
+// ── Edit a leave request (owner = re-approval if it was approved; approver = edit in place) ──
+window.leaveEditOpen=function(id){
+  var lv=S._leave||{};
+  var req=(lv.allReqs||[]).find(function(r){return r.id===id;})||(lv.myReqs||[]).find(function(r){return r.id===id;});
+  if(!req)return;
+  S._leaveEdit={id:id,type:req.leave_type,startDate:req.start_date,endDate:req.end_date,reason:req.reason||'',status:req.status,user_id:req.user_id};
+  _leaveEditRender();
+};
+function _leaveEditRender(){
+  var e=S._leaveEdit;if(!e)return;
+  var ex=document.getElementById('leave-edit-ov');if(ex)ex.remove();
+  var ov=document.createElement('div');ov.id='leave-edit-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:18px';
+  var typeBtns=LEAVE_TYPES.map(function(lt){var on=e.type===lt.id;return '<button onclick="S._leaveEdit.type=\''+lt.id+'\';_leaveEditRender()" style="padding:6px 12px;border-radius:8px;border:1.5px solid '+(on?'#c084fc':'rgba(255,255,255,.15)')+';background:'+(on?'rgba(124,58,237,.2)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.55)')+';font-size:12px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+lt.icon+' '+lt.lbl+'</button>';}).join('');
+  var isOwner=e.user_id===(S.user&&S.user.id);
+  var reappWarn=(isOwner&&e.status==='approved')?'<div style="font-size:12px;color:#fbbf24;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:7px;padding:7px 10px;margin-bottom:12px">⚠ Editing approved leave sets it back to pending for re-approval.</div>':'';
+  ov.innerHTML='<div style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:20px;max-width:420px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 12px 44px rgba(0,0,0,.55)">'
+    +'<div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:14px">Edit leave request</div>'
+    +reappWarn
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:6px">Type</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">'+typeBtns+'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
+    +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Start</div><input type="date" value="'+e.startDate+'" onchange="S._leaveEdit.startDate=this.value" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>'
+    +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:5px">End</div><input type="date" value="'+e.endDate+'" onchange="S._leaveEdit.endDate=this.value" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>'
+    +'</div>'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Reason / comments</div>'
+    +'<textarea onchange="S._leaveEdit.reason=this.value" rows="2" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;margin-bottom:16px">'+_lvEsc(e.reason||'')+'</textarea>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button onclick="window.leaveEditSave()" style="flex:1;padding:10px;background:#7c3aed;border:none;border-radius:9px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Save changes</button>'
+    +'<button onclick="var o=document.getElementById(\'leave-edit-ov\');if(o)o.remove();S._leaveEdit=null" style="padding:10px 16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer">Cancel</button>'
+    +'</div></div>';
+  ov.addEventListener('click',function(ev){if(ev.target===ov){ov.remove();S._leaveEdit=null;}});
+  document.body.appendChild(ov);
+}
+window._leaveEditRender=_leaveEditRender;
+window.leaveEditSave=async function(){
+  var e=S._leaveEdit;if(!e)return;
+  if(!e.startDate||!e.endDate){toast('Select start and end dates.','error');return;}
+  if(e.endDate<e.startDate){toast('End date must be after start date.','error');return;}
+  var lv=S._leave||{};
+  var req=(lv.allReqs||[]).find(function(r){return r.id===e.id;})||(lv.myReqs||[]).find(function(r){return r.id===e.id;});
+  if(!req)return;
+  var me=S.user;
+  var changes=[];
+  if(req.start_date!==e.startDate||req.end_date!==e.endDate)changes.push('dates '+_lvFmt(req.start_date)+'→'+_lvFmt(req.end_date)+' ⇒ '+_lvFmt(e.startDate)+'→'+_lvFmt(e.endDate));
+  if(req.leave_type!==e.type){var ot=LEAVE_TYPES.find(function(t){return t.id===req.leave_type;}),nt=LEAVE_TYPES.find(function(t){return t.id===e.type;});changes.push('type '+(ot?ot.lbl:req.leave_type)+' ⇒ '+(nt?nt.lbl:e.type));}
+  if((req.reason||'')!==(e.reason||''))changes.push('reason updated');
+  if(!changes.length){var _o=document.getElementById('leave-edit-ov');if(_o)_o.remove();S._leaveEdit=null;toast('No changes made.','info');return;}
+  var days=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,e.startDate,e.endDate):_lvDays(e.startDate,e.endDate,false);
+  var isOwner=req.user_id===(me&&me.id);
+  var reapprove=isOwner&&req.status==='approved';
+  var patch={leave_type:e.type,start_date:e.startDate,end_date:e.endDate,reason:e.reason||null,total_days:days};
+  if(reapprove){patch.status='pending';patch.reviewed_at=null;patch.reviewed_by=null;patch.reviewed_by_name=null;patch.admin_comment=null;}
+  var ok=await sbPatch('ts_leave_requests',e.id,patch);
+  if(!ok){toast('Save failed — check connection.','error');return;}
+  var action=reapprove?'edited_resubmit':(isOwner?'edited':'edited_by_approver');
+  var detail=(me&&(me.name||me.email)||'?')+' edited — '+changes.join('; ')+(reapprove?' (re-approval required)':'');
+  try{await sbU('ts_leave_audit',[{request_id:e.id,action:action,performed_by:me&&me.id,performed_by_name:me&&(me.name||me.email),comment:detail}]);}catch(_){}
+  if(reapprove){try{await window._notifyLeaveApprovers(e.id,req.user_role||'desk',req.user_name||(me&&me.name),e.type,e.startDate,e.endDate);}catch(_){}}
+  else if(!isOwner&&req.user_id){try{await sbU('ts_notifications',[{user_id:req.user_id,type:'leave_edited',message:'Your leave was updated by '+((me&&me.name)||'an approver')+' — '+changes.join('; '),read:false,created_at:new Date().toISOString()}]);if(me&&me.id===req.user_id)window.loadNotifications();}catch(_){}}
+  var o=document.getElementById('leave-edit-ov');if(o)o.remove();S._leaveEdit=null;
+  if(S._leave){S._leave._myLoaded=false;S._leave._allLoaded=false;if(S._leave._audit)delete S._leave._audit[e.id];}
+  toast(reapprove?'Leave updated — sent for re-approval.':'Leave updated.','success');
+  window.loadMyLeave();if(_lvCanApprove(S.user&&S.user.role))window.loadAllLeave();
+};
+// ── Audit history (per request) ──
+window.toggleLeaveHistory=function(id){
+  if(!S._leave._histOpen)S._leave._histOpen={};
+  S._leave._histOpen[id]=!S._leave._histOpen[id];
+  if(S._leave._histOpen[id])window.loadLeaveAudit(id);
+  render();
+};
+window.loadLeaveAudit=async function(id){
+  if(!S._leave._audit)S._leave._audit={};
+  try{var r=await fetch(SB+'/rest/v1/ts_leave_audit?select=*&request_id=eq.'+id+'&order=created_at.desc',{headers:SH});if(r.ok){S._leave._audit[id]=await r.json();safeRender();}}catch(e){}
+};
+function _lvHistoryHtml(id){
+  var open=S._leave&&S._leave._histOpen&&S._leave._histOpen[id];
+  if(!open)return '';
+  var rows=(S._leave._audit&&S._leave._audit[id]);
+  if(rows===undefined)return '<div style="font-size:11px;color:var(--text3);padding:6px 2px">Loading history…</div>';
+  if(!rows.length)return '<div style="font-size:11px;color:var(--text3);padding:6px 2px">No history yet.</div>';
+  var LBL={submitted:'Submitted',approved:'Approved ✓',declined:'Declined',withdrawn:'Withdrawn',edited:'Edited',edited_resubmit:'Edited → re-approval',edited_by_approver:'Edited by approver'};
+  return '<div style="margin-top:8px;border-top:1px solid rgba(255,255,255,.08);padding-top:8px;display:flex;flex-direction:column;gap:3px">'+rows.map(function(a){
+    var when=a.created_at?new Date(a.created_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+    return '<div style="font-size:11px;color:var(--text2);display:flex;gap:8px"><span style="color:var(--text3);min-width:118px;flex-shrink:0">'+when+'</span><span style="flex:1"><strong>'+(LBL[a.action]||a.action)+'</strong>'+(a.performed_by_name?' · '+_lvEsc(a.performed_by_name):'')+(a.comment?'<div style="color:var(--text3);margin-top:1px">'+_lvEsc(a.comment)+'</div>':'')+'</span></div>';
+  }).join('')+'</div>';
+}
+
 // ── Notifications ──
 window._notifyLeaveApprovers=async function(requestId,requesterRole,requesterName,leaveType,startDate,endDate){
   var approverRoles=(requesterRole==='desk'||requesterRole==='ground_staff')
@@ -10893,9 +11074,17 @@ window._triggerLeaveEmail=async function(requestId,action){
 
 window.loadNotifications=async function(){
   var uid=S.user?.id;if(!uid)return;
-  var r=await fetch(SB+'/rest/v1/ts_notifications?select=*&user_id=eq.'+uid+'&order=created_at.desc&limit=20',{headers:SH});
-  if(r.ok){S._notifications=await r.json();safeRender();}
+  try{
+    var r=await fetch(SB+'/rest/v1/ts_notifications?select=*&user_id=eq.'+uid+'&order=created_at.desc&limit=20',{headers:SH});
+    if(r.ok){
+      var data=await r.json();
+      var _s=JSON.stringify(data);
+      if(_s!==S.__notifStr){S.__notifStr=_s;S._notifications=data;safeRender();} // only re-render when something changed
+    }
+  }catch(e){}
 };
+// Poll for new notifications every 10s (and on foreground) so the bell stays current.
+setInterval(function(){if(S.user&&document.visibilityState==='visible'&&window.loadNotifications)window.loadNotifications();},10000);
 
 window.markNotificationsRead=async function(){
   var uid=S.user?.id;if(!uid)return;

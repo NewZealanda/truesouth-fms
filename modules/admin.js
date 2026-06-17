@@ -1701,6 +1701,9 @@ window.saveUnsigned=async()=>{
     }
     S.lsTabs.splice(_idx,1);
   }
+  // Close the tab on every other device too
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_close',payload:{id:_tid}},ref:String(_rtRef)}));}
+  window.saveWorkspace&&window.saveWorkspace();
   try{window.scrollTo(0,0);}catch(e){} // jump to the top of the now-active loadsheet
   render();
 };
@@ -1724,6 +1727,18 @@ window.submitLsInPlace=async function(){
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Loadsheet submitted ✓','ok');
+  // Submitting closes the tab everywhere (only the tabs still being worked on stay open)
+  var _sidx=S.lsTabs.findIndex(function(t){return t.id===id;});
+  if(_sidx!==-1){
+    if(S.activeTabId===id){
+      if(S.lsTabs.length>1){var _snx=S.lsTabs[_sidx>0?_sidx-1:1];S.activeTabId=_snx.id;S.form=_snx.form;S.lsAc=(_snx.acId||'').replace('ZK-','');S.editId=_snx.id;}
+      else{S.activeTabId=null;S.editId=null;S._newLsTab=false;S.tab='saved';}
+    }
+    S.lsTabs.splice(_sidx,1);
+  }
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_close',payload:{id:id}},ref:String(_rtRef)}));}
+  window.saveWorkspace&&window.saveWorkspace();
+  try{window.scrollTo(0,0);}catch(e){}
   render();
 };
 // handleSubmit for signed loadsheets
