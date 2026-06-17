@@ -81,8 +81,8 @@ function renderLsSeatGrid(f,a){
       } else if(!isPIC&&paxType==='C'){
         // C badge already rendered above; only show $ if no child badge
       }
-      if(!hasInfant&&payReq&&!isPIC){
-        seatsCol+='<div style="position:absolute;top:2px;right:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.6);color:#fff;border-radius:3px;padding:0 3px;line-height:1.6">$</div>';
+      if(payReq&&!isPIC&&!isCoPilot){
+        seatsCol+='<div style="position:absolute;top:0;left:0;right:0;background:#ef4444;color:#fff;font-size:'+(isMob?'10':'12')+'px;font-weight:900;letter-spacing:.08em;text-align:center;line-height:1.9;border-radius:8px 8px 0 0;box-shadow:0 1px 4px rgba(239,68,68,.6)">💲 TO PAY</div>';
       }
       seatsCol+='</div>';
     });

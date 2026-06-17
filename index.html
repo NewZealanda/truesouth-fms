@@ -408,7 +408,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.71';
+const APP_VER='v22.72';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3480,7 +3480,11 @@ function renderStep2(){
           <div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div>
           <div class="seat-wt" style="color:#334155">${wt>0?wt+'kg':''}</div>
         </div>`;
-      }).join(''):`<div style="font-size:12px;color:var(--text3);font-style:italic">${_hasSel?'Tap here or drop seat card here to unallocate':'—'}</div>`}
+      }).join(''):''}
+      <div class="seat" ondragover="event.preventDefault();this.style.outline='2px solid var(--acc)'" ondragleave="this.style.outline=''" ondrop="event.preventDefault();event.stopPropagation();this.style.outline='';window.dropOnPool(event)" onclick="event.stopPropagation();window.tapPool(event)" style="flex-shrink:0;border:2px dashed ${_hasSel?'#f59e0b':'var(--border2)'};background:transparent;cursor:pointer;opacity:${_hasSel?'1':'.6'};display:flex;flex-direction:column;align-items:center;justify-content:center" title="Drag a seat here to unassign">
+        <div style="font-size:18px;color:${_hasSel?'#f59e0b':'var(--border2)'};line-height:1">+</div>
+        <div style="font-size:8px;color:var(--text3);line-height:1.2">drag here</div>
+      </div>
     </div>
   </div>`;
 
@@ -3615,8 +3619,8 @@ function renderLsSeatGrid(f,a){
       } else if(!isPIC&&paxType==='C'){
         // C badge already rendered above; only show $ if no child badge
       }
-      if(!hasInfant&&payReq&&!isPIC){
-        seatsCol+='<div style="position:absolute;top:2px;right:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.6);color:#fff;border-radius:3px;padding:0 3px;line-height:1.6">$</div>';
+      if(payReq&&!isPIC&&!isCoPilot){
+        seatsCol+='<div style="position:absolute;top:0;left:0;right:0;background:#ef4444;color:#fff;font-size:'+(isMob?'10':'12')+'px;font-weight:900;letter-spacing:.08em;text-align:center;line-height:1.9;border-radius:8px 8px 0 0;box-shadow:0 1px 4px rgba(239,68,68,.6)">💲 TO PAY</div>';
       }
       seatsCol+='</div>';
     });

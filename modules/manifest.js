@@ -562,7 +562,11 @@ function renderStep2(){
           <div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div>
           <div class="seat-wt" style="color:#334155">${wt>0?wt+'kg':''}</div>
         </div>`;
-      }).join(''):`<div style="font-size:12px;color:var(--text3);font-style:italic">${_hasSel?'Tap here or drop seat card here to unallocate':'—'}</div>`}
+      }).join(''):''}
+      <div class="seat" ondragover="event.preventDefault();this.style.outline='2px solid var(--acc)'" ondragleave="this.style.outline=''" ondrop="event.preventDefault();event.stopPropagation();this.style.outline='';window.dropOnPool(event)" onclick="event.stopPropagation();window.tapPool(event)" style="flex-shrink:0;border:2px dashed ${_hasSel?'#f59e0b':'var(--border2)'};background:transparent;cursor:pointer;opacity:${_hasSel?'1':'.6'};display:flex;flex-direction:column;align-items:center;justify-content:center" title="Drag a seat here to unassign">
+        <div style="font-size:18px;color:${_hasSel?'#f59e0b':'var(--border2)'};line-height:1">+</div>
+        <div style="font-size:8px;color:var(--text3);line-height:1.2">drag here</div>
+      </div>
     </div>
   </div>`;
 
