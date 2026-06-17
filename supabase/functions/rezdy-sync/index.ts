@@ -2,13 +2,13 @@
 // Deploy: supabase functions deploy rezdy-sync   (or paste in the dashboard editor)
 // Env (auto): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY ; Secret: REZDY_API_KEY
 //
-// POST {date:'YYYY-MM-DD', store?:true} -> fetches that day's Rezdy bookings (by tour
-// start time), normalises them, caches them in ts_rezdy_bookings, and returns them.
-// The Rezdy API key never leaves the server.
+// POST {date:'YYYY-MM-DD', store?:true} -> fetch that day's Rezdy bookings (by tour
+// start time), normalise (incl. per-passenger names+weights, extras/lunches, booking
+// fields/special requirements, and outstanding balance), cache in ts_rezdy_bookings,
+// and return them. The Rezdy API key never leaves the server.
 //
 // NOTE: Rezdy requires ISO-8601 timestamps (yyyy-MM-ddTHH:mm:ssZ) for
-// minTourStartTime / maxTourStartTime — a space-separated datetime is rejected
-// with errorCode 3 "Invalid Date format".
+// minTourStartTime / maxTourStartTime — a space-separated datetime is rejected.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
@@ -27,10 +27,21 @@ const CORS = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, "Content-Type": "application/json" } })
 
+const num = (x: any) => { const n = parseFloat(x); return isNaN(n) ? 0 : n }
+
 function fieldsToObj(fields: any[]): Record<string, string> {
   const o: Record<string, string> = {}
   ;(fields || []).forEach((f: any) => { if (f && f.label) o[f.label] = f.value })
   return o
+}
+
+function participant(p: any) {
+  const f = fieldsToObj(p.fields)
+  const name = [f["First Name"] || f["Firstname"] || f["First name"] || "",
+                f["Last Name"] || f["Lastname"] || f["Last name"] || ""].filter(Boolean).join(" ")
+  const wKey = Object.keys(f).find((k) => /weight/i.test(k))
+  const ageKey = Object.keys(f).find((k) => /child|infant|age/i.test(k))
+  return { name, weight: wKey ? f[wKey] : "", age: ageKey ? f[ageKey] : "", fields: f }
 }
 
 function normalize(b: any) {
@@ -40,10 +51,12 @@ function normalize(b: any) {
     startTimeLocal: it.startTimeLocal || it.startTime || "",
     quantity: it.totalQuantity || (it.quantities || []).reduce((s: number, q: any) => s + (q.value || 0), 0),
     pickup: it.pickupLocation ? (it.pickupLocation.locationName || it.pickupLocation.additionalInstructions || "") : "",
-    pickupLat: it.pickupLocation?.latitude ?? null,
-    pickupLng: it.pickupLocation?.longitude ?? null,
-    participants: (it.participants || []).map((p: any) => fieldsToObj(p.fields)),
+    pickupTime: it.pickupLocation?.pickupTime ?? "",
+    extras: (it.extras || []).map((e: any) => ({ name: e.name || e.extraName || "", qty: e.quantity || 1 })),
+    participants: (it.participants || []).map(participant),
   }))
+  const totalAmount = num(b.totalAmount)
+  const totalPaid = num(b.totalPaid)
   return {
     id: String(b.orderNumber || b.id || ""),
     orderNumber: b.orderNumber || "",
@@ -52,8 +65,12 @@ function normalize(b: any) {
     phone: c.phone || c.mobile || "",
     email: c.email || "",
     comments: b.comments || "",
+    fields: fieldsToObj(b.fields), // booking-level custom fields (e.g. Special Requirements)
     source: b.source || (b.agent && b.agent.companyName) || "",
     totalPax: items.reduce((s: number, i: any) => s + (i.quantity || 0), 0),
+    totalAmount, totalPaid,
+    balanceDue: Math.max(0, totalAmount - totalPaid),
+    currency: b.totalCurrency || b.currency || "",
     items,
   }
 }

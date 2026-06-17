@@ -359,9 +359,9 @@ function renderDrawer(){
   const _canOps=_isAdminPlus||_navPerms.operations===true;
   const _canCharter=_isAdminPlus||_navPerms.charter===true;
   const _canMaint=_isAdminPlus||_navPerms.maintenance===true;
-  // Roster VIEW: granted by the roster perm, OR (since the admin grid groups them as a
-  // single "Roster & Leave" column) by the leave perm. Editing stays gated on roster_edit.
-  const _canRoster=_isAdminPlus||_navPerms.roster===true||_navPerms.leave===true;
+  // Roster VIEW is available to EVERY logged-in user (read-only for non-editors).
+  // Editing remains gated inside renderRoster on roster_edit / admin / superadmin.
+  const _canRoster=!!S.user;
   const sec=S.section||'operations';
   // Drawer sections expand/collapse independently; default all closed (shut on login). Kept in memory so reopening the burger shows the same state.
   S._drawerExp=S._drawerExp||{};
