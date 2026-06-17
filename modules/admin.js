@@ -1109,7 +1109,7 @@ window.lsDropOnSeat=function(toIdx,e){
     if(!f.paxPaymentReq)f.paxPaymentReq={};swp(f.paxPaymentReq,S._dragSeat,toIdx);
     S._dragSeat=null;
   }
-  render();
+  autoSaveLS();render();
 };
 window.lsDropOnUnalloc=function(e){
   e.preventDefault();
