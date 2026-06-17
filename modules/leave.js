@@ -402,10 +402,17 @@ function renderNotificationPanel(){
       }
       h+='</div>';
     });
+    h+='<div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.08);text-align:center;position:sticky;bottom:0;background:#111827"><button tabindex="-1" onclick="window.clearAllNotifications()" style="font-size:12px;color:#f87171;background:none;border:none;cursor:pointer;padding:4px">🗑 Clear all notifications</button></div>';
   }
   h+='</div>';
   return h;
 }
+window.clearAllNotifications=async function(){
+  var uid=S.user&&S.user.id;if(!uid)return;
+  if(!confirm('Clear all your notifications?'))return;
+  try{await fetch(SB+'/rest/v1/ts_notifications?user_id=eq.'+uid,{method:'DELETE',headers:SH});}catch(e){}
+  S._notifications=[];S.__notifStr='';render();
+};
 
 // ══════════════════════════════════════════════
 // Cloud functions

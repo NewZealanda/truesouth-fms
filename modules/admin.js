@@ -999,6 +999,8 @@ window.tapFormSeat=(seatIdx,acId,ev)=>{
       swp(f.bags,from,seatIdx);
       if(!f.infantNames)f.infantNames={};swp(f.infantNames,from,seatIdx);
       if(!f.paxGroups)f.paxGroups={};swp(f.paxGroups,from,seatIdx);
+      if(!f.paxType)f.paxType={};swp(f.paxType,from,seatIdx);
+      if(!f.paxPaymentReq)f.paxPaymentReq={};swp(f.paxPaymentReq,from,seatIdx);
     }
     S._selFormSeat=null;
   } else if(nm){
@@ -1134,15 +1136,13 @@ window.dropFormSeat=(ev,toIdx,acId)=>{
   _lsUndoPush();
   if(!S.dragState?.fromFormIdx&&S.dragState?.fromFormIdx!==0)return;
   const from=S.dragState.fromFormIdx;
-  // Swap names, weights, bags, infant names
+  // Swap ALL per-seat fields so name, weight, bag, infant, group, child type and
+  // TO PAY all travel with the passenger.
   const f=S.form;
-  if(!f.infantNames)f.infantNames={};
-  const tmp={n:f.names[from],s:f.seats[from],b:f.bags[from],inf:f.infantNames[from]||''};
-  f.names[from]=f.names[toIdx]||'';f.seats[from]=f.seats[toIdx]||'';f.bags[from]=f.bags[toIdx]||'';
-  if(f.infantNames[toIdx])f.infantNames[from]=f.infantNames[toIdx];else delete f.infantNames[from];
-  f.names[toIdx]=tmp.n;f.seats[toIdx]=tmp.s;f.bags[toIdx]=tmp.b;
-  if(tmp.inf)f.infantNames[toIdx]=tmp.inf;else delete f.infantNames[toIdx];
-  S.dragState=null;render();
+  if(!f.infantNames)f.infantNames={};if(!f.paxGroups)f.paxGroups={};if(!f.paxType)f.paxType={};if(!f.paxPaymentReq)f.paxPaymentReq={};
+  const swp=(obj,a,b)=>{const t=obj[a];obj[a]=obj[b];obj[b]=t;};
+  swp(f.names,from,toIdx);swp(f.seats,from,toIdx);swp(f.bags,from,toIdx);swp(f.infantNames,from,toIdx);swp(f.paxGroups,from,toIdx);swp(f.paxType,from,toIdx);swp(f.paxPaymentReq,from,toIdx);
+  S.dragState=null;autoSaveLS();render();
 };
 
 // ── Manifest save/load ──
