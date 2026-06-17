@@ -197,6 +197,9 @@ function renderStep1(){
 })();
 
   const canNext=d.acSetup.length>0&&d.acSetup.every(s=>s.pic)&&d.pax.length>0;
+  const _depOther=!!S._rtOther_dep||(!!d.dep&&!_isKnownApt(d.dep));
+  const _destOther=!!S._rtOther_dest||(!!d.dest&&!_isKnownApt(d.dest));
+  const _otherInput=function(field,val){return '<input tabindex="-1" class="fi" type="text" value="'+(val||'').replace(/"/g,'&quot;')+'" placeholder="Type location" onclick="event.stopPropagation()" onchange="S.dispatch.'+field+'=this.value;autoSaveDispatch();safeRender()" style="margin-top:6px;width:100%;font-size:13px;font-weight:600;background:var(--card);border:1px solid var(--border2);border-radius:6px;padding:5px 7px;color:var(--text1)">';};
 
   return _tabBar+`
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
@@ -210,12 +213,14 @@ function renderStep1(){
     <div style="display:flex;align-items:stretch;gap:6px;margin-bottom:8px">
       <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Departure</div>
-        <select tabindex="-1" class="fi" onchange="S.dispatch.dep=this.value;autoSaveDispatch();safeRender()" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(d.dep)}</select>
+        <select tabindex="-1" class="fi" onchange="window.setRouteField('dep',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_depOther?'':d.dep)}<option value="__other__"${_depOther?' selected':''}>✏️ Other…</option></select>
+        ${_depOther?_otherInput('dep',d.dep):''}
       </div>
-      <button tabindex="-1" onclick="const t=S.dispatch.dep;S.dispatch.dep=S.dispatch.dest;S.dispatch.dest=t;autoSaveDispatch();safeRender()" title="Swap" style="align-self:center;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--accent);font-size:16px;cursor:pointer;flex-shrink:0;line-height:1">&#x21C4;</button>
+      <button tabindex="-1" onclick="const t=S.dispatch.dep;S.dispatch.dep=S.dispatch.dest;S.dispatch.dest=t;S._rtOther_dep=false;S._rtOther_dest=false;autoSaveDispatch();safeRender()" title="Swap" style="align-self:center;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--accent);font-size:16px;cursor:pointer;flex-shrink:0;line-height:1">&#x21C4;</button>
       <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Destination</div>
-        <select tabindex="-1" class="fi" onchange="S.dispatch.dest=this.value;autoSaveDispatch();safeRender()" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(d.dest)}</select>
+        <select tabindex="-1" class="fi" onchange="window.setRouteField('dest',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_destOther?'':d.dest)}<option value="__other__"${_destOther?' selected':''}>✏️ Other…</option></select>
+        ${_destOther?_otherInput('dest',d.dest):''}
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -553,13 +558,14 @@ function renderStep2(){
         const isSel=S.selectedPax===p.id;
         const wt=parseFloat(p.weight||0)+parseFloat(p.bag||0);
         const borderCol=p._pushedFrom?(AC_COL[p._pushedFrom]||gc||'#64748b'):gc||'#64748b';
-        const cardStyle=isSel?'background:rgba(255,255,255,.97);border:2px solid #ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.35),0 2px 10px rgba(0,0,0,.25)':`background:rgba(255,255,255,.93);border-left:4px solid ${borderCol}`;
-        return`<div class="seat filled" style="${cardStyle};flex-shrink:0" onclick="event.stopPropagation();tapPax('${p.id}')" draggable="true" ondragstart="startDrag(event,'${p.id}','pool',null)" ondragover="event.preventDefault();event.stopPropagation()" ondrop="event.stopPropagation();window.dropOnPoolPax('${p.id}',event)">
-          ${gc?`<div class="seat-dot" style="background:${gc}"></div>`:''}
-          ${p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':''}
+        const _poolPay=!!p.paymentReq;
+        const cardStyle=isSel?'background:rgba(255,255,255,.97);border:2px solid #ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.35),0 2px 10px rgba(0,0,0,.25)':('background:rgba(255,255,255,.93);'+(_poolPay?'border:2px solid #ef4444':'border-left:4px solid '+borderCol));
+        return`<div class="seat filled" style="position:relative;overflow:hidden;${cardStyle};flex-shrink:0" onclick="event.stopPropagation();tapPax('${p.id}')" draggable="true" ondragstart="startDrag(event,'${p.id}','pool',null)" ondragover="event.preventDefault();event.stopPropagation()" ondrop="event.stopPropagation();window.dropOnPoolPax('${p.id}',event)">
+          ${_poolPay?`<div style="position:absolute;top:0;left:0;right:0;background:#ef4444;color:#fff;font-size:8px;font-weight:900;letter-spacing:.04em;text-align:center;line-height:1.6">$ TO PAY</div>`:''}
+          ${gc?`<div class="seat-dot" style="background:${gc}${_poolPay?';top:13px':''}"></div>`:''}
           ${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':''}
           ${p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':''}
-          <div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div>
+          <div class="seat-name" style="color:#1e293b;font-weight:700;${_poolPay?'margin-top:11px':''}">${p.name?p.name.split(' ')[0]:'?'}</div>
           <div class="seat-wt" style="color:#334155">${wt>0?wt+'kg':''}</div>
         </div>`;
       }).join(''):''}

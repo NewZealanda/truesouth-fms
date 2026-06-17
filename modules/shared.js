@@ -77,7 +77,16 @@ function curDisp(){
   return S.dispatch;
 }
 function seatmapWS(){if(!S.smWS||typeof S.smWS!=='object'){var _sv=null;try{_sv=lsGet('ts_smws');}catch(e){}S.smWS=(_sv&&typeof _sv==='object'&&_sv.acSetup)?_sv:bD();}return S.smWS;}
-function saveSeatmapWS(){try{lsSet('ts_smws',S.smWS||bD());}catch(e){}}
+var _smBcTimer=null;
+// Broadcast the seatmap workspace so seat/pool moves sync live across devices.
+function broadcastSeatmap(){
+  if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
+  clearTimeout(_smBcTimer);
+  _smBcTimer=setTimeout(function(){
+    if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'sm_update',payload:{ws:S.smWS,sessionId:_sessionId}},ref:String(_rtRef)}));}
+  },500);
+}
+function saveSeatmapWS(){try{lsSet('ts_smws',S.smWS||bD());}catch(e){}broadcastSeatmap();}
 window.saveSeatmapWS=saveSeatmapWS;
 // Shared unallocated pool — single source for the seatmap AND every loadsheet tab.
 // It lives on whichever dispatch is current (workspace on the seatmap/loadsheet tabs).
@@ -148,6 +157,15 @@ function _rebuildAptData(){
   all.forEach(function(a){APTS[a.icao]=a.name;APT_COORDS[a.icao]={lat:a.lat,lng:a.lon};});
   APS=Object.keys(APTS);
 }
+// Is this dep/dest value one of the known aerodromes? (Blank counts as known — no "Other" box.)
+function _isKnownApt(v){if(!v)return true;if(!APS||!APS.length)_rebuildAptData();return APS.indexOf(v)>=0;}
+// Departure/Destination select handler that supports a free-text "Other" location.
+window.setRouteField=function(field,val){
+  if(!S.dispatch)return;
+  if(val==='__other__'){S['_rtOther_'+field]=true;if(_isKnownApt(S.dispatch[field]))S.dispatch[field]='';}
+  else{S['_rtOther_'+field]=false;S.dispatch[field]=val;}
+  autoSaveDispatch();safeRender();
+};
 function aptOpts(sel){
   _rebuildAptData();
   var all=_getAllApts();
@@ -160,7 +178,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.83';
+const APP_VER='v22.84';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1389,6 +1407,18 @@ function initRealtime(){
               // If we're viewing this loadsheet and not actively typing, refresh it now.
               var _ae=document.activeElement,_aet=_ae&&_ae.tagName;
               if(_aet==='INPUT'||_aet==='SELECT'||_aet==='TEXTAREA')safeRender();else render();
+            }
+          }
+        }
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='sm_update'){
+          var _smp=msg.payload.payload;
+          if(_smp&&_smp.sessionId!==_sessionId&&_smp.ws){
+            S.smWS=_smp.ws;
+            try{lsSet('ts_smws',S.smWS);}catch(e){}
+            if(S.tab==='seatmap'){
+              var _sae=document.activeElement,_saet=_sae&&_sae.tagName;
+              try{S.solverAutoApply=false;runSolver();S.solverAutoApply=true;}catch(e){}
+              if(_saet==='INPUT'||_saet==='SELECT'||_saet==='TEXTAREA')safeRender();else render();
             }
           }
         }
