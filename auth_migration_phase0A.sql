@@ -9,7 +9,8 @@
 --
 -- BEFORE RUNNING:
 --   1. Take a database backup (Dashboard -> Database -> Backups).
---   2. Deploy the Edge Functions (supabase functions deploy verify-login set-password).
+--   2. Deploy the Edge Functions:
+--        supabase functions deploy verify-login set-password confirm-reset
 --   3. Do this on a NON-production project / the test data first if possible.
 --
 -- A paired ROLLBACK script is at the bottom (commented out).
@@ -61,15 +62,19 @@ create or replace view public.ts_users_public as
     inactive
   from public.ts_users;
 
--- Turn on RLS and remove direct anon/authenticated access to the base table.
--- (Edge Functions use the service_role key, which bypasses RLS, so login + admin
--- password writes keep working through verify-login / set-password.)
-alter table public.ts_users enable row level security;
-
-revoke all on public.ts_users from anon, authenticated;
+-- Hide the hash by revoking SELECT on the base table. We do NOT revoke writes or
+-- enable RLS in Phase A: the client still writes user records + passwords directly
+-- (it just can't READ the hash). sbUserWrite() in the app uses Prefer: return=minimal
+-- so writes don't need a SELECT-back. Blocking write-side account-takeover comes in
+-- Phase B/C (RLS + per-user JWTs); Phase A's job is to close the hash/PII HARVEST.
+revoke select on public.ts_users from anon, authenticated;
 
 -- The browser reads users through the safe view instead.
 grant select on public.ts_users_public to anon, authenticated;
+
+-- The verify-login / set-password / confirm-reset Edge Functions use the service_role
+-- key (which bypasses table grants), so login, password change, and reset all keep
+-- working without the browser ever seeing a hash.
 
 -- IMPORTANT: ts_users is in the realtime publication and streams change events to
 -- every anon client. With RLS on and no SELECT policy, realtime will no longer leak
@@ -88,10 +93,9 @@ grant select on public.ts_users_public to anon, authenticated;
 
 
 -- ============================================================================
--- ROLLBACK (uncomment to revert Phase A if needed — restores the old open access)
+-- ROLLBACK (uncomment to revert Phase A — restores the old open read access)
 -- ============================================================================
--- grant select, insert, update, delete on public.ts_users to anon, authenticated;
--- alter table public.ts_users disable row level security;
+-- grant select on public.ts_users to anon, authenticated;
 -- drop view if exists public.ts_users_public;
 -- -- Phase 0 (optional to keep; harmless if left in place):
 -- -- drop function if exists public.app_role();

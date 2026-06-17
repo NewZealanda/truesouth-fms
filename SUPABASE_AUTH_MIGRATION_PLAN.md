@@ -305,5 +305,39 @@ These are committed and **inert** until you run/deploy them:
 - **Realtime:** drop `'ts_users'` from the `tables` array in `initRealtime` (it can no longer be
   subscribed once RLS is on).
 
-After Phase A the password-hash exposure and anonymous account-takeover paths are closed; Phases B
-and C then add per-table and per-user enforcement as described above.
+After Phase A the password-hash **read/harvest** exposure is closed. Anonymous *write*-side
+takeover (overwriting a hash directly) is intentionally still open in Phase A — it's closed in
+Phase C with real per-user JWTs + RLS write policies.
+
+---
+
+## 10. Implementation status (v22.90) — Phase A is CODED behind a flag
+
+The Phase A client cutover is now in the bundle, gated by **`let AUTH_PHASE_A=false;`** in
+`shared.js` (default **OFF** → the app behaves exactly as before). When ON:
+
+- User lists are read from `ts_users_public` (no hash); `S.users[].passwordHash` is empty.
+- Login calls **`verify-login`**; self password-change calls **`set-password`**; forgot/admin
+  reset confirmation calls **`confirm-reset`**. Admin-set-another-user's-password and the user
+  record upsert (`savePerson`) stay client-side (writes are still allowed in Phase A).
+- All `ts_users` writes go through `sbUserWrite()`, which under the flag uses `return=minimal`
+  and **drops an empty `password_hash`** so editing a user (or saving a reset token) can never
+  wipe a real password now that reads are hash-free.
+- `ts_users` is dropped from the realtime subscription (it can't be subscribed once SELECT is
+  revoked).
+- Remember-me restore matches by `id` only (the hash is no longer client-side).
+
+### Go-live (do on the test site / with a break-glass admin first)
+1. Backup the DB.
+2. Deploy the functions: `supabase functions deploy verify-login set-password confirm-reset`.
+3. Run `auth_migration_phase0A.sql` (creates `ts_users_public`, **revokes SELECT only** on
+   `ts_users`, grants the view). Writes stay open, so the app keeps working.
+4. Flip `AUTH_PHASE_A=true`, rebuild (`python3 build.py`), bump `APP_VER`, deploy.
+5. Verify: log in; from the browser console `fetch(SB+'/rest/v1/ts_users?select=*',{headers:SH})`
+   returns no hashes; change a password; do a forgot-password reset; edit a user without a
+   password and confirm their login still works (no wipe).
+6. To revert instantly: set `AUTH_PHASE_A=false` and redeploy (and/or run the SQL rollback block).
+
+> **Edge functions are untested end-to-end** (they need a live Supabase deploy). They mirror the
+> app's existing hashing and the working `send-leave-email` function, but treat step 5 as the real
+> test gate before flipping the flag in production.

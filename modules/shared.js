@@ -121,6 +121,35 @@ function _seatmapSyncPool(){
 }
 const sbU=async(t,d)=>{try{const r=await fetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);return null;}};
 const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:SH});return r.ok;}catch{return false;}};
+
+// ── Phase A auth cutover (DEFAULT OFF) ──────────────────────────────────────
+// Flip ON only AFTER (1) deploying the verify-login / set-password / confirm-reset
+// Edge Functions and (2) running auth_migration_phase0A.sql. Test on the flag with a
+// break-glass admin before going live — see SUPABASE_AUTH_MIGRATION_PLAN.md.
+// With the flag OFF every helper below behaves exactly as it did before.
+let AUTH_PHASE_A=false;
+// Read users from the hash-free view when locked down, the base table otherwise.
+const USERS_TBL=()=>AUTH_PHASE_A?'ts_users_public':'ts_users';
+// Write user rows. Under Phase A, ts_users SELECT is revoked so we use return=minimal
+// (no SELECT-back) and never push an EMPTY password hash — reads no longer include the
+// hash, so echoing '' back would wipe a real password.
+async function sbUserWrite(rows){
+  let body=rows||[];
+  if(AUTH_PHASE_A){body=body.map(function(r){var c=Object.assign({},r);if(c.password_hash===''||c.password_hash==null)delete c.password_hash;return c;});}
+  try{
+    const r=await fetch(`${SB}/rest/v1/ts_users`,{method:'POST',headers:{...SH,'Prefer':AUTH_PHASE_A?'resolution=merge-duplicates,return=minimal':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(body)});
+    if(!r.ok){console.error('[sbUserWrite]',r.status,await r.text());return null;}
+    return AUTH_PHASE_A?[]:await r.json();
+  }catch(e){console.error('[sbUserWrite]',e);return null;}
+}
+// Call a Supabase Edge Function. Returns {ok, status, data}.
+async function callFn(name,payload){
+  try{
+    const r=await fetch(SB+'/functions/v1/'+name,{method:'POST',headers:{'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK},body:JSON.stringify(payload||{})});
+    const j=await r.json().catch(function(){return{};});
+    return {ok:r.ok&&j&&j.ok!==false,status:r.status,data:j};
+  }catch(e){return {ok:false,status:0,data:{error:'network'}};}
+}
 const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
 
 
@@ -180,7 +209,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.89';
+const APP_VER='v22.90';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -972,7 +1001,7 @@ async function loadAll(){
       sbF('ts_charter_rates'),
       sbF('ts_loadsheets',Q_LOADSHEETS()),
       sbF('ts_manifests',Q_MANIFESTS()),
-      sbF('ts_users'),
+      sbF(USERS_TBL()),
       sbF('ts_scratchpads','','saved_at')
     ]);
     // ── Crew — Supabase is source of truth; localStorage is fast-load cache + offline fallback ──
@@ -1088,7 +1117,7 @@ async function loadAll(){
         const admin={id:'u_admin',name:'Andrew Adamson',email:'andrew@truesouthflights.co.nz',role:'admin',linkedCrew:'A. Adamson',passwordHash:btoa('admin123')};
         S.users=[admin];
         lsSet('ts_users_cache',S.users);
-        await sbU('ts_users',[{id:admin.id,name:admin.name,email:admin.email,role:admin.role,linked_crew:admin.linkedCrew,password_hash:admin.passwordHash}]);
+        await sbUserWrite([{id:admin.id,name:admin.name,email:admin.email,role:admin.role,linked_crew:admin.linkedCrew,password_hash:admin.passwordHash}]);
       }
     }
     if(_initPads&&_initPads.length){S.pads=_initPads.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});}
@@ -1151,7 +1180,7 @@ async function loadAll(){
   if(savedUser)try{S.user=JSON.parse(savedUser);}catch{}
   if(S.user){auditLog('session_restore',{via:'session',user:S.user.email});setTimeout(function(){initRealtime();},300);}
   // Restore remembered session if no session in sessionStorage
-  if(!S.user){const rem=localStorage.getItem('ts_remembered_user');if(rem)try{const ru=JSON.parse(rem);const live=S.users.find(x=>x.id===ru.id&&x.passwordHash===ru.passwordHash);if(live){S.user=live;if(live.email==='andrew@truesouthflights.co.nz'||live.email==='adamsonandrew1@gmail.com'||live.role==='superadmin')live.superAdmin=true;sessionStorage.setItem('ts_user',JSON.stringify(live));['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});auditLog('session_restore',{via:'remember_me',user:live.email});setTimeout(initRealtime,0);}}catch(e){}}
+  if(!S.user){const rem=localStorage.getItem('ts_remembered_user');if(rem)try{const ru=JSON.parse(rem);const live=S.users.find(x=>x.id===ru.id&&(AUTH_PHASE_A||x.passwordHash===ru.passwordHash));if(live){S.user=live;if(live.email==='andrew@truesouthflights.co.nz'||live.email==='adamsonandrew1@gmail.com'||live.role==='superadmin')live.superAdmin=true;sessionStorage.setItem('ts_user',JSON.stringify(live));['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});auditLog('session_restore',{via:'remember_me',user:live.email});setTimeout(initRealtime,0);}}catch(e){}}
   // Load audit log from localStorage first (instant)
   S.auditLog=lsGet('ts_audit_log')||[];
   render();
@@ -1187,7 +1216,8 @@ const _sessionId='sess_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
 function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance'];
+  // Under Phase A, ts_users SELECT is revoked so it can't be subscribed — drop it.
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance'].filter(function(t){return !(AUTH_PHASE_A&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
     _rtWs.onopen=function(){
@@ -1498,7 +1528,7 @@ async function reloadTable(table){
     const acR=await sbF('ts_aircraft');
     if(acR&&acR.length){S.aircraft={};acR.forEach(function(r){S.aircraft[r.id]=r.data||r;});lsSet('ts_aircraft_cache',S.aircraft);return true;}
   } else if(table==='ts_users'){
-    const us=await sbF('ts_users');
+    const us=await sbF(USERS_TBL());
     if(us&&us.length){
       S.users=us.map(function(r){return{id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',
         passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,
@@ -1806,9 +1836,9 @@ window.handleForgot=async function(){
   const expires=Date.now()+30*60*1000;
   u.resetToken=token;u.resetExpires=expires;
   lsSet('ts_users_cache',S.users);
-  // Save token to Supabase
+  // Save token to Supabase (sbUserWrite drops the empty hash under Phase A so it isn't wiped).
   try{
-    await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,
+    await sbUserWrite([{id:u.id,name:u.name,email:u.email,role:u.role,
       linked_crew:u.linkedCrew||'',password_hash:u.passwordHash,
       reset_token:token,reset_expires:expires}]);
   }catch(e){console.warn('Token save failed:',e);}
@@ -1837,16 +1867,24 @@ window.handleReset=async function(){
   if(!code){showResetErr('Enter the 6-digit code from your email.');return;}
   if(!newPw||newPw.length<6){showResetErr('Password must be at least 6 characters.');return;}
   if(newPw!==conf){showResetErr('Passwords do not match.');return;}
-  const u=S.users.find(x=>x.resetToken===code&&x.resetExpires&&Date.now()<x.resetExpires);
-  if(!u){showResetErr('Invalid or expired code. Request a new one.');return;}
-  u.passwordHash=await hashPw(newPw);delete u.resetToken;delete u.resetExpires;
-  lsSet('ts_users_cache',S.users);
-  try{
-    await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,
-      linked_crew:u.linkedCrew||'',password_hash:u.passwordHash,
-      reset_token:null,reset_expires:null}]);
-  }catch(e){}
-  auditLog('password_reset','Password reset for '+u.email);
+  if(AUTH_PHASE_A){
+    // Token is hidden from the client now — verify + set server-side.
+    const em=S.resetEmail||(document.getElementById('li_e')?.value||'').trim();
+    const res=await callFn('confirm-reset',{email:em,code:code,newPassword:newPw});
+    if(!res.ok){showResetErr(res.data&&res.data.error==='invalid_code'?'Invalid or expired code. Request a new one.':'Could not reset password. Try again.');return;}
+    auditLog('password_reset','Password reset (server) for '+(em||'user'));
+  } else {
+    const u=S.users.find(x=>x.resetToken===code&&x.resetExpires&&Date.now()<x.resetExpires);
+    if(!u){showResetErr('Invalid or expired code. Request a new one.');return;}
+    u.passwordHash=await hashPw(newPw);delete u.resetToken;delete u.resetExpires;
+    lsSet('ts_users_cache',S.users);
+    try{
+      await sbUserWrite([{id:u.id,name:u.name,email:u.email,role:u.role,
+        linked_crew:u.linkedCrew||'',password_hash:u.passwordHash,
+        reset_token:null,reset_expires:null}]);
+    }catch(e){}
+    auditLog('password_reset','Password reset for '+u.email);
+  }
   S.resetStep=0;S.resetCode=null;S.resetEmail='';
   // Show success and pre-fill email
   S.loginErr=null;
@@ -1867,12 +1905,27 @@ async function _doLogin(emailArg,passArg){
     else render();
   }
   if(!email||!pass){showErr('Please enter your email and password.');return;}
-  // find user by email first, then verify password async
-  const uByEmail=S.users.find(x=>x.email.toLowerCase()===email.toLowerCase());
-  const pwOk=uByEmail?await verifyPw(pass,uByEmail.passwordHash):false;
-  const u=pwOk?uByEmail:null;
-  // auto-upgrade legacy btoa hash to SHA-256
-  if(u&&u.passwordHash===btoa(pass)){u.passwordHash=await hashPw(pass);lsSet('ts_users_cache',S.users);try{await sbU('ts_users',[{id:u.id,password_hash:u.passwordHash}]);}catch(e){}}
+  let u=null;
+  if(AUTH_PHASE_A){
+    // Server-side verification — hashes never reach the browser.
+    const res=await callFn('verify-login',{email,password:pass});
+    if(res.ok&&res.data&&res.data.user){
+      const vu=res.data.user;
+      u={id:vu.id,name:vu.name,email:vu.email,role:vu.role,linkedCrew:vu.linked_crew||'',passwordHash:'',
+         weight:parseFloat(vu.weight)||0,isPilot:vu.is_pilot||vu.role==='pilot'||false,inactive:vu.inactive||false};
+      // Keep S.users in sync with the verified record.
+      const _ix=S.users.findIndex(x=>x.id===u.id);if(_ix>=0)S.users[_ix]=Object.assign({},S.users[_ix],u);else S.users.push(u);
+    } else if(res.status===0){
+      showErr('Login service unavailable. Check your connection and try again.');return;
+    }
+  } else {
+    // find user by email first, then verify password async
+    const uByEmail=S.users.find(x=>x.email.toLowerCase()===email.toLowerCase());
+    const pwOk=uByEmail?await verifyPw(pass,uByEmail.passwordHash):false;
+    u=pwOk?uByEmail:null;
+    // auto-upgrade legacy btoa hash to SHA-256
+    if(u&&u.passwordHash===btoa(pass)){u.passwordHash=await hashPw(pass);lsSet('ts_users_cache',S.users);try{await sbUserWrite([{id:u.id,password_hash:u.passwordHash}]);}catch(e){}}
+  }
   if(!u){
     showErr('Invalid email or password. Check your details and try again.');
     // Audit failed attempt

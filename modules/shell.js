@@ -286,15 +286,21 @@ window.changePasswordFromModal=async function(){
   const cur=curEl?curEl.value:'';
   const nw=newEl?newEl.value:'';
   const conf=confEl?confEl.value:'';
-  if(isOwnAccount&&!await verifyPw(cur,S.user.passwordHash)){S.admin.pwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
   if(nw.length<6){S.admin.pwMsg={ok:false,text:'Min 6 characters.'};render();return;}
   if(nw!==conf){S.admin.pwMsg={ok:false,text:'Passwords do not match.'};render();return;}
+  // Phase A: own-account change must verify the current password server-side (hash is hidden).
+  if(AUTH_PHASE_A&&isOwnAccount){
+    const res=await callFn('set-password',{mode:'self',email:S.user.email,currentPassword:cur,newPassword:nw});
+    if(!res.ok){S.admin.pwMsg={ok:false,text:res.data&&res.data.error==='invalid_login'?'Current password is incorrect.':'Could not update password.'};render();return;}
+    S.admin.pwMsg={ok:true,text:'Password updated.'};render();return;
+  }
+  if(isOwnAccount&&!await verifyPw(cur,S.user.passwordHash)){S.admin.pwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
   const user=S.users.find(function(x){return x.id===m.userId;});
   const nwHash=await hashPw(nw);
   if(user)user.passwordHash=nwHash;
   if(isOwnAccount){S.user.passwordHash=nwHash;sessionStorage.setItem('ts_user',JSON.stringify(S.user));}
   lsSet('ts_users_cache',S.users);
-  try{await sbU('ts_users',[{id:m.userId,password_hash:nwHash}]);}catch(e){}
+  try{await sbUserWrite([{id:m.userId,password_hash:nwHash}]);}catch(e){}
   S.admin.pwMsg={ok:true,text:'Password updated.'};render();
 };
 
@@ -315,9 +321,16 @@ window.changeMyPassword=async function(){
   const nw=document.getElementById('acc_new')?.value||'';
   const conf=document.getElementById('acc_conf')?.value||'';
   const u=S.user;
-  if(!await verifyPw(cur,u.passwordHash)){S.changePwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
   if(nw.length<6){S.changePwMsg={ok:false,text:'New password must be at least 6 characters.'};render();return;}
   if(nw!==conf){S.changePwMsg={ok:false,text:'New passwords do not match.'};render();return;}
+  // Phase A: verify current + set new server-side (the hash is no longer client-side).
+  if(AUTH_PHASE_A){
+    const res=await callFn('set-password',{mode:'self',email:u.email,currentPassword:cur,newPassword:nw});
+    if(!res.ok){S.changePwMsg={ok:false,text:res.data&&res.data.error==='invalid_login'?'Current password is incorrect.':'Could not update password.'};render();return;}
+    auditLog('password_change','User changed their own password (server)');
+    S.changePwMsg={ok:true,text:'Password updated successfully.'};render();return;
+  }
+  if(!await verifyPw(cur,u.passwordHash)){S.changePwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
   // Update in S.users
   const stored=S.users.find(x=>x.id===u.id);
   const nwHash2=await hashPw(nw);
@@ -326,7 +339,7 @@ window.changeMyPassword=async function(){
   sessionStorage.setItem('ts_user',JSON.stringify(u));
   lsSet('ts_users_cache',S.users);
   try{
-    await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,
+    await sbUserWrite([{id:u.id,name:u.name,email:u.email,role:u.role,
       linked_crew:u.linkedCrew||'',password_hash:nwHash2,
       reset_token:null,reset_expires:null}]);
   }catch(e){}

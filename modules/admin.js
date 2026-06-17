@@ -588,7 +588,7 @@ window.requestReset=async()=>{
   // Store reset token in Supabase (ts_users password_hash temporarily stores token)
   u.resetToken=code;u.resetExpires=expires;
   lsSet('ts_users_cache',S.users);
-  await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,
+  await sbUserWrite([{id:u.id,name:u.name,email:u.email,role:u.role,
     linked_crew:u.linkedCrew,password_hash:u.passwordHash,
     reset_token:code,reset_expires:String(expires)}]);
   // Show code (in production this would email it - for now show in app since no email service)
@@ -599,11 +599,18 @@ window.applyReset=async()=>{
   const code=(document.getElementById('resetCode')?.value||'').trim();
   const newPw=(document.getElementById('resetNewPw')?.value||'').trim();
   if(!code||!newPw){S.resetMsg={ok:false,text:'Enter both the code and new password.'};render();return;}
+  if(AUTH_PHASE_A){
+    // Token is hidden from the client — verify + set server-side.
+    const em=(document.getElementById('resetEmail')?.value||'').toLowerCase().trim();
+    const res=await callFn('confirm-reset',{email:em,code:code,newPassword:newPw});
+    if(!res.ok){S.resetMsg={ok:false,text:res.data&&res.data.error==='invalid_code'?'Invalid or expired code.':'Could not reset password.'};render();return;}
+    S.resetMsg={ok:true,text:'Password updated. You can now log in.'};S.showReset=false;render();return;
+  }
   const u=S.users.find(x=>x.resetToken===code&&x.resetExpires&&Date.now()<x.resetExpires);
   if(!u){S.resetMsg={ok:false,text:'Invalid or expired code.'};render();return;}
   u.passwordHash=await hashPw(newPw);delete u.resetToken;delete u.resetExpires;
   lsSet('ts_users_cache',S.users);
-  await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,linked_crew:u.linkedCrew,password_hash:u.passwordHash,reset_token:null,reset_expires:null}]);
+  await sbUserWrite([{id:u.id,name:u.name,email:u.email,role:u.role,linked_crew:u.linkedCrew,password_hash:u.passwordHash,reset_token:null,reset_expires:null}]);
   S.resetMsg={ok:true,text:'Password updated. You can now log in.'};
   S.showReset=false;render();
 };
@@ -2754,11 +2761,13 @@ window.savePerson=async function(){
       const uIdx=S.users.findIndex(function(x){return x.id===userId;});
       if(uIdx>=0) S.users[uIdx]=userRec;else S.users.push(userRec);
       lsSet('ts_users_cache',S.users);
-      // Two-tier upsert: full payload first, minimal fallback if columns missing
-      const fullUR=await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,role:userRec.role,
+      // Two-tier upsert: full payload first, minimal fallback if columns missing.
+      // sbUserWrite drops an empty hash under Phase A, so editing a user without a new
+      // password never wipes their existing one.
+      const fullUR=await sbUserWrite([{id:userRec.id,name:userRec.name,email:userRec.email,role:userRec.role,
         linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash,weight:userRec.weight||0,is_pilot:!!userRec.isPilot,inactive:!!userRec.inactive}]);
       if(!fullUR){
-        const minUR=await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,
+        const minUR=await sbUserWrite([{id:userRec.id,name:userRec.name,email:userRec.email,
           role:userRec.role,linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash}]);
         if(!minUR) toast('Warning: account may not have saved to server — check connection','warn');
       }
