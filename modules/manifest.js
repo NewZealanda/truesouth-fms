@@ -183,7 +183,6 @@ function renderStep1(){
 
   return _tabBar+`
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
-    ${(d.acSetup&&d.acSetup.length)?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(99,179,237,.5);color:#63b3ed" onclick="window.pullFromSeatmap()">🔄 Pull from Seatmap</button>`:''}
     <button tabindex="-1" class="btn btn-ghost" style="font-size:12px" onclick="S.section='operations';S.tab='saved';S.savedTab='manifests';render()">📂 Open Saved</button>
     <button tabindex="-1" class="btn btn-red" style="font-size:12px" onclick="clearManifest()">✕ Clear</button>
     ${S._undoLabel?`<button tabindex="-1" class="btn btn-ghost" style="font-size:12px;border-color:rgba(245,158,11,.5);color:#f59e0b" onclick="undoManifest()">&#x21A9; Undo ${S._undoLabel}</button>`:''}
@@ -235,8 +234,13 @@ function renderStep1(){
       ${(S._paxUndo&&S._paxUndo.length)?`<button tabindex="-1" class="btn btn-ghost" style="font-size:13px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.undoPax()">&#x21A9; Undo Delete (${S._paxUndo.length})</button>`:""}
     </div>
   </div>
-  <button tabindex="-1" class="btn-full ${canNext?'btn-primary':'btn-disabled'}" onclick="${canNext?'autoAllocate()':''}"
-    ${!canNext?'disabled':''}>Auto-Allocate & Open Seat Map →</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button tabindex="-1" class="btn-full ${canNext?'btn-primary':'btn-disabled'}" style="flex:2;min-width:200px" onclick="${canNext?'autoAllocate()':''}"
+      ${!canNext?'disabled':''}>Auto-Allocate & Open Seat Map →</button>
+    <button tabindex="-1" class="btn-full ${d.pax.filter(p=>!p.infant).length?'btn-ghost':'btn-disabled'}" style="flex:1;min-width:150px;${d.pax.filter(p=>!p.infant).length?'border-color:rgba(99,179,237,.6);color:#63b3ed':''}" onclick="${d.pax.filter(p=>!p.infant).length?'sendManifestToPool()':''}"
+      ${d.pax.filter(p=>!p.infant).length?'':'disabled'}>↓ Send to Pool</button>
+  </div>
+  <p style="font-size:11px;color:var(--text3);margin:6px 2px 0">Pushing copies these passengers into the seatmap workspace — your manifest stays put, so you can push from any manifest and clear the seatmap freely.</p>
   ${renderManifestStickyBar()}
 `;
 }
@@ -267,12 +271,15 @@ window.toggleLockAc=function(acId){
 };
 
 window.reAllocate=function(){
-  const d=S.dispatch;
+  // Re-seat the SEATMAP WORKSPACE (never the manifest).
+  const d=curDisp();
   const locked=S.lockedAcs||[];
   if(locked.length===0){
-    // Full re-allocation: clear all seats first, then auto-allocate
+    // Full re-allocation: clear all seats first, then re-seat the workspace pax
     d.seatMap={};d.origAcMap={};
-    autoAllocate();
+    _seatWorkspaceUnseated();
+    _seatmapSyncPool();
+    S.solverAutoApply=true;runSolver();saveSeatmapWS();render();
     return;
   }
   // Partial re-allocation: keep locked aircraft seats, clear unlocked, then fill
@@ -285,7 +292,7 @@ window.reAllocate=function(){
   acs.forEach(function(id){
     if(!locked.includes(id))delete d.seatMap[id];
   });
-  // Temporarily pin locked pax so autoAllocate leaves them alone
+  // Temporarily pin locked pax so re-seat leaves them alone
   const origPins={};
   d.pax.forEach(function(p){
     origPins[p.id]=p.pinAc;
@@ -297,18 +304,21 @@ window.reAllocate=function(){
       p.pinAc=null;
     }
   });
-  autoAllocate();
+  _seatWorkspaceUnseated();
   d.pax.forEach(function(p){p.pinAc=origPins[p.id];});
+  _seatmapSyncPool();
+  S.solverAutoApply=true;runSolver();saveSeatmapWS();render();
 };
 
 window.applySwapFix=function(acId,fromIdx,toIdx){
-  const sm=S.dispatch.seatMap[acId]||{};
+  const d=curDisp();
+  const sm=(d.seatMap||{})[acId]||{};
   const fromPax=sm[fromIdx];
   const toPax=sm[toIdx];
   if(fromPax) sm[toIdx]=fromPax; else delete sm[toIdx];
   if(toPax) sm[fromIdx]=toPax; else delete sm[fromIdx];
-  S.dispatch.seatMap[acId]=sm;
-  runSolver();
+  d.seatMap[acId]=sm;
+  runSolver();saveSeatmapWS();
   S.appMsg={type:'ok',text:'Swap applied — check CoG is now within limits'};
   render();
 };
@@ -320,8 +330,8 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
   const layout=acLayout(acId);
   const isGA8=a.layout==='ga8';
   const col=AC_COL[acId]||'#1e6b8c';
-  const d=S.dispatch;
-  const sm=interactive?d.seatMap[acId]||{}:{};
+  const d=curDisp();
+  const sm=interactive?(d.seatMap||{})[acId]||{}:{};
   const formSm=form?form.names:null; // for loadsheet view
   const rows=layout.filter(r=>r!=='spacer');
   const hasSpacerBefore=(idx)=>layout.slice(0,layout.indexOf(layout.filter(r=>r!=='spacer')[idx])).some(r=>r==='spacer');
@@ -348,9 +358,9 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
       const isCrew=isPIC||isCoPilotSeat;
       if(!interactive&&form){
         // Loadsheet view — same style as manifest allocation cards
-        const nm=formSm?formSm[cell.i]||'':'';const isInfant=S.dispatch.pax.find(p=>p.name===nm)?.infant||false;
+        const nm=formSm?formSm[cell.i]||'':'';const isInfant=(d.pax||[]).find(p=>p.name===nm)?.infant||false;
         const wt=form?parseFloat(form.seats?.[cell.i]||0)+parseFloat(form.bags?.[cell.i]||0):0;
-        const grp=S.dispatch.pax.find(p=>p.name===nm)?.group||'';
+        const grp=(d.pax||[]).find(p=>p.name===nm)?.group||'';
         const gc=grp?groupColor(grp):null;
         // Match interactive card style: white bg + coloured left border when filled
         const lsSeatStyle=isCrew?''
@@ -407,7 +417,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
       // Show cargo/baggage zones if any values entered
       const cargoItems=a.cargo||[];
       if(!cargoItems.length) return "";
-      const cargoVals=interactive?(S.dispatch?.cargo?.[acId]||{}):form?(form.cargo||{}):(S.form?.cargo||{});
+      const cargoVals=interactive?((d&&d.cargo&&d.cargo[acId])||{}):form?(form.cargo||{}):(S.form?.cargo||{});
       const hasVal=cargoItems.some((_,i)=>parseFloat(cargoVals[i]||0)>0);
       if(!hasVal) return "";
       const rows=cargoItems.map((c,i)=>{
@@ -428,7 +438,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht){
 }
 
 function renderStep2(){
-  const d=S.dispatch;
+  const d=curDisp();
   _seatmapSyncPool(); // keep seatmap "Unassigned" in step with the shared loadsheet pool
   const setups=d.acSetup||[];
   // Find open loadsheet tabs not yet in the seatmap
@@ -439,9 +449,17 @@ function renderStep2(){
     <span style="font-size:13px;font-weight:600;color:#93c5fd;flex:1">📋 ${_notInSeatmap.length} open loadsheet${_notInSeatmap.length!==1?'s':''} not yet in seatmap: ${_notInSeatmap.map(t=>t.form.ac).join(', ')}</span>
     <button onclick="window.pushAllLsToSeatmap()" style="padding:5px 12px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Pull all into Seatmap</button>
   </div>`:'';
+  const _poolNoAc=(d.pax||[]).filter(p=>!p.infant).length;
   if(!setups.length){
-    // No aircraft in seatmap — if we have open loadsheets, show pull prompt; otherwise go to manifest
+    // No aircraft in seatmap — if we have open loadsheets, show pull prompt
     if(_notInSeatmap.length) return _lsBanner+`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Click "Pull all into Seatmap" above to get started, or <button class="btn btn-ghost" style="font-size:13px" onclick="S.opsTab='manifest';render()">go to Manifest</button> to set up aircraft.</div>`;
+    // Passengers were sent to the pool but no aircraft chosen yet — show the pool
+    if(_poolNoAc){
+      const ua=(d.pax||[]).filter(p=>!p.infant);
+      return `<div class="card" style="text-align:center;padding:18px;color:var(--text3);margin-bottom:12px">${_poolNoAc} passenger${_poolNoAc!==1?'s':''} in the pool. Choose aircraft on the <button class="btn btn-ghost" style="font-size:13px" onclick="S.tab='manifest';render()">Manifest</button>, then Auto-Allocate — or push a manifest with aircraft.</div>
+      <div class="card" style="padding:10px 12px"><div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Unassigned (${ua.length}) <button style="font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;cursor:pointer;float:right" onclick="if(confirm('Clear all pooled passengers from the seatmap? (Manifests are not affected.)'))window.clearUnassigned()">Clear All</button></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${ua.map(p=>{const wt=parseFloat(p.weight||0)+parseFloat(p.bag||0);return`<div class="seat filled" style="background:rgba(255,255,255,.93);border-left:4px solid #64748b;flex-shrink:0"><div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div><div class="seat-wt" style="color:#334155">${wt>0?wt+'kg':''}</div></div>`;}).join('')}</div></div>`;
+    }
     S.tab='manifest';render();return'';
   }
 
@@ -502,7 +520,7 @@ function renderStep2(){
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;flex:1">Unassigned${unassigned.length?' ('+unassigned.length+')':''}</div>
       ${S._unassignedUndo?`<button style="font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#f59e0b;cursor:pointer;font-weight:700" onclick="event.stopPropagation();window.undoClearUnassigned()">↩ Undo</button>`:''}
-      ${unassigned.length?`<button style="font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;cursor:pointer" onclick="event.stopPropagation();if(confirm('Remove all unassigned passengers?'))window.clearUnassigned()">Clear All</button>`:''}
+      ${unassigned.length?`<button style="font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;cursor:pointer" onclick="event.stopPropagation();if(confirm('Remove all unassigned passengers from the seatmap? (Your manifests are not affected.)'))window.clearUnassigned()">Clear All</button>`:''}
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;min-height:54px;align-items:flex-start">
       ${unassigned.length?unassigned.map(p=>{
@@ -543,7 +561,8 @@ function renderStep2(){
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
     <button class="btn btn-ghost" onclick="S.tab='manifest';window.scrollTo(0,0);render()">&#x2190; Back to Manifest</button>
     ${hasLsTabs?`<button class="btn btn-primary" onclick="window.pushAllLsToSeatmap()" style="flex:1">&#x2191; Merge All Loadsheets</button>`:''}
-    <button class="btn btn-ghost" onclick="window.clearSeatmap()" style="border-color:rgba(239,68,68,.4);color:#ef4444">&#x2715; Clear Seats</button>
+    <button class="btn btn-ghost" onclick="window.clearSeatmap()" style="border-color:rgba(245,158,11,.4);color:#f59e0b" title="Unseat everyone — they drop to the pool">&#x2715; Clear Seats</button>
+    <button class="btn btn-ghost" onclick="window.resetSeatmap()" style="border-color:rgba(239,68,68,.5);color:#ef4444" title="Empty the whole seatmap (manifests are not affected)">&#x1F5D1; Clear Seatmap</button>
   </div>`;
 }
 

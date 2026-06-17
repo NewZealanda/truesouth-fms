@@ -331,7 +331,7 @@ function renderLoadsheet(){
       const nameHasInfant=nm.includes(' + ');
       const displayNm=nameHasInfant?nm.split(' + ')[0]:nm;
       const infantNm=rawInfant||(nameHasInfant?nm.split(' + ').slice(1).join(' + '):'');
-      const grp=f.paxGroups?.[idx]||S.dispatch?.pax?.find(p=>p.name===nm||p.name===displayNm)?.group||'';
+      const grp=f.paxGroups?.[idx]||(curDisp()?.pax||[]).find(p=>p.name===nm||p.name===displayNm)?.group||'';
       const gc=grp?groupColor(grp):null;
       const payReq=(f.paxPaymentReq||{})[idx]||false;
       const hasPerson=nm||parseFloat(wt);

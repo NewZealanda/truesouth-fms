@@ -852,19 +852,21 @@ window.setPaxField=(i,k,v)=>{
 window.tapPax=pid=>{S.selectedPax=S.selectedPax===pid?null:pid;render();};
 window.tapPool=function(ev){
   if(ev)ev.stopPropagation();
-  if(!S.selectedPax||!S.dispatch)return;
+  const _D=curDisp();
+  if(!S.selectedPax||!_D)return;
   const pid=S.selectedPax;
-  const sm=S.dispatch.seatMap||{};
+  const sm=_D.seatMap||{};
   Object.keys(sm).forEach(function(ac){
     Object.keys(sm[ac]||{}).forEach(function(idx){if(sm[ac][idx]===pid)delete sm[ac][idx];});
   });
   S.selectedPax=null;
   S.solverAutoApply=false;runSolver();S.solverAutoApply=true;
-  autoSaveDispatch();render();
+  saveSeatmapWS();render();
 };
 window.tapSeat=(toIdx,toAc)=>{
-  if(!S.dispatch)return;S.dispatch.seatMap=S.dispatch.seatMap||{};
-  const sm=S.dispatch.seatMap;if(!sm[toAc])sm[toAc]={};
+  const _D=curDisp();
+  if(!_D)return;_D.seatMap=_D.seatMap||{};
+  const sm=_D.seatMap;if(!sm[toAc])sm[toAc]={};
   const displaced=sm[toAc][toIdx]||null;
   if(S.selectedPax){
     const selPid=S.selectedPax;
@@ -882,15 +884,15 @@ window.tapSeat=(toIdx,toAc)=>{
       delete sm[fromAc][fromIdx];
       if(displaced) sm[fromAc][fromIdx]=displaced; // swap
     }
-    S.dispatch.origAcMap=S.dispatch.origAcMap||{};
-    if(!S.dispatch.origAcMap[selPid]) S.dispatch.origAcMap[selPid]=fromAc||toAc;
+    _D.origAcMap=_D.origAcMap||{};
+    if(!_D.origAcMap[selPid]) _D.origAcMap[selPid]=fromAc||toAc;
     S.selectedPax=null;
   } else if(displaced){
     // Tap on occupied seat with nothing selected = select that pax
     S.selectedPax=displaced;
   }
   S.solverAutoApply=false;runSolver();S.solverAutoApply=true;
-  autoSaveDispatch();render();
+  saveSeatmapWS();render();
 };
 window.toggleViewAc=id=>{
   if(!S.viewAcs)S.viewAcs=[];
@@ -918,9 +920,10 @@ window.dropOnSeat=function(ev,toIdx,toAc){
   const pid=S.dragState.pid;
   const fromAc=S.dragState.fromAc;
   const fromSeat=S.dragState.fromSeat;
-  if(!pid||!S.dispatch) return;
-  S.dispatch.seatMap=S.dispatch.seatMap||{};
-  const sm=S.dispatch.seatMap;
+  const _D=curDisp();
+  if(!pid||!_D) return;
+  _D.seatMap=_D.seatMap||{};
+  const sm=_D.seatMap;
   if(!sm[toAc]) sm[toAc]={};
   if(fromAc&&fromAc!=='pool'&&!sm[fromAc]) sm[fromAc]={};
   // Read displaced pax BEFORE any writes
@@ -934,28 +937,29 @@ window.dropOnSeat=function(ev,toIdx,toAc){
     if(displaced) sm[fromAc][fromSeat]=displaced;
   }
   // Track original AC for colour
-  if(!S.dispatch.origAcMap) S.dispatch.origAcMap={};
-  if(!S.dispatch.origAcMap[pid]) S.dispatch.origAcMap[pid]=fromAc||toAc;
+  if(!_D.origAcMap) _D.origAcMap={};
+  if(!_D.origAcMap[pid]) _D.origAcMap[pid]=fromAc||toAc;
   S.dragState=null;
   S.selectedPax=null;
   // If an infant was moved, warn to reweigh
-  const movedPax=S.dispatch.pax.find(function(p){return p.id===pid;});
+  const movedPax=(_D.pax||[]).find(function(p){return p.id===pid;});
   if(movedPax&&movedPax.infant){toast('🔁 Infant moved — please reweigh passengers to confirm actual weights.','warn');}
   S.solverAutoApply=false;runSolver();S.solverAutoApply=true;
-  autoSaveDispatch();render();
+  saveSeatmapWS();render();
 };
 window.dropOnPool=(ev,forceAc)=>{
   ev.preventDefault();if(!S.dragState)return;
   const{fromAc,fromSeat}=S.dragState;
-  if(fromAc&&fromAc!=='pool'&&fromSeat!=null){const sm=S.dispatch.seatMap;if(sm[fromAc])delete sm[fromAc][fromSeat];}
-  S.dragState=null;S.selectedPax=null;runSolver();autoSaveDispatch();render();
+  if(fromAc&&fromAc!=='pool'&&fromSeat!=null){const sm=curDisp().seatMap;if(sm[fromAc])delete sm[fromAc][fromSeat];}
+  S.dragState=null;S.selectedPax=null;runSolver();saveSeatmapWS();render();
 };
 window.dropOnPoolPax=function(targetPaxId,ev){
   ev.preventDefault();ev.stopPropagation();
   if(!S.dragState)return;
   const{pid,fromAc,fromSeat}=S.dragState;
-  if(!pid||pid===targetPaxId||!S.dispatch)return;
-  const sm=S.dispatch.seatMap||{};
+  const _D=curDisp();
+  if(!pid||pid===targetPaxId||!_D)return;
+  const sm=_D.seatMap||{};
   if(fromAc&&fromAc!=='pool'&&fromSeat!=null){
     // Seat pax dragged onto pool pax: put pool pax into source seat (swap)
     if(!sm[fromAc])sm[fromAc]={};
@@ -963,7 +967,7 @@ window.dropOnPoolPax=function(targetPaxId,ev){
   }
   S.dragState=null;S.selectedPax=null;
   S.solverAutoApply=false;runSolver();S.solverAutoApply=true;
-  autoSaveDispatch();render();
+  saveSeatmapWS();render();
 };
 
 // Loadsheet form seat map drag
@@ -1025,36 +1029,41 @@ window.tapDropUnallocated=function(){
 };
 window.removeUnallocated=function(idx){
   _uaPool().splice(idx,1);
-  if(S._selUnalloc===idx)S._selUnalloc=null;autoSaveDispatch();render();
+  if(S._selUnalloc===idx)S._selUnalloc=null;saveSeatmapWS();render();
 };
 window.clearUnallocated=function(){
   var pool=_uaPool();
   S._unallocUndo=pool.map(function(p){return Object.assign({},p);});
   pool.length=0;S._selUnalloc=null;
-  autoSaveDispatch();render();
+  saveSeatmapWS();render();
 };
 window.undoClearUnallocated=function(){
   if(!S._unallocUndo)return;
   var pool=_uaPool();pool.length=0;
   S._unallocUndo.forEach(function(p){pool.push(p);});
   S._unallocUndo=null;
-  autoSaveDispatch();render();
+  saveSeatmapWS();render();
 };
 window.clearUnassigned=function(){
-  if(!S.dispatch)return;
-  const seatedIds=new Set(Object.values(S.dispatch.seatMap||{}).flatMap(function(sm){return Object.values(sm||{});}));
-  const unassigned=(S.dispatch.pax||[]).filter(function(p){return !seatedIds.has(p.id);});
+  // Removes unseated passengers from the SEATMAP WORKSPACE only — manifests are untouched.
+  const _D=curDisp();
+  if(!_D)return;
+  const seatedIds=new Set(Object.values(_D.seatMap||{}).flatMap(function(sm){return Object.values(sm||{});}));
+  const unassigned=(_D.pax||[]).filter(function(p){return !seatedIds.has(p.id);});
   if(!unassigned.length){toast('No unassigned passengers.','warn');return;}
   S._unassignedUndo=unassigned.map(function(p){return Object.assign({},p);});
-  S.dispatch.pax=(S.dispatch.pax||[]).filter(function(p){return seatedIds.has(p.id);});
-  autoSaveDispatch();render();
-  toast('Cleared '+unassigned.length+' unassigned pax','ok');
+  _D.pax=(_D.pax||[]).filter(function(p){return seatedIds.has(p.id);});
+  // Also drop them from the shared pool array
+  if(Array.isArray(_D._unallocated))_D._unallocated=_D._unallocated.filter(function(e){return e.id&&seatedIds.has(e.id);});
+  saveSeatmapWS();render();
+  toast('Cleared '+unassigned.length+' unassigned pax from the seatmap','ok');
 };
 window.undoClearUnassigned=function(){
   if(!S._unassignedUndo)return;
-  S.dispatch.pax=(S.dispatch.pax||[]).concat(S._unassignedUndo);
+  const _D=curDisp();
+  _D.pax=(_D.pax||[]).concat(S._unassignedUndo);
   S._unassignedUndo=null;
-  autoSaveDispatch();render();
+  saveSeatmapWS();render();
 };
 window.lsUnallocDragStart=function(idx,e){
   S._dragUnalloc=idx;S._dragSeat=null;
@@ -1447,7 +1456,7 @@ window.closeManifestTab=function(id){
 // ── Generate loadsheet from manifest ──
 window.openAcLoadsheet=function(acId){generateLoadsheet(acId);};
 function generateLoadsheet(acId){
-  const a=S.aircraft[acId];const d=S.dispatch;if(!a)return;
+  const a=S.aircraft[acId];const d=curDisp();if(!a)return;
   const setup=d.acSetup.find(s=>s.acId===acId);const form=bF();
   form.ac=acId;form.dep=d.dep;form.dest=d.dest;form.date=d.date;form.etd=d.etd;form.etdCustom=d.etdCustom||false;
   form.paxPaymentReq={};
@@ -1845,23 +1854,23 @@ window.createLsTab=function(acId){S._newLsTab=false;generateLoadsheet(acId);};
 window.pushLsToSeatmap=function(){
   const f=S.form;if(!f||!f.ac)return;
   const acId=f.ac;
-  if(!S.dispatch)S.dispatch=bD();
-  S.dispatch.acSetup=S.dispatch.acSetup||[];
-  S.dispatch.seatMap=S.dispatch.seatMap||{};
-  S.dispatch.pax=S.dispatch.pax||[];
+  const _D=curDisp();
+  _D.acSetup=_D.acSetup||[];
+  _D.seatMap=_D.seatMap||{};
+  _D.pax=_D.pax||[];
   // Auto-add aircraft to seatmap if not already present — PIC/coPilot NOT overwritten (manifest owns those)
-  var _acsEntry=S.dispatch.acSetup.find(function(s){return s.acId===acId;});
+  var _acsEntry=_D.acSetup.find(function(s){return s.acId===acId;});
   if(!_acsEntry){
     _acsEntry={acId:acId,pic:'',coPilot:''};
-    S.dispatch.acSetup.push(_acsEntry);
+    _D.acSetup.push(_acsEntry);
   }
   // Use _seatmapKey if present (matches how seatmap render resolves the key)
   const smKey=_acsEntry._seatmapKey||acId;
-  // Clear existing seat assignments for this aircraft — displaced pax stay in dispatch.pax (unassigned pool)
-  delete S.dispatch.seatMap[smKey];
+  // Clear existing seat assignments for this aircraft — displaced pax stay in workspace pax (unassigned pool)
+  delete _D.seatMap[smKey];
   // Build name→id map from existing pax
   const nameMap={};
-  S.dispatch.pax.forEach(function(p){if(p.name)nameMap[p.name.trim().toLowerCase()]=p.id;});
+  _D.pax.forEach(function(p){if(p.name)nameMap[p.name.trim().toLowerCase()]=p.id;});
   // Build fresh seatmap from loadsheet
   const sm={};
   Object.keys(f.names||{}).forEach(function(idx){
@@ -1870,10 +1879,10 @@ window.pushLsToSeatmap=function(){
     const key=nm.toLowerCase();
     let pid=nameMap[key];
     if(!pid){
-      // Pax in loadsheet but not in manifest — add them
+      // Pax in loadsheet but not in workspace — add them
       pid='_ls_'+key.replace(/[^a-z0-9]/g,'_');
-      if(!S.dispatch.pax.find(function(p){return p.id===pid;})){
-        S.dispatch.pax.push({id:pid,name:nm,
+      if(!_D.pax.find(function(p){return p.id===pid;})){
+        _D.pax.push({id:pid,name:nm,
           weight:parseFloat((f.seats||{})[idx]||0)||0,
           bag:parseFloat((f.bags||{})[idx]||0)||0,
           type:((f.paxType||{})[idx]==='C'?'child':'adult'),
@@ -1885,26 +1894,26 @@ window.pushLsToSeatmap=function(){
     }
     sm[parseInt(idx)]=pid;
     var grpVal=(f.paxGroups||{})[idx];
-    if(grpVal!=null){var _dp=S.dispatch.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
+    if(grpVal!=null){var _dp=_D.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
     var payReqVal=(f.paxPaymentReq||{})[idx];
-    if(payReqVal!=null){var _dp2=S.dispatch.pax.find(function(px){return px.id===pid;});if(_dp2)_dp2.paymentReq=!!payReqVal;}
+    if(payReqVal!=null){var _dp2=_D.pax.find(function(px){return px.id===pid;});if(_dp2)_dp2.paymentReq=!!payReqVal;}
   });
-  S.dispatch.seatMap[smKey]=sm;
+  _D.seatMap[smKey]=sm;
   runSolver();
-  autoSaveDispatch();
+  saveSeatmapWS();
   render();
   toast('✅ Pushed to seatmap — displaced pax moved to unassigned','ok');
 };
 window.pushAllLsToSeatmap=function(){
   const tabs=S.lsTabs||[];
   if(!tabs.length){toast('No open loadsheets to push.','warn');return;}
-  if(!S.dispatch)S.dispatch=bD();
-  S.dispatch.pax=S.dispatch.pax||[];
-  S.dispatch.seatMap=S.dispatch.seatMap||{};
-  S.dispatch.acSetup=S.dispatch.acSetup||[];
+  const _D=curDisp();
+  _D.pax=_D.pax||[];
+  _D.seatMap=_D.seatMap||{};
+  _D.acSetup=_D.acSetup||[];
   // Build name→id map from existing pax
   const nameMap={};
-  S.dispatch.pax.forEach(function(p){if(p.name)nameMap[p.name.trim().toLowerCase()]=p.id;});
+  _D.pax.forEach(function(p){if(p.name)nameMap[p.name.trim().toLowerCase()]=p.id;});
   // Group tabs by physical aircraft
   const acGroups={};
   tabs.forEach(function(tab){
@@ -1921,12 +1930,12 @@ window.pushAllLsToSeatmap=function(){
       const smKey=multi?(phyId+'_'+(i+1)):phyId;
       const suffix=multi?'('+(i+1)+')':null;
       // Add to acSetup if not present; always update PIC/coPilot from loadsheet
-      var _pacs=S.dispatch.acSetup.find(function(s){return(s._seatmapKey||s.acId)===smKey;});
+      var _pacs=_D.acSetup.find(function(s){return(s._seatmapKey||s.acId)===smKey;});
       if(!_pacs){
-        var _ephys=S.dispatch.acSetup.find(function(s){return s.acId===phyId;});
+        var _ephys=_D.acSetup.find(function(s){return s.acId===phyId;});
         _pacs=Object.assign({},_ephys||{acId:phyId},{acId:phyId,_seatmapKey:smKey,_displaySuffix:suffix});
         // PIC/coPilot not carried from loadsheet — manifest owns those
-        S.dispatch.acSetup.push(_pacs);
+        _D.acSetup.push(_pacs);
       }
       // Full replace — clear existing seats so removed pax don't persist
       const sm={};
@@ -1937,8 +1946,8 @@ window.pushAllLsToSeatmap=function(){
         let pid=nameMap[key];
         if(!pid){
           pid='_ls_'+key.replace(/[^a-z0-9]/g,'_');
-          if(!S.dispatch.pax.find(function(p){return p.id===pid;})){
-            S.dispatch.pax.push({id:pid,name:nm,
+          if(!_D.pax.find(function(p){return p.id===pid;})){
+            _D.pax.push({id:pid,name:nm,
               weight:parseFloat((f.seats||{})[idx]||0)||0,
               bag:parseFloat((f.bags||{})[idx]||0)||0,
               type:((f.paxType||{})[idx]==='C'?'child':'adult'),
@@ -1949,13 +1958,13 @@ window.pushAllLsToSeatmap=function(){
         }
         sm[parseInt(idx)]=pid;
         var grpVal=(f.paxGroups||{})[idx];
-        if(grpVal!=null){var _dp=S.dispatch.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
+        if(grpVal!=null){var _dp=_D.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
       });
-      S.dispatch.seatMap[smKey]=sm;
+      _D.seatMap[smKey]=sm;
     });
   });
   runSolver();
-  autoSaveDispatch();render();
+  saveSeatmapWS();render();
   toast('✅ All loadsheets pushed to seatmap','ok');
 };
 window.pullFromSeatmap=function(){
@@ -1978,17 +1987,31 @@ window.pullFromSeatmap=function(){
   toast('✅ Pulled from seatmap','ok');
 };
 window.clearSeatmap=function(){
-  S.dispatch.seatMap={};
+  // Unseat everyone in the workspace (they fall back to the pool). Manifests untouched.
+  const _D=curDisp();
+  _D.seatMap={};_D.origAcMap={};
   S.selectedPax=null;
-  autoSaveDispatch();render();
-  toast('Seatmap cleared','ok');
+  _seatmapSyncPool();
+  S.solverAutoApply=true;runSolver();saveSeatmapWS();render();
+  toast('Seats cleared — passengers moved to the pool','ok');
+};
+window.resetSeatmap=function(){
+  // Empty the entire seatmap workspace (seats, pool, aircraft, passengers).
+  // Manifests are NOT affected — re-push from any manifest afterwards.
+  if(!confirm('Clear the whole seatmap (seats, pool and aircraft)?\n\nYour manifests are not affected — you can push them again afterwards.'))return;
+  S.smWS=bD();
+  S.selectedPax=null;S._unassignedUndo=null;S.solverRes={};
+  saveSeatmapWS();
+  S.tab='manifest';window.scrollTo(0,0);render();
+  toast('Seatmap cleared. Push a manifest when ready.','ok');
 };
 window.removeAcFromSeatmap=function(smKey){
-  // Seatmap is a seating VIEW — it must not edit the manifest. This only clears
-  // this aircraft's seat assignments; the aircraft + passengers stay in the manifest.
-  // (Add/remove aircraft from the manifest itself on the Manifest tab.)
-  if(S.dispatch.seatMap)delete S.dispatch.seatMap[smKey];
-  autoSaveDispatch();render();
+  // Seatmap is a working area — it must not edit the manifest. This only clears
+  // this aircraft's seat assignments in the workspace; the manifest is untouched.
+  const _D=curDisp();
+  if(_D.seatMap)delete _D.seatMap[smKey];
+  _seatmapSyncPool();
+  runSolver();saveSeatmapWS();render();
   toast('Seats cleared for this aircraft','ok');
 };
 window.createBlankLsTab=function(acId){
