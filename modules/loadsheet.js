@@ -219,6 +219,15 @@ window.lsSeatEditPopup=function(idx){
     if(!f.paxType)f.paxType={};
     if(newNm||parseFloat(newWt)){f.paxType[idx]=_pType;}else{delete f.paxType[idx];}
     if(!f.paxPaymentReq)f.paxPaymentReq={};
+    // Pay flag is locked to the group: set/clear it for every member of this group
+    var _pg=(newGrp||'').trim().toLowerCase();
+    if(_pg){
+      Object.keys(f.names||{}).forEach(function(k){
+        if((((f.paxGroups||{})[k]||'').trim().toLowerCase())===_pg){
+          if(_payReq)f.paxPaymentReq[k]=true;else delete f.paxPaymentReq[k];
+        }
+      });
+    }
     if(_payReq)f.paxPaymentReq[idx]=true;else delete f.paxPaymentReq[idx];
     S.formDirty=true;autoSaveLS();
     ov.remove();render();

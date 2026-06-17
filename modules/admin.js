@@ -1700,6 +1700,7 @@ window.saveUnsigned=async()=>{
     }
     S.lsTabs.splice(_idx,1);
   }
+  try{window.scrollTo(0,0);}catch(e){} // jump to the top of the now-active loadsheet
   render();
 };
 window.saveDraft=window.saveUnsigned; // alias for desk staff button
