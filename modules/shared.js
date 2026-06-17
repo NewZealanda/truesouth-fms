@@ -134,13 +134,32 @@ const USERS_TBL=()=>(AUTH_PHASE_A||AUTH_PHASE_C)?'ts_users_public':'ts_users';
 // (no SELECT-back) and never push an EMPTY password hash — reads no longer include the
 // hash, so echoing '' back would wipe a real password.
 async function sbUserWrite(rows){
-  let body=rows||[];
   const hf=(typeof _hashFree==='function')&&_hashFree();
-  if(hf){body=body.map(function(r){var c=Object.assign({},r);if(c.password_hash===''||c.password_hash==null)delete c.password_hash;return c;});}
+  const list=(rows||[]).map(function(r){
+    var c=Object.assign({},r);
+    // Under Phase A/C the legacy password_hash isn't the source of truth (Supabase
+    // Auth is); never wipe it with an empty value.
+    if(hf&&(c.password_hash===''||c.password_hash==null))delete c.password_hash;
+    return c;
+  });
+  // Phase A/C revoke SELECT on ts_users (to hide password hashes). PostgREST upsert
+  // (Prefer: resolution=merge-duplicates -> ON CONFLICT DO UPDATE) requires table-level
+  // SELECT, so it fails with 42501. Instead: INSERT new rows; on a 409 duplicate-id,
+  // fall back to PATCH (UPDATE by id). Both need only INSERT/UPDATE + SELECT(id).
   try{
-    const r=await fetch(`${SB}/rest/v1/ts_users`,{method:'POST',headers:{...SH,'Prefer':hf?'resolution=merge-duplicates,return=minimal':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(body)});
-    if(!r.ok){console.error('[sbUserWrite]',r.status,await r.text());return null;}
-    return hf?[]:await r.json();
+    for(const row of list){
+      const r=await fetch(`${SB}/rest/v1/ts_users`,{method:'POST',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(row)});
+      if(r.ok)continue;                       // inserted a new row
+      if(r.status===409){                     // existing id -> update it
+        if(!row.id){console.error('[sbUserWrite] 409 with no id');return null;}
+        const patch=Object.assign({},row);delete patch.id;   // never PATCH the PK
+        const pr=await fetch(`${SB}/rest/v1/ts_users?id=eq.${encodeURIComponent(row.id)}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(patch)});
+        if(pr.ok)continue;
+        console.error('[sbUserWrite PATCH]',pr.status,await pr.text());return null;
+      }
+      console.error('[sbUserWrite INSERT]',r.status,await r.text());return null;
+    }
+    return list;   // truthy = success (callers only check truthiness)
   }catch(e){console.error('[sbUserWrite]',e);return null;}
 }
 // Call a Supabase Edge Function. Returns {ok, status, data}.
@@ -280,7 +299,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.98';
+const APP_VER='v22.99';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
