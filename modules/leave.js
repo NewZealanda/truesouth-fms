@@ -59,7 +59,12 @@ function _lvRosterConflicts(req){
   return out;
 }
 function _lvFmt(ds){if(!ds)return '';var d=new Date(ds+'T00:00:00');return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'});}
-function _lvCanApprove(role){return role==='superadmin'||role==='admin'||role==='cx_manager';}
+function _lvCanApprove(role){
+  // Base "can approve leave at all" is now driven by the permission grid (leave_approve);
+  // the per-request hierarchy below (_lvCanApproveRole) still limits WHO they can approve.
+  if(role==='superadmin'||role==='admin')return true;
+  return (typeof hasRolePerm==='function')?hasRolePerm('leave_approve'):(role==='cx_manager');
+}
 function _lvCanApproveRole(myRole,reqRole){
   if(myRole==='superadmin')return true;
   if(myRole==='admin')return reqRole!=='superadmin';

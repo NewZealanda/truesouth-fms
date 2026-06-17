@@ -2700,7 +2700,9 @@ window.savePerson=async function(){
   const m=S.admin.personModal;if(!m)return;
   const d=m.draft;
   const name=(d.n||'').trim();
-  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
+  // Managing user accounts/roles requires admin_users (admin/superadmin always have it);
+  // self-profile edits remain allowed below via userId===S.user.id.
+  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin||(typeof hasRolePerm==='function'&&hasRolePerm('admin_users'));
   // Validate
   if(!name&&!d.email){S.admin.err='Name is required.';render();return;}
   const finalName=name||(d.email?d.email.split('@')[0]:'');
@@ -2805,6 +2807,7 @@ window.saveAircraftDraft=async()=>{
   await sbU('ts_aircraft',[{id:d.id,data:d}]);
 };
 window.saveCharterRates=async()=>{
+  if(typeof hasRolePerm==='function'&&!hasRolePerm('charter')){toast('Not authorised to edit charter rates.','warn');return;}
   lsSet('ts_charter_rates_cache',S.charterRates);
   lsSet('ts_charter_wait_rate',S.charterWaitRate);
   const rows=Object.entries(S.charterRates).map(([acId,rates])=>({id:acId,acId,rates}));
@@ -3122,6 +3125,7 @@ window.calcTTIS=function(){
 // --- Role Permissions Table ---
 let _permSaveTimer=null;
 window.toggleRolePerm=function(role,perm,val){
+  if(typeof hasRolePerm==='function'&&!hasRolePerm('admin_users')){toast('Not authorised to change permissions.','warn');return;}
   if(!S.rolePerms)S.rolePerms={};
   if(!S.rolePerms[role])S.rolePerms[role]=Object.assign({},(DEFAULT_ROLE_PERMS[role])||{});
   if(perm==='roster_leave'){S.rolePerms[role]['roster']=val;S.rolePerms[role]['leave']=val;}
@@ -3156,7 +3160,9 @@ function renderAdminPerms(){
     {k:'admin_users',   lbl:'Users',          tip:'Manage user accounts, roles and passwords'},
     {k:'sign_loadsheet',lbl:'Sign',           tip:'Sign off on loadsheets as PIC'},
     {k:'maint_bookings',lbl:'Bookings',       tip:'Manage maintenance bookings'},
-    {k:'audit',         lbl:'Audit',          tip:'View the system audit log'}
+    {k:'audit',         lbl:'Audit',          tip:'View the system audit log'},
+    {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'},
+    {k:'rezdy',         lbl:'Rezdy',          tip:'Access the Rezdy bookings/pickups/schedule tab'}
   ];
   var ROLE_ROWS=[
     {k:'admin',        lbl:'Admin'},

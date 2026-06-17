@@ -157,6 +157,7 @@ window.clearCharterQuote=function(){
   render();
 };
 window.saveCharterQuote=function(){
+  if(typeof hasRolePerm==='function'&&!hasRolePerm('charter')){toast('Not authorised to save charter quotes.','warn');return;}
   const legs=S.charter.legs||[];
   let totalCost=0;
   const waitRate=S.charterWaitRate||150;

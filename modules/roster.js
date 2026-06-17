@@ -177,7 +177,7 @@ function renderRosterView(){
   NEVER_SHOW.forEach(function(k){if(S._rosterGroupHide.indexOf(k)===-1)S._rosterGroupHide.push(k);});
   var _rGH=S._rosterGroupHide;
 
-  var _payAllowed=role==='superadmin'||role==='admin'||role==='accounts';
+  var _payAllowed=role==='superadmin'||role==='admin'||(typeof hasRolePerm==='function'&&hasRolePerm('pay_week'));
   if(typeof S._rosterPayWeek==='undefined')S._rosterPayWeek=lsGet('ts_roster_payweek')||false;
   var _payWeek=_payAllowed&&!!S._rosterPayWeek;
   // Align the displayed week to the active mode: Mon–Sun normally, Thu–Wed for pay week.

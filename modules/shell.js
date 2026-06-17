@@ -396,7 +396,7 @@ function renderDrawer(){
     }
   }
   // Roster & Leave combined
-  {var _canApproveLeaveNav=role==='superadmin'||role==='admin'||role==='cx_manager';
+  {var _canApproveLeaveNav=_isAdminPlus||hasRolePerm('leave_approve');
   var _lvActive=sec==='leave';
   // Match the Approvals tab: only count pending requests this approver can actually action.
   var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveRole!=='function'||_lvCanApproveRole(role,r.user_role||'desk'));}).length:0;
@@ -417,29 +417,30 @@ function renderDrawer(){
       h+=_mn('Logs','log');
       h+=_mn('Aircraft','aircraft');
       h+=_mn('Observations','observations');
-      if(_isAdminPlus){h+=_mn('Bookings','bookings');h+=_mn('Estimator','estimator');}
+      if(_isAdminPlus||hasRolePerm('maint_bookings')){h+=_mn('Bookings','bookings');h+=_mn('Estimator','estimator');}
       h+=_mn('Search','search');
     }
   }
-  {
+  {var _canUsers=_isAdminPlus||hasRolePerm('admin_users');
+   var _canCrew=_isAdminPlus||hasRolePerm('admin_crew');
+   if(_canUsers||_canCrew){
     h+=_secBtn('Settings','settings','⚙️');
     if(_isExp('settings')){
       var adSec=(S.admin||{}).section||'people';
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
+      h+=_sn('People','people');
+      if(_canUsers)h+=_sn('Permissions','perms');
       if(_isAdminPlus){
-        h+=_sn('People','people');
-        h+=_sn('Permissions','perms');
         h+=_sn('Drive','gdrive');
         h+=_sn('Aerodromes','aerodromes');
         h+=_sn('Statistics','statistics');
-        if(role==='superadmin')h+=_sn('Audit','audit');
-      } else {
-        h+=_subBtn('People',sec==='settings',"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='people';window.setTab('admin')");
       }
+      if(hasRolePerm('audit'))h+=_sn('Audit','audit');
     }
+   }
   }
-  // Rezdy integration — superadmin only (work in progress)
-  if(role==='superadmin'){
+  // Rezdy integration — gated on the 'rezdy' permission (superadmin only by default)
+  if(hasRolePerm('rezdy')){
     h+=_secBtn('Rezdy','rezdy','🔗');
     if(_isExp('rezdy')){
       h+=_subBtn('Integration',sec==='rezdy',"S._drawerOpen=false;S.section='rezdy';render()");

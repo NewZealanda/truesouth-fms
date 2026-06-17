@@ -84,8 +84,8 @@ function _rzEnsureVans(){
 //  ENTRY
 // ─────────────────────────────────────────────────────────────────────────────
 function renderRezdy(){
-  // Superadmin-only while in development (defense-in-depth; the menu item is also gated).
-  if((S.user&&S.user.role)!=='superadmin')return '<div class="page"><div class="card" style="text-align:center;padding:40px">Not available.</div></div>';
+  // Gated on the 'rezdy' permission (superadmin only by default; the menu item is also gated).
+  if(typeof hasRolePerm==='function'&&!hasRolePerm('rezdy'))return '<div class="page"><div class="card" style="text-align:center;padding:40px">Not available.</div></div>';
   if(!S.rezdyDate)S.rezdyDate=_rzToday();
   const sub=S.rezdyTab||'bookings';
   const tabBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
