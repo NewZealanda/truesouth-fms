@@ -411,7 +411,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.79';
+const APP_VER='v22.80';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -6957,7 +6957,7 @@ window.saveUnsigned=async()=>{
   if(_savingTab)delete _savingTab.originalForm;
   lsSet('ts_loadsheets_cache',S.saved);
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned'}]);
-  window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f);
+  window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog(isEdit?'loadsheet_edit':'loadsheet_save',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Draft saved.','ok');
@@ -6992,7 +6992,7 @@ window.submitLsInPlace=async function(){
   S.editId=id;S.formDirty=false;
   var _t=S.lsTabs.find(function(t){return t.id===id;});if(_t)delete _t.originalForm;
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
-  window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f);
+  window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Loadsheet submitted ✓','ok');
@@ -10790,7 +10790,10 @@ function renderNotificationPanel(){
       h+='<div style="font-size:12px;color:'+(n.read?'var(--text2)':'var(--text)')+';line-height:1.5;display:inline">'+_lvEsc(n.message||'')+'</div>';
       h+='<div style="font-size:10px;color:var(--text3);margin-top:4px">'+new Date(n.created_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</div>';
       if(n.type==='leave_submitted'&&n.reference_id){
-        h+='<button tabindex="-1" onclick="S.section=\'leave\';_lvInit();S._leave.tab=\'approvals\';S._notifOpen=false;render()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">View request →</button>';
+        h+='<div><button tabindex="-1" onclick="S.section=\'leave\';_lvInit();S._leave.tab=\'approvals\';S._notifOpen=false;render()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">View request →</button></div>';
+      }
+      if(n.type==='loadsheet_pic'&&n.reference_id){
+        h+='<div style="margin-top:6px"><button tabindex="-1" onclick="window.openLoadsheetFromNotif(\''+n.reference_id+'\')" style="font-size:12px;font-weight:700;color:#fff;background:#7c3aed;border:none;cursor:pointer;padding:6px 12px;border-radius:7px">Open loadsheet to sign →</button></div>';
       }
       h+='</div>';
     });
@@ -11051,7 +11054,7 @@ window._notifyLeaveUser=async function(userId,action,leaveType,startDate,endDate
 
 // Notify the PIC's user account when a loadsheet is saved with them as PIC.
 // Message format: "BF has created a loadsheet for you. ZK-SLA QN-MF 0930"
-window._notifyPicLoadsheet=async function(f){
+window._notifyPicLoadsheet=async function(f,lsId){
   try{
     if(!f||!f.pic)return;
     var pic=String(f.pic).trim();
@@ -11062,8 +11065,15 @@ window._notifyPicLoadsheet=async function(f){
     var route=((f.dep||'').replace(/^NZ/,''))+'-'+((f.dest||'').replace(/^NZ/,''));
     var etd=(f.etd||'').replace(':','');
     var msg=code+' has created a loadsheet for you. '+(f.ac||'')+' '+route+(etd?' '+etd:'');
-    await sbU('ts_notifications',[{user_id:picUser.id,type:'loadsheet_pic',message:msg,read:false,created_at:new Date().toISOString()}]);
+    await sbU('ts_notifications',[{user_id:picUser.id,type:'loadsheet_pic',reference_id:lsId||null,message:msg,read:false,created_at:new Date().toISOString()}]);
   }catch(e){}
+};
+// Open a loadsheet straight from its notification (jump to sign).
+window.openLoadsheetFromNotif=function(id){
+  S._notifOpen=false;S.section='operations';S._newLsTab=false;
+  if((S.lsTabs||[]).find(function(t){return t.id===id;})){window.switchLsTab(id);return;}
+  if((S.saved||[]).find(function(s){return s.id===id&&s.status!=='deleted';})){window.editSaved(id);return;}
+  toast('That loadsheet is no longer available.','warn');render();
 };
 
 window._triggerLeaveEmail=async function(requestId,action){

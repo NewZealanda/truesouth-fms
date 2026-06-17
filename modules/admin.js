@@ -1688,7 +1688,7 @@ window.saveUnsigned=async()=>{
   if(_savingTab)delete _savingTab.originalForm;
   lsSet('ts_loadsheets_cache',S.saved);
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned'}]);
-  window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f);
+  window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog(isEdit?'loadsheet_edit':'loadsheet_save',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Draft saved.','ok');
@@ -1723,7 +1723,7 @@ window.submitLsInPlace=async function(){
   S.editId=id;S.formDirty=false;
   var _t=S.lsTabs.find(function(t){return t.id===id;});if(_t)delete _t.originalForm;
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
-  window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f);
+  window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Loadsheet submitted ✓','ok');
