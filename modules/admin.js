@@ -3204,7 +3204,7 @@ function renderAdminPerms(){
       }
       h+='<td style="text-align:center;padding:4px">'
         +'<input type="checkbox" '+(eff?'checked':'')+' '
-        +'onchange="window.toggleRolePerm('+JSON.stringify(row.k)+','+JSON.stringify(col.k)+',this.checked)" '
+        +"onchange=\"window.toggleRolePerm('"+row.k+"','"+col.k+"',this.checked)\" "
         +'style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">'
         +'</td>';
     });

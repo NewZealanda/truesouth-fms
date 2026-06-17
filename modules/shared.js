@@ -304,7 +304,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.00';
+const APP_VER='v23.01';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1404,7 +1404,6 @@ function initRealtime(){
               S.saved=S.saved||[];S.saved.unshift({id:_tp.id,form:_tp.form,status:'draft',savedAt:_tp.savedAt});
               lsSet('ts_loadsheets_cache',S.saved);
             }
-            if(_tp.by&&S.user&&_tp.by!==S.user.name)toast((_tp.by||'Someone')+' opened '+((_tp.acId||'').replace('ZK-',''))+' loadsheet','info');
             safeRender();
           }
         }
@@ -1454,7 +1453,6 @@ function initRealtime(){
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_signed'){
           var _sipl=msg.payload.payload;
           if(_sipl&&_sipl.sessionId!==_sessionId){
-            if(_sipl.by&&S.user&&_sipl.by!==S.user.name)toast((_sipl.by||'Someone')+' created '+(_sipl.acCode||'')+' loadsheet','ok');
             reloadTable('ts_loadsheets').then(function(){
               // Update open tab form so signature shows live
               if(_sipl.id){
@@ -1877,9 +1875,6 @@ function mergeDispatch(remote){
   if(remote._loadedAt&&(!local._loadedAt||remote._loadedAt>local._loadedAt)){
     S.dispatch={...remote,seatMap:{},step:local.step||1};
     S.solverRes={};
-    const who=(S.users||[]).find(function(u){return u.id===remote._updatedBy;});
-    const whoName=who?(who.name||who.email).split(' ')[0]:'Someone';
-    toast(whoName+' loaded manifest: '+(remote.name||'untitled'),'info');
     safeRender();return;
   }
 
@@ -1914,9 +1909,6 @@ function mergeDispatch(remote){
     S.dispatch._updateTs=remote._updateTs;
   }
 
-  const who=(S.users||[]).find(function(u){return u.id===remote._updatedBy;});
-  const whoName=who?(who.name||who.email).split(' ')[0]:'Someone';
-  toast(whoName+' updated the manifest','info');
   safeRender();
 }
 
@@ -2129,11 +2121,13 @@ async function restoreWorkspace(){
   if(!S.user)return;
   try{
     var _r=await fetch(SB+'/rest/v1/ts_settings?key=eq.workspace_shared&select=value&limit=1',{headers:{'apikey':SK,...SH}});
-    if(!_r.ok)return;
-    var _rows=await _r.json();
-    if(!_rows.length||!_rows[0].value)return;
-    _applyWorkspace(JSON.parse(_rows[0].value));
+    if(_r.ok){
+      var _rows=await _r.json();
+      if(_rows.length&&_rows[0].value)_applyWorkspace(JSON.parse(_rows[0].value));
+    }
   }catch(e){}
+  // Always return to the last-viewed page on boot/login, even with no shared workspace.
+  try{_restoreLastView();safeRender();}catch(e){}
 }
 
 function _applyWorkspace(ws){
@@ -2180,7 +2174,6 @@ function _applyWorkspace(ws){
       _render=true;
     }
   });
-  _restoreLastView();
   if(_render)safeRender();
 }
 // Return to the same page (section / tab / open loadsheet or manifest) after a reload,
