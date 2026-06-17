@@ -160,7 +160,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.75';
+const APP_VER='v22.76';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1656,13 +1656,14 @@ document.addEventListener('visibilitychange',function(){
     // socket has usually dropped, so the open loadsheets/manifests can be stale.
     // Do a full refresh to pull the latest data + workspace. (No-cache headers make
     // this cheap, and loadAll + restoreWorkspace rebuild the correct open tabs.)
-    if(S.user&&awayMs>60000){location.reload();return;}
+    var _rUnsaved=(typeof _rosterUnsaved==='function')&&_rosterUnsaved();
+    if(S.user&&awayMs>60000&&!_rUnsaved){location.reload();return;}
     // Brief switch — just reconnect realtime if it dropped, and resume presence.
     if(S.user&&(!_rtWs||_rtWs.readyState!==1)){try{initRealtime();}catch(e){}}
     if(S._presSection){broadcastPresence(S._presSection);_presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},9000);}
   }
 });
-window.addEventListener('beforeunload',function(){if(S._presSection)broadcastPresence(null);});
+window.addEventListener('beforeunload',function(e){if(S._presSection)broadcastPresence(null);if(typeof _rosterUnsaved==='function'&&_rosterUnsaved()){e.preventDefault();e.returnValue='';return '';}});
 window.addEventListener('pagehide',function(){if(S._presSection)broadcastPresence(null);});
 // iOS/Safari restores frozen pages from the back/forward cache — force a fresh load.
 window.addEventListener('pageshow',function(e){if(e.persisted&&S.user)location.reload();});

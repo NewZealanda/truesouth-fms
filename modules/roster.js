@@ -83,6 +83,37 @@ function _rGetStatus(u,ds,roster){
   return st;
 }
 function _rIni(u){return _rCode(u);}
+// ── Unsaved-roster guard ──
+function _rosterUnsaved(){return !!(S._rosterDraft&&Object.keys(S._rosterDraft).length>0);}
+// Run `go` immediately unless there are unsaved roster edits — then prompt first.
+window._navAway=function(go){
+  if(S.section==='roster'&&_rosterUnsaved()){_rosterSavePrompt(go);}
+  else if(typeof go==='function'){go();}
+};
+function _rosterSavePrompt(proceed){
+  var ex=document.getElementById('roster-save-ov');if(ex)ex.remove();
+  S._rosterPendingNav=proceed||null;
+  var ov=document.createElement('div');ov.id='roster-save-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML='<div style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:22px;max-width:380px;width:100%;box-shadow:0 12px 44px rgba(0,0,0,.55)">'
+    +'<div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Unsaved roster changes</div>'
+    +'<div style="font-size:13px;color:var(--text3);margin-bottom:18px;line-height:1.5">You have roster edits that haven\'t been saved. Save them before leaving?</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px">'
+    +'<button onclick="window._rosterNavChoose(\'save\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(34,197,94,.55);background:rgba(34,197,94,.12);color:#4ade80;font-size:14px;font-weight:700;cursor:pointer">💾 Save &amp; continue</button>'
+    +'<button onclick="window._rosterNavChoose(\'discard\')" style="padding:11px;border-radius:10px;border:1.5px solid rgba(239,68,68,.5);background:rgba(239,68,68,.12);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer">Discard changes</button>'
+    +'<button onclick="window._rosterNavChoose(\'cancel\')" style="padding:11px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Cancel</button>'
+    +'</div></div>';
+  ov.addEventListener('click',function(e){if(e.target===ov)window._rosterNavChoose('cancel');});
+  document.body.appendChild(ov);
+}
+window._rosterNavChoose=function(c){
+  var ov=document.getElementById('roster-save-ov');if(ov)ov.remove();
+  var go=S._rosterPendingNav;S._rosterPendingNav=null;
+  if(c==='cancel')return;
+  if(c==='save'){window.saveRosterToCloud&&window.saveRosterToCloud();}   // merges draft locally + persists
+  else if(c==='discard'){S._rosterDraft={};S._rosterUndoStack=[];}
+  if(typeof go==='function')go();
+};
 
 // ── Main entry ──
 function renderRoster(){
@@ -167,13 +198,13 @@ function renderRosterView(){
   // ── Toolbar ──
   var h='';
   h+='<div style="padding:10px 14px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card)">';
-  h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(prevStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">◁</button>';
+  h+='<button tabindex="-1" onclick="window._navAway(function(){S.rosterWeek=\''+_rIso(prevStart)+'\';S._rosterLeaveWeek=null;render()})" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">◁</button>';
   h+='<label onclick="this.querySelector(\'input\').showPicker?this.querySelector(\'input\').showPicker():null" style="display:inline-flex;align-items:center;cursor:pointer;position:relative">';
   h+='<span style="font-size:13px;font-weight:700;color:var(--accent);padding:4px 8px;border-radius:6px;border:1px solid rgba(167,139,250,.35);background:rgba(167,139,250,.08);white-space:nowrap">'+wkLbl+'</span>';
   h+='<input type="date" value="'+S.rosterWeek+'" onchange="window.rosterJump(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;left:0;top:0">';
   h+='</label>';
-  h+='<button tabindex="-1" onclick="S.rosterWeek=\''+_rIso(nextStart)+'\';S._rosterLeaveWeek=null;render()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>';
-  h+='<button tabindex="-1" onclick="S.rosterWeek=null;S._rosterLeaveWeek=null;render()" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.08);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">Today</button>';
+  h+='<button tabindex="-1" onclick="window._navAway(function(){S.rosterWeek=\''+_rIso(nextStart)+'\';S._rosterLeaveWeek=null;render()})" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>';
+  h+='<button tabindex="-1" onclick="window._navAway(function(){S.rosterWeek=null;S._rosterLeaveWeek=null;render()})" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.08);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">Today</button>';
   if(_payAllowed){
     h+='<button tabindex="-1" onclick="window.rosterTogglePayWeek()" title="Toggle pay-week display (Thursday–Wednesday)" style="padding:5px 10px;border-radius:8px;border:1px solid '+(_payWeek?'rgba(34,197,94,.5)':'var(--border2)')+';background:'+(_payWeek?'rgba(34,197,94,.12)':'var(--card2)')+';color:'+(_payWeek?'#4ade80':'var(--text3)')+';font-size:11px;font-weight:700;cursor:pointer">'+(_payWeek?'Pay wk · Thu–Wed':'Pay week')+'</button>';
   }
@@ -725,13 +756,15 @@ window.rosterJump=function(v){
   if(!v)return;
   var d=new Date(v+'T00:00:00');
   if(isNaN(d.getTime()))return;
-  var day=d.getDay();
-  var diff=day===0?-6:1-day;
-  d.setDate(d.getDate()+diff);
-  var iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  S.rosterWeek=iso;
-  S._rosterLeaveWeek=null;
-  setTimeout(render,0);
+  window._navAway(function(){
+    var day=d.getDay();
+    var diff=day===0?-6:1-day;
+    d.setDate(d.getDate()+diff);
+    var iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    S.rosterWeek=iso;
+    S._rosterLeaveWeek=null;
+    setTimeout(render,0);
+  });
 };
 
 window.rosterVisAll=function(){
