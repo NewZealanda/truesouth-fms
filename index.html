@@ -408,7 +408,7 @@ async function callFn(name,payload){
 // Supabase Auth (GoTrue) directly, every REST/realtime call carries the user's JWT,
 // and RLS enforces access server-side. Phase C implies the Phase A hash-free posture.
 // With the flag OFF, every helper below is inert.
-let AUTH_PHASE_C=false;
+let AUTH_PHASE_C=true;
 let _sbSession=null;          // {access_token, refresh_token, expires_at(ms)}
 let _sbRefreshTimer=null;
 // True when user reads must avoid the hashed base table (either cutover).
@@ -531,7 +531,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.92';
+const APP_VER='v22.93';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
