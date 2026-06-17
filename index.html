@@ -408,7 +408,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.69';
+const APP_VER='v22.70';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -10230,6 +10230,24 @@ var LEAVE_SC={
 
 function _lvEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function _lvDays(s,e,partial){if(!s||!e)return 0;var d=Math.round((new Date(e)-new Date(s))/86400000)+1;return partial?Math.max(0.5,d-0.5):d;}
+// Count the actual leave days used = days in range the person is rostered ON
+// (excludes RDOs / days already off per the roster).
+function _lvWorkingDays(userId,s,e){
+  if(!s||!e)return 0;
+  var roster=S.roster||{};
+  var u=(S.users||[]).find(function(x){return x.id===userId;})||{id:userId,name:''};
+  var off={rdo:1,off:1};
+  var cur=new Date(s+'T00:00:00'),end=new Date(e+'T00:00:00'),n=0,guard=0;
+  while(cur<=end&&guard++<3660){
+    var ds=(typeof _rIso==='function')?_rIso(cur):cur.toISOString().slice(0,10);
+    var st=(typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):((roster[ds]||{})[userId]||'');
+    if(!off[st])n++;
+    cur.setDate(cur.getDate()+1);
+  }
+  return n;
+}
+// RDO/off days within a range (the days NOT counted against leave).
+function _lvRdoDays(userId,s,e){return Math.max(0,_lvDays(s,e,false)-_lvWorkingDays(userId,s,e));}
 function _lvFmt(ds){if(!ds)return '';var d=new Date(ds+'T00:00:00');return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'});}
 function _lvCanApprove(role){return role==='superadmin'||role==='admin'||role==='cx_manager';}
 function _lvCanApproveRole(myRole,reqRole){
@@ -10276,6 +10294,8 @@ function renderLeave(){
 
   if(!lv._myLoaded){lv._myLoaded=true;window.loadMyLeave();}
   if(canApprove&&!lv._allLoaded){lv._allLoaded=true;window.loadAllLeave();}
+  // Need the roster to work out which leave days are RDOs vs working days.
+  if(!S._rosterLoaded&&window.loadRosterFromCloud){S._rosterLoaded=true;window.loadRosterFromCloud();if(window.loadRosterLeave)window.loadRosterLeave();}
 
   var pendingCt=canApprove&&lv.allReqs
     ?lv.allReqs.filter(function(r){return r.status==='pending'&&_lvCanApproveRole(role,r.user_role||'desk');}).length
@@ -10332,7 +10352,9 @@ function _renderMyLeave(lv){
     h+='<input type="date" value="'+f.endDate+'" oninput="S._leave.form.endDate=this.value;render()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
     h+='</div>';
     if(f.startDate&&f.endDate&&days>0){
-      h+='<div style="font-size:13px;color:#a78bfa;margin-bottom:12px">📅 '+days+' day'+(days!==1?'s':'')+' total</div>';
+      var _wd=_lvWorkingDays(S.user&&S.user.id,f.startDate,f.endDate);
+      var _rd=days-_wd;
+      h+='<div style="font-size:13px;color:#a78bfa;margin-bottom:12px">📅 <strong>'+_wd+' leave day'+(_wd!==1?'s':'')+'</strong> used'+(_rd>0?' <span style="color:var(--text3)">('+days+' calendar days − '+_rd+' RDO/off day'+(_rd!==1?'s':'')+')</span>':'')+'</div>';
     }
 
     // Reason
@@ -10445,11 +10467,13 @@ function _renderApprovals(lv,role){
     var sc=LEAVE_SC[r.status]||LEAVE_SC.pending;
     var lt=LEAVE_TYPES.find(function(t){return t.id===r.leave_type;})||{icon:'📝',lbl:r.leave_type||'Leave'};
     var days=r.total_days||1;
+    var _calDays=_lvDays(r.start_date,r.end_date,false);
+    var _rdoExcl=Math.max(0,_calDays-(_lvWorkingDays(r.user_id,r.start_date,r.end_date)));
     var isDecline=lv.declineId===r.id;
 
-    // Overlap warning
+    // Conflicts: everyone else with overlapping leave (approved OR pending)
     var overlaps=allReqs.filter(function(o){
-      return o.id!==r.id&&o.status==='approved'&&o.start_date<=r.end_date&&o.end_date>=r.start_date;
+      return o.id!==r.id&&(o.status==='approved'||o.status==='pending')&&o.start_date<=r.end_date&&o.end_date>=r.start_date;
     });
 
     h+='<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px;margin-bottom:10px">';
@@ -10464,16 +10488,28 @@ function _renderApprovals(lv,role){
     h+='<div style="font-size:13px;color:var(--text2);margin-bottom:4px">'+lt.icon+' '+lt.lbl;
     if(r.partial_day){h+=' <span style="font-size:11px;padding:2px 6px;border-radius:5px;background:rgba(99,102,241,.18);color:#818cf8">½ '+(r.partial_type||'am').toUpperCase()+'</span>';}
     h+='</div>';
-    h+='<div style="font-size:13px;color:var(--text3)">📅 '+_lvFmt(r.start_date)+' → '+_lvFmt(r.end_date)+'<span style="margin-left:8px">('+days+' day'+(days!==1?'s':'')+')</span></div>';
+    h+='<div style="font-size:13px;color:var(--text3)">📅 '+_lvFmt(r.start_date)+' → '+_lvFmt(r.end_date)+'<span style="margin-left:8px">('+days+' leave day'+(days!==1?'s':'')+(_rdoExcl>0?', '+_rdoExcl+' RDO excl':'')+')</span></div>';
     if(r.reason){h+='<div style="font-size:12px;color:var(--text3);margin-top:4px;font-style:italic">"'+_lvEsc(r.reason)+'"</div>';}
     h+='</div>';
     h+='<div style="flex-shrink:0">'+_lvStatusBadge(r.status)+'</div>';
     h+='</div>';
 
-    // Overlap warning
-    if(overlaps.length>0&&r.status==='pending'){
-      var names=overlaps.map(function(o){return o.user_name||'Unknown';}).join(', ');
-      h+='<div style="margin-top:8px;padding:7px 10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:7px;font-size:12px;color:#fbbf24">⚠ Overlap: '+_lvEsc(names)+' also on leave during this period</div>';
+    // Conflicts — show everyone else off during this period (approved + pending)
+    if(overlaps.length>0){
+      h+='<div style="margin-top:10px;padding:9px 11px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px">';
+      h+='<div style="font-size:12px;font-weight:700;color:#fbbf24;margin-bottom:6px">⚠ '+overlaps.length+' conflict'+(overlaps.length!==1?'s':'')+' — others off during this period</div>';
+      overlaps.sort(function(a,b){return (a.start_date<b.start_date?-1:1);}).forEach(function(o){
+        var osc=LEAVE_SC[o.status]||LEAVE_SC.pending;
+        var olt=LEAVE_TYPES.find(function(t){return t.id===o.leave_type;})||{icon:'📝'};
+        h+='<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);padding:2px 0;flex-wrap:wrap">'
+          +'<span style="font-weight:700;color:var(--text)">'+_lvEsc(o.user_name||'Unknown')+'</span>'
+          +'<span style="color:var(--text3);font-size:10px;text-transform:uppercase">'+(o.user_role||'')+'</span>'
+          +'<span>'+olt.icon+'</span>'
+          +'<span style="color:var(--text3)">'+_lvFmt(o.start_date)+' → '+_lvFmt(o.end_date)+'</span>'
+          +'<span style="padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:'+osc.bg+';color:'+osc.col+';border:1px solid '+osc.bd+'">'+osc.lbl+'</span>'
+          +'</div>';
+      });
+      h+='</div>';
     }
 
     // Submitted time + reviewed by
@@ -10553,7 +10589,7 @@ window.submitLeaveRequest=async function(){
   var uid=S.user?.id;
   var uname=S.user?.name||S.user?.email||'Unknown';
   var urole=S.user?.role||'desk';
-  var days=_lvDays(f.startDate,f.endDate,f.partialDay);
+  var days=_lvWorkingDays(uid,f.startDate,f.endDate); // leave days actually used (RDOs excluded)
   var payload={user_id:uid,user_name:uname,user_role:urole,
     leave_type:f.type,start_date:f.startDate,end_date:f.endDate,
     total_days:days,partial_day:f.partialDay,partial_type:f.partialType||'am',
