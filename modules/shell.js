@@ -597,17 +597,16 @@ function _triggerFlash(ids){
 function _applyLsFlash(){
   if(!S._lsFlash)return;
   var now=Date.now();
+  // All loadsheet live-edit signals (fuel/route/seats) flash the combined loadsheet card.
+  var el=document.getElementById('lsf-loading');
   Object.keys(S._lsFlash).forEach(function(k){
     var age=now-S._lsFlash[k];
-    if(age>2200){delete S._lsFlash[k];return;}
-    var elId=k==='fuel'?'lsf-fuel':(k==='route'?'lsf-seats':'lsf-seats');
-    var el=document.getElementById(elId);
+    if(age>2200){delete S._lsFlash[k];return;}   // only drop the key once expired
     if(el&&!el.classList.contains('ls-flash')){
       el.classList.add('ls-flash');
       var rem=Math.max(100,2000-age);
       setTimeout(function(){if(el)el.classList.remove('ls-flash');},rem);
     }
-    delete S._lsFlash[k];
   });
   _triggerFlash('flash-loadsheet');
 }

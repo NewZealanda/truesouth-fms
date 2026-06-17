@@ -391,14 +391,6 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'<button onclick="S.admin.personModal.draft.inactive=!S.admin.personModal.draft.inactive;render()" '
         +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
         +'background:'+(d.inactive?'rgba(239,68,68,.25)':'rgba(255,255,255,.06)')+';'
-        +'color:'+(d.inactive?'#f87171':'var(--text3)')+'">'
-        +(d.inactive?'Inactive':'Active')+'</button>'
-        +'</div>':'')
-        +(isAdmin&&m.userId?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border2)">'
-        +'<label style="font-size:11px;color:var(--text3);flex:1">MARK AS INACTIVE (hides from roster &amp; dropdowns from chosen date)</label>'
-        +'<button onclick="S.admin.personModal.draft.inactive=!S.admin.personModal.draft.inactive;render()" '
-        +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
-        +'background:'+(d.inactive?'rgba(239,68,68,.25)':'rgba(255,255,255,.06)')+';'
         +'color:'+(d.inactive?'#f87171':'var(--text3)')+'">⊘ '+(d.inactive?'Inactive':'Active')+'</button>'
         +'</div>':'')
         +(m.userId?'<div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px">'
@@ -626,6 +618,7 @@ window.switchToLoadsheets=function(){
   S.section='operations';S.tab='loadsheet';render();
 };
 window.switchOpsTab=function(tabId){
+  if(S.section==='roster'&&typeof _rosterUnsaved==='function'&&_rosterUnsaved()){window._navAway(function(){window.switchOpsTab(tabId);});return;}
   S.activeTabId=null;S._newLsTab=false;
   S.section='operations';S.tab=tabId;
   render();
@@ -635,6 +628,7 @@ window.switchOpsTab=function(tabId){
   window.scrollTo(0,0);
 };
 window.setTab=function(t){
+  if(S.section==='roster'&&typeof _rosterUnsaved==='function'&&_rosterUnsaved()){window._navAway(function(){window.setTab(t);});return;}
   if(t==='operations'){
     S.section='operations';
     if(S._newLsTab&&!S.activeTabId){S._newLsTab=false;S.tab='manifest';}
@@ -1580,10 +1574,10 @@ window.lsCopyFlight=function(targetAc){
 
 window.lsTrimExcess=()=>{
   const a=S.aircraft[S.form.ac];if(!a)return;
-  const max=a.seats.length;
+  const max=a.seats.length,removed=a.removedSeats||[];
   [S.form.seats,S.form.bags,S.form.names,S.form.infantNames,S.form.paxGroups,S.form.paxType,S.form.paxPaymentReq].forEach(obj=>{
     if(!obj)return;
-    Object.keys(obj).forEach(i=>{if(parseInt(i)>=max)delete obj[i];});
+    Object.keys(obj).forEach(i=>{const n=parseInt(i);if(n>=max||removed.includes(n))delete obj[i];});
   });
   autoSaveLS();render();
 };
@@ -2472,7 +2466,8 @@ function generatePrintHTML(sheet){
   // Fuel calcs
   var fuelKgV=parseFloat(f.fuel)||0;
   var burnKgV=r?r.burnKg:0;
-  var remKg=fuelKgV-a.gndBurn-burnKgV;
+  var _gndBurnV=r?r.gndBurn:(parseFloat(f.gndBurn!=null?f.gndBurn:a.gndBurn)||0);
+  var remKg=fuelKgV-_gndBurnV-burnKgV;
   var fuelU=fuelUnit(f.ac);
   var fuelDisplay=f.ac?fromKg(fuelKgV,f.ac).toFixed(1):fuelKgV;
   var remDisplay=f.ac?fromKg(Math.max(0,remKg),f.ac).toFixed(1):Math.max(0,remKg).toFixed(1);
@@ -2513,7 +2508,7 @@ function generatePrintHTML(sheet){
       ['Empty Weight',a.ew,false],['Crew',r.crewW,false],['Passengers',r.paxW,false],
       ['Cargo / Baggage',r.cargoW,false],['Zero Fuel Weight',r.zfw,true],
       ['+ Fuel',r.fuelW,false],['Ramp Weight',r.rampW,true],
-      ['− Ground Burn',a.gndBurn,false],['Takeoff Weight',r.tow,true],
+      ['− Ground Burn',r.gndBurn,false],['Takeoff Weight',r.tow,true],
       ['− Flight Burn',r.burnKg,false],['Landing Weight',r.lw,true]
     ];
     items.forEach(function(it){
@@ -2607,7 +2602,7 @@ function generatePrintHTML(sheet){
     +'<table style="width:100%;border-collapse:collapse;margin-bottom:14px">'
     +thRow('Fuel',2)
     +'<tr><td style="'+TD+'color:#666">Fuel at departure</td><td style="'+TD+'text-align:right">'+fuelKgV.toFixed(1)+' kg ('+fuelDisplay+' '+fuelU+')</td></tr>'
-    +'<tr><td style="'+TD+'color:#666">Ground burn</td><td style="'+TD+'text-align:right">'+a.gndBurn+' kg</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Ground burn</td><td style="'+TD+'text-align:right">'+_gndBurnV+' kg</td></tr>'
     +'<tr><td style="'+TD+'color:#666">Flight burn</td><td style="'+TD+'text-align:right">'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr>'
     +'<tr style="background:'+acFaint+'"><td style="'+TD+'border-left:3px solid '+acCol+';font-weight:700">Fuel at destination</td><td style="'+TD+'text-align:right;font-weight:700">'+remDisplay+' '+fuelU+'</td></tr>'
     +'</table>'
@@ -2925,7 +2920,8 @@ function generateHalfSheetContent(sheet){
   var statusColor=allOk?'#15803d':'#b91c1c';
   var fuelKgV=parseFloat(f.fuel)||0;
   var burnKgV=r?r.burnKg:0;
-  var remKg=fuelKgV-(a.gndBurn||0)-burnKgV;
+  var _gndBurnV=r?r.gndBurn:(parseFloat(f.gndBurn!=null?f.gndBurn:(a.gndBurn||0))||0);
+  var remKg=fuelKgV-_gndBurnV-burnKgV;
   var fuelU=fuelUnit(f.ac);
   var fuelDisplay=f.ac?fromKg(fuelKgV,f.ac).toFixed(1):fuelKgV;
   var remDisplay=f.ac?fromKg(Math.max(0,remKg),f.ac).toFixed(1):Math.max(0,remKg).toFixed(1);
@@ -2969,7 +2965,7 @@ function generateHalfSheetContent(sheet){
     +'</table>'
     +'<table style="flex:1;border-collapse:collapse;font-size:9px"><tr><th colspan="2" style="'+TH+'">FUEL</th></tr>'
     +'<tr><td style="'+TD+'color:#666">Loaded</td><td style="'+TD+'">'+fuelKgV.toFixed(1)+' kg ('+fuelDisplay+' '+fuelU+')</td></tr>'
-    +'<tr><td style="'+TD+'color:#666">Gnd burn</td><td style="'+TD+'">'+(a.gndBurn||0)+' kg</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Gnd burn</td><td style="'+TD+'">'+_gndBurnV+' kg</td></tr>'
     +'<tr><td style="'+TD+'color:#666">Flt burn</td><td style="'+TD+'">'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr>'
     +'<tr style="background:'+acFaint+'"><td style="'+TD+'border-left:2px solid '+acCol+';font-weight:700">@ Dest</td><td style="'+TD+'font-weight:700">'+remDisplay+' '+fuelU+'</td></tr>'
     +'</table></div>'
@@ -3105,7 +3101,7 @@ window.calcTTIS=function(){
   }
 };
 
-function acDisp(id){return(id||"").replace("ZK-","");}function acDisp(id){return(id||"").replace("ZK-","");}
+/* acDisp() moved to shared.js (single canonical definition) */
 
 // --- Role Permissions Table ---
 let _permSaveTimer=null;

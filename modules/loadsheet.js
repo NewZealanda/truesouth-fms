@@ -563,10 +563,12 @@ function renderLoadsheet(){
     }
   }
 
-  // Over-capacity check: any seat index >= a.seats.length has data that calcFormWB ignores
-  const _overCap=a?Object.keys(f.seats).filter(i=>parseInt(i)>=a.seats.length&&(parseFloat(f.seats[i])>0||f.names[i])).length:0;
+  // Invalid-seat check: index >= a.seats.length (over capacity, ignored by calcFormWB)
+  // OR a removed seat (counted by calcFormWB but hidden on the grid → phantom weight).
+  const _removedSeats=(a&&a.removedSeats)||[];
+  const _overCap=a?Object.keys(f.seats).filter(i=>{const n=parseInt(i);return (n>=a.seats.length||_removedSeats.includes(n))&&(parseFloat(f.seats[i])>0||f.names[i]);}).length:0;
   const _overCapBanner=_overCap>0?`<div style="padding:12px 14px;background:#3b0000;border:2px solid #ef4444;border-radius:8px;color:#fca5a5;font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-    <span>⚠ ${_overCap} passenger(s) exceed ${acDisp(f.ac)}'s ${a?a.seats.length-1:0}-seat capacity — they are NOT included in W&B calculations.</span>
+    <span>⚠ ${_overCap} passenger(s) are on invalid or removed seats for ${acDisp(f.ac)} and may not be reflected correctly in W&B — remove and reseat them.</span>
     <button onclick="window.lsTrimExcess()" style="padding:5px 12px;border-radius:6px;border:1px solid #ef4444;background:transparent;color:#fca5a5;font-size:12px;cursor:pointer;white-space:nowrap;font-weight:700">Remove excess pax</button>
   </div>`:'';
 

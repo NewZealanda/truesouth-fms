@@ -17,7 +17,7 @@ function _lvEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;
 function _lvDays(s,e,partial){if(!s||!e)return 0;var d=Math.round((new Date(e+'T00:00:00')-new Date(s+'T00:00:00'))/86400000)+1;return partial?Math.max(0.5,d-0.5):d;}
 // Count the actual leave days used = days in range the person is rostered ON
 // (excludes RDOs / days already off per the roster).
-function _lvWorkingDays(userId,s,e){
+function _lvWorkingDays(userId,s,e,partial){
   if(!s||!e)return 0;
   var roster=S.roster||{};
   var u=(S.users||[]).find(function(x){return x.id===userId;})||{id:userId,name:''};
@@ -32,7 +32,8 @@ function _lvWorkingDays(userId,s,e){
     if(!off[st])n++;
     cur.setDate(cur.getDate()+1);
   }
-  return n;
+  // A half-day request consumes 0.5 of a working day (mirrors _lvDays).
+  return partial?Math.max(0.5,n-0.5):n;
 }
 // RDO/off days within a range (the days NOT counted against leave).
 function _lvRdoDays(userId,s,e){return Math.max(0,_lvDays(s,e,false)-_lvWorkingDays(userId,s,e));}
@@ -439,7 +440,7 @@ window.submitLeaveRequest=async function(){
   var uid=S.user?.id;
   var uname=S.user?.name||S.user?.email||'Unknown';
   var urole=S.user?.role||'desk';
-  var days=_lvWorkingDays(uid,f.startDate,f.endDate); // leave days actually used (RDOs excluded)
+  var days=_lvWorkingDays(uid,f.startDate,f.endDate,f.partialDay); // leave days actually used (RDOs excluded; half-day aware)
   var payload={user_id:uid,user_name:uname,user_role:urole,
     leave_type:f.type,start_date:f.startDate,end_date:f.endDate,
     total_days:days,partial_day:f.partialDay,partial_type:f.partialType||'am',
@@ -476,12 +477,15 @@ window.approveLeave=async function(id){
   var me=S.user;
   var req=(S._leave?.allReqs||[]).find(function(r){return r.id===id;});
   if(!req)return;
+  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk')){toast('Not authorised to approve this request.','warn');return;}
   var overlaps=(S._leave?.allReqs||[]).filter(function(r){
     return r.id!==id&&r.status==='approved'&&r.start_date<=req.end_date&&r.end_date>=req.start_date;
   });
-  if(overlaps.length>0){
-    var names=overlaps.map(function(r){return r.user_name||'Unknown';}).join(', ');
-    if(!confirm('Warning: '+names+' also have approved leave overlapping these dates. Approve anyway?'))return;
+  // Also surface clashes that exist directly on the roster (imported / hand-entered leave).
+  var _clashNames=overlaps.map(function(r){return r.user_name||'Unknown';});
+  try{(_lvRosterConflicts(req)||[]).forEach(function(c){if(_clashNames.indexOf(c.name)<0)_clashNames.push(c.name+' ('+c.label+')');});}catch(e){}
+  if(_clashNames.length>0){
+    if(!confirm('Warning: '+_clashNames.join(', ')+' also have leave overlapping these dates. Approve anyway?'))return;
   }
   var ok=await sbPatch('ts_leave_requests',id,{
     status:'approved',reviewed_at:new Date().toISOString(),
@@ -502,6 +506,7 @@ window.declineLeave=async function(id){
   var comment=(document.getElementById('decline-comment-'+id)||{}).value||S._leave?.declineComment||'';
   var req=(S._leave?.allReqs||[]).find(function(r){return r.id===id;});
   if(!req)return;
+  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk')){toast('Not authorised to decline this request.','warn');return;}
   var ok=await sbPatch('ts_leave_requests',id,{
     status:'declined',admin_comment:comment||null,
     reviewed_at:new Date().toISOString(),reviewed_by:me?.id,reviewed_by_name:me?.name||me?.email
@@ -518,8 +523,10 @@ window.declineLeave=async function(id){
 
 window.withdrawLeave=async function(id){
   if(!confirm('Withdraw this leave request?'))return;
+  var me=S.user;
   var ok=await sbPatch('ts_leave_requests',id,{status:'withdrawn'});
   if(ok){
+    try{await sbU('ts_leave_audit',[{request_id:id,action:'withdrawn',performed_by:me&&me.id,performed_by_name:me&&(me.name||me.email)}]);}catch(e){}
     S._leave._myLoaded=false;
     toast('Leave request withdrawn.','info');
     window.loadMyLeave();
@@ -530,6 +537,9 @@ window.withdrawLeave=async function(id){
 window.deleteLeaveRequest=async function(id){
   if((S.user&&S.user.role)!=='superadmin'){toast('Only a superadmin can delete leave requests.','warn');return;}
   if(!confirm('Permanently delete this leave request? This cannot be undone.'))return;
+  var _delReq=(S._leave&&S._leave.allReqs||[]).find(function(r){return r.id===id;})||{};
+  // Log to the general audit trail (ts_audit_log) since the leave-specific audit rows are deleted below.
+  try{if(typeof auditLog==='function')await auditLog('leave_delete',{id:id,user:_delReq.user_name,type:_delReq.leave_type,start:_delReq.start_date,end:_delReq.end_date});}catch(e){}
   try{
     await fetch(SB+'/rest/v1/ts_leave_requests?id=eq.'+id,{method:'DELETE',headers:SH});
     await fetch(SB+'/rest/v1/ts_leave_audit?request_id=eq.'+id,{method:'DELETE',headers:SH});
@@ -547,6 +557,7 @@ window.deleteAllLeave=async function(){
   var n=((S._leave&&S._leave.allReqs)||[]).length;
   if(!confirm('Permanently delete ALL '+n+' leave request(s) and their history? This cannot be undone.'))return;
   if(!confirm('Are you absolutely sure? This wipes every leave request in the system.'))return;
+  try{if(typeof auditLog==='function')await auditLog('leave_delete_all',{count:n});}catch(e){}
   try{
     await fetch(SB+'/rest/v1/ts_leave_requests?id=neq.__none__',{method:'DELETE',headers:SH});
     await fetch(SB+'/rest/v1/ts_leave_audit?id=neq.__none__',{method:'DELETE',headers:SH});
@@ -604,8 +615,10 @@ window.leaveEditSave=async function(){
   if(req.leave_type!==e.type){var ot=LEAVE_TYPES.find(function(t){return t.id===req.leave_type;}),nt=LEAVE_TYPES.find(function(t){return t.id===e.type;});changes.push('type '+(ot?ot.lbl:req.leave_type)+' ⇒ '+(nt?nt.lbl:e.type));}
   if((req.reason||'')!==(e.reason||''))changes.push('reason updated');
   if(!changes.length){var _o=document.getElementById('leave-edit-ov');if(_o)_o.remove();S._leaveEdit=null;toast('No changes made.','info');return;}
-  var days=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,e.startDate,e.endDate):_lvDays(e.startDate,e.endDate,false);
+  var days=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,e.startDate,e.endDate,req.partial_day):_lvDays(e.startDate,e.endDate,req.partial_day);
   var isOwner=req.user_id===(me&&me.id);
+  // Approvers editing someone else's request must actually be allowed to approve that role.
+  if(!isOwner&&(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk'))){toast('Not authorised to edit this request.','warn');return;}
   var reapprove=isOwner&&req.status==='approved';
   var patch={leave_type:e.type,start_date:e.startDate,end_date:e.endDate,reason:e.reason||null,total_days:days};
   if(reapprove){patch.status='pending';patch.reviewed_at=null;patch.reviewed_by=null;patch.reviewed_by_name=null;patch.admin_comment=null;}

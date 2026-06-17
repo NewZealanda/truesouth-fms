@@ -1,5 +1,5 @@
 // === MODULE: maintenance === v1.0 ===
-function acDisp(id){return(id||"").replace("ZK-","");}
+/* acDisp() moved to shared.js (single canonical definition) */
 function renderMaintenance(){
   initMaintenance();
   const m=S.maintenance||{};
@@ -103,7 +103,11 @@ function _saveMaintObs(){
   lsSet('ts_aircraft_obs',S.maintObs||{});
   sbU('ts_settings',[{key:'aircraft_obs',value:JSON.stringify(S.maintObs||{})}]).catch(function(){});
 }
+// Defense-in-depth: gate every maintenance write on the maint_bookings permission
+// (the UI hides the controls; this stops console/edge-case writes too).
+function _maintGuard(){if(typeof hasRolePerm==='function'&&!hasRolePerm('maint_bookings')){toast('Not authorised to edit maintenance.','warn');return false;}return true;}
 window.maintObsAdd=function(){
+  if(!_maintGuard())return;
   var el=document.getElementById('obs-new-text');var txt=el?el.value.trim():(S._obsNewText||'').trim();
   if(!txt){toast('Enter some text first.','err');return;}
   var ac=S._obsAc;if(!ac)return;
@@ -116,6 +120,7 @@ window.maintObsAdd=function(){
   toast('Entry added','ok');render();
 };
 window.maintObsResolve=function(id){
+  if(!_maintGuard())return;
   var ac=S._obsAc,arr=(S.maintObs||{})[ac]||[],e=arr.find(function(x){return x.id===id;});
   if(!e)return;
   e.status=e.status==='resolved'?'open':'resolved';
@@ -124,6 +129,7 @@ window.maintObsResolve=function(id){
   _saveMaintObs();render();
 };
 window.maintObsDelete=function(id){
+  if(!_maintGuard())return;
   if(!confirm('Delete this entry?'))return;
   var ac=S._obsAc;if(!S.maintObs||!S.maintObs[ac])return;
   S.maintObs[ac]=S.maintObs[ac].filter(function(x){return x.id!==id;});
@@ -772,6 +778,7 @@ function renderMaintSearch(){
 // ── Maintenance action handlers ──
 
 window.saveMaintField=function(date,ac,field,rawVal){
+  if(!_maintGuard())return;
   const val=rawVal.trim();
   initMaintenance();
   if(field==='oil'){
@@ -795,6 +802,7 @@ window.saveMaintField=function(date,ac,field,rawVal){
   render();
 };
 window.addMaintEntry=function(){
+  if(!_maintGuard())return;
   const cwSel=document.getElementById('ml_compwash')?.checked?'done':'';
   const adasSel=document.getElementById('ml_adas')?.checked?'done':'';
   const date=document.getElementById('ml_date')?.value;
@@ -850,12 +858,14 @@ window.addMaintEntry=function(){
   toast('Entry saved: '+ac+' '+hours+'hrs on '+fmtMaintDate(date),'ok');auditLog('maint_entry_add',{date:date,ac:ac,ttis:hours,starts:starts,landings:landings,oil:oil});S.appMsg=null;render();
 };
 window.toggleCWLog=function(date,ac){
+  if(!_maintGuard())return;
   if(!S.maintenance.compwash)S.maintenance.compwash={};
   var arr=S.maintenance.compwash[ac]||[];if(!Array.isArray(arr))arr=arr?[arr]:[];
   var ix=arr.indexOf(date);if(ix>=0)arr.splice(ix,1);else arr.push(date);
   S.maintenance.compwash[ac]=arr;auditLog('maint_compwash_toggle',{date:date,ac:ac});saveMaintenance();render();
 };
 window.toggleADASLog=function(date,ac){
+  if(!_maintGuard())return;
   if(!S.maintenance.adas)S.maintenance.adas={};
   var arr=S.maintenance.adas[ac]||[];if(!Array.isArray(arr))arr=arr?[arr]:[];
   var ix=arr.indexOf(date);if(ix>=0)arr.splice(ix,1);else arr.push(date);
@@ -863,6 +873,7 @@ window.toggleADASLog=function(date,ac){
 };
 
 window.deleteMaintEntry=function(date,ac){
+  if(!_maintGuard())return;
   if(!confirm('Delete log entry for '+ac+' on '+date+'?')) return;
   initMaintenance();
   S.maintenance.hist=S.maintenance.hist.filter(function(e){
@@ -876,6 +887,7 @@ window.deleteMaintEntry=function(date,ac){
   auditLog('maint_entry_delete',{date:date,ac:ac});saveMaintenance();toast('Entry deleted','ok');render();
 };
 window.addOilEntry=function(){
+  if(!_maintGuard())return;
   const date=document.getElementById('oil_date')?.value;
   if(!date) return;
   initMaintenance();
@@ -895,6 +907,7 @@ window.addOilEntry=function(){
 };
 
 window.saveMaintCheck=function(ac,field,val){
+  if(!_maintGuard())return;
   initMaintenance();
   if(field==='nextCheck') S.maintenance.nextCheck[ac]=val;
   if(field==='checkType') S.maintenance.checkType[ac]=val;
@@ -904,6 +917,7 @@ window.saveMaintCheck=function(ac,field,val){
 };
 
 window.addBooking=function(ac){
+  if(!_maintGuard())return;
   initMaintenance();
   S.maintenance.bookings=S.maintenance.bookings||{};
   S.maintenance.bookings[ac]=S.maintenance.bookings[ac]||[];
@@ -912,6 +926,7 @@ window.addBooking=function(ac){
 };
 
 window.editBooking=function(ac,idx,field,val){
+  if(!_maintGuard())return;
   initMaintenance();
   if(!S.maintenance.bookings?.[ac]?.[idx]) return;
   S.maintenance.bookings[ac][idx][field]=val;
@@ -919,12 +934,14 @@ window.editBooking=function(ac,idx,field,val){
 };
 
 window.deleteBooking=function(ac,idx){
+  if(!_maintGuard())return;
   initMaintenance();
   S.maintenance.bookings[ac].splice(idx,1);
   saveMaintenance();render();
 };
 
 window.toggleMaintPriority=function(ac){
+  if(!_maintGuard())return;
   initMaintenance();
   S.maintenance.priority=S.maintenance.priority||[];
   const i=S.maintenance.priority.indexOf(ac);

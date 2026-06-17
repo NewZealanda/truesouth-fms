@@ -57,7 +57,7 @@ const _fetchSince=()=>new Date(Date.now()-FETCH_DAYS*864e5).toISOString().slice(
 // Loadsheets: last FETCH_DAYS only. Manifests: same, but ALWAYS include the
 // live_draft row and any ls_live_* realtime-collaboration rows regardless of age.
 const Q_LOADSHEETS=()=>`&created_at=gte.${_fetchSince()}`;
-const Q_MANIFESTS=()=>`&or=(created_at.gte.${_fetchSince()},id.eq.live_draft,id.like.ls_live_*)`;
+const Q_MANIFESTS=()=>`&or=(created_at.gte.${_fetchSince()},id.eq.live_draft)`;
 // ── Seatmap workspace ─────────────────────────────────────────────────────
 // The seatmap is a SEPARATE working area from the manifests. Manifests are the
 // permanent data-entry lists (S.dispatch / per-tab); the seatmap workspace
@@ -110,10 +110,12 @@ function _seatmapSyncPool(){
   // 2. Drop pool entries that are now seated in the seatmap.
   for(var i=pool.length-1;i>=0;i--){if(pool[i].id&&seated[pool[i].id])pool.splice(i,1);}
   // 3. Add any unseated, non-infant passengers that aren't already in the pool (by id or name+weight).
-  var inPool={},poolKey={}; pool.forEach(function(e){if(e.id)inPool[e.id]=1;poolKey[(e.name||'')+'|'+(e.weight||'')]=1;});
+  // De-dupe by id; only fall back to name+weight for entries that have NO id,
+  // so two genuinely different passengers sharing a name and weight both appear.
+  var inPool={},poolKey={}; pool.forEach(function(e){if(e.id)inPool[e.id]=1;else poolKey[(e.name||'')+'|'+(e.weight||'')]=1;});
   (d.pax||[]).forEach(function(p){
     if(p.infant||seated[p.id]||inPool[p.id])return;
-    if(poolKey[(p.name||'')+'|'+(p.weight||'')])return;
+    if(!p.id&&poolKey[(p.name||'')+'|'+(p.weight||'')])return;
     pool.push({id:p.id,name:p.name,weight:p.weight,bag:p.bag||0,group:p.group||'',infant:p.infantName||null,type:p.type||'adult',paymentReq:!!p.paymentReq});
   });
 }
@@ -178,7 +180,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.87';
+const APP_VER='v22.88';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -209,6 +211,8 @@ function groupColor(g,paxList){const gs=[...new Set((paxList||(curDisp()||{}).pa
 // or a duplicate-instance key ("ZK-SLA_2"). _ac() resolves any key to its physical
 // aircraft id so spec/layout lookups (S.aircraft[...]) always work.
 function _ac(key){if(!key)return key;if(S.aircraft[key])return key;var s=((curDisp()||{}).acSetup||[]).find(function(x){return (x._seatmapKey||x.acId)===key;});if(s&&S.aircraft[s.acId])return s.acId;return String(key).replace(/_\d+$/,'');}
+// Canonical aircraft-display helper (single definition — was previously duplicated in admin.js + maintenance.js).
+function acDisp(id){return(id||"").replace("ZK-","");}
 function _acSpec(acId){return S.aircraft[acId]||S.aircraft[_ac(acId)];}
 function fuelUnit(acId){return _acSpec(acId)?.layout==='ga8'?'L':'lbs';}
 function toKg(v,acId){const n=parseFloat(v)||0;const a=_acSpec(acId);if(!a)return n;return a.layout==='ga8'?n*AVGAS:n*LB;}
@@ -257,11 +261,13 @@ function calcFormWB(form){
   for(let i=1;i<a.seats.length;i++){const w=(parseFloat(form.seats[i]||0))+(parseFloat(form.bags[i]||0));if(i===1&&form.coPilot){/* crew */}else{pW+=w;}wt+=w;mom+=w*a.seats[i].arm;}
   let cg=0;for(let i=0;i<a.cargo.length;i++){const w=parseFloat((form.cargo&&form.cargo[i])||0);cg+=w;wt+=w;mom+=w*a.cargo[i].arm;}
   const zfw=wt,fW=parseFloat(form.fuel||a.fuelKg);wt+=fW;mom+=fW*a.fuelArm;const rW=wt;
-  wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
+  // Honour the editable per-loadsheet ground-burn override (falls back to the aircraft spec default).
+  const gndBurn=parseFloat(form.gndBurn!=null?form.gndBurn:a.gndBurn)||0;
+  wt-=gndBurn;mom-=gndBurn*a.fuelArm;
   const tow=wt,towCog=wt?mom/wt:0;
   const burnKg=form.burnOff?burnToKg(parseFloat(form.burnOff)||0,form.ac):burnToKg(a.burnDef,form.ac);
   wt-=burnKg;mom-=burnKg*a.fuelArm;
-  return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn:a.gndBurn,tow,towCog,burnKg,lw:wt,lwCog:wt?mom/wt:0,
+  return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn,tow,towCog,burnKg,lw:wt,lwCog:wt?mom/wt:0,
     towOk:tow<=a.mtow,lwOk:wt<=a.mlw,cogOk:towCog>=a.cogMin&&towCog<=a.cogMax,
     mtow:a.mtow,mlw:a.mlw,cogMin:a.cogMin,cogMax:a.cogMax};
 }
@@ -278,7 +284,7 @@ function scoreAssign(acId,paxList){
   if(seat1IsCoPilot(acId))mom+=cpW*a.seats[1].arm;
   Object.entries(sm).forEach(([idx,pid])=>{const p=(curDisp().pax||[]).find(x=>x.id===pid)||paxList.find(x=>x.id===pid);if(!p)return;const w=parseFloat(p.weight||0)+parseFloat(p.bag||0);wt+=w;mom+=w*a.seats[parseInt(idx)].arm;});
   wt+=fW;mom+=fW*a.fuelArm;wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
-  const tow=wt,cog=mom/wt,wtOver=Math.max(0,tow-a.mtow);
+  const tow=wt,cog=wt?mom/wt:0,wtOver=Math.max(0,tow-a.mtow);
   const cogMid=(a.cogMin+a.cogMax)/2,cogDev=Math.abs(cog-cogMid);
   const cogOver=cog<a.cogMin?a.cogMin-cog:cog>a.cogMax?cog-a.cogMax:0;
   return wtOver*1000+cogOver*500+cogDev;
@@ -1175,7 +1181,7 @@ async function loadAll(){
 }
 
 // ── Supabase Realtime ──
-let _rtWs=null,_rtRef=0,_rtHb=null,_rtRecon=null,_rtPending=new Set(),_rtFlush=null;
+let _rtWs=null,_rtRef=0,_rtHb=null,_rtRecon=null,_rtPending=new Set(),_rtFlush=null,_rtConnectedOnce=false;
 const _sessionId='sess_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
 
 function initRealtime(){
@@ -1203,7 +1209,12 @@ function initRealtime(){
         }
         if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
           if(msg.payload&&msg.payload.status==='ok'){
-            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);safeRender();
+            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);
+            // Reconnect backfill: postgres_changes that fired while the socket was down are
+            // gone, so on a RE-open (not the first connect) pull the collaborative tables once.
+            if(_rtConnectedOnce){try{Promise.all([reloadTable('ts_manifests'),reloadTable('ts_loadsheets')]).then(function(){safeRender();}).catch(function(){});}catch(e){}}
+            _rtConnectedOnce=true;
+            safeRender();
           } else if(msg.payload&&msg.payload.status==='error'){
             S.rtStatus='offline';safeRender();
           }
@@ -1410,7 +1421,7 @@ function initRealtime(){
             try{lsSet('ts_smws',S.smWS);}catch(e){}
             if(S.tab==='seatmap'){
               var _sae=document.activeElement,_saet=_sae&&_sae.tagName;
-              try{S.solverAutoApply=false;runSolver();S.solverAutoApply=true;}catch(e){}
+              var _prevAuto=S.solverAutoApply;try{S.solverAutoApply=false;runSolver();}catch(e){}S.solverAutoApply=_prevAuto;
               if(_saet==='INPUT'||_saet==='SELECT'||_saet==='TEXTAREA')safeRender();else render();
             }
           }
@@ -1445,7 +1456,13 @@ async function reloadTable(table){
   if(table==='ts_loadsheets'){
     const ls=await sbF('ts_loadsheets',Q_LOADSHEETS());
     if(ls){
-      S.saved=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});
+      var _fresh=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});
+      // Preserve any currently-open loadsheet tabs whose saved row falls outside the
+      // fetch window, so a realtime refresh can't drop a tab the user still has open.
+      var _freshIds={};_fresh.forEach(function(s){_freshIds[s.id]=1;});
+      var _keepIds={};(S.lsTabs||[]).forEach(function(t){if(t.id)_keepIds[t.id]=1;});if(S.activeTabId)_keepIds[S.activeTabId]=1;
+      (S.saved||[]).forEach(function(s){if(_keepIds[s.id]&&!_freshIds[s.id])_fresh.push(s);});
+      S.saved=_fresh;
       lsSet('ts_loadsheets_cache',S.saved);
       return true;
     }
@@ -1456,23 +1473,15 @@ async function reloadTable(table){
     const ms=await sbF('ts_manifests',Q_MANIFESTS());
     if(ms){
       const live=ms.find(function(r){return r.id==='live_draft';});
-      var _lsForeignChange=false;
-      ms.forEach(function(r){
-        if(r.id.startsWith('ls_live_')&&r.data){
-          const _ac=r.id.slice(8);
-          if(Date.now()-_ownLSSaveTs<3500){return;} // suppress own postgres echo
-          S.lsForms[_ac]=r.data;
-          if(S.lsAc===_ac)S.form=r.data;
-          _lsForeignChange=true;
-        }
-      });
       var _ownEcho=false;
       if(live&&live.data){
         if(live.data._updatedBy===S.user?.id){_ownEcho=true;}
         else{mergeDispatch(live.data);}
       }
+      // ls_live_* rows are never written (loadsheet live-edit rides on the ls_update
+      // broadcast); filter any stale ones out defensively rather than reading them.
       S.manifests=ms.filter(function(r){return r.id!=='live_draft'&&!r.id.startsWith('ls_live_');}).map(function(r){return{id:r.id,name:r.name,savedAt:r.saved_at,data:r.data,_deleted:!!(r.data&&r.data._deleted)};});
-      lsSet('ts_manifests_cache',S.manifests);return !_ownEcho||_lsForeignChange;
+      lsSet('ts_manifests_cache',S.manifests);return !_ownEcho;
     }
   } else if(table==='ts_crew'){
     const crew=await sbF('ts_crew');
@@ -1585,11 +1594,11 @@ document.addEventListener('keydown',function(e){
   if(fi<0)return;
   let nextRow,nextField;
   if(!e.shiftKey){
-    if(fi<3){nextRow=rowIdx;nextField=fields[fi+1];}
-    else{nextRow=rowIdx+1;nextField='name';}
+    if(fi<fields.length-1){nextRow=rowIdx;nextField=fields[fi+1];}
+    else{nextRow=rowIdx+1;nextField=fields[0];}
   }else{
     if(fi>0){nextRow=rowIdx;nextField=fields[fi-1];}
-    else if(rowIdx>0){nextRow=rowIdx-1;nextField='bag';}
+    else if(rowIdx>0){nextRow=rowIdx-1;nextField=fields[fields.length-1];}
     else return;
   }
   // Save current field value before render destroys it
@@ -1640,7 +1649,6 @@ function autoSaveDispatch(){
 
 // -- Loadsheet live sync --
 let _autoSaveLSTimer=null;
-let _ownLSSaveTs=0;
 function autoSaveLS(){
   const _id=S.editId;
   const _acCode=S.lsAc;

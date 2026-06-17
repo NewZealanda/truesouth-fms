@@ -158,8 +158,8 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 
 /* ── Scrollable content ── */
 .page{max-width:760px;margin:0 auto;padding:14px 12px 80px;}
-@keyframes lsFlash{0%{outline:0 solid transparent;}100%{outline:0 solid transparent;}}
-.ls-flash{border-radius:6px;}
+@keyframes lsFlash{0%{box-shadow:0 0 0 2px rgba(96,165,250,.55);}100%{box-shadow:0 0 0 2px rgba(96,165,250,0);}}
+.ls-flash{border-radius:6px;animation:lsFlash 1.8s ease-out;}
 @media(min-width:900px){.page{max-width:1100px;padding:16px 28px 80px;}}
 @media(min-width:1400px){.page{max-width:1400px;padding:16px 48px 80px;}}
 
@@ -308,7 +308,7 @@ const _fetchSince=()=>new Date(Date.now()-FETCH_DAYS*864e5).toISOString().slice(
 // Loadsheets: last FETCH_DAYS only. Manifests: same, but ALWAYS include the
 // live_draft row and any ls_live_* realtime-collaboration rows regardless of age.
 const Q_LOADSHEETS=()=>`&created_at=gte.${_fetchSince()}`;
-const Q_MANIFESTS=()=>`&or=(created_at.gte.${_fetchSince()},id.eq.live_draft,id.like.ls_live_*)`;
+const Q_MANIFESTS=()=>`&or=(created_at.gte.${_fetchSince()},id.eq.live_draft)`;
 // ── Seatmap workspace ─────────────────────────────────────────────────────
 // The seatmap is a SEPARATE working area from the manifests. Manifests are the
 // permanent data-entry lists (S.dispatch / per-tab); the seatmap workspace
@@ -361,10 +361,12 @@ function _seatmapSyncPool(){
   // 2. Drop pool entries that are now seated in the seatmap.
   for(var i=pool.length-1;i>=0;i--){if(pool[i].id&&seated[pool[i].id])pool.splice(i,1);}
   // 3. Add any unseated, non-infant passengers that aren't already in the pool (by id or name+weight).
-  var inPool={},poolKey={}; pool.forEach(function(e){if(e.id)inPool[e.id]=1;poolKey[(e.name||'')+'|'+(e.weight||'')]=1;});
+  // De-dupe by id; only fall back to name+weight for entries that have NO id,
+  // so two genuinely different passengers sharing a name and weight both appear.
+  var inPool={},poolKey={}; pool.forEach(function(e){if(e.id)inPool[e.id]=1;else poolKey[(e.name||'')+'|'+(e.weight||'')]=1;});
   (d.pax||[]).forEach(function(p){
     if(p.infant||seated[p.id]||inPool[p.id])return;
-    if(poolKey[(p.name||'')+'|'+(p.weight||'')])return;
+    if(!p.id&&poolKey[(p.name||'')+'|'+(p.weight||'')])return;
     pool.push({id:p.id,name:p.name,weight:p.weight,bag:p.bag||0,group:p.group||'',infant:p.infantName||null,type:p.type||'adult',paymentReq:!!p.paymentReq});
   });
 }
@@ -429,7 +431,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.87';
+const APP_VER='v22.88';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -460,6 +462,8 @@ function groupColor(g,paxList){const gs=[...new Set((paxList||(curDisp()||{}).pa
 // or a duplicate-instance key ("ZK-SLA_2"). _ac() resolves any key to its physical
 // aircraft id so spec/layout lookups (S.aircraft[...]) always work.
 function _ac(key){if(!key)return key;if(S.aircraft[key])return key;var s=((curDisp()||{}).acSetup||[]).find(function(x){return (x._seatmapKey||x.acId)===key;});if(s&&S.aircraft[s.acId])return s.acId;return String(key).replace(/_\d+$/,'');}
+// Canonical aircraft-display helper (single definition — was previously duplicated in admin.js + maintenance.js).
+function acDisp(id){return(id||"").replace("ZK-","");}
 function _acSpec(acId){return S.aircraft[acId]||S.aircraft[_ac(acId)];}
 function fuelUnit(acId){return _acSpec(acId)?.layout==='ga8'?'L':'lbs';}
 function toKg(v,acId){const n=parseFloat(v)||0;const a=_acSpec(acId);if(!a)return n;return a.layout==='ga8'?n*AVGAS:n*LB;}
@@ -508,11 +512,13 @@ function calcFormWB(form){
   for(let i=1;i<a.seats.length;i++){const w=(parseFloat(form.seats[i]||0))+(parseFloat(form.bags[i]||0));if(i===1&&form.coPilot){/* crew */}else{pW+=w;}wt+=w;mom+=w*a.seats[i].arm;}
   let cg=0;for(let i=0;i<a.cargo.length;i++){const w=parseFloat((form.cargo&&form.cargo[i])||0);cg+=w;wt+=w;mom+=w*a.cargo[i].arm;}
   const zfw=wt,fW=parseFloat(form.fuel||a.fuelKg);wt+=fW;mom+=fW*a.fuelArm;const rW=wt;
-  wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
+  // Honour the editable per-loadsheet ground-burn override (falls back to the aircraft spec default).
+  const gndBurn=parseFloat(form.gndBurn!=null?form.gndBurn:a.gndBurn)||0;
+  wt-=gndBurn;mom-=gndBurn*a.fuelArm;
   const tow=wt,towCog=wt?mom/wt:0;
   const burnKg=form.burnOff?burnToKg(parseFloat(form.burnOff)||0,form.ac):burnToKg(a.burnDef,form.ac);
   wt-=burnKg;mom-=burnKg*a.fuelArm;
-  return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn:a.gndBurn,tow,towCog,burnKg,lw:wt,lwCog:wt?mom/wt:0,
+  return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn,tow,towCog,burnKg,lw:wt,lwCog:wt?mom/wt:0,
     towOk:tow<=a.mtow,lwOk:wt<=a.mlw,cogOk:towCog>=a.cogMin&&towCog<=a.cogMax,
     mtow:a.mtow,mlw:a.mlw,cogMin:a.cogMin,cogMax:a.cogMax};
 }
@@ -529,7 +535,7 @@ function scoreAssign(acId,paxList){
   if(seat1IsCoPilot(acId))mom+=cpW*a.seats[1].arm;
   Object.entries(sm).forEach(([idx,pid])=>{const p=(curDisp().pax||[]).find(x=>x.id===pid)||paxList.find(x=>x.id===pid);if(!p)return;const w=parseFloat(p.weight||0)+parseFloat(p.bag||0);wt+=w;mom+=w*a.seats[parseInt(idx)].arm;});
   wt+=fW;mom+=fW*a.fuelArm;wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
-  const tow=wt,cog=mom/wt,wtOver=Math.max(0,tow-a.mtow);
+  const tow=wt,cog=wt?mom/wt:0,wtOver=Math.max(0,tow-a.mtow);
   const cogMid=(a.cogMin+a.cogMax)/2,cogDev=Math.abs(cog-cogMid);
   const cogOver=cog<a.cogMin?a.cogMin-cog:cog>a.cogMax?cog-a.cogMax:0;
   return wtOver*1000+cogOver*500+cogDev;
@@ -1426,7 +1432,7 @@ async function loadAll(){
 }
 
 // ── Supabase Realtime ──
-let _rtWs=null,_rtRef=0,_rtHb=null,_rtRecon=null,_rtPending=new Set(),_rtFlush=null;
+let _rtWs=null,_rtRef=0,_rtHb=null,_rtRecon=null,_rtPending=new Set(),_rtFlush=null,_rtConnectedOnce=false;
 const _sessionId='sess_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
 
 function initRealtime(){
@@ -1454,7 +1460,12 @@ function initRealtime(){
         }
         if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
           if(msg.payload&&msg.payload.status==='ok'){
-            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);safeRender();
+            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);
+            // Reconnect backfill: postgres_changes that fired while the socket was down are
+            // gone, so on a RE-open (not the first connect) pull the collaborative tables once.
+            if(_rtConnectedOnce){try{Promise.all([reloadTable('ts_manifests'),reloadTable('ts_loadsheets')]).then(function(){safeRender();}).catch(function(){});}catch(e){}}
+            _rtConnectedOnce=true;
+            safeRender();
           } else if(msg.payload&&msg.payload.status==='error'){
             S.rtStatus='offline';safeRender();
           }
@@ -1661,7 +1672,7 @@ function initRealtime(){
             try{lsSet('ts_smws',S.smWS);}catch(e){}
             if(S.tab==='seatmap'){
               var _sae=document.activeElement,_saet=_sae&&_sae.tagName;
-              try{S.solverAutoApply=false;runSolver();S.solverAutoApply=true;}catch(e){}
+              var _prevAuto=S.solverAutoApply;try{S.solverAutoApply=false;runSolver();}catch(e){}S.solverAutoApply=_prevAuto;
               if(_saet==='INPUT'||_saet==='SELECT'||_saet==='TEXTAREA')safeRender();else render();
             }
           }
@@ -1696,7 +1707,13 @@ async function reloadTable(table){
   if(table==='ts_loadsheets'){
     const ls=await sbF('ts_loadsheets',Q_LOADSHEETS());
     if(ls){
-      S.saved=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});
+      var _fresh=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});
+      // Preserve any currently-open loadsheet tabs whose saved row falls outside the
+      // fetch window, so a realtime refresh can't drop a tab the user still has open.
+      var _freshIds={};_fresh.forEach(function(s){_freshIds[s.id]=1;});
+      var _keepIds={};(S.lsTabs||[]).forEach(function(t){if(t.id)_keepIds[t.id]=1;});if(S.activeTabId)_keepIds[S.activeTabId]=1;
+      (S.saved||[]).forEach(function(s){if(_keepIds[s.id]&&!_freshIds[s.id])_fresh.push(s);});
+      S.saved=_fresh;
       lsSet('ts_loadsheets_cache',S.saved);
       return true;
     }
@@ -1707,23 +1724,15 @@ async function reloadTable(table){
     const ms=await sbF('ts_manifests',Q_MANIFESTS());
     if(ms){
       const live=ms.find(function(r){return r.id==='live_draft';});
-      var _lsForeignChange=false;
-      ms.forEach(function(r){
-        if(r.id.startsWith('ls_live_')&&r.data){
-          const _ac=r.id.slice(8);
-          if(Date.now()-_ownLSSaveTs<3500){return;} // suppress own postgres echo
-          S.lsForms[_ac]=r.data;
-          if(S.lsAc===_ac)S.form=r.data;
-          _lsForeignChange=true;
-        }
-      });
       var _ownEcho=false;
       if(live&&live.data){
         if(live.data._updatedBy===S.user?.id){_ownEcho=true;}
         else{mergeDispatch(live.data);}
       }
+      // ls_live_* rows are never written (loadsheet live-edit rides on the ls_update
+      // broadcast); filter any stale ones out defensively rather than reading them.
       S.manifests=ms.filter(function(r){return r.id!=='live_draft'&&!r.id.startsWith('ls_live_');}).map(function(r){return{id:r.id,name:r.name,savedAt:r.saved_at,data:r.data,_deleted:!!(r.data&&r.data._deleted)};});
-      lsSet('ts_manifests_cache',S.manifests);return !_ownEcho||_lsForeignChange;
+      lsSet('ts_manifests_cache',S.manifests);return !_ownEcho;
     }
   } else if(table==='ts_crew'){
     const crew=await sbF('ts_crew');
@@ -1836,11 +1845,11 @@ document.addEventListener('keydown',function(e){
   if(fi<0)return;
   let nextRow,nextField;
   if(!e.shiftKey){
-    if(fi<3){nextRow=rowIdx;nextField=fields[fi+1];}
-    else{nextRow=rowIdx+1;nextField='name';}
+    if(fi<fields.length-1){nextRow=rowIdx;nextField=fields[fi+1];}
+    else{nextRow=rowIdx+1;nextField=fields[0];}
   }else{
     if(fi>0){nextRow=rowIdx;nextField=fields[fi-1];}
-    else if(rowIdx>0){nextRow=rowIdx-1;nextField='bag';}
+    else if(rowIdx>0){nextRow=rowIdx-1;nextField=fields[fields.length-1];}
     else return;
   }
   // Save current field value before render destroys it
@@ -1891,7 +1900,6 @@ function autoSaveDispatch(){
 
 // -- Loadsheet live sync --
 let _autoSaveLSTimer=null;
-let _ownLSSaveTs=0;
 function autoSaveLS(){
   const _id=S.editId;
   const _acCode=S.lsAc;
@@ -2923,17 +2931,16 @@ function _triggerFlash(ids){
 function _applyLsFlash(){
   if(!S._lsFlash)return;
   var now=Date.now();
+  // All loadsheet live-edit signals (fuel/route/seats) flash the combined loadsheet card.
+  var el=document.getElementById('lsf-loading');
   Object.keys(S._lsFlash).forEach(function(k){
     var age=now-S._lsFlash[k];
-    if(age>2200){delete S._lsFlash[k];return;}
-    var elId=k==='fuel'?'lsf-fuel':(k==='route'?'lsf-seats':'lsf-seats');
-    var el=document.getElementById(elId);
+    if(age>2200){delete S._lsFlash[k];return;}   // only drop the key once expired
     if(el&&!el.classList.contains('ls-flash')){
       el.classList.add('ls-flash');
       var rem=Math.max(100,2000-age);
       setTimeout(function(){if(el)el.classList.remove('ls-flash');},rem);
     }
-    delete S._lsFlash[k];
   });
   _triggerFlash('flash-loadsheet');
 }
@@ -4182,10 +4189,12 @@ function renderLoadsheet(){
     }
   }
 
-  // Over-capacity check: any seat index >= a.seats.length has data that calcFormWB ignores
-  const _overCap=a?Object.keys(f.seats).filter(i=>parseInt(i)>=a.seats.length&&(parseFloat(f.seats[i])>0||f.names[i])).length:0;
+  // Invalid-seat check: index >= a.seats.length (over capacity, ignored by calcFormWB)
+  // OR a removed seat (counted by calcFormWB but hidden on the grid → phantom weight).
+  const _removedSeats=(a&&a.removedSeats)||[];
+  const _overCap=a?Object.keys(f.seats).filter(i=>{const n=parseInt(i);return (n>=a.seats.length||_removedSeats.includes(n))&&(parseFloat(f.seats[i])>0||f.names[i]);}).length:0;
   const _overCapBanner=_overCap>0?`<div style="padding:12px 14px;background:#3b0000;border:2px solid #ef4444;border-radius:8px;color:#fca5a5;font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-    <span>⚠ ${_overCap} passenger(s) exceed ${acDisp(f.ac)}'s ${a?a.seats.length-1:0}-seat capacity — they are NOT included in W&B calculations.</span>
+    <span>⚠ ${_overCap} passenger(s) are on invalid or removed seats for ${acDisp(f.ac)} and may not be reflected correctly in W&B — remove and reseat them.</span>
     <button onclick="window.lsTrimExcess()" style="padding:5px 12px;border-radius:6px;border:1px solid #ef4444;background:transparent;color:#fca5a5;font-size:12px;cursor:pointer;white-space:nowrap;font-weight:700">Remove excess pax</button>
   </div>`:'';
 
@@ -4542,6 +4551,9 @@ window.setPadMode=function(m){
   var act=S.padTabs.find(function(t){return t.id===S.activePadId;});
   if(act){act._mode=m;render();}
 };
+// Escape user-entered aerodrome names before inserting into innerHTML (a custom name
+// could otherwise contain markup/script).
+function _aeroEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 // NZ Aerodrome database (AIP NZ sourced)
 const NZ_AERODROMES=[
   {icao:'NZKT',name:'Kaitaia',lat:-35.0700,lon:173.2853,elev:270},
@@ -4692,7 +4704,7 @@ function renderAerodromes(){
     var isSelected=S._aeroSel===a.icao;
     return '<tr data-icao="'+a.icao+'" onclick="window.aeroSelect(this.dataset.icao)" style="cursor:pointer;background:'+(isSelected?'rgba(99,102,241,.12)':'')+';">'
       +'<td style="padding:5px 8px;font-weight:700;color:var(--acc);font-size:12px">'+a.icao+'</td>'
-      +'<td style="padding:5px 8px;font-size:12px;color:var(--text1)">'+a.name+(isCustom?' <span style="font-size:9px;color:var(--ok-text);border:1px solid var(--ok-text);border-radius:3px;padding:1px 3px">edited</span>':'')+'</td>'
+      +'<td style="padding:5px 8px;font-size:12px;color:var(--text1)">'+_aeroEsc(a.name)+(isCustom?' <span style="font-size:9px;color:var(--ok-text);border:1px solid var(--ok-text);border-radius:3px;padding:1px 3px">edited</span>':'')+'</td>'
       +'<td style="padding:5px 8px;font-size:11px;color:var(--text3)">'+a.elev+'ft</td>'
       +'<td style="padding:5px 8px;white-space:nowrap">'
       +'<button data-eicao="'+a.icao+'" onclick="event.stopPropagation();window.aeroEdit(this.dataset.eicao)" style="font-size:10px;padding:1px 6px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--acc);cursor:pointer;margin-right:3px">Edit</button>'
@@ -4703,7 +4715,7 @@ function renderAerodromes(){
 
   // Selected info pill
   var selInfo=selEntry
-    ?'<div style="padding:6px 10px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);border-radius:6px;font-size:12px;color:var(--text2);margin-bottom:8px"><span style="font-weight:700;color:var(--acc)">'+selEntry.icao+'</span> &#x2014; '+selEntry.name+' &middot; Elev '+selEntry.elev+'ft &middot; '+selEntry.lat.toFixed(4)+', '+selEntry.lon.toFixed(4)+'</div>'
+    ?'<div style="padding:6px 10px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);border-radius:6px;font-size:12px;color:var(--text2);margin-bottom:8px"><span style="font-weight:700;color:var(--acc)">'+selEntry.icao+'</span> &#x2014; '+_aeroEsc(selEntry.name)+' &middot; Elev '+selEntry.elev+'ft &middot; '+selEntry.lat.toFixed(4)+', '+selEntry.lon.toFixed(4)+'</div>'
     :'<div style="padding:6px 10px;background:var(--card2);border-radius:6px;font-size:12px;color:var(--text3);margin-bottom:8px">Click a row to see it on the map.</div>';
 
   var h='<div class="card" style="margin-bottom:14px">';
@@ -5693,14 +5705,6 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'<button onclick="S.admin.personModal.draft.inactive=!S.admin.personModal.draft.inactive;render()" '
         +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
         +'background:'+(d.inactive?'rgba(239,68,68,.25)':'rgba(255,255,255,.06)')+';'
-        +'color:'+(d.inactive?'#f87171':'var(--text3)')+'">'
-        +(d.inactive?'Inactive':'Active')+'</button>'
-        +'</div>':'')
-        +(isAdmin&&m.userId?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border2)">'
-        +'<label style="font-size:11px;color:var(--text3);flex:1">MARK AS INACTIVE (hides from roster &amp; dropdowns from chosen date)</label>'
-        +'<button onclick="S.admin.personModal.draft.inactive=!S.admin.personModal.draft.inactive;render()" '
-        +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
-        +'background:'+(d.inactive?'rgba(239,68,68,.25)':'rgba(255,255,255,.06)')+';'
         +'color:'+(d.inactive?'#f87171':'var(--text3)')+'">⊘ '+(d.inactive?'Inactive':'Active')+'</button>'
         +'</div>':'')
         +(m.userId?'<div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px">'
@@ -5928,6 +5932,7 @@ window.switchToLoadsheets=function(){
   S.section='operations';S.tab='loadsheet';render();
 };
 window.switchOpsTab=function(tabId){
+  if(S.section==='roster'&&typeof _rosterUnsaved==='function'&&_rosterUnsaved()){window._navAway(function(){window.switchOpsTab(tabId);});return;}
   S.activeTabId=null;S._newLsTab=false;
   S.section='operations';S.tab=tabId;
   render();
@@ -5937,6 +5942,7 @@ window.switchOpsTab=function(tabId){
   window.scrollTo(0,0);
 };
 window.setTab=function(t){
+  if(S.section==='roster'&&typeof _rosterUnsaved==='function'&&_rosterUnsaved()){window._navAway(function(){window.setTab(t);});return;}
   if(t==='operations'){
     S.section='operations';
     if(S._newLsTab&&!S.activeTabId){S._newLsTab=false;S.tab='manifest';}
@@ -6882,10 +6888,10 @@ window.lsCopyFlight=function(targetAc){
 
 window.lsTrimExcess=()=>{
   const a=S.aircraft[S.form.ac];if(!a)return;
-  const max=a.seats.length;
+  const max=a.seats.length,removed=a.removedSeats||[];
   [S.form.seats,S.form.bags,S.form.names,S.form.infantNames,S.form.paxGroups,S.form.paxType,S.form.paxPaymentReq].forEach(obj=>{
     if(!obj)return;
-    Object.keys(obj).forEach(i=>{if(parseInt(i)>=max)delete obj[i];});
+    Object.keys(obj).forEach(i=>{const n=parseInt(i);if(n>=max||removed.includes(n))delete obj[i];});
   });
   autoSaveLS();render();
 };
@@ -7774,7 +7780,8 @@ function generatePrintHTML(sheet){
   // Fuel calcs
   var fuelKgV=parseFloat(f.fuel)||0;
   var burnKgV=r?r.burnKg:0;
-  var remKg=fuelKgV-a.gndBurn-burnKgV;
+  var _gndBurnV=r?r.gndBurn:(parseFloat(f.gndBurn!=null?f.gndBurn:a.gndBurn)||0);
+  var remKg=fuelKgV-_gndBurnV-burnKgV;
   var fuelU=fuelUnit(f.ac);
   var fuelDisplay=f.ac?fromKg(fuelKgV,f.ac).toFixed(1):fuelKgV;
   var remDisplay=f.ac?fromKg(Math.max(0,remKg),f.ac).toFixed(1):Math.max(0,remKg).toFixed(1);
@@ -7815,7 +7822,7 @@ function generatePrintHTML(sheet){
       ['Empty Weight',a.ew,false],['Crew',r.crewW,false],['Passengers',r.paxW,false],
       ['Cargo / Baggage',r.cargoW,false],['Zero Fuel Weight',r.zfw,true],
       ['+ Fuel',r.fuelW,false],['Ramp Weight',r.rampW,true],
-      ['− Ground Burn',a.gndBurn,false],['Takeoff Weight',r.tow,true],
+      ['− Ground Burn',r.gndBurn,false],['Takeoff Weight',r.tow,true],
       ['− Flight Burn',r.burnKg,false],['Landing Weight',r.lw,true]
     ];
     items.forEach(function(it){
@@ -7909,7 +7916,7 @@ function generatePrintHTML(sheet){
     +'<table style="width:100%;border-collapse:collapse;margin-bottom:14px">'
     +thRow('Fuel',2)
     +'<tr><td style="'+TD+'color:#666">Fuel at departure</td><td style="'+TD+'text-align:right">'+fuelKgV.toFixed(1)+' kg ('+fuelDisplay+' '+fuelU+')</td></tr>'
-    +'<tr><td style="'+TD+'color:#666">Ground burn</td><td style="'+TD+'text-align:right">'+a.gndBurn+' kg</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Ground burn</td><td style="'+TD+'text-align:right">'+_gndBurnV+' kg</td></tr>'
     +'<tr><td style="'+TD+'color:#666">Flight burn</td><td style="'+TD+'text-align:right">'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr>'
     +'<tr style="background:'+acFaint+'"><td style="'+TD+'border-left:3px solid '+acCol+';font-weight:700">Fuel at destination</td><td style="'+TD+'text-align:right;font-weight:700">'+remDisplay+' '+fuelU+'</td></tr>'
     +'</table>'
@@ -8227,7 +8234,8 @@ function generateHalfSheetContent(sheet){
   var statusColor=allOk?'#15803d':'#b91c1c';
   var fuelKgV=parseFloat(f.fuel)||0;
   var burnKgV=r?r.burnKg:0;
-  var remKg=fuelKgV-(a.gndBurn||0)-burnKgV;
+  var _gndBurnV=r?r.gndBurn:(parseFloat(f.gndBurn!=null?f.gndBurn:(a.gndBurn||0))||0);
+  var remKg=fuelKgV-_gndBurnV-burnKgV;
   var fuelU=fuelUnit(f.ac);
   var fuelDisplay=f.ac?fromKg(fuelKgV,f.ac).toFixed(1):fuelKgV;
   var remDisplay=f.ac?fromKg(Math.max(0,remKg),f.ac).toFixed(1):Math.max(0,remKg).toFixed(1);
@@ -8271,7 +8279,7 @@ function generateHalfSheetContent(sheet){
     +'</table>'
     +'<table style="flex:1;border-collapse:collapse;font-size:9px"><tr><th colspan="2" style="'+TH+'">FUEL</th></tr>'
     +'<tr><td style="'+TD+'color:#666">Loaded</td><td style="'+TD+'">'+fuelKgV.toFixed(1)+' kg ('+fuelDisplay+' '+fuelU+')</td></tr>'
-    +'<tr><td style="'+TD+'color:#666">Gnd burn</td><td style="'+TD+'">'+(a.gndBurn||0)+' kg</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Gnd burn</td><td style="'+TD+'">'+_gndBurnV+' kg</td></tr>'
     +'<tr><td style="'+TD+'color:#666">Flt burn</td><td style="'+TD+'">'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr>'
     +'<tr style="background:'+acFaint+'"><td style="'+TD+'border-left:2px solid '+acCol+';font-weight:700">@ Dest</td><td style="'+TD+'font-weight:700">'+remDisplay+' '+fuelU+'</td></tr>'
     +'</table></div>'
@@ -8407,7 +8415,7 @@ window.calcTTIS=function(){
   }
 };
 
-function acDisp(id){return(id||"").replace("ZK-","");}function acDisp(id){return(id||"").replace("ZK-","");}
+/* acDisp() moved to shared.js (single canonical definition) */
 
 // --- Role Permissions Table ---
 let _permSaveTimer=null;
@@ -8571,7 +8579,7 @@ function renderAdminAudit(){
     +'<tbody>'+rows+'</tbody>'
     +'</table></div></div>';
 }
-function acDisp(id){return(id||"").replace("ZK-","");}
+/* acDisp() moved to shared.js (single canonical definition) */
 function renderMaintenance(){
   initMaintenance();
   const m=S.maintenance||{};
@@ -8675,7 +8683,11 @@ function _saveMaintObs(){
   lsSet('ts_aircraft_obs',S.maintObs||{});
   sbU('ts_settings',[{key:'aircraft_obs',value:JSON.stringify(S.maintObs||{})}]).catch(function(){});
 }
+// Defense-in-depth: gate every maintenance write on the maint_bookings permission
+// (the UI hides the controls; this stops console/edge-case writes too).
+function _maintGuard(){if(typeof hasRolePerm==='function'&&!hasRolePerm('maint_bookings')){toast('Not authorised to edit maintenance.','warn');return false;}return true;}
 window.maintObsAdd=function(){
+  if(!_maintGuard())return;
   var el=document.getElementById('obs-new-text');var txt=el?el.value.trim():(S._obsNewText||'').trim();
   if(!txt){toast('Enter some text first.','err');return;}
   var ac=S._obsAc;if(!ac)return;
@@ -8688,6 +8700,7 @@ window.maintObsAdd=function(){
   toast('Entry added','ok');render();
 };
 window.maintObsResolve=function(id){
+  if(!_maintGuard())return;
   var ac=S._obsAc,arr=(S.maintObs||{})[ac]||[],e=arr.find(function(x){return x.id===id;});
   if(!e)return;
   e.status=e.status==='resolved'?'open':'resolved';
@@ -8696,6 +8709,7 @@ window.maintObsResolve=function(id){
   _saveMaintObs();render();
 };
 window.maintObsDelete=function(id){
+  if(!_maintGuard())return;
   if(!confirm('Delete this entry?'))return;
   var ac=S._obsAc;if(!S.maintObs||!S.maintObs[ac])return;
   S.maintObs[ac]=S.maintObs[ac].filter(function(x){return x.id!==id;});
@@ -9344,6 +9358,7 @@ function renderMaintSearch(){
 // ── Maintenance action handlers ──
 
 window.saveMaintField=function(date,ac,field,rawVal){
+  if(!_maintGuard())return;
   const val=rawVal.trim();
   initMaintenance();
   if(field==='oil'){
@@ -9367,6 +9382,7 @@ window.saveMaintField=function(date,ac,field,rawVal){
   render();
 };
 window.addMaintEntry=function(){
+  if(!_maintGuard())return;
   const cwSel=document.getElementById('ml_compwash')?.checked?'done':'';
   const adasSel=document.getElementById('ml_adas')?.checked?'done':'';
   const date=document.getElementById('ml_date')?.value;
@@ -9422,12 +9438,14 @@ window.addMaintEntry=function(){
   toast('Entry saved: '+ac+' '+hours+'hrs on '+fmtMaintDate(date),'ok');auditLog('maint_entry_add',{date:date,ac:ac,ttis:hours,starts:starts,landings:landings,oil:oil});S.appMsg=null;render();
 };
 window.toggleCWLog=function(date,ac){
+  if(!_maintGuard())return;
   if(!S.maintenance.compwash)S.maintenance.compwash={};
   var arr=S.maintenance.compwash[ac]||[];if(!Array.isArray(arr))arr=arr?[arr]:[];
   var ix=arr.indexOf(date);if(ix>=0)arr.splice(ix,1);else arr.push(date);
   S.maintenance.compwash[ac]=arr;auditLog('maint_compwash_toggle',{date:date,ac:ac});saveMaintenance();render();
 };
 window.toggleADASLog=function(date,ac){
+  if(!_maintGuard())return;
   if(!S.maintenance.adas)S.maintenance.adas={};
   var arr=S.maintenance.adas[ac]||[];if(!Array.isArray(arr))arr=arr?[arr]:[];
   var ix=arr.indexOf(date);if(ix>=0)arr.splice(ix,1);else arr.push(date);
@@ -9435,6 +9453,7 @@ window.toggleADASLog=function(date,ac){
 };
 
 window.deleteMaintEntry=function(date,ac){
+  if(!_maintGuard())return;
   if(!confirm('Delete log entry for '+ac+' on '+date+'?')) return;
   initMaintenance();
   S.maintenance.hist=S.maintenance.hist.filter(function(e){
@@ -9448,6 +9467,7 @@ window.deleteMaintEntry=function(date,ac){
   auditLog('maint_entry_delete',{date:date,ac:ac});saveMaintenance();toast('Entry deleted','ok');render();
 };
 window.addOilEntry=function(){
+  if(!_maintGuard())return;
   const date=document.getElementById('oil_date')?.value;
   if(!date) return;
   initMaintenance();
@@ -9467,6 +9487,7 @@ window.addOilEntry=function(){
 };
 
 window.saveMaintCheck=function(ac,field,val){
+  if(!_maintGuard())return;
   initMaintenance();
   if(field==='nextCheck') S.maintenance.nextCheck[ac]=val;
   if(field==='checkType') S.maintenance.checkType[ac]=val;
@@ -9476,6 +9497,7 @@ window.saveMaintCheck=function(ac,field,val){
 };
 
 window.addBooking=function(ac){
+  if(!_maintGuard())return;
   initMaintenance();
   S.maintenance.bookings=S.maintenance.bookings||{};
   S.maintenance.bookings[ac]=S.maintenance.bookings[ac]||[];
@@ -9484,6 +9506,7 @@ window.addBooking=function(ac){
 };
 
 window.editBooking=function(ac,idx,field,val){
+  if(!_maintGuard())return;
   initMaintenance();
   if(!S.maintenance.bookings?.[ac]?.[idx]) return;
   S.maintenance.bookings[ac][idx][field]=val;
@@ -9491,12 +9514,14 @@ window.editBooking=function(ac,idx,field,val){
 };
 
 window.deleteBooking=function(ac,idx){
+  if(!_maintGuard())return;
   initMaintenance();
   S.maintenance.bookings[ac].splice(idx,1);
   saveMaintenance();render();
 };
 
 window.toggleMaintPriority=function(ac){
+  if(!_maintGuard())return;
   initMaintenance();
   S.maintenance.priority=S.maintenance.priority||[];
   const i=S.maintenance.priority.indexOf(ac);
@@ -9685,11 +9710,12 @@ function _rosterSavePrompt(proceed){
   ov.addEventListener('click',function(e){if(e.target===ov)window._rosterNavChoose('cancel');});
   document.body.appendChild(ov);
 }
-window._rosterNavChoose=function(c){
+window._rosterNavChoose=async function(c){
   var ov=document.getElementById('roster-save-ov');if(ov)ov.remove();
   var go=S._rosterPendingNav;S._rosterPendingNav=null;
   if(c==='cancel')return;
-  if(c==='save'){window.saveRosterToCloud&&window.saveRosterToCloud();}   // merges draft locally + persists
+  // Await the cloud save so navigation/reload can't race ahead and lose the write.
+  if(c==='save'){try{if(window.saveRosterToCloud)await window.saveRosterToCloud();}catch(e){}}   // merges draft locally + persists
   else if(c==='discard'){S._rosterDraft={};S._rosterUndoStack=[];}
   if(typeof go==='function')go();
 };
@@ -10453,7 +10479,7 @@ function _lvEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;
 function _lvDays(s,e,partial){if(!s||!e)return 0;var d=Math.round((new Date(e+'T00:00:00')-new Date(s+'T00:00:00'))/86400000)+1;return partial?Math.max(0.5,d-0.5):d;}
 // Count the actual leave days used = days in range the person is rostered ON
 // (excludes RDOs / days already off per the roster).
-function _lvWorkingDays(userId,s,e){
+function _lvWorkingDays(userId,s,e,partial){
   if(!s||!e)return 0;
   var roster=S.roster||{};
   var u=(S.users||[]).find(function(x){return x.id===userId;})||{id:userId,name:''};
@@ -10468,7 +10494,8 @@ function _lvWorkingDays(userId,s,e){
     if(!off[st])n++;
     cur.setDate(cur.getDate()+1);
   }
-  return n;
+  // A half-day request consumes 0.5 of a working day (mirrors _lvDays).
+  return partial?Math.max(0.5,n-0.5):n;
 }
 // RDO/off days within a range (the days NOT counted against leave).
 function _lvRdoDays(userId,s,e){return Math.max(0,_lvDays(s,e,false)-_lvWorkingDays(userId,s,e));}
@@ -10875,7 +10902,7 @@ window.submitLeaveRequest=async function(){
   var uid=S.user?.id;
   var uname=S.user?.name||S.user?.email||'Unknown';
   var urole=S.user?.role||'desk';
-  var days=_lvWorkingDays(uid,f.startDate,f.endDate); // leave days actually used (RDOs excluded)
+  var days=_lvWorkingDays(uid,f.startDate,f.endDate,f.partialDay); // leave days actually used (RDOs excluded; half-day aware)
   var payload={user_id:uid,user_name:uname,user_role:urole,
     leave_type:f.type,start_date:f.startDate,end_date:f.endDate,
     total_days:days,partial_day:f.partialDay,partial_type:f.partialType||'am',
@@ -10912,12 +10939,15 @@ window.approveLeave=async function(id){
   var me=S.user;
   var req=(S._leave?.allReqs||[]).find(function(r){return r.id===id;});
   if(!req)return;
+  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk')){toast('Not authorised to approve this request.','warn');return;}
   var overlaps=(S._leave?.allReqs||[]).filter(function(r){
     return r.id!==id&&r.status==='approved'&&r.start_date<=req.end_date&&r.end_date>=req.start_date;
   });
-  if(overlaps.length>0){
-    var names=overlaps.map(function(r){return r.user_name||'Unknown';}).join(', ');
-    if(!confirm('Warning: '+names+' also have approved leave overlapping these dates. Approve anyway?'))return;
+  // Also surface clashes that exist directly on the roster (imported / hand-entered leave).
+  var _clashNames=overlaps.map(function(r){return r.user_name||'Unknown';});
+  try{(_lvRosterConflicts(req)||[]).forEach(function(c){if(_clashNames.indexOf(c.name)<0)_clashNames.push(c.name+' ('+c.label+')');});}catch(e){}
+  if(_clashNames.length>0){
+    if(!confirm('Warning: '+_clashNames.join(', ')+' also have leave overlapping these dates. Approve anyway?'))return;
   }
   var ok=await sbPatch('ts_leave_requests',id,{
     status:'approved',reviewed_at:new Date().toISOString(),
@@ -10938,6 +10968,7 @@ window.declineLeave=async function(id){
   var comment=(document.getElementById('decline-comment-'+id)||{}).value||S._leave?.declineComment||'';
   var req=(S._leave?.allReqs||[]).find(function(r){return r.id===id;});
   if(!req)return;
+  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk')){toast('Not authorised to decline this request.','warn');return;}
   var ok=await sbPatch('ts_leave_requests',id,{
     status:'declined',admin_comment:comment||null,
     reviewed_at:new Date().toISOString(),reviewed_by:me?.id,reviewed_by_name:me?.name||me?.email
@@ -10954,8 +10985,10 @@ window.declineLeave=async function(id){
 
 window.withdrawLeave=async function(id){
   if(!confirm('Withdraw this leave request?'))return;
+  var me=S.user;
   var ok=await sbPatch('ts_leave_requests',id,{status:'withdrawn'});
   if(ok){
+    try{await sbU('ts_leave_audit',[{request_id:id,action:'withdrawn',performed_by:me&&me.id,performed_by_name:me&&(me.name||me.email)}]);}catch(e){}
     S._leave._myLoaded=false;
     toast('Leave request withdrawn.','info');
     window.loadMyLeave();
@@ -10966,6 +10999,9 @@ window.withdrawLeave=async function(id){
 window.deleteLeaveRequest=async function(id){
   if((S.user&&S.user.role)!=='superadmin'){toast('Only a superadmin can delete leave requests.','warn');return;}
   if(!confirm('Permanently delete this leave request? This cannot be undone.'))return;
+  var _delReq=(S._leave&&S._leave.allReqs||[]).find(function(r){return r.id===id;})||{};
+  // Log to the general audit trail (ts_audit_log) since the leave-specific audit rows are deleted below.
+  try{if(typeof auditLog==='function')await auditLog('leave_delete',{id:id,user:_delReq.user_name,type:_delReq.leave_type,start:_delReq.start_date,end:_delReq.end_date});}catch(e){}
   try{
     await fetch(SB+'/rest/v1/ts_leave_requests?id=eq.'+id,{method:'DELETE',headers:SH});
     await fetch(SB+'/rest/v1/ts_leave_audit?request_id=eq.'+id,{method:'DELETE',headers:SH});
@@ -10983,6 +11019,7 @@ window.deleteAllLeave=async function(){
   var n=((S._leave&&S._leave.allReqs)||[]).length;
   if(!confirm('Permanently delete ALL '+n+' leave request(s) and their history? This cannot be undone.'))return;
   if(!confirm('Are you absolutely sure? This wipes every leave request in the system.'))return;
+  try{if(typeof auditLog==='function')await auditLog('leave_delete_all',{count:n});}catch(e){}
   try{
     await fetch(SB+'/rest/v1/ts_leave_requests?id=neq.__none__',{method:'DELETE',headers:SH});
     await fetch(SB+'/rest/v1/ts_leave_audit?id=neq.__none__',{method:'DELETE',headers:SH});
@@ -11040,8 +11077,10 @@ window.leaveEditSave=async function(){
   if(req.leave_type!==e.type){var ot=LEAVE_TYPES.find(function(t){return t.id===req.leave_type;}),nt=LEAVE_TYPES.find(function(t){return t.id===e.type;});changes.push('type '+(ot?ot.lbl:req.leave_type)+' ⇒ '+(nt?nt.lbl:e.type));}
   if((req.reason||'')!==(e.reason||''))changes.push('reason updated');
   if(!changes.length){var _o=document.getElementById('leave-edit-ov');if(_o)_o.remove();S._leaveEdit=null;toast('No changes made.','info');return;}
-  var days=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,e.startDate,e.endDate):_lvDays(e.startDate,e.endDate,false);
+  var days=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,e.startDate,e.endDate,req.partial_day):_lvDays(e.startDate,e.endDate,req.partial_day);
   var isOwner=req.user_id===(me&&me.id);
+  // Approvers editing someone else's request must actually be allowed to approve that role.
+  if(!isOwner&&(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk'))){toast('Not authorised to edit this request.','warn');return;}
   var reapprove=isOwner&&req.status==='approved';
   var patch={leave_type:e.type,start_date:e.startDate,end_date:e.endDate,reason:e.reason||null,total_days:days};
   if(reapprove){patch.status='pending';patch.reviewed_at=null;patch.reviewed_by=null;patch.reviewed_by_name=null;patch.admin_comment=null;}

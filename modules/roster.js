@@ -106,11 +106,12 @@ function _rosterSavePrompt(proceed){
   ov.addEventListener('click',function(e){if(e.target===ov)window._rosterNavChoose('cancel');});
   document.body.appendChild(ov);
 }
-window._rosterNavChoose=function(c){
+window._rosterNavChoose=async function(c){
   var ov=document.getElementById('roster-save-ov');if(ov)ov.remove();
   var go=S._rosterPendingNav;S._rosterPendingNav=null;
   if(c==='cancel')return;
-  if(c==='save'){window.saveRosterToCloud&&window.saveRosterToCloud();}   // merges draft locally + persists
+  // Await the cloud save so navigation/reload can't race ahead and lose the write.
+  if(c==='save'){try{if(window.saveRosterToCloud)await window.saveRosterToCloud();}catch(e){}}   // merges draft locally + persists
   else if(c==='discard'){S._rosterDraft={};S._rosterUndoStack=[];}
   if(typeof go==='function')go();
 };
