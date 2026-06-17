@@ -50,6 +50,7 @@ create or replace function public.app_role() returns text
 -- Hash-free projection the browser is allowed to read.
 -- NOTE: adjust the column list to your real ts_users schema. It must NOT include
 -- password_hash, reset_token, or reset_expires.
+-- Columns verified against the live schema (no weight/is_pilot/super_admin columns exist).
 create or replace view public.ts_users_public as
   select
     id,
@@ -57,9 +58,8 @@ create or replace view public.ts_users_public as
     email,
     role,
     linked_crew,
-    weight,
-    is_pilot,
-    inactive
+    inactive,
+    created_at
   from public.ts_users;
 
 -- Hide the hash by revoking SELECT on the base table. We do NOT revoke writes or

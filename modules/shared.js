@@ -127,19 +127,20 @@ const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id
 // Edge Functions and (2) running auth_migration_phase0A.sql. Test on the flag with a
 // break-glass admin before going live — see SUPABASE_AUTH_MIGRATION_PLAN.md.
 // With the flag OFF every helper below behaves exactly as it did before.
-let AUTH_PHASE_A=false;
+let AUTH_PHASE_A=true;
 // Read users from the hash-free view when locked down, the base table otherwise.
-const USERS_TBL=()=>AUTH_PHASE_A?'ts_users_public':'ts_users';
+const USERS_TBL=()=>(AUTH_PHASE_A||AUTH_PHASE_C)?'ts_users_public':'ts_users';
 // Write user rows. Under Phase A, ts_users SELECT is revoked so we use return=minimal
 // (no SELECT-back) and never push an EMPTY password hash — reads no longer include the
 // hash, so echoing '' back would wipe a real password.
 async function sbUserWrite(rows){
   let body=rows||[];
-  if(AUTH_PHASE_A){body=body.map(function(r){var c=Object.assign({},r);if(c.password_hash===''||c.password_hash==null)delete c.password_hash;return c;});}
+  const hf=(typeof _hashFree==='function')&&_hashFree();
+  if(hf){body=body.map(function(r){var c=Object.assign({},r);if(c.password_hash===''||c.password_hash==null)delete c.password_hash;return c;});}
   try{
-    const r=await fetch(`${SB}/rest/v1/ts_users`,{method:'POST',headers:{...SH,'Prefer':AUTH_PHASE_A?'resolution=merge-duplicates,return=minimal':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(body)});
+    const r=await fetch(`${SB}/rest/v1/ts_users`,{method:'POST',headers:{...SH,'Prefer':hf?'resolution=merge-duplicates,return=minimal':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(body)});
     if(!r.ok){console.error('[sbUserWrite]',r.status,await r.text());return null;}
-    return AUTH_PHASE_A?[]:await r.json();
+    return hf?[]:await r.json();
   }catch(e){console.error('[sbUserWrite]',e);return null;}
 }
 // Call a Supabase Edge Function. Returns {ok, status, data}.
@@ -149,6 +150,76 @@ async function callFn(name,payload){
     const j=await r.json().catch(function(){return{};});
     return {ok:r.ok&&j&&j.ok!==false,status:r.status,data:j};
   }catch(e){return {ok:false,status:0,data:{error:'network'}};}
+}
+
+// ── Phase C auth (DEFAULT OFF): real per-user Supabase Auth (JWT) ────────────
+// Build/test behind this flag per MIGRATION_RUNBOOK step 12. When ON, login uses
+// Supabase Auth (GoTrue) directly, every REST/realtime call carries the user's JWT,
+// and RLS enforces access server-side. Phase C implies the Phase A hash-free posture.
+// With the flag OFF, every helper below is inert.
+let AUTH_PHASE_C=false;
+let _sbSession=null;          // {access_token, refresh_token, expires_at(ms)}
+let _sbRefreshTimer=null;
+// True when user reads must avoid the hashed base table (either cutover).
+function _hashFree(){return AUTH_PHASE_A||AUTH_PHASE_C;}
+// Decode a JWT payload (base64url) to read custom claims (app_id, user_role, email).
+function _jwtClaims(tok){try{var p=(tok||'').split('.')[1].replace(/-/g,'+').replace(/_/g,'/');return JSON.parse(decodeURIComponent(escape(atob(p))));}catch(e){return {};}}
+// Put the user's access token on REST calls (or restore the anon key when signed out).
+function _applySession(sess){
+  _sbSession=sess||null;
+  SH['Authorization']='Bearer '+((sess&&sess.access_token)||SK);
+  _scheduleRefresh();
+}
+function _scheduleRefresh(){
+  clearTimeout(_sbRefreshTimer);
+  if(!AUTH_PHASE_C||!_sbSession||!_sbSession.expires_at)return;
+  var ms=_sbSession.expires_at-Date.now()-60000; // refresh ~1 min before expiry
+  _sbRefreshTimer=setTimeout(function(){_sbRefresh();},Math.max(5000,ms));
+}
+async function _sbRefresh(){
+  if(!_sbSession||!_sbSession.refresh_token)return false;
+  try{
+    var r=await fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({refresh_token:_sbSession.refresh_token})});
+    if(!r.ok){return false;}
+    var j=await r.json();
+    var sess={access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+(j.expires_in||3600)*1000};
+    try{localStorage.setItem('ts_sb_session',JSON.stringify(sess));}catch(e){}
+    _applySession(sess);
+    if(_rtWs)initRealtime();   // re-join realtime with the fresh token
+    return true;
+  }catch(e){return false;}
+}
+// Sign in via Supabase Auth; on first post-migration login, fall back to migrate-login once.
+async function _sbSignIn(email,password){
+  async function _tok(){
+    var r=await fetch(SB+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({email:email,password:password})});
+    return {ok:r.ok,status:r.status,data:await r.json().catch(function(){return{};})};
+  }
+  var res=await _tok();
+  if(!res.ok){
+    if(res.status===0)return {ok:false,offline:true};
+    var mig=await callFn('migrate-login',{email:email,password:password});
+    if(!mig.ok)return {ok:false};
+    res=await _tok();
+    if(!res.ok)return {ok:false};
+  }
+  var j=res.data;
+  var sess={access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+(j.expires_in||3600)*1000};
+  try{localStorage.setItem('ts_sb_session',JSON.stringify(sess));}catch(e){}
+  return {ok:true,session:sess,claims:_jwtClaims(j.access_token)};
+}
+// Build an S.user object from JWT claims + the public user record.
+function _userFromClaims(claims){
+  var appId=claims.app_id,role=claims.user_role||'desk';
+  var rec=(S.users||[]).find(function(x){return x.id===appId;})||{};
+  var u={id:appId,name:rec.name||claims.email||'',email:rec.email||claims.email||'',role:role,linkedCrew:rec.linkedCrew||'',passwordHash:'',weight:rec.weight||0,isPilot:rec.isPilot||role==='pilot'||false,inactive:rec.inactive||false};
+  if(u.email==='andrew@truesouthflights.co.nz'||u.email==='adamsonandrew1@gmail.com'||role==='superadmin')u.superAdmin=true;
+  return u;
+}
+// Under Phase C the boot fetch runs as anon (RLS hides protected tables), so reload the
+// core tables once a JWT is in place after login/restore.
+async function _reloadCoreTables(){
+  try{await Promise.all(['ts_crew','ts_aircraft','ts_charter_rates','ts_loadsheets','ts_manifests','ts_scratchpads'].map(function(t){return reloadTable(t);}));}catch(e){}
 }
 const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
 
@@ -209,7 +280,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.90';
+const APP_VER='v22.92';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1176,11 +1247,28 @@ async function loadAll(){
   S.gdriveFolder=lsGet('gdrive_folder')||'Loadsheets';
   S.gdriveFolderId=lsGet('gdrive_folder_id')||'';
   // Restore session
-  const savedUser=sessionStorage.getItem('ts_user');
-  if(savedUser)try{S.user=JSON.parse(savedUser);}catch{}
-  if(S.user){auditLog('session_restore',{via:'session',user:S.user.email});setTimeout(function(){initRealtime();},300);}
-  // Restore remembered session if no session in sessionStorage
-  if(!S.user){const rem=localStorage.getItem('ts_remembered_user');if(rem)try{const ru=JSON.parse(rem);const live=S.users.find(x=>x.id===ru.id&&(AUTH_PHASE_A||x.passwordHash===ru.passwordHash));if(live){S.user=live;if(live.email==='andrew@truesouthflights.co.nz'||live.email==='adamsonandrew1@gmail.com'||live.role==='superadmin')live.superAdmin=true;sessionStorage.setItem('ts_user',JSON.stringify(live));['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});auditLog('session_restore',{via:'remember_me',user:live.email});setTimeout(initRealtime,0);}}catch(e){}}
+  if(AUTH_PHASE_C){
+    // Restore the Supabase session from its refresh token, then rebuild the user from claims.
+    let _sess=null;try{_sess=JSON.parse(localStorage.getItem('ts_sb_session')||'null');}catch(e){}
+    if(_sess&&_sess.refresh_token){
+      _applySession(_sess);
+      (async function(){
+        const ok=await _sbRefresh();
+        if(ok&&_sbSession&&_sbSession.access_token){
+          S.user=_userFromClaims(_jwtClaims(_sbSession.access_token));
+          auditLog('session_restore',{via:'supabase',user:S.user.email});
+          await _reloadCoreTables();
+          initRealtime();render();setTimeout(function(){restoreWorkspace();},400);
+        } else { _applySession(null);try{localStorage.removeItem('ts_sb_session');}catch(e){} render(); }
+      })();
+    }
+  } else {
+    const savedUser=sessionStorage.getItem('ts_user');
+    if(savedUser)try{S.user=JSON.parse(savedUser);}catch{}
+    if(S.user){auditLog('session_restore',{via:'session',user:S.user.email});setTimeout(function(){initRealtime();},300);}
+    // Restore remembered session if no session in sessionStorage
+    if(!S.user){const rem=localStorage.getItem('ts_remembered_user');if(rem)try{const ru=JSON.parse(rem);const live=S.users.find(x=>x.id===ru.id&&(AUTH_PHASE_A||x.passwordHash===ru.passwordHash));if(live){S.user=live;if(live.email==='andrew@truesouthflights.co.nz'||live.email==='adamsonandrew1@gmail.com'||live.role==='superadmin')live.superAdmin=true;sessionStorage.setItem('ts_user',JSON.stringify(live));['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});auditLog('session_restore',{via:'remember_me',user:live.email});setTimeout(initRealtime,0);}}catch(e){}}
+  }
   // Load audit log from localStorage first (instant)
   S.auditLog=lsGet('ts_audit_log')||[];
   render();
@@ -1217,13 +1305,13 @@ function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
   // Under Phase A, ts_users SELECT is revoked so it can't be subscribed — drop it.
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance'].filter(function(t){return !(AUTH_PHASE_A&&t==='ts_users');});
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
     _rtWs.onopen=function(){
       _rtRef++;
       _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'phx_join',
-        payload:{config:{broadcast:{self:false},postgres_changes:tables.map(function(t){return{event:'*',schema:'public',table:t};})},access_token:SK},
+        payload:{config:{broadcast:{self:false},postgres_changes:tables.map(function(t){return{event:'*',schema:'public',table:t};})},access_token:((AUTH_PHASE_C&&_sbSession&&_sbSession.access_token)||SK)},
         ref:String(_rtRef)}));
       _rtHb=setInterval(function(){
         if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(_rtRef)}));}
@@ -1825,6 +1913,13 @@ window.handleForgot=async function(){
     if(el){el.style.display='block';el.textContent='Enter your email address first.';}
     return;
   }
+  if(AUTH_PHASE_C){
+    // Supabase Auth owns reset now — send its recovery email.
+    try{await fetch(SB+'/auth/v1/recover',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({email:email})});}catch(e){}
+    const el=document.getElementById('login-err');
+    if(el){el.style.display='block';el.style.color='#4ade80';el.textContent='If that email exists, a reset link is on its way.';}
+    return;
+  }
   const u=S.users.find(x=>x.email.toLowerCase()===email.toLowerCase());
   if(!u){
     const el=document.getElementById('login-err');
@@ -1906,7 +2001,18 @@ async function _doLogin(emailArg,passArg){
   }
   if(!email||!pass){showErr('Please enter your email and password.');return;}
   let u=null;
-  if(AUTH_PHASE_A){
+  if(AUTH_PHASE_C){
+    // Real Supabase Auth: sign in (migrating the legacy password on first login), then
+    // build the user from the JWT claims.
+    const r=await _sbSignIn(email,pass);
+    if(r&&r.ok){
+      _applySession(r.session);
+      u=_userFromClaims(r.claims||{});
+      const _ix=S.users.findIndex(x=>x.id===u.id);if(_ix>=0)S.users[_ix]=Object.assign({},S.users[_ix],u);else if(u.id)S.users.push(u);
+    } else if(r&&r.offline){
+      showErr('Login service unavailable. Check your connection and try again.');return;
+    }
+  } else if(AUTH_PHASE_A){
     // Server-side verification — hashes never reach the browser.
     const res=await callFn('verify-login',{email,password:pass});
     if(res.ok&&res.data&&res.data.user){
@@ -1944,6 +2050,8 @@ async function _doLogin(emailArg,passArg){
   // Update auth header to use user's session token if available (fixes RLS for writes)
   if(u.sessionToken) SH['Authorization']='Bearer '+u.sessionToken;
   S.tab=u.role==='maint'?'maintenance':'manifest';S._appLoading=true;render();initRealtime();setTimeout(function(){restoreWorkspace();},600);setTimeout(function(){S._appLoading=false;render();},1400);
+  // Phase C: the boot fetch ran as anon (RLS hid protected tables) — reload them now the JWT is set.
+  if(AUTH_PHASE_C){_reloadCoreTables().then(function(){safeRender();});}
   // Fetch latest audit log from Supabase after login
   if(u.superAdmin){
     (async()=>{try{
@@ -1961,7 +2069,13 @@ async function _doLogin(emailArg,passArg){
 
 window.tryLogin=function(){_doLogin();};
 window.updateLoginSuffix=function(){var s=document.getElementById('li_e_sfx');var e=document.getElementById('li_e');if(s&&e)s.style.display=e.value.includes('@')?'none':'';};
-function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.removeItem('ts_remembered_user');S._notifications=[];S.__notifStr='';S._notifOpen=false;broadcastPresence(null);if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}S.rtStatus='offline';S.rtPresence={};S._presSection=null;clearInterval(_presInterval);render();}
+function logout(){
+  if(AUTH_PHASE_C){
+    try{if(_sbSession&&_sbSession.access_token)fetch(SB+'/auth/v1/logout',{method:'POST',headers:{'apikey':SK,'Authorization':'Bearer '+_sbSession.access_token}}).catch(function(){});}catch(e){}
+    try{localStorage.removeItem('ts_sb_session');}catch(e){}
+    clearTimeout(_sbRefreshTimer);_applySession(null);  // restores the anon key on SH
+  }
+  S.user=null;sessionStorage.removeItem('ts_user');localStorage.removeItem('ts_remembered_user');S._notifications=[];S.__notifStr='';S._notifOpen=false;broadcastPresence(null);if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}S.rtStatus='offline';S.rtPresence={};S._presSection=null;clearInterval(_presInterval);render();}
 
 // ── Shared Workspace Persistence ──
 async function saveWorkspace(){
