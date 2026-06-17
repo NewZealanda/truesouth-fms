@@ -351,21 +351,7 @@ window.changeMyPassword=async function(){
 function renderRosterPlaceholder(){
   return '<div class="card" style="text-align:center;padding:48px 24px"><div style="font-size:32px;margin-bottom:12px">🗓️</div><div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Roster</div><div style="font-size:13px;color:var(--text3)">Coming soon — staff roster and scheduling.</div></div>';
 }
-function renderRezdy(){
-  if((S.user?.role||'')!=='superadmin')return'<div class="page"><div class="card" style="text-align:center;padding:40px">Not available.</div></div>';
-  return `<div class="card" style="max-width:760px;margin:0 auto">
-    <div class="st">Rezdy Integration</div>
-    <div style="text-align:center;padding:30px 10px">
-      <div style="font-size:40px;margin-bottom:10px">🔗</div>
-      <div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Coming soon</div>
-      <div style="font-size:13px;color:var(--text3);line-height:1.7;max-width:520px;margin:0 auto">
-        Placeholder for the upcoming Rezdy integration: pulling bookings (passengers, weights, pick-ups, booking number, date, departure and payment details) into True South.
-        This will run through a secure server-side connection — the API key will never live in the app.
-      </div>
-      <div style="margin-top:18px;font-size:11px;color:var(--text3);opacity:.7">Visible to superadmin only while in development.</div>
-    </div>
-  </div>`;
-}
+/* renderRezdy() now lives in modules/rezdy.js (Bookings + Pickups + Schedule). */
 function renderDrawer(){
   const role=S.user?.role||'desk';
   const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
@@ -373,7 +359,9 @@ function renderDrawer(){
   const _canOps=_isAdminPlus||_navPerms.operations===true;
   const _canCharter=_isAdminPlus||_navPerms.charter===true;
   const _canMaint=_isAdminPlus||_navPerms.maintenance===true;
-  const _canRoster=_isAdminPlus||_navPerms.roster===true;
+  // Roster VIEW: granted by the roster perm, OR (since the admin grid groups them as a
+  // single "Roster & Leave" column) by the leave perm. Editing stays gated on roster_edit.
+  const _canRoster=_isAdminPlus||_navPerms.roster===true||_navPerms.leave===true;
   const sec=S.section||'operations';
   // Drawer sections expand/collapse independently; default all closed (shut on login). Kept in memory so reopening the burger shows the same state.
   S._drawerExp=S._drawerExp||{};
@@ -410,7 +398,8 @@ function renderDrawer(){
   // Roster & Leave combined
   {var _canApproveLeaveNav=role==='superadmin'||role==='admin'||role==='cx_manager';
   var _lvActive=sec==='leave';
-  var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending';}).length:0;
+  // Match the Approvals tab: only count pending requests this approver can actually action.
+  var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveRole!=='function'||_lvCanApproveRole(role,r.user_role||'desk'));}).length:0;
   var _rlOn=sec==='roster'||sec==='leave';
   var _rlExp=_isExp('roster');
   h+='<button tabindex="-1" onclick="S._drawerExp[\'roster\']=!S._drawerExp[\'roster\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_rlOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_rlOn?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(_rlOn?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px"><span style="flex:1">🗓️ Roster'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_rlExp?'▲':'▼')+'</span></button>';

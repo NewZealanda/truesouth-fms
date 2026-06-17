@@ -438,6 +438,7 @@ window.submitLeaveRequest=async function(){
   if(!f||!f.startDate||!f.endDate){toast('Please select start and end dates.','error');return;}
   if(f.endDate<f.startDate){toast('End date must be after start date.','error');return;}
   var uid=S.user?.id;
+  if(!uid){toast('Could not identify your account — please sign in again.','error');return;}
   var uname=S.user?.name||S.user?.email||'Unknown';
   var urole=S.user?.role||'desk';
   var days=_lvWorkingDays(uid,f.startDate,f.endDate,f.partialDay); // leave days actually used (RDOs excluded; half-day aware)
