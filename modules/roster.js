@@ -83,6 +83,19 @@ function _rGetStatus(u,ds,roster){
   return st;
 }
 function _rIni(u){return _rCode(u);}
+// Crew sharing a code break the roster/leave-day keying (status is stored per code as
+// well as per id). Returns {CODE:[name,...]} for any code held by more than one crew member.
+function _dupCrewCodes(){
+  var seen={},dupes={};
+  (S.crew||[]).forEach(function(c){
+    var code=String(c.code||'').trim().toUpperCase();
+    if(!code)return;
+    if(seen[code]){dupes[code]=dupes[code]||[seen[code]];dupes[code].push(c.n||'?');}
+    else seen[code]=c.n||'?';
+  });
+  return dupes;
+}
+window._dupCrewCodes=_dupCrewCodes;
 // ── Unsaved-roster guard ──
 function _rosterUnsaved(){return !!(S._rosterDraft&&Object.keys(S._rosterDraft).length>0);}
 // Run `go` immediately unless there are unsaved roster edits — then prompt first.
@@ -234,6 +247,13 @@ function renderRosterView(){
   if(isAdminPlus)h+=_rTbPill('Colours','🎨',_ce,"S._rosterColorEdit=!S._rosterColorEdit;render()");
   h+='</div>';
   h+='</div>';
+  // Warn admins about duplicate crew codes (they corrupt roster/leave-day counts).
+  if(canEditRoster){
+    var _dupes=_dupCrewCodes(),_dupKeys=Object.keys(_dupes);
+    if(_dupKeys.length){
+      h+='<div style="margin:10px 14px;padding:9px 12px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);border-radius:8px;font-size:12px;color:#fbbf24;line-height:1.5">⚠ Duplicate crew codes share roster &amp; leave-day data — give each a unique code in Admin → People: '+_dupKeys.map(function(k){return '<strong>'+k+'</strong> ('+_dupes[k].join(', ')+')';}).join('; ')+'</div>';
+    }
+  }
   // Collapsible role-visibility panel
   if(_showOn){
     h+='<div style="padding:10px 14px;border-bottom:1px solid var(--border2);background:var(--card2);display:flex;gap:6px;flex-wrap:wrap;align-items:center">';

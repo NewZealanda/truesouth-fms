@@ -2702,6 +2702,13 @@ window.savePerson=async function(){
     const dupUser=S.users.find(function(x){return x.email.toLowerCase()===d.email.toLowerCase()&&x.id!==m.userId;});
     if(dupUser){S.admin.err='That email is already used by another account.';render();return;}
   }
+  // Crew code must be unique (case-insensitive). It keys the roster grid and leave-day
+  // counts, so two crew sharing a code would cross-contaminate each other's roster/payroll.
+  if((d.code||'').trim()){
+    const _code=String(d.code).trim().toUpperCase();
+    const _dupCode=(S.crew||[]).find(function(cr){return cr.id!==m.crewId&&String(cr.code||'').trim().toUpperCase()===_code;});
+    if(_dupCode){S.admin.err='Crew code "'+_code+'" is already used by '+(_dupCode.n||'another crew member')+'. Codes must be unique.';render();return;}
+  }
 
   // ── Save crew record ──
   let crewId=m.crewId;
