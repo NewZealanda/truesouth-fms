@@ -2066,10 +2066,62 @@ window.editSaved=function(id){
   if(existing){window.switchLsTab(id);return;}
   var s=S.saved.find(function(x){return x.id===id;});
   if(!s)return;
-  var acFull=s.form&&s.form.ac?s.form.ac:'ZK-SLA';
-  var _esForm=dc(s.form);if(!_esForm.cargo)_esForm.cargo={};var _esAc=S.aircraft[_esForm.ac];if(_esAc&&_esAc.layout==='ga8'&&(!_esForm.burnOff||parseFloat(_esForm.burnOff)<30)){_esForm.burnOff='35';}
-  S.lsTabs.push({id:s.id,acId:acFull,form:_esForm,status:s.status||'unsigned',savedAt:s.savedAt,originalForm:dc(s.form)});
+  _openLsTabSilent(s);
   window.switchLsTab(s.id);window.saveWorkspace&&window.saveWorkspace();
+};
+// Add a saved loadsheet as an open tab WITHOUT switching/rendering (for bulk open).
+function _openLsTabSilent(s){
+  if(!s||!s.form)return;
+  if(S.lsTabs.find(function(t){return t.id===s.id;}))return;
+  var acFull=s.form.ac?s.form.ac:'ZK-SLA';
+  var f=dc(s.form);if(!f.cargo)f.cargo={};
+  var ac=S.aircraft[f.ac];if(ac&&ac.layout==='ga8'&&(!f.burnOff||parseFloat(f.burnOff)<30))f.burnOff='35';
+  S.lsTabs.push({id:s.id,acId:acFull,form:f,status:s.status||'unsigned',savedAt:s.savedAt,originalForm:dc(s.form)});
+}
+// Add a saved manifest as an open tab WITHOUT switching view/rendering (for bulk open).
+function _openManifestTabSilent(m){
+  if(!m)return;
+  if(!S._manifestDispatches)S._manifestDispatches={};
+  if(!S.manifestTabs)S.manifestTabs=[];
+  var ex=S.manifestTabs.find(function(t){return t.savedId===m.id;});
+  if(ex){S.activeManifestTabId=ex.id;S.dispatch=JSON.parse(JSON.stringify((S._manifestDispatches||{})[ex.id]||bD()));S._loadedManifestId=m.id;return;}
+  var now=Date.now();
+  var data=Object.assign({},bD(),m.data||{},{seatMap:{},step:1});
+  (data.pax||[]).forEach(function(p){p._ts=now;});
+  (data.acSetup||[]).forEach(function(s){s._ts=now;});
+  data._updateTs=now;data._loadedAt=now;
+  if(S.activeManifestTabId)S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+  var newId='mt_'+now+'_'+Math.floor(Math.random()*1e4);
+  S._manifestDispatches[newId]=JSON.parse(JSON.stringify(data));
+  S.manifestTabs.push({id:newId,savedId:m.id});
+  S.activeManifestTabId=newId;
+  S.dispatch=JSON.parse(JSON.stringify(data));
+  S._loadedManifestId=m.id;
+}
+// Open every selected saved item at once — each into its own tab.
+window.openSelectedSaved=function(){
+  var ids=Object.keys(S.savedSel||{});
+  if(!ids.length){toast('Select items to open first.','warn');return;}
+  var nLs=0,nMf=0,lastLs=null;
+  ids.forEach(function(id){
+    var s=(S.saved||[]).find(function(x){return x.id===id;});
+    if(s){_openLsTabSilent(s);nLs++;lastLs=s.id;return;}
+    var m=(S.manifests||[]).find(function(x){return x.id===id;});
+    if(m){_openManifestTabSilent(m);nMf++;}
+  });
+  S.savedSel={};
+  S.section='operations';S._newLsTab=false;
+  // Navigate to whichever type we opened (prefer manifests if that's what was selected)
+  if(nMf&&!nLs){
+    S.tab='manifest';
+  } else if(nLs){
+    var t=S.lsTabs.find(function(x){return x.id===lastLs;});
+    if(t){S.activeTabId=t.id;S.form=t.form;S.lsAc=(t.acId||'').replace('ZK-','');S.editId=t.id;}
+    S.tab='loadsheet';
+  }
+  window.saveWorkspace&&window.saveWorkspace();
+  window.scrollTo(0,0);render();
+  toast('Opened '+(nLs+nMf)+' item'+((nLs+nMf)!==1?'s':''),'ok');
 };
 window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted'}]);};
 window.restoreFromBin=async function(id){

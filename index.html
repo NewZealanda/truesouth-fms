@@ -408,7 +408,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.66';
+const APP_VER='v22.67';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -4685,6 +4685,7 @@ function renderSaved(){
   const _selSignedCount=Object.keys(S.savedSel).filter(id=>{const s=S.saved.find(x=>x.id===id);return s&&s.status==='complete';}).length;
   const _bulkBar=_selCount>0&&tab!=='bin'?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
     <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_selCount} item(s) selected</span>
+    <button onclick="window.openSelectedSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📂 Open (${_selCount})</button>
     <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
     <button onclick="window.printMultiSheet(Object.keys(S.savedSel))" style="padding:5px 12px;border-radius:6px;border:none;background:#374151;color:#fff;font-size:16px;font-weight:700;cursor:pointer" title="Print selected">&#x1F5A8;</button>
     ${_selSignedCount>0?`<button onclick="window.bulkUploadSaved()" style="padding:5px 14px;border-radius:6px;border:none;background:#1a73e8;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;box-shadow:0 1px 4px rgba(26,115,232,.4)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>Upload to Drive (${_selSignedCount})</button>`:''}
@@ -4849,6 +4850,7 @@ function renderSaved(){
     var _aSelCnt=Object.keys(S.savedSel).filter(function(id){return activeItems.find(function(s){return s.id===id;});}).length;
     var _aBulk=_aSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
       <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_aSelCnt} selected</span>
+      <button onclick="window.openSelectedSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📂 Open (${_aSelCnt})</button>
       <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
       <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_aSelCnt})</button>
     </div>`:'';
@@ -4867,6 +4869,7 @@ function renderSaved(){
     var _sSelCnt=Object.keys(S.savedSel).filter(function(id){return signedItems.find(function(s){return s.id===id;});}).length;
     var _sBulk=_sSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
       <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_sSelCnt} selected</span>
+      <button onclick="window.openSelectedSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📂 Open (${_sSelCnt})</button>
       <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
       ${_sSelCnt>0?`<button onclick="window.bulkUploadSaved()" style="padding:5px 14px;border-radius:6px;border:none;background:#1a73e8;color:#fff;font-size:12px;font-weight:700;cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg> Upload All (${_sSelCnt})</button>`:''}
       <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_sSelCnt})</button>
@@ -7211,10 +7214,62 @@ window.editSaved=function(id){
   if(existing){window.switchLsTab(id);return;}
   var s=S.saved.find(function(x){return x.id===id;});
   if(!s)return;
-  var acFull=s.form&&s.form.ac?s.form.ac:'ZK-SLA';
-  var _esForm=dc(s.form);if(!_esForm.cargo)_esForm.cargo={};var _esAc=S.aircraft[_esForm.ac];if(_esAc&&_esAc.layout==='ga8'&&(!_esForm.burnOff||parseFloat(_esForm.burnOff)<30)){_esForm.burnOff='35';}
-  S.lsTabs.push({id:s.id,acId:acFull,form:_esForm,status:s.status||'unsigned',savedAt:s.savedAt,originalForm:dc(s.form)});
+  _openLsTabSilent(s);
   window.switchLsTab(s.id);window.saveWorkspace&&window.saveWorkspace();
+};
+// Add a saved loadsheet as an open tab WITHOUT switching/rendering (for bulk open).
+function _openLsTabSilent(s){
+  if(!s||!s.form)return;
+  if(S.lsTabs.find(function(t){return t.id===s.id;}))return;
+  var acFull=s.form.ac?s.form.ac:'ZK-SLA';
+  var f=dc(s.form);if(!f.cargo)f.cargo={};
+  var ac=S.aircraft[f.ac];if(ac&&ac.layout==='ga8'&&(!f.burnOff||parseFloat(f.burnOff)<30))f.burnOff='35';
+  S.lsTabs.push({id:s.id,acId:acFull,form:f,status:s.status||'unsigned',savedAt:s.savedAt,originalForm:dc(s.form)});
+}
+// Add a saved manifest as an open tab WITHOUT switching view/rendering (for bulk open).
+function _openManifestTabSilent(m){
+  if(!m)return;
+  if(!S._manifestDispatches)S._manifestDispatches={};
+  if(!S.manifestTabs)S.manifestTabs=[];
+  var ex=S.manifestTabs.find(function(t){return t.savedId===m.id;});
+  if(ex){S.activeManifestTabId=ex.id;S.dispatch=JSON.parse(JSON.stringify((S._manifestDispatches||{})[ex.id]||bD()));S._loadedManifestId=m.id;return;}
+  var now=Date.now();
+  var data=Object.assign({},bD(),m.data||{},{seatMap:{},step:1});
+  (data.pax||[]).forEach(function(p){p._ts=now;});
+  (data.acSetup||[]).forEach(function(s){s._ts=now;});
+  data._updateTs=now;data._loadedAt=now;
+  if(S.activeManifestTabId)S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
+  var newId='mt_'+now+'_'+Math.floor(Math.random()*1e4);
+  S._manifestDispatches[newId]=JSON.parse(JSON.stringify(data));
+  S.manifestTabs.push({id:newId,savedId:m.id});
+  S.activeManifestTabId=newId;
+  S.dispatch=JSON.parse(JSON.stringify(data));
+  S._loadedManifestId=m.id;
+}
+// Open every selected saved item at once — each into its own tab.
+window.openSelectedSaved=function(){
+  var ids=Object.keys(S.savedSel||{});
+  if(!ids.length){toast('Select items to open first.','warn');return;}
+  var nLs=0,nMf=0,lastLs=null;
+  ids.forEach(function(id){
+    var s=(S.saved||[]).find(function(x){return x.id===id;});
+    if(s){_openLsTabSilent(s);nLs++;lastLs=s.id;return;}
+    var m=(S.manifests||[]).find(function(x){return x.id===id;});
+    if(m){_openManifestTabSilent(m);nMf++;}
+  });
+  S.savedSel={};
+  S.section='operations';S._newLsTab=false;
+  // Navigate to whichever type we opened (prefer manifests if that's what was selected)
+  if(nMf&&!nLs){
+    S.tab='manifest';
+  } else if(nLs){
+    var t=S.lsTabs.find(function(x){return x.id===lastLs;});
+    if(t){S.activeTabId=t.id;S.form=t.form;S.lsAc=(t.acId||'').replace('ZK-','');S.editId=t.id;}
+    S.tab='loadsheet';
+  }
+  window.saveWorkspace&&window.saveWorkspace();
+  window.scrollTo(0,0);render();
+  toast('Opened '+(nLs+nMf)+' item'+((nLs+nMf)!==1?'s':''),'ok');
 };
 window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted'}]);};
 window.restoreFromBin=async function(id){
