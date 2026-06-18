@@ -593,7 +593,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.07';
+const APP_VER='v23.08';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -9284,20 +9284,19 @@ function renderMaintLog(){
     const hrsUsedToday=ttis!=null&&prevHrs2!=null?(parseFloat(ttis)-prevHrs2).toFixed(1):null;
     const starts=e[ac+'_starts']||null;
     const landings=e[ac+'_landings']||null;
-    // Use stored cumulative totals from spreadsheet; fall back to most recent stored value before this date
-    var cumStarts=e[ac+'_startTot']||null;
-    var cumLandings=e[ac+'_landTot']||null;
-    if(cumStarts==null||cumLandings==null){
-      var dIdx=allDays3.indexOf(ds);
-      for(var _di=dIdx;_di>=0;_di--){
-        var _de=histMap2[allDays3[_di]];
-        if(_de){
-          if(cumStarts==null&&_de[ac+'_startTot']) cumStarts=_de[ac+'_startTot'];
-          if(cumLandings==null&&_de[ac+'_landTot']) cumLandings=_de[ac+'_landTot'];
-        }
-        if(cumStarts!=null&&cumLandings!=null) break;
-      }
+    // Cumulative starts/landings = running sum of every per-day entry for this aircraft up
+    // to and including this date. allDays3 is newest-first, so older days are at HIGHER
+    // indices — sum from the oldest (end) down to this date's index.
+    var cumStarts=0,cumLandings=0,_hasCumS=false,_hasCumL=false;
+    var _dIdx=allDays3.indexOf(ds);
+    for(var _ci=allDays3.length-1;_ci>=_dIdx;_ci--){
+      var _ce=histMap2[allDays3[_ci]];
+      if(!_ce)continue;
+      if(_ce[ac+'_starts']!=null){cumStarts+=parseInt(_ce[ac+'_starts'])||0;_hasCumS=true;}
+      if(_ce[ac+'_landings']!=null){cumLandings+=parseInt(_ce[ac+'_landings'])||0;_hasCumL=true;}
     }
+    if(!_hasCumS)cumStarts=null;
+    if(!_hasCumL)cumLandings=null;
     const oil=oe[ac]||null;
     const hasFlightData=ttis!=null||starts!=null||landings!=null||oil!=null||e.comment;
     const cwDone=cwDoneMap[ds];
@@ -9322,7 +9321,7 @@ function renderMaintLog(){
       <td style="padding:5px 6px;font-size:11px;color:var(--text3);white-space:nowrap">${fmtMaintDate(ds)}</td>
       <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="${ttis||''}" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','ttis',this.value)" style="width:58px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${ttis?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
       <td style="padding:5px 6px;text-align:right;font-size:12px">${hrsUsedToday!=null?`<span style="color:${col2}">+${hrsUsedToday}</span>`:'<span style="color:var(--border)">—</span>'}</td>
-      ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${starts||''}" placeholder="—" title="${cumStarts>0?'Total starts: '+cumStarts:''}" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${starts!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${landings||''}" placeholder="—" title="${cumLandings>0?'Total landings: '+cumLandings:''}" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${landings!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>`:''}
+      ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${starts||''}" placeholder="—" title="${cumStarts!=null?'Total starts to date: '+cumStarts:''}" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${starts!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${landings||''}" placeholder="—" title="${cumLandings!=null?'Total landings to date: '+cumLandings:''}" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${landings!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>`:''}
       <td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${oil||''}" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','oil',this.value)" style="width:44px;background:transparent;border:none;border-bottom:1px solid transparent;color:${oil!=null?'#f59e0b':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
       ${cwTd}${adasTd}
       <td style="padding:2px 4px"><input type="text" value="${esc(e.comment||'')}" placeholder="notes…" onblur="window.saveMaintField('${ds}','${ac}','comment',this.value)" style="width:100%;min-width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-size:11px;font-style:italic;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
@@ -10846,6 +10845,33 @@ function _lvRosterConflicts(req){
   });
   return out;
 }
+// Auto-stamp an approved leave onto the persisted roster (so it shows on the roster and is
+// caught by future conflict checks). Skips days already RDO/off; writes by user id.
+async function _lvStampRoster(req){
+  if(!req||!req.start_date||!req.end_date||!req.user_id)return;
+  // Make sure we stamp onto the real persisted roster, not an empty one.
+  if((!S.roster||!Object.keys(S.roster).length)&&typeof window.loadRosterFromCloud==='function'){
+    try{await window.loadRosterFromCloud();}catch(e){}
+  }
+  var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};
+  var code=_lvMap[req.leave_type]||'leave';
+  if(!S.roster)S.roster={};
+  var off={rdo:1,off:1};
+  var cur=new Date(req.start_date+'T00:00:00'),end=new Date(req.end_date+'T00:00:00'),guard=0,changed=false;
+  while(cur<=end&&guard++<3660){
+    var ds=(typeof _rIso==='function')?_rIso(cur):cur.toISOString().slice(0,10);
+    if(!S.roster[ds])S.roster[ds]={};
+    var ex=S.roster[ds][req.user_id]||'';
+    if(typeof ex==='string'&&ex.indexOf('other:')===0)ex='other';
+    if(!off[ex]&&ex!==code){S.roster[ds][req.user_id]=code;changed=true;}
+    cur.setDate(cur.getDate()+1);
+  }
+  if(changed){
+    lsSet('ts_roster',S.roster);
+    var res=await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
+    if(res===null)toast('Leave approved, but the roster auto-stamp didn’t save — add it on the roster manually.','warn');
+  }
+}
 function _lvFmt(ds){if(!ds)return '';var d=new Date(ds+'T00:00:00');return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'});}
 function _lvCanApprove(role){
   // Base "can approve leave at all" is now driven by the permission grid (leave_approve);
@@ -11301,6 +11327,7 @@ window.approveLeave=async function(id){
   });
   if(ok){
     await sbU('ts_leave_audit',[{request_id:id,action:'approved',performed_by:me?.id,performed_by_name:me?.name||me?.email}]);
+    try{await _lvStampRoster(req);}catch(e){}   // auto-stamp the approved leave onto the roster
     await window._notifyLeaveUser(req.user_id,'approved',req.leave_type,req.start_date,req.end_date,null);
     window._triggerLeaveEmail(id,'approved').catch(function(){});
     S._leave._allLoaded=false;

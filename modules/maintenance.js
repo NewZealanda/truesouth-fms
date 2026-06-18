@@ -405,20 +405,19 @@ function renderMaintLog(){
     const hrsUsedToday=ttis!=null&&prevHrs2!=null?(parseFloat(ttis)-prevHrs2).toFixed(1):null;
     const starts=e[ac+'_starts']||null;
     const landings=e[ac+'_landings']||null;
-    // Use stored cumulative totals from spreadsheet; fall back to most recent stored value before this date
-    var cumStarts=e[ac+'_startTot']||null;
-    var cumLandings=e[ac+'_landTot']||null;
-    if(cumStarts==null||cumLandings==null){
-      var dIdx=allDays3.indexOf(ds);
-      for(var _di=dIdx;_di>=0;_di--){
-        var _de=histMap2[allDays3[_di]];
-        if(_de){
-          if(cumStarts==null&&_de[ac+'_startTot']) cumStarts=_de[ac+'_startTot'];
-          if(cumLandings==null&&_de[ac+'_landTot']) cumLandings=_de[ac+'_landTot'];
-        }
-        if(cumStarts!=null&&cumLandings!=null) break;
-      }
+    // Cumulative starts/landings = running sum of every per-day entry for this aircraft up
+    // to and including this date. allDays3 is newest-first, so older days are at HIGHER
+    // indices — sum from the oldest (end) down to this date's index.
+    var cumStarts=0,cumLandings=0,_hasCumS=false,_hasCumL=false;
+    var _dIdx=allDays3.indexOf(ds);
+    for(var _ci=allDays3.length-1;_ci>=_dIdx;_ci--){
+      var _ce=histMap2[allDays3[_ci]];
+      if(!_ce)continue;
+      if(_ce[ac+'_starts']!=null){cumStarts+=parseInt(_ce[ac+'_starts'])||0;_hasCumS=true;}
+      if(_ce[ac+'_landings']!=null){cumLandings+=parseInt(_ce[ac+'_landings'])||0;_hasCumL=true;}
     }
+    if(!_hasCumS)cumStarts=null;
+    if(!_hasCumL)cumLandings=null;
     const oil=oe[ac]||null;
     const hasFlightData=ttis!=null||starts!=null||landings!=null||oil!=null||e.comment;
     const cwDone=cwDoneMap[ds];
@@ -443,7 +442,7 @@ function renderMaintLog(){
       <td style="padding:5px 6px;font-size:11px;color:var(--text3);white-space:nowrap">${fmtMaintDate(ds)}</td>
       <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="${ttis||''}" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','ttis',this.value)" style="width:58px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${ttis?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
       <td style="padding:5px 6px;text-align:right;font-size:12px">${hrsUsedToday!=null?`<span style="color:${col2}">+${hrsUsedToday}</span>`:'<span style="color:var(--border)">—</span>'}</td>
-      ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${starts||''}" placeholder="—" title="${cumStarts>0?'Total starts: '+cumStarts:''}" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${starts!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${landings||''}" placeholder="—" title="${cumLandings>0?'Total landings: '+cumLandings:''}" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${landings!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>`:''}
+      ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${starts||''}" placeholder="—" title="${cumStarts!=null?'Total starts to date: '+cumStarts:''}" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${starts!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${landings||''}" placeholder="—" title="${cumLandings!=null?'Total landings to date: '+cumLandings:''}" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${landings!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>`:''}
       <td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${oil||''}" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','oil',this.value)" style="width:44px;background:transparent;border:none;border-bottom:1px solid transparent;color:${oil!=null?'#f59e0b':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
       ${cwTd}${adasTd}
       <td style="padding:2px 4px"><input type="text" value="${esc(e.comment||'')}" placeholder="notes…" onblur="window.saveMaintField('${ds}','${ac}','comment',this.value)" style="width:100%;min-width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-size:11px;font-style:italic;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>

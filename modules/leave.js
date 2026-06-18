@@ -57,6 +57,33 @@ function _lvRosterConflicts(req){
   });
   return out;
 }
+// Auto-stamp an approved leave onto the persisted roster (so it shows on the roster and is
+// caught by future conflict checks). Skips days already RDO/off; writes by user id.
+async function _lvStampRoster(req){
+  if(!req||!req.start_date||!req.end_date||!req.user_id)return;
+  // Make sure we stamp onto the real persisted roster, not an empty one.
+  if((!S.roster||!Object.keys(S.roster).length)&&typeof window.loadRosterFromCloud==='function'){
+    try{await window.loadRosterFromCloud();}catch(e){}
+  }
+  var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};
+  var code=_lvMap[req.leave_type]||'leave';
+  if(!S.roster)S.roster={};
+  var off={rdo:1,off:1};
+  var cur=new Date(req.start_date+'T00:00:00'),end=new Date(req.end_date+'T00:00:00'),guard=0,changed=false;
+  while(cur<=end&&guard++<3660){
+    var ds=(typeof _rIso==='function')?_rIso(cur):cur.toISOString().slice(0,10);
+    if(!S.roster[ds])S.roster[ds]={};
+    var ex=S.roster[ds][req.user_id]||'';
+    if(typeof ex==='string'&&ex.indexOf('other:')===0)ex='other';
+    if(!off[ex]&&ex!==code){S.roster[ds][req.user_id]=code;changed=true;}
+    cur.setDate(cur.getDate()+1);
+  }
+  if(changed){
+    lsSet('ts_roster',S.roster);
+    var res=await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
+    if(res===null)toast('Leave approved, but the roster auto-stamp didn’t save — add it on the roster manually.','warn');
+  }
+}
 function _lvFmt(ds){if(!ds)return '';var d=new Date(ds+'T00:00:00');return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'});}
 function _lvCanApprove(role){
   // Base "can approve leave at all" is now driven by the permission grid (leave_approve);
@@ -512,6 +539,7 @@ window.approveLeave=async function(id){
   });
   if(ok){
     await sbU('ts_leave_audit',[{request_id:id,action:'approved',performed_by:me?.id,performed_by_name:me?.name||me?.email}]);
+    try{await _lvStampRoster(req);}catch(e){}   // auto-stamp the approved leave onto the roster
     await window._notifyLeaveUser(req.user_id,'approved',req.leave_type,req.start_date,req.end_date,null);
     window._triggerLeaveEmail(id,'approved').catch(function(){});
     S._leave._allLoaded=false;
