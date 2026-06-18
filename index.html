@@ -625,7 +625,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.31';
+const APP_VER='v23.32';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -12034,29 +12034,64 @@ function renderRezdy(){
 // ─────────────────────────────────────────────────────────────────────────────
 //  (1) BOOKINGS
 // ─────────────────────────────────────────────────────────────────────────────
-// Passenger "bubbles" for a booking — one per traveller with first name + weight (or TBC),
-// mirroring the loadsheet/manifest style. An outstanding balance flags every bubble TO PAY.
-function _rzPaxBubbles(b){
+// Booking group colour (all pax in one booking share group = order number).
+function _rzGroupColor(s){s=String(s||'');var h=0;for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffffff;var pal=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];return pal[Math.abs(h)%pal.length];}
+function _rzPaxMeta(order){S._rezdyPaxMeta=S._rezdyPaxMeta||{};order=String(order);return S._rezdyPaxMeta[order]||(S._rezdyPaxMeta[order]={});}
+function _rzSavePaxMeta(){if(window.pickupSave)window.pickupSave(true);}
+// Passenger "bubbles" for a booking — loadsheet style: white card, group-colour left border,
+// C (child) / i (infant) corner badges, TO PAY banner. opts.drag enables in-booking dragging:
+// drop one bubble on another to make it that passenger's lap infant; tap toggles child.
+function _rzPaxBubbles(b,opts){
+  opts=opts||{};
+  var order=String(b.orderNumber||'');
   var parts=[];
   (b.items||[]).forEach(function(it){(it.participants||[]).forEach(function(p){parts.push(p);});});
   if(!parts.length)return '';
   var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
-  var bubs=parts.map(function(p){
+  var m=(S._rezdyPaxMeta||{})[order]||{};var infantOf=m.infantOf||{};var types=m.types||{};
+  var gcol=_rzGroupColor(order);
+  var bubs='';
+  parts.forEach(function(p,idx){
+    if(infantOf[idx]!=null)return; // lap infant on someone else — not its own bubble
     var full=(p&&p.name)?String(p.name).trim():'';
     var nm=full?_rzEsc(full.split(/\s+/)[0]):'?';
     var wRaw=(p&&p.weight!=null&&p.weight!=='')?String(p.weight):'';
     var tbc=!wRaw||/^tbc$/i.test(wRaw);
     var w=tbc?'TBC':_rzEsc(wRaw.replace(/\s*kg$/i,''))+'kg';
-    return '<div title="'+_rzEsc(full||'')+'" style="position:relative;overflow:hidden;background:rgba(255,255,255,.93);border-radius:8px;'+(owing?'border:2px solid #ef4444':'border-left:4px solid #64748b')+';min-width:58px;flex-shrink:0">'+
+    var isChild=types[idx]==='child';
+    var infName=null,infIdx=null;Object.keys(infantOf).forEach(function(ii){if(String(infantOf[ii])===String(idx)){infIdx=ii;var ip=parts[ii];if(ip&&ip.name)infName=String(ip.name).trim().split(/\s+/)[0];}});
+    var dd=opts.drag?(' draggable="true" ondragstart="window.rezdyPaxDragStart(\''+order.replace(/'/g,"\\'")+'\','+idx+',event)" ondragover="event.preventDefault()" ondrop="window.rezdyPaxDropInfant(\''+order.replace(/'/g,"\\'")+'\','+idx+',event)" onclick="window.rezdyPaxToggleChild(\''+order.replace(/'/g,"\\'")+'\','+idx+')"'):'';
+    bubs+='<div title="'+_rzEsc(full+(infName?' (+ infant '+infName+')':''))+'"'+dd+' style="position:relative;overflow:hidden;background:rgba(255,255,255,.93);border-radius:8px;'+(owing?'border:2px solid #ef4444':'border-left:4px solid '+gcol)+';min-width:60px;flex-shrink:0;'+(opts.drag?'cursor:grab;':'')+'">'+
       (owing?'<div style="background:#ef4444;color:#fff;font-size:8px;font-weight:900;letter-spacing:.04em;text-align:center;line-height:1.7">$ TO PAY</div>':'')+
+      (isChild?'<div style="position:absolute;bottom:3px;left:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')+
+      (infName?'<div'+(opts.drag?' onclick="event.stopPropagation();window.rezdyPaxRemoveInfant(\''+order.replace(/'/g,"\\'")+'\','+infIdx+')"':'')+' title="Infant: '+_rzEsc(infName)+(opts.drag?' (tap to remove)':'')+'" style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)'+(opts.drag?';cursor:pointer':'')+'">i</div>':'')+
       '<div style="padding:'+(owing?'2px 7px 4px':'4px 7px')+'">'+
         '<div style="font-size:11px;font-weight:700;color:#1e293b;white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'+
         '<div style="font-size:10px;font-weight:'+(tbc?'700':'400')+';color:'+(tbc?'#b45309':'#334155')+'">'+w+'</div>'+
       '</div></div>';
-  }).join('');
+  });
+  if(!bubs)return '';
+  var nA=0,nC=0,nI=0;parts.forEach(function(p,idx){if(infantOf[idx]!=null)nI++;else if(types[idx]==='child')nC++;else nA++;});
+  var bd='<span style="font-size:12px;font-weight:800;color:var(--text1);align-self:center">'+nA+'A'+(nC?' · '+nC+'C':'')+(nI?' · '+nI+'i':'')+'</span>';
   return '<div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 10px;align-items:stretch">'+
-    '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;align-self:center;margin-right:2px">Pax</span>'+bubs+'</div>';
+    '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;align-self:center;margin-right:2px">Pax</span>'+bd+bubs+'</div>';
 }
+window.rezdyPaxDragStart=function(order,idx,e){S._rezdyPaxDrag={order:String(order),idx:idx};try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','pax');}catch(_){}};
+window.rezdyPaxDropInfant=function(order,hostIdx,e){
+  if(e&&e.preventDefault)e.preventDefault();if(e&&e.stopPropagation)e.stopPropagation();
+  var d=S._rezdyPaxDrag;S._rezdyPaxDrag=null;
+  if(!d||String(d.order)!==String(order)||d.idx===hostIdx)return; // same booking only, not onto itself
+  var m=_rzPaxMeta(order);m.infantOf=m.infantOf||{};
+  if(m.infantOf[hostIdx]!=null)return; // host is itself an infant — ignore
+  m.infantOf[d.idx]=hostIdx;if(m.types)delete m.types[d.idx];
+  _rzSavePaxMeta();render();
+};
+window.rezdyPaxToggleChild=function(order,idx){
+  var m=_rzPaxMeta(order);m.types=m.types||{};
+  if(m.types[idx]==='child')delete m.types[idx];else m.types[idx]='child';
+  _rzSavePaxMeta();render();
+};
+window.rezdyPaxRemoveInfant=function(order,infIdx){var m=_rzPaxMeta(order);if(m.infantOf)delete m.infantOf[infIdx];_rzSavePaxMeta();render();};
 function _rzRenderBookings(){
   if(S._rezdyLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading bookings…</div>';
   // Cancelled bookings sink to the bottom (least relevant); otherwise keep order.
@@ -12074,7 +12109,7 @@ function _rzRenderBookings(){
   // Build one table; each booking can have multiple items → one row per item.
   // The Order cell carries a chevron toggle; an expanded full-width detail row
   // follows each booking when S._rezdyOpen[orderNumber] is set.
-  const NCOL=11; // total columns (chevron+order, customer, pax, product, departs, pickup, phone, email, status, balance, comments)
+  const NCOL=10; // chevron+order, customer, pax, product, departs, pickup, phone, status, balance, comments (email hidden until expand)
   let body='';
   rows.forEach(function(b){
     const items=(b.items&&b.items.length)?b.items:[{}];
@@ -12098,14 +12133,13 @@ function _rzRenderBookings(){
       body+='<td style="padding:8px 6px">'+_rzEsc(it.pickup)+'</td>';
       if(ii===0){
         body+='<td style="padding:8px 6px;white-space:nowrap;vertical-align:top" rowspan="'+span+'">'+_rzEsc(b.phone)+'</td>';
-        body+='<td style="padding:8px 6px;vertical-align:top;word-break:break-all" rowspan="'+span+'">'+_rzEsc(b.email)+'</td>';
         body+='<td style="padding:8px 6px;vertical-align:top;font-weight:700;color:'+stCol+'" rowspan="'+span+'">'+_rzEsc(b.status)+(chip?'<br>'+chip:'')+'</td>';
         body+='<td style="padding:8px 6px;vertical-align:top;white-space:nowrap;font-weight:700;color:'+(owing?'#f59e0b':'#4ade80')+'" rowspan="'+span+'">'+(owing?_rzEsc(_rzMoney(bal,b.currency)):'Paid')+'</td>';
         body+='<td style="padding:8px 6px;vertical-align:top;font-size:11px;color:var(--text3);max-width:200px" rowspan="'+span+'">'+_rzEsc(b.comments)+'</td>';
       }
       body+='</tr>';
     });
-    var _bub=_rzPaxBubbles(b);
+    var _bub=_rzPaxBubbles(b,{drag:true});
     if(_bub)body+='<tr><td colspan="'+NCOL+'" style="padding:0;border-top:1px dashed var(--border2);background:var(--card2)">'+_bub+'</td></tr>';
     if(open){
       body+='<tr><td colspan="'+NCOL+'" style="padding:0;border-top:1px solid var(--border)"><div style="background:var(--card2);padding:12px 14px">'+_rzBookingDetail(b)+'</div></td></tr>';
@@ -12116,7 +12150,7 @@ function _rzRenderBookings(){
     '<thead><tr>'+
       '<th style="'+th+'">Order</th><th style="'+th+'">Customer</th><th style="'+th+';text-align:center">Pax</th>'+
       '<th style="'+th+'">Product</th><th style="'+th+'">Departs</th><th style="'+th+'">Pickup</th>'+
-      '<th style="'+th+'">Phone</th><th style="'+th+'">Email</th><th style="'+th+'">Status</th><th style="'+th+'">Balance</th><th style="'+th+'">Comments</th>'+
+      '<th style="'+th+'">Phone</th><th style="'+th+'">Status</th><th style="'+th+'">Balance</th><th style="'+th+'">Comments</th>'+
     '</tr></thead><tbody>'+body+'</tbody></table></div>';
   return hdr+table;
 }
@@ -12178,6 +12212,14 @@ function _rzBookingDetail(b){
     });
     reqH+='</div></div>';
   }
+  // Contact (email hidden from the table — shown here on expand).
+  let contactH='';
+  if(b.email||b.phone){
+    contactH='<div style="margin-bottom:10px"><div style="'+sec+'">Contact</div>';
+    if(b.phone)contactH+='<div style="font-size:12.5px"><a href="tel:'+_rzEsc(b.phone)+'" style="color:var(--acc);text-decoration:none">📞 '+_rzEsc(b.phone)+'</a></div>';
+    if(b.email)contactH+='<div style="font-size:12.5px;word-break:break-all"><a href="mailto:'+_rzEsc(b.email)+'" style="color:var(--acc);text-decoration:none">✉ '+_rzEsc(b.email)+'</a></div>';
+    contactH+='</div>';
+  }
   // Balance.
   const bal=parseFloat(b.balanceDue);
   const owing=isFinite(bal)&&bal>0;
@@ -12187,7 +12229,7 @@ function _rzBookingDetail(b){
   balH+='</div>';
   return '<div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">'+
     '<div style="flex:1 1 300px;min-width:240px">'+paxH+exH+'</div>'+
-    '<div style="flex:1 1 260px;min-width:220px">'+reqH+balH+'</div>'+
+    '<div style="flex:1 1 260px;min-width:220px">'+contactH+reqH+balH+'</div>'+
     '</div>';
 }
 
@@ -12419,8 +12461,9 @@ window.rezdyLoadPickups=async function(){
     S._pickupLocOverride=(row.locOverride&&typeof row.locOverride==='object')?row.locOverride:{};
     S._pickupDrivers=Array.isArray(row.drivers)?row.drivers:[];
     S._pickupExtraDrivers=Array.isArray(row.extraDrivers)?row.extraDrivers:[];
+    S._rezdyPaxMeta=(row.paxMeta&&typeof row.paxMeta==='object')?row.paxMeta:{};
   }else{
-    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];S._pickupExtraDrivers=[];
+    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];S._pickupExtraDrivers=[];S._rezdyPaxMeta={};
   }
   S._pickupLoading=false;
   render();
@@ -12467,7 +12510,7 @@ window.pickupSave=async function(silent){
   const payload={
     id:'pl_'+S.rezdyDate,
     list_date:S.rezdyDate,
-    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[]}
+    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],paxMeta:S._rezdyPaxMeta||{}}
   };
   const r=await sbU('ts_pickup_lists',[payload]);
   if(!silent)toast(r?'Pickup list saved ✓':'Save failed',r?'ok':'err');
