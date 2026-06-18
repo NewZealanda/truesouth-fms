@@ -593,7 +593,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.10';
+const APP_VER='v23.11';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2129,21 +2129,29 @@ document.addEventListener('visibilitychange',function(){
     clearInterval(_presInterval);
   } else {
     var awayMs=_hiddenAt?Date.now()-_hiddenAt:0;
-    // Came back after being away a while (phone backgrounded etc.) — the realtime
-    // socket has usually dropped, so the open loadsheets/manifests can be stale.
-    // Do a full refresh to pull the latest data + workspace. (No-cache headers make
-    // this cheap, and loadAll + restoreWorkspace rebuild the correct open tabs.)
     var _rUnsaved=(typeof _rosterUnsaved==='function')&&_rosterUnsaved();
-    if(S.user&&awayMs>60000&&!_rUnsaved){location.reload();return;}
-    // Brief switch — just reconnect realtime if it dropped, and resume presence.
+    // Reconnect realtime if the socket dropped while backgrounded, and resume presence.
     if(S.user&&(!_rtWs||_rtWs.readyState!==1)){try{initRealtime();}catch(e){}}
     if(S._presSection){clearInterval(_presInterval);broadcastPresence(S._presSection);_presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},9000);}
+    // Came back after a longer absence: refresh the data IN PLACE instead of a full
+    // page reload. The old location.reload() flashed the login screen and visibly
+    // refreshed the page on return; reloading the core tables keeps the app mounted.
+    // Skipped while a roster draft is unsaved so we don't clobber it.
+    if(S.user&&awayMs>60000&&!_rUnsaved&&typeof _reloadCoreTables==='function'){
+      try{_reloadCoreTables().then(function(){safeRender();});}catch(e){}
+    }
   }
 });
 window.addEventListener('beforeunload',function(e){if(S._presSection)broadcastPresence(null);if(typeof _rosterUnsaved==='function'&&_rosterUnsaved()){e.preventDefault();e.returnValue='';return '';}});
 window.addEventListener('pagehide',function(){if(S._presSection)broadcastPresence(null);});
-// iOS/Safari restores frozen pages from the back/forward cache — force a fresh load.
-window.addEventListener('pageshow',function(e){if(e.persisted&&S.user)location.reload();});
+// iOS/Safari restores frozen pages from the back/forward cache — reconnect realtime and
+// refresh data in place rather than a full reload (which flashed the login screen).
+window.addEventListener('pageshow',function(e){
+  if(e.persisted&&S.user){
+    if(!_rtWs||_rtWs.readyState!==1){try{initRealtime();}catch(e){}}
+    if(typeof _reloadCoreTables==='function'){try{_reloadCoreTables().then(function(){safeRender();});}catch(e){}}
+  }
+});
 
 function broadcastLS(acCode,form,tabId){
   if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
