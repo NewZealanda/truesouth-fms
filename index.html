@@ -625,7 +625,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.33';
+const APP_VER='v23.34';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -11880,7 +11880,9 @@ window.markNotifRead=async function(id){
 //   _schedEdit, _rezdyDragId.
 
 // ── helpers ───────────────────────────────────────────────────────────────
-function _rzToday(){return new Date().toISOString().slice(0,10);}
+// Local Y-M-D (NOT toISOString, which is UTC and lands a day off in NZ).
+function _rzYmd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function _rzToday(){return _rzYmd(new Date());}
 function _rzDowLabel(ds){
   if(!ds)return'';var d=new Date(ds+'T00:00:00');if(isNaN(d))return'';
   var t=new Date();t.setHours(0,0,0,0);var diff=Math.round((d-t)/86400000);
@@ -11901,6 +11903,8 @@ function _rzHHMMcolon(s){var m=/^(\d{2})(\d{2})$/.exec(String(s||''));return m?m
 function _rzProductDuration(p){var s=String(p||'').toUpperCase();if(/FCF|MILFORD.*FLY.*CRUISE.*FLY/.test(s))return 270;if(/\b(FJHH|MCEXP|THH)\b/.test(s))return 300;return 120;}
 // Like above but returns 0 when the text names no known product (so we don't clobber a manual end).
 function _rzProductCodeDuration(t){var s=String(t||'').toUpperCase();if(/\bFCF\b/.test(s))return 270;if(/\b(FJHH|MCEXP|THH)\b/.test(s))return 300;return 0;}
+// A booking's primary departure time (first item), e.g. "0930"; "—" if none.
+function _rzBookingDep(b){var it=((b&&b.items)||[])[0]||{};return _rzDepTime(it.startTimeLocal||'')||'—';}
 // Which fleet aircraft a booking is allocated to — read from the comments / custom fields
 // (the operator writes e.g. "SLA" or "ZK-SLB" in Rezdy the day before). Returns an ac id or null.
 function _rzAircraftFromComments(b){
@@ -12018,10 +12022,12 @@ function renderRezdy(){
   const _isToday=S.rezdyDate===_rzToday();
   const dateRow='<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
     '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1" title="Previous day" onclick="window.rezdyShiftDate(-1)">◁</button>'+
-    '<input class="fi" type="date" style="max-width:168px" value="'+_rzEsc(S.rezdyDate)+'" onchange="window.rezdySetDate(this.value)">'+
+    '<div style="position:relative;display:inline-block">'+
+      '<span style="display:inline-block;font-size:14px;font-weight:700;color:var(--text1);padding:7px 12px;border-radius:8px;background:var(--card2);border:1px solid var(--border2);white-space:nowrap">📅 '+_rzDowLabel(S.rezdyDate)+'</span>'+
+      '<input type="date" value="'+_rzEsc(S.rezdyDate)+'" onchange="window.rezdySetDate(this.value)" onclick="try{this.showPicker&&this.showPicker()}catch(e){}" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;border:none;cursor:pointer">'+
+    '</div>'+
     '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1" title="Next day" onclick="window.rezdyShiftDate(1)">▷</button>'+
     '<button class="btn btn-ghost" style="font-size:12px;padding:6px 12px'+(_isToday?';opacity:.45':'')+'" title="Jump to today" onclick="window.rezdySetDate(\''+_rzToday()+'\')">Today</button>'+
-    '<div style="font-size:13px;font-weight:700;color:var(--text2)">'+_rzDowLabel(S.rezdyDate)+'</div>'+
     (sub==='bookings'?'<button class="btn btn-ghost" style="font-size:12px;margin-left:auto" onclick="window.rezdyRefresh()">⟳ Refresh from Rezdy</button>':'')+
     '</div>';
 
@@ -12042,6 +12048,43 @@ function _rzSavePaxMeta(){if(window.pickupSave)window.pickupSave(true);}
 function _rzBreakdown(b){var a=0,c=0,i=0,has=false;((b&&b.items)||[]).forEach(function(it){((it&&it.quantities)||[]).forEach(function(q){has=true;var l=String((q&&q.label)||'').toLowerCase();var v=parseInt(q&&q.value,10)||0;if(/infant/.test(l))i+=v;else if(/child/.test(l))c+=v;else a+=v;});});return has?{a:a,c:c,i:i}:null;}
 // Per-participant type from Rezdy's captured age field (when present).
 function _rzAgeType(p){var a=String((p&&p.age)||'').toLowerCase();if(/infant/.test(a))return 'infant';if(/child/.test(a))return 'child';var n=parseInt(a,10);if(!isNaN(n)){if(n<=2)return 'infant';if(n<13)return 'child';}return 'adult';}
+// Effective A/C/i for a booking: Rezdy's counts by default, but once the operator has manually
+// tagged children/infants in the bookings tab, switch to the per-participant tally so the
+// calendar block and bubble strip both reflect those edits.
+function _rzEffBreakdown(b){
+  var order=String((b&&b.orderNumber)||'');
+  var m=(S._rezdyPaxMeta||{})[order]||{};
+  var hasManual=(m.types&&Object.keys(m.types).length)||(m.infantOf&&Object.keys(m.infantOf).length);
+  var parts=[];((b&&b.items)||[]).forEach(function(it){((it&&it.participants)||[]).forEach(function(p){parts.push(p);});});
+  if(hasManual&&parts.length){
+    var a=0,c=0,i=0,infantOf=m.infantOf||{},types=m.types||{};
+    parts.forEach(function(p,idx){if(infantOf[idx]!=null){i++;}else{var t=types[idx]||_rzAgeType(p);if(t==='child')c++;else if(t==='infant')i++;else a++;}});
+    return {a:a,c:c,i:i};
+  }
+  var rb=_rzBreakdown(b);if(rb)return rb;
+  var a2=0,c2=0,i2=0;parts.forEach(function(p){var t=_rzAgeType(p);if(t==='child')c2++;else if(t==='infant')i2++;else a2++;});
+  return {a:a2,c:c2,i:i2};
+}
+function _rzBdText(bd){return bd.a+'A'+(bd.c?' · '+bd.c+'C':'')+(bd.i?' · '+bd.i+'i':'');}
+function _rzBdCompact(bd){return bd.a+'A'+(bd.c?bd.c+'C':'')+(bd.i?bd.i+'i':'');} // 10A2C1i
+// Pilots rostered on for the day (available to fly) with their 2-letter crew code.
+function _rzAvailablePilots(){
+  var ds=S.rezdyDate,roster=S.roster||{},off={rdo:1,off:1,leave:1,ul:1,sick:1};
+  return (S.users||[]).filter(function(u){
+    if(!u||u.inactive)return false;
+    if(u.role!=='pilot'&&!u.isPilot)return false;
+    var st=(typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):((roster[ds]||{})[u.id]||'');
+    return !off[st];
+  }).map(function(u){return {code:(typeof _rCode==='function')?_rCode(u):(u.name||'').slice(0,2).toUpperCase(),name:(u.name||'').trim()};});
+}
+window.rezdySchedPilotDragStart=function(code,e){S._schedPilotDrag=code;try{e.dataTransfer.effectAllowed='copy';e.dataTransfer.setData('text/plain','pilot:'+code);}catch(_){}};
+window.rezdySchedDropPilot=function(key,e){
+  if(e&&e.preventDefault)e.preventDefault();if(e&&e.stopPropagation)e.stopPropagation();
+  var code=S._schedPilotDrag;S._schedPilotDrag=null;if(!code||!key)return;
+  S._schedPilots=S._schedPilots||{};S._schedPilots[String(key)]=code;
+  if(window.pickupSave)window.pickupSave(true);render();
+};
+window.rezdySchedClearPilot=function(key){if(S._schedPilots)delete S._schedPilots[String(key)];if(window.pickupSave)window.pickupSave(true);render();};
 // Passenger "bubbles" for a booking — loadsheet style: white card, group-colour left border,
 // C (child) / i (infant) corner badges, TO PAY banner. opts.drag enables in-booking dragging:
 // drop one bubble on another to make it that passenger's lap infant; tap toggles child.
@@ -12077,11 +12120,7 @@ function _rzPaxBubbles(b,opts){
       '</div></div>';
   });
   if(!bubs)return '';
-  // Breakdown: Rezdy's quantities are authoritative; fall back to per-bubble types otherwise.
-  var rb=_rzBreakdown(b);var nA,nC,nI;
-  if(rb){nA=rb.a;nC=rb.c;nI=rb.i;}
-  else{nA=0;nC=0;nI=0;parts.forEach(function(p,idx){if(infantOf[idx]!=null){nI++;}else{var tt=types[idx]||_rzAgeType(p);if(tt==='child')nC++;else if(tt==='infant')nI++;else nA++;}});}
-  var bd='<span style="font-size:12px;font-weight:800;color:var(--text1);align-self:center">'+nA+'A'+(nC?' · '+nC+'C':'')+(nI?' · '+nI+'i':'')+'</span>';
+  var bd='<span style="font-size:12px;font-weight:800;color:var(--text1);align-self:center">'+_rzBdText(_rzEffBreakdown(b))+'</span>';
   return '<div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 10px;align-items:stretch">'+
     '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;align-self:center;margin-right:2px">Pax</span>'+bd+bubs+'</div>';
 }
@@ -12104,16 +12143,26 @@ window.rezdyPaxToggleChild=function(order,idx){
 window.rezdyPaxRemoveInfant=function(order,infIdx){var m=_rzPaxMeta(order);if(m.infantOf)delete m.infantOf[infIdx];_rzSavePaxMeta();render();};
 function _rzRenderBookings(){
   if(S._rezdyLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading bookings…</div>';
-  // Cancelled bookings sink to the bottom (least relevant); otherwise keep order.
-  const rows=(S._rezdyBookings||[]).slice().sort(function(a,b){
-    return (/cancel/i.test(a.status||'')?1:0)-(/cancel/i.test(b.status||'')?1:0);
+  // Split the day's bookings by departure time, cancelled to the bottom.
+  const allRows=(S._rezdyBookings||[]).slice();
+  const deps=[];allRows.forEach(function(b){if(/cancel/i.test(b.status||''))return;var d=_rzBookingDep(b);if(deps.indexOf(d)<0)deps.push(d);});
+  deps.sort();
+  const depFilter=(S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:null;
+  const rows=allRows.filter(function(b){return !depFilter||_rzBookingDep(b)===depFilter;}).sort(function(a,b){
+    var ca=/cancel/i.test(a.status||'')?1:0,cb=/cancel/i.test(b.status||'')?1:0;if(ca!==cb)return ca-cb;
+    return String(_rzBookingDep(a)).localeCompare(String(_rzBookingDep(b)));
   });
+  // Departure filter tabs
+  let depTabs='<div class="card" style="padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
+  depTabs+='<button onclick="S._bkDepFilter=null;render()" class="sub-tab '+(!depFilter?'on':'')+'" style="font-size:12px;padding:5px 12px">All</button>';
+  deps.forEach(function(d){var cnt=allRows.filter(function(b){return !/cancel/i.test(b.status||'')&&_rzBookingDep(b)===d;}).length;depTabs+='<button onclick="S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" class="sub-tab '+(depFilter===d?'on':'')+'" style="font-size:12px;padding:5px 12px">🛫 '+_rzEsc(d)+' <span style="opacity:.6">('+cnt+')</span></button>';});
+  depTabs+='</div>';
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
     '<div><div class="st" style="margin-bottom:0">Rezdy Bookings</div>'+
-      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+(rows.length?rows.length+' booking'+(rows.length===1?'':'s')+' for '+_rzEsc(S.rezdyDate):'No cached bookings')+'</p></div>'+
-    '</div>';
+      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+(allRows.length?allRows.length+' booking'+(allRows.length===1?'':'s')+' for '+_rzDowLabel(S.rezdyDate):'No cached bookings')+'</p></div>'+
+    '</div>'+depTabs;
   if(!rows.length){
-    return hdr+'<div class="card" style="text-align:center;padding:36px;color:var(--text3);font-size:13px">No bookings cached for this date.<br>Tap <b>Refresh from Rezdy</b> to pull the latest.</div>';
+    return hdr+'<div class="card" style="text-align:center;padding:36px;color:var(--text3);font-size:13px">'+(allRows.length?'No bookings at this departure.':'No bookings cached for this date.<br>Tap <b>Refresh from Rezdy</b> to pull the latest.')+'</div>';
   }
   if(!S._rezdyOpen||typeof S._rezdyOpen!=='object')S._rezdyOpen={};
   // Build one table; each booking can have multiple items → one row per item.
@@ -12121,7 +12170,17 @@ function _rzRenderBookings(){
   // follows each booking when S._rezdyOpen[orderNumber] is set.
   const NCOL=10; // chevron+order, customer, pax, product, departs, pickup, phone, status, balance, comments (email hidden until expand)
   let body='';
+  let _curDep=null;
   rows.forEach(function(b){
+    // Group header when the departure time changes (a clean split between 0930, 1200, …).
+    var _bdep=/cancel/i.test(b.status||'')?'Cancelled':_rzBookingDep(b);
+    if(_bdep!==_curDep){
+      _curDep=_bdep;
+      var _grp=rows.filter(function(x){return (/cancel/i.test(x.status||'')?'Cancelled':_rzBookingDep(x))===_bdep;});
+      var _gbd={a:0,c:0,i:0};_grp.forEach(function(x){var e=_rzEffBreakdown(x);_gbd.a+=e.a;_gbd.c+=e.c;_gbd.i+=e.i;});
+      var _prod=_rzProduct((((_grp[0]||{}).items||[])[0]||{}).product||'');
+      body+='<tr><td colspan="'+NCOL+'" style="padding:9px 8px;background:var(--card2);border-top:2px solid var(--border)"><span style="font-size:13px;font-weight:800;color:var(--text1)">'+(_bdep==='Cancelled'?'✕ Cancelled':'🛫 '+_rzEsc(_bdep))+'</span><span style="font-size:11px;color:var(--text3);font-weight:600;margin-left:10px">'+_grp.length+' booking'+(_grp.length===1?'':'s')+' · '+_rzBdText(_gbd)+(_prod&&_bdep!=='Cancelled'?' · '+_rzEsc(_prod):'')+'</span></td></tr>';
+    }
     const items=(b.items&&b.items.length)?b.items:[{}];
     const span=items.length;
     const stCol=/cancel/i.test(b.status||'')?'#ef4444':(/confirm/i.test(b.status||'')?'#86efac':'var(--text2)');
@@ -12254,7 +12313,7 @@ window.rezdyShiftDate=function(delta){
   var d=new Date((S.rezdyDate||_rzToday())+'T00:00:00');
   if(isNaN(d))d=new Date();
   d.setDate(d.getDate()+(delta||0));
-  window.rezdySetDate(d.toISOString().slice(0,10));
+  window.rezdySetDate(_rzYmd(d));
 };
 window.rezdySetDate=function(v){
   S.rezdyDate=v||_rzToday();
@@ -12472,8 +12531,9 @@ window.rezdyLoadPickups=async function(){
     S._pickupDrivers=Array.isArray(row.drivers)?row.drivers:[];
     S._pickupExtraDrivers=Array.isArray(row.extraDrivers)?row.extraDrivers:[];
     S._rezdyPaxMeta=(row.paxMeta&&typeof row.paxMeta==='object')?row.paxMeta:{};
+    S._schedPilots=(row.schedPilots&&typeof row.schedPilots==='object')?row.schedPilots:{};
   }else{
-    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];S._pickupExtraDrivers=[];S._rezdyPaxMeta={};
+    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];S._pickupExtraDrivers=[];S._rezdyPaxMeta={};S._schedPilots={};
   }
   S._pickupLoading=false;
   render();
@@ -12520,7 +12580,7 @@ window.pickupSave=async function(silent){
   const payload={
     id:'pl_'+S.rezdyDate,
     list_date:S.rezdyDate,
-    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],paxMeta:S._rezdyPaxMeta||{}}
+    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{}}
   };
   const r=await sbU('ts_pickup_lists',[payload]);
   if(!silent)toast(r?'Pickup list saved ✓':'Save failed',r?'ok':'err');
@@ -12646,7 +12706,10 @@ function _rzRenderSchedule(){
     var g=bkGroups[k];var sm=_rzMinsFromHHMM(g.start)||0;var em=sm+_rzProductDuration(g.product);
     g.end=String(Math.floor(em/60)).padStart(2,'0')+':'+String(em%60).padStart(2,'0');
     var acLbl=g.aircraft==='__unalloc__'?'?':g.aircraft.replace(/^ZK-?/,'');
-    g.label=acLbl+' · '+g.pax+'A · '+g.product;g.order=g.key;g._owing=g.owing;
+    var gbd={a:0,c:0,i:0};g.bookings.forEach(function(bk){var e=_rzEffBreakdown(bk.b);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
+    var pilot=(S._schedPilots||{})[g.key]||null;
+    g.bd=gbd;g.pilot=pilot;
+    g.label=(pilot?pilot+'/':'')+acLbl+' '+_rzBdCompact(gbd)+' '+g.product;g.order=g.key;g._owing=g.owing;
     return g;
   });
   const _totBk=bkBlocks.reduce(function(s,g){return s+g.bookings.length;},0);
@@ -12766,7 +12829,8 @@ function _rzRenderSchedule(){
       const sel=isBk&&String(S._schedGroupKey||'')===String(b.order);
       const _pos='left:'+(2+idx*OFF)+'px;width:calc(100% - '+((n-1)*OFF+4)+'px);z-index:'+(sel?50:idx+1)+';'+(n>1?'box-shadow:-3px 1px 7px rgba(0,0,0,.3);':'');
       const _click=isBk?('window.rezdySchedShowGroup(\''+_rzEsc(b.order).replace(/'/g,"\\'")+'\')'):('window.schedEditBlock(\''+_rzEsc(b.id).replace(/'/g,"\\'")+'\')');
-      blocksH+='<div onclick="'+_click+'" '+
+      const _dropKey=(isBk?b.order:b.id);
+      blocksH+='<div onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
         '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(b.label||b.aircraft)+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+(isBk?'':'–'+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
@@ -12790,7 +12854,17 @@ function _rzRenderSchedule(){
     headH+
     '<div style="display:flex">'+axis+colsH+'</div>'+
     '</div></div>';
-  return hdr+detailH+formH+grid;
+  // Available pilots — drag a code bubble onto a flight block to allocate.
+  var _pilots=_rzAvailablePilots();
+  var pilotsBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:8px">Pilots <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(drag onto a flight)</span></div>';
+  if(!_pilots.length){pilotsBar+='<div style="font-size:12px;color:var(--text3)">No pilots rostered on for this day.</div>';}
+  else{
+    pilotsBar+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    _pilots.forEach(function(p){pilotsBar+='<div draggable="true" ondragstart="window.rezdySchedPilotDragStart(\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\',event)" title="'+_rzEsc(p.name)+' — drag onto a flight block" style="display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:16px;background:rgba(96,165,250,.14);border:1px solid rgba(96,165,250,.5);cursor:grab;font-size:12px;font-weight:800;color:#60a5fa">✈ '+_rzEsc(p.code)+'</div>';});
+    pilotsBar+='</div>';
+  }
+  pilotsBar+='</div>';
+  return hdr+pilotsBar+detailH+formH+grid;
 }
 // Open a booking's passenger detail straight from its calendar block.
 window.rezdySchedShowGroup=function(key){S._schedGroupKey=key;S._schedEdit=null;render();};
@@ -12807,6 +12881,8 @@ window.rezdyLoadSchedule=async function(){
     const brows=await sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(S.rezdyDate));
     S._rezdyBookings=(brows||[]).map(_rzRow).filter(Boolean);
   }
+  // Pull the saved pickup-list row (pilots / pax meta live there) so pilot allocation persists.
+  if(window.rezdyLoadPickups)window.rezdyLoadPickups();
   render();
 };
 
