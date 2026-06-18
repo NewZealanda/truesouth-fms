@@ -625,7 +625,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.22';
+const APP_VER='v23.23';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3036,9 +3036,10 @@ function renderDrawer(){
   const _canOps=_isAdminPlus||_navPerms.operations===true;
   const _canCharter=_isAdminPlus||_navPerms.charter===true;
   const _canMaint=_isAdminPlus||_navPerms.maintenance===true;
-  // Roster VIEW is available to EVERY logged-in user (read-only for non-editors).
-  // Editing remains gated inside renderRoster on roster_edit / admin / superadmin.
-  const _canRoster=!!S.user;
+  // Roster VIEW is gated on the 'roster' permission (the grid's "Roster & Leave" column).
+  // Roles without it (e.g. maint, ground_staff, marketing) don't see the Roster nav item.
+  // Editing remains separately gated inside renderRoster on roster_edit / admin / superadmin.
+  const _canRoster=_isAdminPlus||_navPerms.roster===true;
   const sec=S.section||'operations';
   // Drawer sections expand/collapse independently; default all closed (shut on login). Kept in memory so reopening the burger shows the same state.
   S._drawerExp=S._drawerExp||{};
@@ -3253,7 +3254,10 @@ function renderApp(){
         const _sec=S.section||'operations';
         if(_sec==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';
         if(_sec==='settings')return'<div id="flash-admin">'+renderAdmin()+'</div>';
-        if(_sec==='roster')return'<div id="flash-roster">'+renderRoster()+'</div>';
+        if(_sec==='roster'){
+          if(S.user&&(S.user.role==='superadmin'||S.user.role==='admin'||hasRolePerm('roster')))return'<div id="flash-roster">'+renderRoster()+'</div>';
+          return'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">You don\'t have access to the roster.</div>';
+        }
         if(_sec==='leave')return'<div id="flash-leave">'+renderLeave()+'</div>';
         if(_sec==='rezdy')return renderRezdy();
         return renderOperations();
