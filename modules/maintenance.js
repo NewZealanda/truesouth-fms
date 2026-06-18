@@ -405,19 +405,35 @@ function renderMaintLog(){
     const hrsUsedToday=ttis!=null&&prevHrs2!=null?(parseFloat(ttis)-prevHrs2).toFixed(1):null;
     const starts=e[ac+'_starts']||null;
     const landings=e[ac+'_landings']||null;
-    // Cumulative starts/landings = running sum of every per-day entry for this aircraft up
-    // to and including this date. allDays3 is newest-first, so older days are at HIGHER
-    // indices — sum from the oldest (end) down to this date's index.
-    var cumStarts=0,cumLandings=0,_hasCumS=false,_hasCumL=false;
+    // Cumulative starts/landings = the most recent LIFETIME baseline (_startTot/_landTot,
+    // e.g. seeded from the external maintenance system at a known airframe time) at or before
+    // this date, PLUS the daily entries logged after that baseline up to this date. If no
+    // baseline exists, fall back to simply summing the daily entries. allDays3 is newest-first
+    // (older days at higher indices).
     var _dIdx=allDays3.indexOf(ds);
-    for(var _ci=allDays3.length-1;_ci>=_dIdx;_ci--){
-      var _ce=histMap2[allDays3[_ci]];
-      if(!_ce)continue;
-      if(_ce[ac+'_starts']!=null){cumStarts+=parseInt(_ce[ac+'_starts'])||0;_hasCumS=true;}
-      if(_ce[ac+'_landings']!=null){cumLandings+=parseInt(_ce[ac+'_landings'])||0;_hasCumL=true;}
-    }
-    if(!_hasCumS)cumStarts=null;
-    if(!_hasCumL)cumLandings=null;
+    var _maintCum=function(dailyKey,totKey){
+      var baseVal=null,baseIdx=-1;
+      for(var i=_dIdx;i<allDays3.length;i++){
+        var e2=histMap2[allDays3[i]];
+        if(e2&&e2[ac+totKey]!=null){baseVal=parseFloat(e2[ac+totKey])||0;baseIdx=i;break;}
+      }
+      if(baseVal!=null){
+        var sum=baseVal;
+        for(var j=_dIdx;j<baseIdx;j++){ // dates strictly newer than the baseline, up to this date
+          var e3=histMap2[allDays3[j]];
+          if(e3&&e3[ac+dailyKey]!=null)sum+=parseInt(e3[ac+dailyKey])||0;
+        }
+        return sum;
+      }
+      var s=0,has=false;
+      for(var k=allDays3.length-1;k>=_dIdx;k--){
+        var e4=histMap2[allDays3[k]];
+        if(e4&&e4[ac+dailyKey]!=null){s+=parseInt(e4[ac+dailyKey])||0;has=true;}
+      }
+      return has?s:null;
+    };
+    var cumStarts=_maintCum('_starts','_startTot');
+    var cumLandings=_maintCum('_landings','_landTot');
     const oil=oe[ac]||null;
     const hasFlightData=ttis!=null||starts!=null||landings!=null||oil!=null||e.comment;
     const cwDone=cwDoneMap[ds];
