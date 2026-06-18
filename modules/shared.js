@@ -365,7 +365,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.15';
+const APP_VER='v23.21';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -384,6 +384,17 @@ const CHARTER_RATES_DEF={
   "ZK-SDB":{perHour:5000,minHours:1,currency:'NZD'},
   "ZK-SLB":{perHour:4500,minHours:1,currency:'NZD'},
 };
+// Resolve the effective charter rate for an aircraft. Prefers the configured rate, but
+// falls back to the built-in default whenever the stored rate is missing or has no positive
+// $/hr — so the calculator never silently zeroes out leg costs when rates fail to load
+// (e.g. an empty cloud read landing on a stale cache that has perHour:0).
+function charterRate(acId){
+  if(!acId)return null;
+  var r=(S.charterRates||{})[acId];
+  if(r&&parseFloat(r.perHour)>0)return r;
+  var def=CHARTER_RATES_DEF[acId];
+  return def?dc(def):(r||null);
+}
 function distNm(a,b){if(!Object.keys(APT_COORDS).length)_rebuildAptData();const A=APT_COORDS[a],B=APT_COORDS[b];if(!A||!B)return 0;const R=3440,dLat=(B.lat-A.lat)*Math.PI/180,dLng=(B.lng-A.lng)*Math.PI/180,s=Math.sin(dLat/2)**2+Math.cos(A.lat*Math.PI/180)*Math.cos(B.lat*Math.PI/180)*Math.sin(dLng/2)**2;return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));}
 
 
@@ -1210,7 +1221,7 @@ async function loadAll(){
     // ── Charter rates ──
     let cr=_pRates;
     if(cr&&cr.length){
-      S.charterRates=Object.fromEntries(cr.map(r=>[r.acId,r.rates||dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})]));
+      S.charterRates=Object.fromEntries(cr.map(r=>[r.acId,(r.rates&&parseFloat(r.rates.perHour)>0)?r.rates:dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})]));
       lsSet('ts_charter_rates_cache',S.charterRates);
     } else {
       const cached=lsGet('ts_charter_rates_cache');
@@ -1729,7 +1740,7 @@ async function reloadTable(table){
     }
   } else if(table==='ts_charter_rates'){
     const cr=await sbF('ts_charter_rates');
-    if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,r.rates||dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
+    if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,(r.rates&&parseFloat(r.rates.perHour)>0)?r.rates:dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
       const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured)&select=key,value',{headers:SH});
@@ -1752,8 +1763,9 @@ async function reloadTable(table){
 
 // ── Presence broadcasting ──
 let _presInterval=null;
-function broadcastPresence(section){
-  S._presSection=section;
+// Raw presence send — broadcasts the given section WITHOUT changing the locally-tracked
+// section (so the idle guard can send a "clear" while remembering where the user really is).
+function _sendPres(section){
   if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
   _rtRef++;
   _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
@@ -1762,6 +1774,30 @@ function broadcastPresence(section){
       section:section,color:presColor(S.user.id),ts:Date.now()
     }},ref:String(_rtRef)}));
 }
+function broadcastPresence(section){
+  S._presSection=section;
+  S._presIdle=false;S._lastActivity=Date.now();
+  _sendPres(section);
+}
+// Presence idle guard: a tab left open all day shouldn't keep someone in "Also viewing".
+// After PRES_IDLE_MS with no interaction we stop refreshing presence (and send one clear),
+// so they drop off everyone's bar within the 22s TTL. Any interaction resumes it instantly.
+var PRES_IDLE_MS=120000; // 2 minutes
+function _presTick(){
+  if(!S.user)return;
+  if(Date.now()-(S._lastActivity||0)<PRES_IDLE_MS){S._presIdle=false;broadcastPresence(S._presSection);}
+  else if(!S._presIdle){S._presIdle=true;_sendPres(null);}   // gone quiet → clear our presence
+}
+(function _presActivityInit(){
+  if(typeof window==='undefined'||window.__presActivityBound)return;
+  window.__presActivityBound=true;S._lastActivity=Date.now();
+  ['mousemove','mousedown','keydown','touchstart','wheel','scroll'].forEach(function(ev){
+    window.addEventListener(ev,function(){
+      S._lastActivity=Date.now();
+      if(S._presIdle&&S.user&&S._presSection){S._presIdle=false;broadcastPresence(S._presSection);}
+    },{passive:true,capture:true});
+  });
+})();
 function broadcastDispatch(){
   if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
   _rtRef++;
@@ -1847,7 +1883,7 @@ function startPresenceBroadcast(section){
   if(S._presSection===section)return;
   clearInterval(_presInterval);
   broadcastPresence(section);
-  _presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},9000);
+  _presInterval=setInterval(_presTick,9000);
 }
 
 // ── Collaborative manifest ──
@@ -1910,7 +1946,7 @@ document.addEventListener('visibilitychange',function(){
     var _rUnsaved=(typeof _rosterUnsaved==='function')&&_rosterUnsaved();
     // Reconnect realtime if the socket dropped while backgrounded, and resume presence.
     if(S.user&&(!_rtWs||_rtWs.readyState!==1)){try{initRealtime();}catch(e){}}
-    if(S._presSection){clearInterval(_presInterval);broadcastPresence(S._presSection);_presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},9000);}
+    if(S._presSection){clearInterval(_presInterval);broadcastPresence(S._presSection);_presInterval=setInterval(_presTick,9000);}
     // Came back after a longer absence: refresh the data IN PLACE instead of a full
     // page reload. The old location.reload() flashed the login screen and visibly
     // refreshed the page on return; reloading the core tables keeps the app mounted.
@@ -2267,8 +2303,12 @@ function _applyWorkspace(ws){
 // Return to the same page (section / tab / open loadsheet or manifest) after a reload,
 // as long as that item is still open.
 function _restoreLastView(){
+  // Read the saved view BEFORE we enable saving again — boot renders were gated so this
+  // value is still the user's real last page. From here on, renders may save the view.
+  var _savedView=null;try{_savedView=JSON.parse(localStorage.getItem('ts_lastview')||'null');}catch(e){}
+  S._viewRestored=true;
   try{
-    var v=JSON.parse(localStorage.getItem('ts_lastview')||'null');
+    var v=_savedView;
     if(!v||!v.section)return;
     if(v.section==='operations'){
       S.section='operations';

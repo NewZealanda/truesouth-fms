@@ -15,7 +15,7 @@ function renderCharter(){
   const waitRate=S.charterWaitRate||150;
 
   const legCards=legs.map((leg,i)=>{
-    const a=S.aircraft[leg.acId];const rates=leg.acId?S.charterRates[leg.acId]:null;
+    const a=S.aircraft[leg.acId];const rates=charterRate(leg.acId);
     const dist=distNm(leg.from,leg.to);const speed=a?.layout==='ga8'?130:170;
     const flightHrs=dist>0?dist/speed:0;
     const flightMins=Math.round(flightHrs*60);
@@ -68,7 +68,7 @@ function renderCharter(){
   legs.forEach(leg=>{
     const dist2=distNm(leg.from,leg.to);const speed2=S.aircraft[leg.acId]?.layout==='ga8'?130:170;
     const fh=dist2>0?dist2/speed2:0;
-    const r2=leg.acId?S.charterRates[leg.acId]:null;
+    const r2=charterRate(leg.acId);
     const lc=r2&&fh>0?fh*r2.perHour:0;
     const wh=parseFloat(leg.waitHrs)||0;
     const wc=Math.max(0,wh-1)*waitRate;
@@ -78,8 +78,8 @@ function renderCharter(){
   // 2.5hr minimum
   const totalJourneyHrs=totalMins/60;
   if(totalJourneyHrs>0&&totalJourneyHrs<2.5){
-    const primaryLeg=legs.find(l=>l.acId&&S.charterRates[l.acId]);
-    if(primaryLeg){const r=S.charterRates[primaryLeg.acId];if(r){totalCost=Math.max(totalCost,2.5*r.perHour+totalWaitCost);}}
+    const primaryLeg=legs.find(l=>charterRate(l.acId));
+    if(primaryLeg){const r=charterRate(primaryLeg.acId);if(r){totalCost=Math.max(totalCost,2.5*r.perHour+totalWaitCost);}}
   }
 
   const charterLegs=legs.filter(l=>APT_COORDS[l.from]&&APT_COORDS[l.to]);
@@ -164,7 +164,7 @@ window.saveCharterQuote=function(){
   legs.forEach(function(leg){
     const dist=distNm(leg.from,leg.to);const speed=(S.aircraft[leg.acId]||{}).layout==='ga8'?130:170;
     const fh=dist>0?dist/speed:0;
-    const r=leg.acId?S.charterRates[leg.acId]:null;
+    const r=charterRate(leg.acId);
     const lc=r&&fh>0?fh*r.perHour:0;
     const wh=parseFloat(leg.waitHrs)||0;
     totalCost+=lc+Math.max(0,wh-1)*waitRate;

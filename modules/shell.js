@@ -64,7 +64,9 @@ function render(){
   if(typeof S._mobileInit==='undefined'){S._mobileInit=true;if(typeof S.mobileView==='undefined')S.mobileView=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)&&window.innerWidth<800;}
   document.body.classList.toggle('mobile-view',!!S.mobileView);
   // ── Remember the current view so a reload returns to the same page ──
-  if(S.user){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'manifest',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
+  // Gated on S._viewRestored so the default-view renders during boot DON'T overwrite the
+  // saved last view before _restoreLastView() has had a chance to read and apply it.
+  if(S.user&&S._viewRestored){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'manifest',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
   // ── Preserve focused input across re-renders ──
   const _ae=document.activeElement;
   const _aeId=_ae?.id||null;
@@ -107,7 +109,7 @@ function render(){
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
-  if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
+  if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest&&S._lsMapOpen)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
   // ── Restore focus after re-render ──
   // Force-focus (set by Tab handler) takes priority over activeElement detection
   if(_ffRow!==null){

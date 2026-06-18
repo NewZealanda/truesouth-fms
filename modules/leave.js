@@ -432,6 +432,17 @@ function _renderApprovals(lv,role){
   return h;
 }
 
+// Escape a notification message, then turn any aircraft id (e.g. "ZK-SLA") into a small
+// coloured aircraft pill ("SLA" in the aircraft's colour) so loadsheet notifications read
+// at a glance. Unknown ids are left as plain text.
+function _notifFmtMsg(msg){
+  return _lvEsc(msg||'').replace(/ZK-[A-Z0-9]{2,4}/g,function(m){
+    var col=(typeof AC_COL!=='undefined'&&AC_COL[m]);
+    if(!col)return m;
+    var code=m.replace('ZK-','');
+    return '<span style="display:inline-block;padding:1px 8px;border-radius:20px;background:'+col+'22;border:1px solid '+col+'66;color:'+col+';font-weight:700;font-size:11px;line-height:1.5">'+code+'</span>';
+  });
+}
 // ── Notification panel ──
 function renderNotificationPanel(){
   var notifs=S._notifications||[];
@@ -451,13 +462,13 @@ function renderNotificationPanel(){
     notifs.forEach(function(n){
       h+='<div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05);background:'+(n.read?'transparent':'rgba(124,58,237,.07)')+'">';
       if(!n.read){h+='<div style="width:6px;height:6px;border-radius:50%;background:#c084fc;display:inline-block;margin-right:6px;vertical-align:middle"></div>';}
-      h+='<div style="font-size:12px;color:'+(n.read?'var(--text2)':'var(--text)')+';line-height:1.5;display:inline">'+_lvEsc(n.message||'')+'</div>';
+      h+='<div style="font-size:12px;color:'+(n.read?'var(--text2)':'var(--text)')+';line-height:1.5;display:inline">'+_notifFmtMsg(n.message)+'</div>';
       h+='<div style="font-size:10px;color:var(--text3);margin-top:4px">'+new Date(n.created_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</div>';
       if(n.type==='leave_submitted'&&n.reference_id){
-        h+='<div><button tabindex="-1" onclick="S.section=\'leave\';_lvInit();S._leave.tab=\'approvals\';S._notifOpen=false;render()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">View request →</button></div>';
+        h+='<div><button tabindex="-1" onclick="window.markNotifRead(\''+n.id+'\');S.section=\'leave\';_lvInit();S._leave.tab=\'approvals\';S._notifOpen=false;render()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">View request →</button></div>';
       }
       if(n.type==='loadsheet_pic'&&n.reference_id){
-        h+='<div><button tabindex="-1" onclick="window.openLoadsheetFromNotif(\''+n.reference_id+'\')" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">Open loadsheet →</button></div>';
+        h+='<div><button tabindex="-1" onclick="window.markNotifRead(\''+n.id+'\');window.openLoadsheetFromNotif(\''+n.reference_id+'\')" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">Open loadsheet →</button></div>';
       }
       h+='</div>';
     });
@@ -817,4 +828,13 @@ window.markNotificationsRead=async function(){
   S.__notifStr=JSON.stringify(S._notifications||[]);
   S._notifOpen=false;
   safeRender();
+};
+// Mark a SINGLE notification read — used when the user clicks through to it.
+window.markNotifRead=async function(id){
+  if(!id||id==='undefined')return;
+  var n=(S._notifications||[]).find(function(x){return String(x.id)===String(id);});
+  if(n&&n.read)return;            // already read — nothing to do
+  if(n)n.read=true;
+  S.__notifStr=JSON.stringify(S._notifications||[]);
+  try{await fetch(SB+'/rest/v1/ts_notifications?id=eq.'+id,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify({read:true})});}catch(e){}
 };

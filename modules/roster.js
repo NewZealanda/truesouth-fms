@@ -79,7 +79,13 @@ function _rGetStatus(u,ds,roster){
   }
   var st=(roster[ds]&&(roster[ds][u.id]||roster[ds][_ini]))||'';
   var _lvReq=S._rosterLeave&&S._rosterLeave[ds]&&S._rosterLeave[ds][u.id];
-  if(_lvReq){var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};st=_lvMap[_lvReq]||'leave';}
+  if(_lvReq){
+    // Don't let an approved-leave overlay paint over a rostered day off. If the day was
+    // already RDO/off, leave it as-is — RDOs aren't paid leave, and accounts need to see
+    // them unchanged even when AL spans them. (Mirrors the _lvStampRoster off-day guard.)
+    var _offDay={rdo:1,off:1};
+    if(!_offDay[st]){var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};st=_lvMap[_lvReq]||'leave';}
+  }
   return st;
 }
 function _rIni(u){return _rCode(u);}

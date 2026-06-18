@@ -1998,13 +1998,22 @@ window.pushAllLsToSeatmap=function(){
               bag:parseFloat((f.bags||{})[idx]||0)||0,
               type:((f.paxType||{})[idx]==='C'?'child':'adult'),
               group:(f.paxGroups||{})[idx]||'',
+              infantName:(f.infantNames||{})[idx]||null,
+              paymentReq:!!((f.paxPaymentReq||{})[idx]),
               _pushedFrom:phyId});
           }
           nameMap[key]=pid;
         }
         sm[parseInt(idx)]=pid;
-        var grpVal=(f.paxGroups||{})[idx];
-        if(grpVal!=null){var _dp=_D.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
+        // Keep the seated pax record in sync with the loadsheet so group / infant / child /
+        // TO-PAY all survive (e.g. when the aircraft is later removed and pax fall to the pool).
+        var _dp=_D.pax.find(function(px){return px.id===pid;});
+        if(_dp){
+          _dp.group=(f.paxGroups||{})[idx]||'';
+          _dp.infantName=(f.infantNames||{})[idx]||null;
+          _dp.paymentReq=!!((f.paxPaymentReq||{})[idx]);
+          _dp.type=((f.paxType||{})[idx]==='C'?'child':'adult');
+        }
       });
       _D.seatMap[smKey]=sm;
     });
@@ -3276,14 +3285,30 @@ function renderAdminAudit(){
     if(obj.type)bits.push(obj.type);
     return bits.join(' · ');
   }
-  var rows=log.slice(0,200).map(function(e){
+  // Collapse runs of the same person doing the same action close together into one row
+  // (e.g. a burst of manifest autosaves) so the log is readable. Newest-first ordering
+  // means consecutive duplicates sit next to each other; we keep the most-recent time and
+  // tally a ×N count. The underlying audit rows are untouched — this only thins the view.
+  var GROUP_MS=10*60000; // 10 minutes
+  var grouped=[];
+  log.forEach(function(e){
+    var prev=grouped[grouped.length-1];
+    if(prev&&(prev.name||prev.user||'')===(e.name||e.user||'')&&prev.action===e.action
+       &&Math.abs(new Date(prev.time)-new Date(e.time))<GROUP_MS){
+      prev._count=(prev._count||1)+1;
+    } else {
+      grouped.push(Object.assign({},e,{_count:1}));
+    }
+  });
+  var rows=grouped.slice(0,200).map(function(e){
     var rawDet=typeof e.detail==='object'?JSON.stringify(e.detail):String(e.detail||'');
     var det=_auditDetail(e);
+    var cnt=e._count>1?' <span style="font-size:10px;font-weight:700;color:var(--acc);background:rgba(99,102,241,.12);border-radius:10px;padding:0 6px">×'+e._count+'</span>':'';
     return'<tr style="border-bottom:1px solid var(--border)">'
       +'<td style="padding:7px 8px;font-size:11px;color:var(--text3);white-space:nowrap">'+fmtTime(e.time)+'</td>'
       +'<td style="padding:7px 8px;font-size:12px;font-weight:600;white-space:nowrap">'+esc(e.name||e.user||'')+'</td>'
       +'<td style="padding:7px 8px;font-size:11px;color:var(--text3)">'+esc(e.role||'')+'</td>'
-      +'<td style="padding:7px 8px;font-size:12px">'+esc(_auditAction(e.action))+'</td>'
+      +'<td style="padding:7px 8px;font-size:12px">'+esc(_auditAction(e.action))+cnt+'</td>'
       +'<td title="'+esc(rawDet)+'" style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(det)+'</td>'
       +'</tr>';
   }).join('');

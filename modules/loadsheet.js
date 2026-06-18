@@ -674,9 +674,12 @@ function renderLoadsheet(){
     </div>
     ${f.createdBy?`<div style="text-align:right;margin-top:6px;font-size:9px;color:rgba(255,255,255,.18);letter-spacing:.04em">Created by ${f.createdBy}</div>`:''}
   </div>  ${unallocH}${loadingH}${calcH}
-  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px;border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st">Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div><div id="ls-map" class="route-map"></div></div>`:''}
+  ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px;border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st" style="margin:0;cursor:pointer;display:flex;align-items:center;gap:7px;user-select:none" onclick="window.toggleLsMap()" title="Show / hide the route map"><span style="font-size:10px;display:inline-block;transition:transform .15s;${S._lsMapOpen?'transform:rotate(90deg)':''}">▶</span>Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div>${S._lsMapOpen?`<div id="ls-map" class="route-map"></div>`:''}</div>`:''}
   ${sigH}`;
 }
+// Collapse/expand the loadsheet route map. Closed by default so scrolling the
+// loadsheet doesn't accidentally zoom the map; the map only initialises when open.
+window.toggleLsMap=function(){S._lsMapOpen=!S._lsMapOpen;render();};
 window.lsCheckChildWt=function(idx){
   const f=S.form;if(!f)return;
   if(!f.paxType)f.paxType={};

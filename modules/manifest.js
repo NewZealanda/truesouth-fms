@@ -428,8 +428,10 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,smKey){
           ${needPay?`<div style="position:absolute;top:0;left:0;right:0;background:#ef4444;color:#fff;font-size:10px;font-weight:900;letter-spacing:.06em;text-align:center;line-height:1.7;padding:0 2px">$ TO PAY</div>`:''}
           <span class="seat-lbl" style="${needPay?'margin-top:15px;':''}${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc}${needPay?';top:13px':''}"></div>`:''}
+          ${p&&!isCrew&&p.type==='child'?`<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>`:''}
+          ${p&&!isCrew&&p.infantName?`<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
-            :p?`<div class="seat-name" style="color:#1e293b;font-weight:700">${esc(p.name?p.name.split(' ')[0]:'?')}${p.infantName?' 👶':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
+            :p?`<div class="seat-name" style="color:#1e293b;font-weight:700">${esc(p.name?p.name.split(' ')[0]:'?')}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
         </div>`;
       }
     });
