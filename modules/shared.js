@@ -365,7 +365,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.21';
+const APP_VER='v23.22';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -393,7 +393,9 @@ function charterRate(acId){
   var r=(S.charterRates||{})[acId];
   if(r&&parseFloat(r.perHour)>0)return r;
   var def=CHARTER_RATES_DEF[acId];
-  return def?dc(def):(r||null);
+  // No usable configured rate: use the built-in default if we have one, else null so the
+  // leg is simply omitted from pricing rather than billed at $0 (avoids a misleading total).
+  return def?dc(def):null;
 }
 function distNm(a,b){if(!Object.keys(APT_COORDS).length)_rebuildAptData();const A=APT_COORDS[a],B=APT_COORDS[b];if(!A||!B)return 0;const R=3440,dLat=(B.lat-A.lat)*Math.PI/180,dLng=(B.lng-A.lng)*Math.PI/180,s=Math.sin(dLat/2)**2+Math.cos(A.lat*Math.PI/180)*Math.cos(B.lat*Math.PI/180)*Math.sin(dLng/2)**2;return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));}
 
@@ -1939,7 +1941,10 @@ var _hiddenAt=0;
 document.addEventListener('visibilitychange',function(){
   if(document.hidden){
     _hiddenAt=Date.now();
-    if(S._presSection)broadcastPresence(null);
+    // Clear our presence on everyone else's bar, but KEEP S._presSection so the resume
+    // branch below (and on a quick tab-switch back) can re-announce us. Using broadcastPresence(null)
+    // here would null S._presSection and leave the resume as dead code.
+    if(S._presSection)_sendPres(null);
     clearInterval(_presInterval);
   } else {
     var awayMs=_hiddenAt?Date.now()-_hiddenAt:0;
