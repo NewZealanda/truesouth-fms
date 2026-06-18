@@ -313,6 +313,14 @@ const SH={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer 
 // HTML-escape a dynamic string before placing it in innerHTML (prevents stored XSS via
 // user/other-device free-text such as charter notes, roster notes, names).
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Throttled "your session expired" warning (only when the refresh token is also gone).
+let _sbExpWarnTs=0;
+function _sbWarnExpired(){
+  var now=Date.now();
+  if(now-_sbExpWarnTs<60000)return;
+  _sbExpWarnTs=now;
+  if(typeof toast==='function')toast('Your session has expired — please sign out and sign back in to keep saving changes.','warn');
+}
 // Wrap a REST call so an expired JWT is transparently refreshed and retried once.
 // Background tabs throttle setTimeout, so the scheduled ~1-min-before-expiry refresh
 // can fire late; without this, the first write after waking fails 401 (PGRST303).
@@ -325,6 +333,8 @@ async function _sbFetch(url, opts){
       const h=Object.assign({}, opts.headers||{});
       h['Authorization']=SH['Authorization'];   // fresh token set by _applySession
       r=await fetch(url, Object.assign({}, opts, {headers:h}));
+    } else {
+      _sbWarnExpired();   // refresh token itself is gone — tell the user (throttled)
     }
   }
   return r;
@@ -461,7 +471,7 @@ let _sbRefreshTimer=null;
 // True when user reads must avoid the hashed base table (either cutover).
 function _hashFree(){return AUTH_PHASE_A||AUTH_PHASE_C;}
 // Decode a JWT payload (base64url) to read custom claims (app_id, user_role, email).
-function _jwtClaims(tok){try{var p=(tok||'').split('.')[1].replace(/-/g,'+').replace(/_/g,'/');return JSON.parse(decodeURIComponent(escape(atob(p))));}catch(e){return {};}}
+function _jwtClaims(tok){try{var p=(tok||'').split('.')[1];if(!p)return {};p=p.replace(/-/g,'+').replace(/_/g,'/');while(p.length%4)p+='=';var bin=atob(p),bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return JSON.parse(new TextDecoder('utf-8').decode(bytes));}catch(e){return {};}}
 // Put the user's access token on REST calls (or restore the anon key when signed out).
 function _applySession(sess){
   _sbSession=sess||null;
@@ -583,7 +593,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.06';
+const APP_VER='v23.07';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3626,9 +3636,12 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,smKey){
       const isCrew=isPIC||isCoPilotSeat;
       if(!interactive&&form){
         // Loadsheet view — same style as manifest allocation cards
-        const nm=formSm?formSm[cell.i]||'':'';const isInfant=(d.pax||[]).find(p=>p.name===nm)?.infant||false;
+        const nm=formSm?formSm[cell.i]||'':'';
+        // Read group/infant from the FORM's own per-seat maps (keyed by seat index), not by
+        // matching the name against d.pax — duplicate/blank names otherwise mis-coloured groups.
+        const isInfant=!!(form.infantNames||{})[cell.i];
         const wt=form?parseFloat(form.seats?.[cell.i]||0)+parseFloat(form.bags?.[cell.i]||0):0;
-        const grp=(d.pax||[]).find(p=>p.name===nm)?.group||'';
+        const grp=(form.paxGroups||{})[cell.i]||'';
         const gc=grp?groupColor(grp):null;
         // Match interactive card style: white bg + coloured left border when filled
         const lsSeatStyle=isCrew?''
@@ -5503,7 +5516,7 @@ window.saveCharterQuote=function(){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
   quotes.unshift(quote);
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   toast('Quote saved ✓','ok');
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
@@ -5520,7 +5533,7 @@ window.deleteCharterQuote=function(idx){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
   quotes.splice(idx,1);
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
@@ -5530,7 +5543,7 @@ window.renameCharterQuote=function(qi,newName){
   if(quotes[qi].name===newName)return;
   quotes[qi].name=newName;
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
 };
 
@@ -8279,6 +8292,13 @@ window.savePerson=async function(){
     const _dupCode=(S.crew||[]).find(function(cr){return cr.id!==m.crewId&&String(cr.code||'').trim().toUpperCase()===_code;});
     if(_dupCode){S.admin.err='Crew code "'+_code+'" is already used by '+(_dupCode.n||'another crew member')+'. Codes must be unique.';render();return;}
   }
+  // Creating a NEW login account? Validate the password BEFORE writing the crew record,
+  // so a missing/mismatched password can't leave a half-saved person behind.
+  if(!m.userId&&d.email&&isAdmin){
+    const _confEl=document.getElementById('pm_confpw');
+    if(!d.password){S.admin.err='Password is required for a new login account.';render();return;}
+    if(_confEl&&_confEl.value&&_confEl.value!==d.password){S.admin.err='Passwords do not match.';render();return;}
+  }
 
   // ── Save crew record ──
   let crewId=m.crewId;
@@ -10938,6 +10958,11 @@ function _renderMyLeave(lv){
       var _wd=_lvWorkingDays(S.user&&S.user.id,f.startDate,f.endDate);
       var _rd=days-_wd;
       h+='<div style="font-size:13px;color:#a78bfa;margin-bottom:12px">📅 <strong>'+_wd+' leave day'+(_wd!==1?'s':'')+'</strong> used'+(_rd>0?' <span style="color:var(--text3)">('+days+' calendar days − '+_rd+' RDO/off day'+(_rd!==1?'s':'')+')</span>':'')+'</div>';
+      // Heads-up: who else is already off during this period (from the roster).
+      var _subConf=_lvRosterConflicts({user_id:S.user&&S.user.id,start_date:f.startDate,end_date:f.endDate});
+      if(_subConf.length){
+        h+='<div style="font-size:12px;color:#fbbf24;margin-bottom:12px;line-height:1.5">⚠ Already off then (per roster): '+_subConf.map(function(c){return _lvEsc(c.name)+' ('+c.label+')';}).join(', ')+'</div>';
+      }
     }
 
     // Reason
@@ -12077,14 +12102,22 @@ function _rzRenderSchedule(){
       const onHour=(mins%60===0);
       rows+='<div style="position:absolute;top:'+top+'px;left:0;right:0;height:1px;background:'+(onHour?'var(--border)':'var(--border2)')+';opacity:'+(onHour?.8:.35)+'"></div>';
     }
-    // blocks for this aircraft
+    // blocks for this aircraft — lay overlapping blocks side by side so neither is hidden
     let blocksH='';
-    blocks.filter(function(b){return b.aircraft===ac;}).forEach(function(b){
+    const _acBlocks=blocks.filter(function(b){return b.aircraft===ac;});
+    _acBlocks.forEach(function(b){
+      const s=_rzMinsFromHHMM(b.start)||0,e=_rzMinsFromHHMM(b.end)||(s+30);
+      const ov=_acBlocks.filter(function(o){const os=_rzMinsFromHHMM(o.start)||0,oe=_rzMinsFromHHMM(o.end)||(os+30);return s<oe&&os<e;});
+      b._cols=Math.max(1,ov.length);
+      b._idx=ov.filter(function(o){const os=_rzMinsFromHHMM(o.start)||0;return os<s||(os===s&&String(o.id||'')<String(b.id||''));}).length;
+    });
+    _acBlocks.forEach(function(b){
       const col=b.color||acCol;
       const top=_rzSchTop(b.start);const ht=Math.max(_RZ_PX_PER_SLOT,_rzSchHeight(b.start,b.end));
       const compact=ht<30;
+      const _w=100/(b._cols||1);const _pos='left:calc('+((b._idx||0)*_w)+'% + 2px);width:calc('+_w+'% - 4px);';
       blocksH+='<div onclick="window.schedEditBlock(\''+_rzEsc(b.id).replace(/'/g,"\\'")+'\')" '+
-        'style="position:absolute;left:3px;right:3px;top:'+top+'px;height:'+ht+'px;background:'+col+'26;border:1px solid '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25">'+
+        'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+'26;border:1px solid '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25">'+
         '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.label||b.aircraft)+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+'–'+_rzEsc(b.end)+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';

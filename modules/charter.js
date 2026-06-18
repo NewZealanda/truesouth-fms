@@ -173,7 +173,7 @@ window.saveCharterQuote=function(){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
   quotes.unshift(quote);
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   toast('Quote saved ✓','ok');
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
@@ -190,7 +190,7 @@ window.deleteCharterQuote=function(idx){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
   quotes.splice(idx,1);
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
@@ -200,7 +200,7 @@ window.renameCharterQuote=function(qi,newName){
   if(quotes[qi].name===newName)return;
   quotes[qi].name=newName;
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
 };
 

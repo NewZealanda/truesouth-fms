@@ -53,6 +53,14 @@ const SH={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer 
 // HTML-escape a dynamic string before placing it in innerHTML (prevents stored XSS via
 // user/other-device free-text such as charter notes, roster notes, names).
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Throttled "your session expired" warning (only when the refresh token is also gone).
+let _sbExpWarnTs=0;
+function _sbWarnExpired(){
+  var now=Date.now();
+  if(now-_sbExpWarnTs<60000)return;
+  _sbExpWarnTs=now;
+  if(typeof toast==='function')toast('Your session has expired — please sign out and sign back in to keep saving changes.','warn');
+}
 // Wrap a REST call so an expired JWT is transparently refreshed and retried once.
 // Background tabs throttle setTimeout, so the scheduled ~1-min-before-expiry refresh
 // can fire late; without this, the first write after waking fails 401 (PGRST303).
@@ -65,6 +73,8 @@ async function _sbFetch(url, opts){
       const h=Object.assign({}, opts.headers||{});
       h['Authorization']=SH['Authorization'];   // fresh token set by _applySession
       r=await fetch(url, Object.assign({}, opts, {headers:h}));
+    } else {
+      _sbWarnExpired();   // refresh token itself is gone — tell the user (throttled)
     }
   }
   return r;
@@ -201,7 +211,7 @@ let _sbRefreshTimer=null;
 // True when user reads must avoid the hashed base table (either cutover).
 function _hashFree(){return AUTH_PHASE_A||AUTH_PHASE_C;}
 // Decode a JWT payload (base64url) to read custom claims (app_id, user_role, email).
-function _jwtClaims(tok){try{var p=(tok||'').split('.')[1].replace(/-/g,'+').replace(/_/g,'/');return JSON.parse(decodeURIComponent(escape(atob(p))));}catch(e){return {};}}
+function _jwtClaims(tok){try{var p=(tok||'').split('.')[1];if(!p)return {};p=p.replace(/-/g,'+').replace(/_/g,'/');while(p.length%4)p+='=';var bin=atob(p),bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return JSON.parse(new TextDecoder('utf-8').decode(bytes));}catch(e){return {};}}
 // Put the user's access token on REST calls (or restore the anon key when signed out).
 function _applySession(sess){
   _sbSession=sess||null;
@@ -323,7 +333,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.06';
+const APP_VER='v23.07';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

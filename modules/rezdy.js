@@ -552,14 +552,22 @@ function _rzRenderSchedule(){
       const onHour=(mins%60===0);
       rows+='<div style="position:absolute;top:'+top+'px;left:0;right:0;height:1px;background:'+(onHour?'var(--border)':'var(--border2)')+';opacity:'+(onHour?.8:.35)+'"></div>';
     }
-    // blocks for this aircraft
+    // blocks for this aircraft — lay overlapping blocks side by side so neither is hidden
     let blocksH='';
-    blocks.filter(function(b){return b.aircraft===ac;}).forEach(function(b){
+    const _acBlocks=blocks.filter(function(b){return b.aircraft===ac;});
+    _acBlocks.forEach(function(b){
+      const s=_rzMinsFromHHMM(b.start)||0,e=_rzMinsFromHHMM(b.end)||(s+30);
+      const ov=_acBlocks.filter(function(o){const os=_rzMinsFromHHMM(o.start)||0,oe=_rzMinsFromHHMM(o.end)||(os+30);return s<oe&&os<e;});
+      b._cols=Math.max(1,ov.length);
+      b._idx=ov.filter(function(o){const os=_rzMinsFromHHMM(o.start)||0;return os<s||(os===s&&String(o.id||'')<String(b.id||''));}).length;
+    });
+    _acBlocks.forEach(function(b){
       const col=b.color||acCol;
       const top=_rzSchTop(b.start);const ht=Math.max(_RZ_PX_PER_SLOT,_rzSchHeight(b.start,b.end));
       const compact=ht<30;
+      const _w=100/(b._cols||1);const _pos='left:calc('+((b._idx||0)*_w)+'% + 2px);width:calc('+_w+'% - 4px);';
       blocksH+='<div onclick="window.schedEditBlock(\''+_rzEsc(b.id).replace(/'/g,"\\'")+'\')" '+
-        'style="position:absolute;left:3px;right:3px;top:'+top+'px;height:'+ht+'px;background:'+col+'26;border:1px solid '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25">'+
+        'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+'26;border:1px solid '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25">'+
         '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.label||b.aircraft)+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+'–'+_rzEsc(b.end)+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';

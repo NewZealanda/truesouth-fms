@@ -383,9 +383,12 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,smKey){
       const isCrew=isPIC||isCoPilotSeat;
       if(!interactive&&form){
         // Loadsheet view — same style as manifest allocation cards
-        const nm=formSm?formSm[cell.i]||'':'';const isInfant=(d.pax||[]).find(p=>p.name===nm)?.infant||false;
+        const nm=formSm?formSm[cell.i]||'':'';
+        // Read group/infant from the FORM's own per-seat maps (keyed by seat index), not by
+        // matching the name against d.pax — duplicate/blank names otherwise mis-coloured groups.
+        const isInfant=!!(form.infantNames||{})[cell.i];
         const wt=form?parseFloat(form.seats?.[cell.i]||0)+parseFloat(form.bags?.[cell.i]||0):0;
-        const grp=(d.pax||[]).find(p=>p.name===nm)?.group||'';
+        const grp=(form.paxGroups||{})[cell.i]||'';
         const gc=grp?groupColor(grp):null;
         // Match interactive card style: white bg + coloured left border when filled
         const lsSeatStyle=isCrew?''

@@ -169,6 +169,11 @@ function _renderMyLeave(lv){
       var _wd=_lvWorkingDays(S.user&&S.user.id,f.startDate,f.endDate);
       var _rd=days-_wd;
       h+='<div style="font-size:13px;color:#a78bfa;margin-bottom:12px">📅 <strong>'+_wd+' leave day'+(_wd!==1?'s':'')+'</strong> used'+(_rd>0?' <span style="color:var(--text3)">('+days+' calendar days − '+_rd+' RDO/off day'+(_rd!==1?'s':'')+')</span>':'')+'</div>';
+      // Heads-up: who else is already off during this period (from the roster).
+      var _subConf=_lvRosterConflicts({user_id:S.user&&S.user.id,start_date:f.startDate,end_date:f.endDate});
+      if(_subConf.length){
+        h+='<div style="font-size:12px;color:#fbbf24;margin-bottom:12px;line-height:1.5">⚠ Already off then (per roster): '+_subConf.map(function(c){return _lvEsc(c.name)+' ('+c.label+')';}).join(', ')+'</div>';
+      }
     }
 
     // Reason

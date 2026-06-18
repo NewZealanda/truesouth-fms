@@ -71,7 +71,36 @@ maintenance "save failed" toast, and toast positioning clearing the iPhone notch
   signed-in user, refresh-aware) instead of the hardcoded anon key / bare fetch.
 - **Rezdy schedule** rejects end ≤ start.
 
-## Still deferred (lower priority / needs a decision)
+## Also fixed in the v23.07 pass (remaining items)
+
+- **Loadsheet seatmap badges** now read the form's per-seat `paxGroups`/`infantNames`
+  (keyed by seat index) instead of matching by name — duplicate/blank names no longer
+  mis-colour groups or drop infant flags.
+- **Leave conflict visibility** — the request form now shows a roster-based "already off
+  then" heads-up to the submitter (the approver already saw full approved+pending+roster
+  conflicts at approval).
+- **Charter quote** save/rename/delete now surface a failure toast instead of swallowing.
+- **`_jwtClaims`** uses a proper base64url→TextDecoder decode (handles UTF-8, padding;
+  no deprecated `escape()`), so a malformed token fails cleanly instead of logging a blank
+  desk user.
+- **Session-expired warning** — when the refresh token itself is gone, a throttled
+  "session expired — sign back in" toast appears instead of silent write-loss.
+- **`savePerson`** validates a new login account's password before writing the crew record
+  (no more half-saved person on a bad password).
+- **Rezdy schedule** lays overlapping blocks side by side so neither is hidden.
+
+## Still deferred — need your input / intentionally not changed
+
+- **Maintenance cumulative cycle totals** (`_startTot`/`_landTot`) — never written by the
+  app and only fall back to a prior *stored* value; computing them on the fly needs the
+  correct formula (does the imported spreadsheet baseline already include logged starts?).
+  Left untouched because a wrong lifetime cycle count could mislead maintenance scheduling.
+- **Approved leave → roster auto-write** — not implemented (the conflict check already
+  covers approvers; a non-approver submitter can't see others' requests under RLS anyway).
+- **Boot `loadAll` empty-cache overwrite** — left as-is; guarding it touches the critical
+  boot path and the trigger is rare now that reloads are token-refresh-aware.
+
+## Original lower-priority list (mostly addressed above)
 
 - Approved leave isn't written back to the roster (conflict-detection blind spot) — needs a
   design call on whether to write roster codes on approval or have conflict checks consult

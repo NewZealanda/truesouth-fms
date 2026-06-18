@@ -2718,6 +2718,13 @@ window.savePerson=async function(){
     const _dupCode=(S.crew||[]).find(function(cr){return cr.id!==m.crewId&&String(cr.code||'').trim().toUpperCase()===_code;});
     if(_dupCode){S.admin.err='Crew code "'+_code+'" is already used by '+(_dupCode.n||'another crew member')+'. Codes must be unique.';render();return;}
   }
+  // Creating a NEW login account? Validate the password BEFORE writing the crew record,
+  // so a missing/mismatched password can't leave a half-saved person behind.
+  if(!m.userId&&d.email&&isAdmin){
+    const _confEl=document.getElementById('pm_confpw');
+    if(!d.password){S.admin.err='Password is required for a new login account.';render();return;}
+    if(_confEl&&_confEl.value&&_confEl.value!==d.password){S.admin.err='Passwords do not match.';render();return;}
+  }
 
   // ── Save crew record ──
   let crewId=m.crewId;
