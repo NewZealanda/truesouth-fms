@@ -158,8 +158,8 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 
 /* ── Scrollable content ── */
 .page{max-width:760px;margin:0 auto;padding:14px 12px 80px;}
-@keyframes lsFlash{0%{outline:0 solid transparent;}100%{outline:0 solid transparent;}}
-.ls-flash{border-radius:6px;}
+@keyframes lsFlash{0%{box-shadow:0 0 0 2px rgba(96,165,250,.55);}100%{box-shadow:0 0 0 2px rgba(96,165,250,0);}}
+.ls-flash{border-radius:6px;animation:lsFlash 1.8s ease-out;}
 @media(min-width:900px){.page{max-width:1100px;padding:16px 28px 80px;}}
 @media(min-width:1400px){.page{max-width:1400px;padding:16px 48px 80px;}}
 
@@ -231,6 +231,15 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 @supports(padding:max(0px)){
   .page{padding-bottom:max(80px,env(safe-area-inset-bottom) + 70px);}
   .nav-bar{padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(4px,env(safe-area-inset-bottom));}
+}
+
+/* Toasts: clear the iPhone status bar / Dynamic Island and the nav bar */
+.toast-wrap{top:calc(env(safe-area-inset-top, 0px) + 14px);right:calc(env(safe-area-inset-right, 0px) + 14px);}
+body.mobile-view .toast-wrap{
+  top:calc(env(safe-area-inset-top, 0px) + 60px);
+  left:calc(env(safe-area-inset-left, 0px) + 12px);
+  right:calc(env(safe-area-inset-right, 0px) + 12px);
+  max-width:none;
 }
 
 /* Hide all number input spinners */

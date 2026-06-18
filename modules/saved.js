@@ -62,13 +62,21 @@ function renderSaved(){
 
   // ── Bin tab ──
   if(tab==='bin'){
-    return tabBar+`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span style="font-size:13px;color:var(--text3)">Items here can be restored or permanently deleted.</span>
-      ${binCount>0?`<button class="btn btn-red" style="font-size:12px" onclick="window.emptyBin()">🗑️ Empty Bin</button>`:''}
+    const _bf=S.binFilter||'all';
+    return tabBar+`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <button class="sub-tab ${_bf==='all'?'on':''}" style="font-size:11px;padding:4px 10px" onclick="S.binFilter='all';render()">All (${binCount})</button>
+        <button class="sub-tab ${_bf==='ls'?'on':''}" style="font-size:11px;padding:4px 10px" onclick="S.binFilter='ls';render()">Loadsheets (${binLs.length})</button>
+        <button class="sub-tab ${_bf==='ms'?'on':''}" style="font-size:11px;padding:4px 10px" onclick="S.binFilter='ms';render()">Manifests (${binMs.length})</button>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        ${activeManifests.length?`<button class="btn btn-red" style="font-size:12px" onclick="window.clearAllManifests()">&#x1f5d1; Clear All Manifests (${activeManifests.length})</button>`:''}
+        ${binCount>0?`<button class="btn btn-red" style="font-size:12px" onclick="window.emptyBin()">🗑️ Empty Bin</button>`:''}
+      </div>
     </div>`+
     (!binCount
       ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">🗑️ Bin is empty</div>`
-      :(binLs.map(s=>{
+      :((_bf!=='ms'?binLs.map(s=>{
           const col=AC_COL[s.form.ac]||'#64748b';
           const _savedStr=s.savedAt?_lsRelTime(s.savedAt):'';
           return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid #ef444488;opacity:.85">
@@ -85,8 +93,8 @@ function renderSaved(){
               <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.restoreFromBin('${s.id}')">↩ Restore</button>
               <button class="btn btn-red" style="font-size:12px;padding:6px 10px" onclick="window.permDeleteFromBin('${s.id}')">🗑 Delete</button>
             </div></div>`;
-        }).join('')+
-        binMs.map(m=>{
+        }).join(''):'')+
+        (_bf!=='ls'?binMs.map(m=>{
           const _savedStr=m.savedAt?_lsRelTime(m.savedAt):'';
           return`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;background:var(--card);border-left:3px solid #ef444488;opacity:.85">
             <div style="flex:1;min-width:0">
@@ -100,7 +108,7 @@ function renderSaved(){
               <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.restoreFromBin('${m.id}')">↩ Restore</button>
               <button class="btn btn-red" style="font-size:12px;padding:6px 10px" onclick="window.permDeleteFromBin('${m.id}')">🗑 Delete</button>
             </div></div>`;
-        }).join('')));
+        }).join(''):'')));
   }
 
   // ── Shared card renderer ──
@@ -120,6 +128,7 @@ function renderSaved(){
     var r=calcFormWB(s.form);
     var ok=r&&r.towOk&&r.lwOk&&r.cogOk;
     var sel=!!S.savedSel[s.id];
+    var sid=s.id;
     var _canUpload=(S.gdriveEnabled||S.gdriveClientId)&&opts.showUploadBtn;
     var rhsBadge=opts.showNotUploaded&&!s.driveUploaded
       ?(_canUpload
@@ -129,7 +138,6 @@ function renderSaved(){
       ?'<span style="padding:2px 7px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:4px;font-size:10px;color:#4ade80">☁ Drive ✓</span>'
       :'';
     var limitWarn=isSigned&&!ok?'<span class="pill pill-warn" style="font-size:10px">⚠ check limits</span>':'';
-    var sid=s.id;
     function _whoAt(nm,isoTs){
       if(!nm&&!isoTs)return '';
       var ini=nm?(nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase()):'?';
@@ -255,7 +263,7 @@ function renderSaved(){
 
   // ── Manifests tab ──
   if(tab==='manifests'){
-    return tabBar+_bulkBar+(activeManifests.length?'<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-red" style="font-size:12px" onclick="window.clearAllManifests()">&#x1f5d1; Clear All Manifests</button></div>':'')+`
+    return tabBar+_bulkBar+`
     ${!activeManifests.length
       ?`<div class="card" style="text-align:center;padding:40px;color:var(--text3)">📋 No saved manifests</div>`
       :activeManifests.map(m=>`<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;border:1px solid ${S.savedSel[m.id]?'#3b82f6':'var(--border)'};margin-bottom:8px;background:${S.savedSel[m.id]?'rgba(59,130,246,.08)':'var(--card)'}">

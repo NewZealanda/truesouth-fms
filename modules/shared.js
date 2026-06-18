@@ -50,14 +50,43 @@ const LOGO='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAA
 const SB='https://wgycephyuwwfogggcbye.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndneWNlcGh5dXd3Zm9nZ2djYnllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NjEzNzAsImV4cCI6MjA5NjQzNzM3MH0.6ac1fI7NxOJla_cI6P2bMwBXr3qkBTaHoyipcG9r95Q';
 const SH={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK,'Prefer':'return=representation'};
-const sbF=async(t,q='',order='created_at')=>{try{const r=await fetch(`${SB}/rest/v1/${t}?select=*${q}&order=${order}.desc`,{headers:SH});if(!r.ok){console.error('[sbF]',t,'status:',r.status,await r.text());return null;}return r.json();}catch(e){console.error('[sbF]',t,'exception:',e);return null;}};
+// HTML-escape a dynamic string before placing it in innerHTML (prevents stored XSS via
+// user/other-device free-text such as charter notes, roster notes, names).
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Throttled "your session expired" warning (only when the refresh token is also gone).
+let _sbExpWarnTs=0;
+function _sbWarnExpired(){
+  var now=Date.now();
+  if(now-_sbExpWarnTs<60000)return;
+  _sbExpWarnTs=now;
+  if(typeof toast==='function')toast('Your session has expired — please sign out and sign back in to keep saving changes.','warn');
+}
+// Wrap a REST call so an expired JWT is transparently refreshed and retried once.
+// Background tabs throttle setTimeout, so the scheduled ~1-min-before-expiry refresh
+// can fire late; without this, the first write after waking fails 401 (PGRST303).
+async function _sbFetch(url, opts){
+  opts=opts||{};
+  let r=await fetch(url, opts);
+  if(r.status===401 && typeof AUTH_PHASE_C!=='undefined' && AUTH_PHASE_C && _sbSession && typeof _sbRefresh==='function'){
+    const refreshed=await _sbRefresh();
+    if(refreshed){
+      const h=Object.assign({}, opts.headers||{});
+      h['Authorization']=SH['Authorization'];   // fresh token set by _applySession
+      r=await fetch(url, Object.assign({}, opts, {headers:h}));
+    } else {
+      _sbWarnExpired();   // refresh token itself is gone — tell the user (throttled)
+    }
+  }
+  return r;
+}
+const sbF=async(t,q='',order='created_at')=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?select=*${q}&order=${order}.desc`,{headers:{...SH}});if(!r.ok){console.error('[sbF]',t,'status:',r.status,await r.text());return null;}return r.json();}catch(e){console.error('[sbF]',t,'exception:',e);return null;}};
 // ── Fetch window: only load recent rows from large tables (tunable) ──
 const FETCH_DAYS=90;
 const _fetchSince=()=>new Date(Date.now()-FETCH_DAYS*864e5).toISOString().slice(0,10);
 // Loadsheets: last FETCH_DAYS only. Manifests: same, but ALWAYS include the
 // live_draft row and any ls_live_* realtime-collaboration rows regardless of age.
 const Q_LOADSHEETS=()=>`&created_at=gte.${_fetchSince()}`;
-const Q_MANIFESTS=()=>`&or=(created_at.gte.${_fetchSince()},id.eq.live_draft,id.like.ls_live_*)`;
+const Q_MANIFESTS=()=>`&or=(created_at.gte.${_fetchSince()},id.eq.live_draft)`;
 // ── Seatmap workspace ─────────────────────────────────────────────────────
 // The seatmap is a SEPARATE working area from the manifests. Manifests are the
 // permanent data-entry lists (S.dispatch / per-tab); the seatmap workspace
@@ -110,38 +139,185 @@ function _seatmapSyncPool(){
   // 2. Drop pool entries that are now seated in the seatmap.
   for(var i=pool.length-1;i>=0;i--){if(pool[i].id&&seated[pool[i].id])pool.splice(i,1);}
   // 3. Add any unseated, non-infant passengers that aren't already in the pool (by id or name+weight).
-  var inPool={},poolKey={}; pool.forEach(function(e){if(e.id)inPool[e.id]=1;poolKey[(e.name||'')+'|'+(e.weight||'')]=1;});
+  // De-dupe by id; only fall back to name+weight for entries that have NO id,
+  // so two genuinely different passengers sharing a name and weight both appear.
+  var inPool={},poolKey={}; pool.forEach(function(e){if(e.id)inPool[e.id]=1;else poolKey[(e.name||'')+'|'+(e.weight||'')]=1;});
   (d.pax||[]).forEach(function(p){
     if(p.infant||seated[p.id]||inPool[p.id])return;
-    if(poolKey[(p.name||'')+'|'+(p.weight||'')])return;
+    if(!p.id&&poolKey[(p.name||'')+'|'+(p.weight||'')])return;
     pool.push({id:p.id,name:p.name,weight:p.weight,bag:p.bag||0,group:p.group||'',infant:p.infantName||null,type:p.type||'adult',paymentReq:!!p.paymentReq});
   });
 }
-const sbU=async(t,d)=>{try{const r=await fetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);return null;}};
-const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:SH});return r.ok;}catch{return false;}};
-const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
+const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);return null;}};
+const sbDel=async(t,id)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:{...SH}});return r.ok;}catch{return false;}};
+
+// ── Phase A auth cutover (DEFAULT OFF) ──────────────────────────────────────
+// Flip ON only AFTER (1) deploying the verify-login / set-password / confirm-reset
+// Edge Functions and (2) running auth_migration_phase0A.sql. Test on the flag with a
+// break-glass admin before going live — see SUPABASE_AUTH_MIGRATION_PLAN.md.
+// With the flag OFF every helper below behaves exactly as it did before.
+let AUTH_PHASE_A=true;
+// Read users from the hash-free view when locked down, the base table otherwise.
+const USERS_TBL=()=>(AUTH_PHASE_A||AUTH_PHASE_C)?'ts_users_public':'ts_users';
+// Write user rows. Under Phase A, ts_users SELECT is revoked so we use return=minimal
+// (no SELECT-back) and never push an EMPTY password hash — reads no longer include the
+// hash, so echoing '' back would wipe a real password.
+async function sbUserWrite(rows){
+  const hf=(typeof _hashFree==='function')&&_hashFree();
+  const list=(rows||[]).map(function(r){
+    var c=Object.assign({},r);
+    // Under Phase A/C the legacy password_hash isn't the source of truth (Supabase
+    // Auth is); never wipe it with an empty value.
+    if(hf&&(c.password_hash===''||c.password_hash==null))delete c.password_hash;
+    return c;
+  });
+  // Phase A/C revoke SELECT on ts_users (to hide password hashes). PostgREST upsert
+  // (Prefer: resolution=merge-duplicates -> ON CONFLICT DO UPDATE) requires table-level
+  // SELECT, so it fails with 42501. Instead: INSERT new rows; on a 409 duplicate-id,
+  // fall back to PATCH (UPDATE by id). Both need only INSERT/UPDATE + SELECT(id).
+  try{
+    for(const row of list){
+      const r=await _sbFetch(`${SB}/rest/v1/ts_users`,{method:'POST',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(row)});
+      if(r.ok)continue;                       // inserted a new row
+      if(r.status===409){                     // existing id -> update it
+        if(!row.id){console.error('[sbUserWrite] 409 with no id');return null;}
+        const patch=Object.assign({},row);delete patch.id;   // never PATCH the PK
+        const pr=await _sbFetch(`${SB}/rest/v1/ts_users?id=eq.${encodeURIComponent(row.id)}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(patch)});
+        if(pr.ok)continue;
+        console.error('[sbUserWrite PATCH]',pr.status,await pr.text());return null;
+      }
+      console.error('[sbUserWrite INSERT]',r.status,await r.text());return null;
+    }
+    return list;   // truthy = success (callers only check truthiness)
+  }catch(e){console.error('[sbUserWrite]',e);return null;}
+}
+// Call a Supabase Edge Function. Returns {ok, status, data}.
+async function callFn(name,payload){
+  try{
+    const r=await fetch(SB+'/functions/v1/'+name,{method:'POST',headers:{'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK},body:JSON.stringify(payload||{})});
+    const j=await r.json().catch(function(){return{};});
+    return {ok:r.ok&&j&&j.ok!==false,status:r.status,data:j};
+  }catch(e){return {ok:false,status:0,data:{error:'network'}};}
+}
+
+// ── Phase C auth (DEFAULT OFF): real per-user Supabase Auth (JWT) ────────────
+// Build/test behind this flag per MIGRATION_RUNBOOK step 12. When ON, login uses
+// Supabase Auth (GoTrue) directly, every REST/realtime call carries the user's JWT,
+// and RLS enforces access server-side. Phase C implies the Phase A hash-free posture.
+// With the flag OFF, every helper below is inert.
+let AUTH_PHASE_C=true;
+let _sbSession=null;          // {access_token, refresh_token, expires_at(ms)}
+let _sbRefreshTimer=null;
+// True when user reads must avoid the hashed base table (either cutover).
+function _hashFree(){return AUTH_PHASE_A||AUTH_PHASE_C;}
+// Decode a JWT payload (base64url) to read custom claims (app_id, user_role, email).
+function _jwtClaims(tok){try{var p=(tok||'').split('.')[1];if(!p)return {};p=p.replace(/-/g,'+').replace(/_/g,'/');while(p.length%4)p+='=';var bin=atob(p),bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return JSON.parse(new TextDecoder('utf-8').decode(bytes));}catch(e){return {};}}
+// Put the user's access token on REST calls (or restore the anon key when signed out).
+function _applySession(sess){
+  _sbSession=sess||null;
+  SH['Authorization']='Bearer '+((sess&&sess.access_token)||SK);
+  _scheduleRefresh();
+}
+function _scheduleRefresh(){
+  clearTimeout(_sbRefreshTimer);
+  if(!AUTH_PHASE_C||!_sbSession||!_sbSession.expires_at)return;
+  var ms=_sbSession.expires_at-Date.now()-60000; // refresh ~1 min before expiry
+  _sbRefreshTimer=setTimeout(function(){_sbRefresh();},Math.max(5000,ms));
+}
+async function _sbRefresh(){
+  if(!_sbSession||!_sbSession.refresh_token)return false;
+  try{
+    var r=await fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({refresh_token:_sbSession.refresh_token})});
+    if(!r.ok){return false;}
+    var j=await r.json();
+    var sess={access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+(j.expires_in||3600)*1000};
+    try{localStorage.setItem('ts_sb_session',JSON.stringify(sess));}catch(e){}
+    _applySession(sess);
+    if(_rtWs)initRealtime();   // re-join realtime with the fresh token
+    return true;
+  }catch(e){return false;}
+}
+// Sign in via Supabase Auth; on first post-migration login, fall back to migrate-login once.
+async function _sbSignIn(email,password){
+  async function _tok(){
+    var r=await fetch(SB+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({email:email,password:password})});
+    return {ok:r.ok,status:r.status,data:await r.json().catch(function(){return{};})};
+  }
+  var res=await _tok();
+  if(!res.ok){
+    if(res.status===0)return {ok:false,offline:true};
+    var mig=await callFn('migrate-login',{email:email,password:password});
+    if(!mig.ok)return {ok:false};
+    res=await _tok();
+    if(!res.ok)return {ok:false};
+  }
+  var j=res.data;
+  var sess={access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+(j.expires_in||3600)*1000};
+  try{localStorage.setItem('ts_sb_session',JSON.stringify(sess));}catch(e){}
+  return {ok:true,session:sess,claims:_jwtClaims(j.access_token)};
+}
+// Build an S.user object from JWT claims + the public user record.
+function _userFromClaims(claims){
+  var appId=claims.app_id,role=claims.user_role||'desk';
+  var rec=(S.users||[]).find(function(x){return x.id===appId;})||{};
+  var u={id:appId,name:rec.name||claims.email||'',email:rec.email||claims.email||'',role:role,linkedCrew:rec.linkedCrew||'',passwordHash:'',weight:rec.weight||0,isPilot:rec.isPilot||role==='pilot'||false,inactive:rec.inactive||false};
+  if(u.email==='andrew@truesouthflights.co.nz'||u.email==='adamsonandrew1@gmail.com'||role==='superadmin')u.superAdmin=true;
+  return u;
+}
+// Under Phase C the boot fetch runs as anon (RLS hides protected tables), so reload the
+// core tables once a JWT is in place after login/restore.
+async function _reloadCoreTables(){
+  try{await Promise.all(['ts_crew','ts_aircraft','ts_charter_rates','ts_loadsheets','ts_manifests','ts_scratchpads','ts_settings'].map(function(t){return reloadTable(t);}));}catch(e){}
+}
+const sbPatch=async(t,id,data)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
 
 
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true},
-  admin:       {operations:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true},
-  cx_manager:  {operations:true, charter:false,maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false},
-  pilot:       {operations:true, charter:false,maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true},
-  desk:        {operations:true, charter:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false},
-  maint:       {operations:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
-  maintenance: {operations:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false},
-  ground_staff:{operations:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false},
-  accounts: {operations:false,charter:false,maintenance:false,roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false},
-  marketing: {operations:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false}
+  superadmin:  {operations:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true},
+  admin:       {operations:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true},
+  cx_manager:  {operations:true, charter:false,maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false},
+  pilot:       {operations:true, charter:false,maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true, rezdy:false, pay_week:false},
+  desk:        {operations:true, charter:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false},
+  maint:       {operations:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false,rezdy:false, pay_week:false},
+  maintenance: {operations:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false,rezdy:false, pay_week:false},
+  ground_staff:{operations:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,rezdy:false, pay_week:false},
+  accounts: {operations:false,charter:false,maintenance:false,roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,rezdy:false, pay_week:true},
+  marketing: {operations:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,rezdy:false, pay_week:false}
 };
 function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
+// True while the Admin > Permissions grid is actively on screen (renderAdminPerms bumps
+// S._permsPageTs on every render). While editing, background reloads must NOT overwrite
+// S.rolePerms or they wipe unsaved ticks (the 5s edit-timer alone is not enough — a
+// reconnect or another device's write can fire a reload long after the last tick).
+function _editingPerms(){return Date.now()-(S._permsPageTs||0)<12000;}
 
 const GRP_COLOURS=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];
 // Airport map: ICAO → full name
 var APTS={};var APT_COORDS={};var APS=[];
+// Default featured aerodromes — used only until the user-managed list (Aerodromes
+// settings → ⭐) loads. The settings list is the source of truth; see _featuredApts().
 var _APT_PINNED=["NZQN","NZMF","NZMC","NZFJ"];
+// The live featured list, in display order. Source of truth = ts_settings 'aero_featured'
+// (shared across devices), mirrored to localStorage 'featured_aerodromes' for instant boot.
+// Falls back to _APT_PINNED only when nothing has been saved yet.
+function _featuredApts(){
+  if(Array.isArray(S._aeroFeatured))return S._aeroFeatured;
+  try{var v=lsGet("featured_aerodromes");
+    if(Array.isArray(v)){S._aeroFeatured=v;return v;}
+    if(typeof v==="string"&&v){var p=JSON.parse(v);if(Array.isArray(p)){S._aeroFeatured=p;return p;}}
+  }catch(e){}
+  return _APT_PINNED.slice();
+}
+// Persist the featured list locally + to the cloud (ts_settings) so every device shares it.
+function _saveFeaturedApts(list){
+  S._aeroFeatured=list.slice();
+  try{lsSet("featured_aerodromes",S._aeroFeatured);}catch(e){}
+  if(typeof sbU==="function"){
+    try{sbU("ts_settings",[{key:"aero_featured",value:JSON.stringify(S._aeroFeatured)}]).then(function(r){if(r===null&&typeof toast==='function')toast('Featured aerodromes did not save to the server — check connection.','warn');});}catch(e){}
+  }
+}
 function _getAllApts(){
   var base=typeof NZ_AERODROMES!=="undefined"?NZ_AERODROMES:[];
   var custom=[];
@@ -166,19 +342,30 @@ window.setRouteField=function(field,val){
   else{S['_rtOther_'+field]=false;S.dispatch[field]=val;}
   autoSaveDispatch();safeRender();
 };
-function aptOpts(sel){
+// Same as setRouteField but for the LOADSHEET form (S.form), so dep/dest "Other" works there too.
+window.setLsRouteField=function(field,val){
+  if(!S.form)return;
+  if(val==='__other__'){S['_lsOther_'+field]=true;if(_isKnownApt(S.form[field]))S.form[field]='';}
+  else{S['_lsOther_'+field]=false;S.form[field]=val;}
+  S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();safeRender();
+};
+function aptOpts(sel, isOther){
   _rebuildAptData();
   var all=_getAllApts();
-  var pinned=_APT_PINNED.map(function(ic){return all.find(function(a){return a.icao===ic;});}).filter(Boolean);
-  var rest=all.filter(function(a){return _APT_PINNED.indexOf(a.icao)<0;});
+  var pinIcaos=_featuredApts();
+  var pinned=pinIcaos.map(function(ic){return all.find(function(a){return a.icao===ic;});}).filter(Boolean);
+  var rest=all.filter(function(a){return pinIcaos.indexOf(a.icao)<0;});
   var south=rest.filter(function(a){return a.lat<=-41.35;}).sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});
   var north=rest.filter(function(a){return a.lat>-41.35;}).sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});
   function opt(a){var lbl=(a.icao==='NZQN'?'\uD83C\uDFE0 ':'')+a.name+' ('+a.icao+')';return '<option value="'+a.icao+'"'+(sel===a.icao?' selected':'')+'>'+lbl+'</option>';}
-  return '<optgroup label="* Featured">'+pinned.map(opt).join('')+'</optgroup>'
+  // "Other\u2026" (free-text) at the top of Featured \u2014 only for callers that handle it (manifest /
+  // loadsheet pass the isOther flag). Callers that don't (e.g. charter legs) omit the arg.
+  var otherOpt=(isOther!==undefined)?'<option value="__other__"'+(isOther?' selected':'')+'>\u270F\uFE0F Other\u2026</option>':'';
+  return '<optgroup label="* Featured">'+otherOpt+pinned.map(opt).join('')+'</optgroup>'
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v22.85';
+const APP_VER='v23.24';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -197,6 +384,19 @@ const CHARTER_RATES_DEF={
   "ZK-SDB":{perHour:5000,minHours:1,currency:'NZD'},
   "ZK-SLB":{perHour:4500,minHours:1,currency:'NZD'},
 };
+// Resolve the effective charter rate for an aircraft. Prefers the configured rate, but
+// falls back to the built-in default whenever the stored rate is missing or has no positive
+// $/hr — so the calculator never silently zeroes out leg costs when rates fail to load
+// (e.g. an empty cloud read landing on a stale cache that has perHour:0).
+function charterRate(acId){
+  if(!acId)return null;
+  var r=(S.charterRates||{})[acId];
+  if(r&&parseFloat(r.perHour)>0)return r;
+  var def=CHARTER_RATES_DEF[acId];
+  // No usable configured rate: use the built-in default if we have one, else null so the
+  // leg is simply omitted from pricing rather than billed at $0 (avoids a misleading total).
+  return def?dc(def):null;
+}
 function distNm(a,b){if(!Object.keys(APT_COORDS).length)_rebuildAptData();const A=APT_COORDS[a],B=APT_COORDS[b];if(!A||!B)return 0;const R=3440,dLat=(B.lat-A.lat)*Math.PI/180,dLng=(B.lng-A.lng)*Math.PI/180,s=Math.sin(dLat/2)**2+Math.cos(A.lat*Math.PI/180)*Math.cos(B.lat*Math.PI/180)*Math.sin(dLng/2)**2;return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));}
 
 
@@ -209,6 +409,8 @@ function groupColor(g,paxList){const gs=[...new Set((paxList||(curDisp()||{}).pa
 // or a duplicate-instance key ("ZK-SLA_2"). _ac() resolves any key to its physical
 // aircraft id so spec/layout lookups (S.aircraft[...]) always work.
 function _ac(key){if(!key)return key;if(S.aircraft[key])return key;var s=((curDisp()||{}).acSetup||[]).find(function(x){return (x._seatmapKey||x.acId)===key;});if(s&&S.aircraft[s.acId])return s.acId;return String(key).replace(/_\d+$/,'');}
+// Canonical aircraft-display helper (single definition — was previously duplicated in admin.js + maintenance.js).
+function acDisp(id){return(id||"").replace("ZK-","");}
 function _acSpec(acId){return S.aircraft[acId]||S.aircraft[_ac(acId)];}
 function fuelUnit(acId){return _acSpec(acId)?.layout==='ga8'?'L':'lbs';}
 function toKg(v,acId){const n=parseFloat(v)||0;const a=_acSpec(acId);if(!a)return n;return a.layout==='ga8'?n*AVGAS:n*LB;}
@@ -257,11 +459,13 @@ function calcFormWB(form){
   for(let i=1;i<a.seats.length;i++){const w=(parseFloat(form.seats[i]||0))+(parseFloat(form.bags[i]||0));if(i===1&&form.coPilot){/* crew */}else{pW+=w;}wt+=w;mom+=w*a.seats[i].arm;}
   let cg=0;for(let i=0;i<a.cargo.length;i++){const w=parseFloat((form.cargo&&form.cargo[i])||0);cg+=w;wt+=w;mom+=w*a.cargo[i].arm;}
   const zfw=wt,fW=parseFloat(form.fuel||a.fuelKg);wt+=fW;mom+=fW*a.fuelArm;const rW=wt;
-  wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
+  // Honour the editable per-loadsheet ground-burn override (falls back to the aircraft spec default).
+  const gndBurn=parseFloat(form.gndBurn!=null?form.gndBurn:a.gndBurn)||0;
+  wt-=gndBurn;mom-=gndBurn*a.fuelArm;
   const tow=wt,towCog=wt?mom/wt:0;
   const burnKg=form.burnOff?burnToKg(parseFloat(form.burnOff)||0,form.ac):burnToKg(a.burnDef,form.ac);
   wt-=burnKg;mom-=burnKg*a.fuelArm;
-  return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn:a.gndBurn,tow,towCog,burnKg,lw:wt,lwCog:mom/wt,
+  return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn,tow,towCog,burnKg,lw:wt,lwCog:wt?mom/wt:0,
     towOk:tow<=a.mtow,lwOk:wt<=a.mlw,cogOk:towCog>=a.cogMin&&towCog<=a.cogMax,
     mtow:a.mtow,mlw:a.mlw,cogMin:a.cogMin,cogMax:a.cogMax};
 }
@@ -278,7 +482,7 @@ function scoreAssign(acId,paxList){
   if(seat1IsCoPilot(acId))mom+=cpW*a.seats[1].arm;
   Object.entries(sm).forEach(([idx,pid])=>{const p=(curDisp().pax||[]).find(x=>x.id===pid)||paxList.find(x=>x.id===pid);if(!p)return;const w=parseFloat(p.weight||0)+parseFloat(p.bag||0);wt+=w;mom+=w*a.seats[parseInt(idx)].arm;});
   wt+=fW;mom+=fW*a.fuelArm;wt-=a.gndBurn;mom-=a.gndBurn*a.fuelArm;
-  const tow=wt,cog=mom/wt,wtOver=Math.max(0,tow-a.mtow);
+  const tow=wt,cog=wt?mom/wt:0,wtOver=Math.max(0,tow-a.mtow);
   const cogMid=(a.cogMin+a.cogMax)/2,cogDev=Math.abs(cog-cogMid);
   const cogOver=cog<a.cogMin?a.cogMin-cog:cog>a.cogMax?cog-a.cogMax:0;
   return wtOver*1000+cogOver*500+cogDev;
@@ -867,7 +1071,7 @@ function runSolver(){
         newSm[1]=pid;
         if(prev1) newSm[i]=prev1; else delete newSm[i];
         // Recalc CoG with this swap
-        const setup=(_D.acSetup||[]).find(s=>s.acId===acId);
+        const setup=(_D.acSetup||[]).find(s=>(s._seatmapKey||s.acId)===acId);
         const picW=setup?S.crew.find(c=>c.n===setup.pic)?.w||0:0;
         let wt=a.ew+picW, mom=a.em+picW*a.seats[0].arm;
         const fW=fuelKgForSetup(acId);
@@ -917,7 +1121,7 @@ function runSolver(){
 
 // ── State ──
 function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
-function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',paxType:{},paxGroups:{},sig:null};}
+function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',paxType:{},paxGroups:{},paxPaymentReq:{},sig:null};}
 function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
 let S={
@@ -966,7 +1170,7 @@ async function loadAll(){
       sbF('ts_charter_rates'),
       sbF('ts_loadsheets',Q_LOADSHEETS()),
       sbF('ts_manifests',Q_MANIFESTS()),
-      sbF('ts_users'),
+      sbF(USERS_TBL()),
       sbF('ts_scratchpads','','saved_at')
     ]);
     // ── Crew — Supabase is source of truth; localStorage is fast-load cache + offline fallback ──
@@ -1019,7 +1223,7 @@ async function loadAll(){
     // ── Charter rates ──
     let cr=_pRates;
     if(cr&&cr.length){
-      S.charterRates=Object.fromEntries(cr.map(r=>[r.acId,r.rates||dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})]));
+      S.charterRates=Object.fromEntries(cr.map(r=>[r.acId,(r.rates&&parseFloat(r.rates.perHour)>0)?r.rates:dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})]));
       lsSet('ts_charter_rates_cache',S.charterRates);
     } else {
       const cached=lsGet('ts_charter_rates_cache');
@@ -1036,6 +1240,11 @@ async function loadAll(){
     try{
       const _cq=await fetch(SB+'/rest/v1/ts_settings?key=eq.charter_quotes&select=value',{headers:SH});
       if(_cq.ok){const _cqd=await _cq.json();if(_cqd[0]&&_cqd[0].value){lsSet('ts_charter_quotes_cache',JSON.parse(_cqd[0].value));}}
+    }catch(e){}
+    // Load the featured/pinned aerodrome list (source of truth for the dropdown "Featured" group)
+    try{
+      const _af=await fetch(SB+'/rest/v1/ts_settings?key=eq.aero_featured&select=value',{headers:SH});
+      if(_af.ok){const _afd=await _af.json();if(_afd[0]&&_afd[0].value){var _fl=JSON.parse(_afd[0].value);if(Array.isArray(_fl)){S._aeroFeatured=_fl;lsSet('featured_aerodromes',_fl);}}}
     }catch(e){}
 
     // ── Loadsheets ──
@@ -1082,7 +1291,7 @@ async function loadAll(){
         const admin={id:'u_admin',name:'Andrew Adamson',email:'andrew@truesouthflights.co.nz',role:'admin',linkedCrew:'A. Adamson',passwordHash:btoa('admin123')};
         S.users=[admin];
         lsSet('ts_users_cache',S.users);
-        await sbU('ts_users',[{id:admin.id,name:admin.name,email:admin.email,role:admin.role,linked_crew:admin.linkedCrew,password_hash:admin.passwordHash}]);
+        await sbUserWrite([{id:admin.id,name:admin.name,email:admin.email,role:admin.role,linked_crew:admin.linkedCrew,password_hash:admin.passwordHash}]);
       }
     }
     if(_initPads&&_initPads.length){S.pads=_initPads.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});}
@@ -1091,8 +1300,14 @@ async function loadAll(){
     try{
       const _rpCached=lsGet('ts_role_perms');
       if(_rpCached) S.rolePerms=_rpCached;
-      const _rpRow=await fetch(`${SB}/rest/v1/ts_settings?key=eq.role_perms&select=value`,{headers:SH});
-      if(_rpRow.ok){const _rpData=await _rpRow.json();if(_rpData[0]?.value){S.rolePerms=JSON.parse(_rpData[0].value);lsSet('ts_role_perms',S.rolePerms);}}
+      // Don't clobber an in-progress permissions edit. A reconnect (e.g. switching
+      // devices/backgrounding) can re-run loadAll mid-edit; without this guard the DB
+      // re-fetch overwrites S.rolePerms before the debounced save fires, silently
+      // dropping the toggle the user just made.
+      if(!_editingPerms()&&Date.now()-(S._permsEditTs||0)>5000){
+        const _rpRow=await fetch(`${SB}/rest/v1/ts_settings?key=eq.role_perms&select=value`,{headers:SH});
+        if(_rpRow.ok){const _rpData=await _rpRow.json();if(_rpData[0]?.value){S.rolePerms=JSON.parse(_rpData[0].value);lsSet('ts_role_perms',S.rolePerms);}}
+      }
     }catch(e){}
 
     S.syncStatus='ok';
@@ -1141,11 +1356,28 @@ async function loadAll(){
   S.gdriveFolder=lsGet('gdrive_folder')||'Loadsheets';
   S.gdriveFolderId=lsGet('gdrive_folder_id')||'';
   // Restore session
-  const savedUser=sessionStorage.getItem('ts_user');
-  if(savedUser)try{S.user=JSON.parse(savedUser);}catch{}
-  if(S.user){auditLog('session_restore',{via:'session',user:S.user.email});setTimeout(function(){initRealtime();},300);}
-  // Restore remembered session if no session in sessionStorage
-  if(!S.user){const rem=localStorage.getItem('ts_remembered_user');if(rem)try{const ru=JSON.parse(rem);const live=S.users.find(x=>x.id===ru.id&&x.passwordHash===ru.passwordHash);if(live){S.user=live;if(live.email==='andrew@truesouthflights.co.nz'||live.email==='adamsonandrew1@gmail.com'||live.role==='superadmin')live.superAdmin=true;sessionStorage.setItem('ts_user',JSON.stringify(live));['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});auditLog('session_restore',{via:'remember_me',user:live.email});setTimeout(initRealtime,0);}}catch(e){}}
+  if(AUTH_PHASE_C){
+    // Restore the Supabase session from its refresh token, then rebuild the user from claims.
+    let _sess=null;try{_sess=JSON.parse(localStorage.getItem('ts_sb_session')||'null');}catch(e){}
+    if(_sess&&_sess.refresh_token){
+      _applySession(_sess);
+      (async function(){
+        const ok=await _sbRefresh();
+        if(ok&&_sbSession&&_sbSession.access_token){
+          S.user=_userFromClaims(_jwtClaims(_sbSession.access_token));
+          auditLog('session_restore',{via:'supabase',user:S.user.email});
+          await _reloadCoreTables();
+          initRealtime();render();setTimeout(function(){restoreWorkspace();},400);
+        } else { _applySession(null);try{localStorage.removeItem('ts_sb_session');}catch(e){} render(); }
+      })();
+    }
+  } else {
+    const savedUser=sessionStorage.getItem('ts_user');
+    if(savedUser)try{S.user=JSON.parse(savedUser);}catch{}
+    if(S.user){auditLog('session_restore',{via:'session',user:S.user.email});setTimeout(function(){initRealtime();},300);}
+    // Restore remembered session if no session in sessionStorage
+    if(!S.user){const rem=localStorage.getItem('ts_remembered_user');if(rem)try{const ru=JSON.parse(rem);const live=S.users.find(x=>x.id===ru.id&&(AUTH_PHASE_A||x.passwordHash===ru.passwordHash));if(live){S.user=live;if(live.email==='andrew@truesouthflights.co.nz'||live.email==='adamsonandrew1@gmail.com'||live.role==='superadmin')live.superAdmin=true;sessionStorage.setItem('ts_user',JSON.stringify(live));['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});auditLog('session_restore',{via:'remember_me',user:live.email});setTimeout(initRealtime,0);}}catch(e){}}
+  }
   // Load audit log from localStorage first (instant)
   S.auditLog=lsGet('ts_audit_log')||[];
   render();
@@ -1175,19 +1407,22 @@ async function loadAll(){
 }
 
 // ── Supabase Realtime ──
-let _rtWs=null,_rtRef=0,_rtHb=null,_rtRecon=null,_rtPending=new Set(),_rtFlush=null;
-const _sessionId='sess_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+let _rtWs=null,_rtRef=0,_rtHb=null,_rtRecon=null,_rtPending=new Set(),_rtFlush=null,_rtConnectedOnce=false;
+const _sessionId='sess_'+((typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+'_'+Math.random().toString(36).slice(2,9)));
 
 function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance'];
+  // Under Phase A, ts_users SELECT is revoked so it can't be subscribed — drop it.
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
+    var _rtThisWs=_rtWs;   // guard: a reconnect/refresh may replace _rtWs before this socket opens
     _rtWs.onopen=function(){
+      if(_rtThisWs!==_rtWs){try{_rtThisWs.close();}catch(e){}return;}  // stale socket — don't start a duplicate heartbeat
       _rtRef++;
       _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'phx_join',
-        payload:{config:{broadcast:{self:false},postgres_changes:tables.map(function(t){return{event:'*',schema:'public',table:t};})},access_token:SK},
+        payload:{config:{broadcast:{self:false},postgres_changes:tables.map(function(t){return{event:'*',schema:'public',table:t};})},access_token:((AUTH_PHASE_C&&_sbSession&&_sbSession.access_token)||SK)},
         ref:String(_rtRef)}));
       _rtHb=setInterval(function(){
         if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(_rtRef)}));}
@@ -1203,14 +1438,12 @@ function initRealtime(){
         }
         if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
           if(msg.payload&&msg.payload.status==='ok'){
-            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);safeRender();
-          } else if(msg.payload&&msg.payload.status==='error'){
-            S.rtStatus='offline';safeRender();
-          }
-        }
-        if(msg.event==='phx_reply'&&msg.topic==='realtime:ts-fms'){
-          if(msg.payload&&msg.payload.status==='ok'){
-            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);safeRender();
+            S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);
+            // Reconnect backfill: postgres_changes that fired while the socket was down are
+            // gone, so on a RE-open (not the first connect) pull the collaborative tables once.
+            if(_rtConnectedOnce){try{Promise.all([reloadTable('ts_manifests'),reloadTable('ts_loadsheets')]).then(function(){safeRender();}).catch(function(){});}catch(e){}}
+            _rtConnectedOnce=true;
+            safeRender();
           } else if(msg.payload&&msg.payload.status==='error'){
             S.rtStatus='offline';safeRender();
           }
@@ -1252,7 +1485,6 @@ function initRealtime(){
               S.saved=S.saved||[];S.saved.unshift({id:_tp.id,form:_tp.form,status:'draft',savedAt:_tp.savedAt});
               lsSet('ts_loadsheets_cache',S.saved);
             }
-            if(_tp.by&&S.user&&_tp.by!==S.user.name)toast((_tp.by||'Someone')+' opened '+((_tp.acId||'').replace('ZK-',''))+' loadsheet','info');
             safeRender();
           }
         }
@@ -1302,7 +1534,6 @@ function initRealtime(){
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_signed'){
           var _sipl=msg.payload.payload;
           if(_sipl&&_sipl.sessionId!==_sessionId){
-            if(_sipl.by&&S.user&&_sipl.by!==S.user.name)toast((_sipl.by||'Someone')+' created '+(_sipl.acCode||'')+' loadsheet','ok');
             reloadTable('ts_loadsheets').then(function(){
               // Update open tab form so signature shows live
               if(_sipl.id){
@@ -1371,6 +1602,11 @@ function initRealtime(){
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_update'){
           const _lsp=msg.payload.payload;
           if(_lsp&&_lsp.sessionId!==_sessionId){
+            // Don't clobber the LIVE form out from under a user mid-edit (focused input on
+            // the active loadsheet) — that loses their in-flight keystrokes. Background tab
+            // copies still update, so it reconciles when they next blur/leave/reopen.
+            var _lsAE=document.activeElement;
+            var _lsEditing=!!(_lsAE&&/^(INPUT|SELECT|TEXTAREA)$/.test(_lsAE.tagName||'')&&(S.tab==='loadsheet'||(S.tab||'').indexOf('ls_')===0));
             // Find tab by ID (most reliable for aircraft changes) then fall back to acCode
             var _lsTF=null;
             if(_lsp.tabId)_lsTF=(S.lsTabs||[]).find(function(t){return t.id===_lsp.tabId;});
@@ -1389,11 +1625,11 @@ function initRealtime(){
                 _lsTF.form=_lsp.form;
                 // Update acId on tab if aircraft changed on other device
                 if(_lsp.form.ac&&_lsTF.acId!==_lsp.form.ac)_lsTF.acId=_lsp.form.ac;
-                if(S.activeTabId===_lsTF.id){
+                if(S.activeTabId===_lsTF.id&&!_lsEditing){
                   S.form=_lsp.form;
                   if(_lsp.form.ac)S.lsAc=_lsp.form.ac.replace('ZK-','');
                 }
-              } else if(_lsp.acCode&&S.lsAc===_lsp.acCode&&S.activeTabId){
+              } else if(_lsp.acCode&&S.lsAc===_lsp.acCode&&S.activeTabId&&!_lsEditing){
                 S.form=_lsp.form;
               }
             }
@@ -1417,7 +1653,7 @@ function initRealtime(){
             try{lsSet('ts_smws',S.smWS);}catch(e){}
             if(S.tab==='seatmap'){
               var _sae=document.activeElement,_saet=_sae&&_sae.tagName;
-              try{S.solverAutoApply=false;runSolver();S.solverAutoApply=true;}catch(e){}
+              var _prevAuto=S.solverAutoApply;try{S.solverAutoApply=false;runSolver();}catch(e){}S.solverAutoApply=_prevAuto;
               if(_saet==='INPUT'||_saet==='SELECT'||_saet==='TEXTAREA')safeRender();else render();
             }
           }
@@ -1452,7 +1688,13 @@ async function reloadTable(table){
   if(table==='ts_loadsheets'){
     const ls=await sbF('ts_loadsheets',Q_LOADSHEETS());
     if(ls){
-      S.saved=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});
+      var _fresh=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});
+      // Preserve any currently-open loadsheet tabs whose saved row falls outside the
+      // fetch window, so a realtime refresh can't drop a tab the user still has open.
+      var _freshIds={};_fresh.forEach(function(s){_freshIds[s.id]=1;});
+      var _keepIds={};(S.lsTabs||[]).forEach(function(t){if(t.id)_keepIds[t.id]=1;});if(S.activeTabId)_keepIds[S.activeTabId]=1;
+      (S.saved||[]).forEach(function(s){if(_keepIds[s.id]&&!_freshIds[s.id])_fresh.push(s);});
+      S.saved=_fresh;
       lsSet('ts_loadsheets_cache',S.saved);
       return true;
     }
@@ -1463,23 +1705,15 @@ async function reloadTable(table){
     const ms=await sbF('ts_manifests',Q_MANIFESTS());
     if(ms){
       const live=ms.find(function(r){return r.id==='live_draft';});
-      var _lsForeignChange=false;
-      ms.forEach(function(r){
-        if(r.id.startsWith('ls_live_')&&r.data){
-          const _ac=r.id.slice(8);
-          if(Date.now()-_ownLSSaveTs<3500){return;} // suppress own postgres echo
-          S.lsForms[_ac]=r.data;
-          if(S.lsAc===_ac)S.form=r.data;
-          _lsForeignChange=true;
-        }
-      });
       var _ownEcho=false;
       if(live&&live.data){
         if(live.data._updatedBy===S.user?.id){_ownEcho=true;}
         else{mergeDispatch(live.data);}
       }
+      // ls_live_* rows are never written (loadsheet live-edit rides on the ls_update
+      // broadcast); filter any stale ones out defensively rather than reading them.
       S.manifests=ms.filter(function(r){return r.id!=='live_draft'&&!r.id.startsWith('ls_live_');}).map(function(r){return{id:r.id,name:r.name,savedAt:r.saved_at,data:r.data,_deleted:!!(r.data&&r.data._deleted)};});
-      lsSet('ts_manifests_cache',S.manifests);return !_ownEcho||_lsForeignChange;
+      lsSet('ts_manifests_cache',S.manifests);return !_ownEcho;
     }
   } else if(table==='ts_crew'){
     const crew=await sbF('ts_crew');
@@ -1496,7 +1730,7 @@ async function reloadTable(table){
     const acR=await sbF('ts_aircraft');
     if(acR&&acR.length){S.aircraft={};acR.forEach(function(r){S.aircraft[r.id]=r.data||r;});lsSet('ts_aircraft_cache',S.aircraft);return true;}
   } else if(table==='ts_users'){
-    const us=await sbF('ts_users');
+    const us=await sbF(USERS_TBL());
     if(us&&us.length){
       S.users=us.map(function(r){return{id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',
         passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,
@@ -1508,15 +1742,16 @@ async function reloadTable(table){
     }
   } else if(table==='ts_charter_rates'){
     const cr=await sbF('ts_charter_rates');
-    if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,r.rates||dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
+    if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,(r.rates&&parseFloat(r.rates.perHour)>0)?r.rates:dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
-      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance)&select=key,value',{headers:SH});
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured)&select=key,value',{headers:SH});
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
-          if(row.key==='role_perms'&&row.value&&Date.now()-(S._permsEditTs||0)>5000){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
+          if(row.key==='role_perms'&&row.value&&!_editingPerms()&&Date.now()-(S._permsEditTs||0)>5000){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
+          if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
           if(row.key==='maintenance'&&row.value){
             try{const m=JSON.parse(row.value);if(m&&m.hist){S.maintenance=m;lsSet('ts_maintenance',m);changed=true;}}catch(e){}
           }
@@ -1530,8 +1765,9 @@ async function reloadTable(table){
 
 // ── Presence broadcasting ──
 let _presInterval=null;
-function broadcastPresence(section){
-  S._presSection=section;
+// Raw presence send — broadcasts the given section WITHOUT changing the locally-tracked
+// section (so the idle guard can send a "clear" while remembering where the user really is).
+function _sendPres(section){
   if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
   _rtRef++;
   _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',
@@ -1540,6 +1776,30 @@ function broadcastPresence(section){
       section:section,color:presColor(S.user.id),ts:Date.now()
     }},ref:String(_rtRef)}));
 }
+function broadcastPresence(section){
+  S._presSection=section;
+  S._presIdle=false;S._lastActivity=Date.now();
+  _sendPres(section);
+}
+// Presence idle guard: a tab left open all day shouldn't keep someone in "Also viewing".
+// After PRES_IDLE_MS with no interaction we stop refreshing presence (and send one clear),
+// so they drop off everyone's bar within the 22s TTL. Any interaction resumes it instantly.
+var PRES_IDLE_MS=120000; // 2 minutes
+function _presTick(){
+  if(!S.user)return;
+  if(Date.now()-(S._lastActivity||0)<PRES_IDLE_MS){S._presIdle=false;broadcastPresence(S._presSection);}
+  else if(!S._presIdle){S._presIdle=true;_sendPres(null);}   // gone quiet → clear our presence
+}
+(function _presActivityInit(){
+  if(typeof window==='undefined'||window.__presActivityBound)return;
+  window.__presActivityBound=true;S._lastActivity=Date.now();
+  ['mousemove','mousedown','keydown','touchstart','wheel','scroll'].forEach(function(ev){
+    window.addEventListener(ev,function(){
+      S._lastActivity=Date.now();
+      if(S._presIdle&&S.user&&S._presSection){S._presIdle=false;broadcastPresence(S._presSection);}
+    },{passive:true,capture:true});
+  });
+})();
 function broadcastDispatch(){
   if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
   _rtRef++;
@@ -1592,11 +1852,11 @@ document.addEventListener('keydown',function(e){
   if(fi<0)return;
   let nextRow,nextField;
   if(!e.shiftKey){
-    if(fi<3){nextRow=rowIdx;nextField=fields[fi+1];}
-    else{nextRow=rowIdx+1;nextField='name';}
+    if(fi<fields.length-1){nextRow=rowIdx;nextField=fields[fi+1];}
+    else{nextRow=rowIdx+1;nextField=fields[0];}
   }else{
     if(fi>0){nextRow=rowIdx;nextField=fields[fi-1];}
-    else if(rowIdx>0){nextRow=rowIdx-1;nextField='bag';}
+    else if(rowIdx>0){nextRow=rowIdx-1;nextField=fields[fields.length-1];}
     else return;
   }
   // Save current field value before render destroys it
@@ -1625,7 +1885,7 @@ function startPresenceBroadcast(section){
   if(S._presSection===section)return;
   clearInterval(_presInterval);
   broadcastPresence(section);
-  _presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},9000);
+  _presInterval=setInterval(_presTick,9000);
 }
 
 // ── Collaborative manifest ──
@@ -1647,7 +1907,6 @@ function autoSaveDispatch(){
 
 // -- Loadsheet live sync --
 let _autoSaveLSTimer=null;
-let _ownLSSaveTs=0;
 function autoSaveLS(){
   const _id=S.editId;
   const _acCode=S.lsAc;
@@ -1682,25 +1941,36 @@ var _hiddenAt=0;
 document.addEventListener('visibilitychange',function(){
   if(document.hidden){
     _hiddenAt=Date.now();
-    if(S._presSection)broadcastPresence(null);
+    // Clear our presence on everyone else's bar, but KEEP S._presSection so the resume
+    // branch below (and on a quick tab-switch back) can re-announce us. Using broadcastPresence(null)
+    // here would null S._presSection and leave the resume as dead code.
+    if(S._presSection)_sendPres(null);
     clearInterval(_presInterval);
   } else {
     var awayMs=_hiddenAt?Date.now()-_hiddenAt:0;
-    // Came back after being away a while (phone backgrounded etc.) — the realtime
-    // socket has usually dropped, so the open loadsheets/manifests can be stale.
-    // Do a full refresh to pull the latest data + workspace. (No-cache headers make
-    // this cheap, and loadAll + restoreWorkspace rebuild the correct open tabs.)
     var _rUnsaved=(typeof _rosterUnsaved==='function')&&_rosterUnsaved();
-    if(S.user&&awayMs>60000&&!_rUnsaved){location.reload();return;}
-    // Brief switch — just reconnect realtime if it dropped, and resume presence.
+    // Reconnect realtime if the socket dropped while backgrounded, and resume presence.
     if(S.user&&(!_rtWs||_rtWs.readyState!==1)){try{initRealtime();}catch(e){}}
-    if(S._presSection){broadcastPresence(S._presSection);_presInterval=setInterval(function(){if(S.user)broadcastPresence(S._presSection);},9000);}
+    if(S._presSection){clearInterval(_presInterval);broadcastPresence(S._presSection);_presInterval=setInterval(_presTick,9000);}
+    // Came back after a longer absence: refresh the data IN PLACE instead of a full
+    // page reload. The old location.reload() flashed the login screen and visibly
+    // refreshed the page on return; reloading the core tables keeps the app mounted.
+    // Skipped while a roster draft is unsaved so we don't clobber it.
+    if(S.user&&awayMs>60000&&!_rUnsaved&&typeof _reloadCoreTables==='function'){
+      try{_reloadCoreTables().then(function(){safeRender();});}catch(e){}
+    }
   }
 });
 window.addEventListener('beforeunload',function(e){if(S._presSection)broadcastPresence(null);if(typeof _rosterUnsaved==='function'&&_rosterUnsaved()){e.preventDefault();e.returnValue='';return '';}});
 window.addEventListener('pagehide',function(){if(S._presSection)broadcastPresence(null);});
-// iOS/Safari restores frozen pages from the back/forward cache — force a fresh load.
-window.addEventListener('pageshow',function(e){if(e.persisted&&S.user)location.reload();});
+// iOS/Safari restores frozen pages from the back/forward cache — reconnect realtime and
+// refresh data in place rather than a full reload (which flashed the login screen).
+window.addEventListener('pageshow',function(e){
+  if(e.persisted&&S.user){
+    if(!_rtWs||_rtWs.readyState!==1){try{initRealtime();}catch(e){}}
+    if(typeof _reloadCoreTables==='function'){try{_reloadCoreTables().then(function(){safeRender();});}catch(e){}}
+  }
+});
 
 function broadcastLS(acCode,form,tabId){
   if(!_rtWs||_rtWs.readyState!==1||!S.user)return;
@@ -1728,9 +1998,6 @@ function mergeDispatch(remote){
   if(remote._loadedAt&&(!local._loadedAt||remote._loadedAt>local._loadedAt)){
     S.dispatch={...remote,seatMap:{},step:local.step||1};
     S.solverRes={};
-    const who=(S.users||[]).find(function(u){return u.id===remote._updatedBy;});
-    const whoName=who?(who.name||who.email).split(' ')[0]:'Someone';
-    toast(whoName+' loaded manifest: '+(remote.name||'untitled'),'info');
     safeRender();return;
   }
 
@@ -1740,11 +2007,17 @@ function mergeDispatch(remote){
   (remote.pax||[]).forEach(function(p){
     if(!paxMap[p.id]||(p._ts||0)>(paxMap[p.id]._ts||0)){paxMap[p.id]=p;}
   });
-  // Remove pax deleted by the other user (not in remote, and remote is more recent overall)
+  // Remove pax deleted by the other user (absent from remote, remote more recent overall).
+  // Guard against deleting a pax the remote simply HASN'T SEEN YET: a passenger added
+  // locally in the last 15s is protected, so a stale broadcast from another device that
+  // predates our just-added pax can't wipe it. Our autosave pushes within ~1-2s, so a
+  // genuine deletion of an older pax still propagates normally.
   if((remote._updateTs||0)>(local._updateTs||0)){
     const remIds=new Set((remote.pax||[]).map(function(p){return p.id;}));
+    const _now=Date.now();
     Object.keys(paxMap).forEach(function(id){
-      if(!remIds.has(id)&&(paxMap[id]._ts||0)<(remote._updateTs||0)){delete paxMap[id];}
+      const _pts=paxMap[id]._ts||0;
+      if(!remIds.has(id)&&_pts<(remote._updateTs||0)&&(_now-_pts)>15000){delete paxMap[id];}
     });
   }
   S.dispatch.pax=Object.values(paxMap);
@@ -1765,9 +2038,6 @@ function mergeDispatch(remote){
     S.dispatch._updateTs=remote._updateTs;
   }
 
-  const who=(S.users||[]).find(function(u){return u.id===remote._updatedBy;});
-  const whoName=who?(who.name||who.email).split(' ')[0]:'Someone';
-  toast(whoName+' updated the manifest','info');
   safeRender();
 }
 
@@ -1794,6 +2064,13 @@ window.handleForgot=async function(){
     if(el){el.style.display='block';el.textContent='Enter your email address first.';}
     return;
   }
+  if(AUTH_PHASE_C){
+    // Supabase Auth owns reset now — send its recovery email.
+    try{await fetch(SB+'/auth/v1/recover',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({email:email})});}catch(e){}
+    const el=document.getElementById('login-err');
+    if(el){el.style.display='block';el.style.color='#4ade80';el.textContent='If that email exists, a reset link is on its way.';}
+    return;
+  }
   const u=S.users.find(x=>x.email.toLowerCase()===email.toLowerCase());
   if(!u){
     const el=document.getElementById('login-err');
@@ -1805,9 +2082,9 @@ window.handleForgot=async function(){
   const expires=Date.now()+30*60*1000;
   u.resetToken=token;u.resetExpires=expires;
   lsSet('ts_users_cache',S.users);
-  // Save token to Supabase
+  // Save token to Supabase (sbUserWrite drops the empty hash under Phase A so it isn't wiped).
   try{
-    await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,
+    await sbUserWrite([{id:u.id,name:u.name,email:u.email,role:u.role,
       linked_crew:u.linkedCrew||'',password_hash:u.passwordHash,
       reset_token:token,reset_expires:expires}]);
   }catch(e){console.warn('Token save failed:',e);}
@@ -1836,16 +2113,24 @@ window.handleReset=async function(){
   if(!code){showResetErr('Enter the 6-digit code from your email.');return;}
   if(!newPw||newPw.length<6){showResetErr('Password must be at least 6 characters.');return;}
   if(newPw!==conf){showResetErr('Passwords do not match.');return;}
-  const u=S.users.find(x=>x.resetToken===code&&x.resetExpires&&Date.now()<x.resetExpires);
-  if(!u){showResetErr('Invalid or expired code. Request a new one.');return;}
-  u.passwordHash=await hashPw(newPw);delete u.resetToken;delete u.resetExpires;
-  lsSet('ts_users_cache',S.users);
-  try{
-    await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,
-      linked_crew:u.linkedCrew||'',password_hash:u.passwordHash,
-      reset_token:null,reset_expires:null}]);
-  }catch(e){}
-  auditLog('password_reset','Password reset for '+u.email);
+  if(AUTH_PHASE_A){
+    // Token is hidden from the client now — verify + set server-side.
+    const em=S.resetEmail||(document.getElementById('li_e')?.value||'').trim();
+    const res=await callFn('confirm-reset',{email:em,code:code,newPassword:newPw});
+    if(!res.ok){showResetErr(res.data&&res.data.error==='invalid_code'?'Invalid or expired code. Request a new one.':'Could not reset password. Try again.');return;}
+    auditLog('password_reset','Password reset (server) for '+(em||'user'));
+  } else {
+    const u=S.users.find(x=>x.resetToken===code&&x.resetExpires&&Date.now()<x.resetExpires);
+    if(!u){showResetErr('Invalid or expired code. Request a new one.');return;}
+    u.passwordHash=await hashPw(newPw);delete u.resetToken;delete u.resetExpires;
+    lsSet('ts_users_cache',S.users);
+    try{
+      await sbUserWrite([{id:u.id,name:u.name,email:u.email,role:u.role,
+        linked_crew:u.linkedCrew||'',password_hash:u.passwordHash,
+        reset_token:null,reset_expires:null}]);
+    }catch(e){}
+    auditLog('password_reset','Password reset for '+u.email);
+  }
   S.resetStep=0;S.resetCode=null;S.resetEmail='';
   // Show success and pre-fill email
   S.loginErr=null;
@@ -1866,12 +2151,38 @@ async function _doLogin(emailArg,passArg){
     else render();
   }
   if(!email||!pass){showErr('Please enter your email and password.');return;}
-  // find user by email first, then verify password async
-  const uByEmail=S.users.find(x=>x.email.toLowerCase()===email.toLowerCase());
-  const pwOk=uByEmail?await verifyPw(pass,uByEmail.passwordHash):false;
-  const u=pwOk?uByEmail:null;
-  // auto-upgrade legacy btoa hash to SHA-256
-  if(u&&u.passwordHash===btoa(pass)){u.passwordHash=await hashPw(pass);lsSet('ts_users_cache',S.users);try{await sbU('ts_users',[{id:u.id,password_hash:u.passwordHash}]);}catch(e){}}
+  let u=null;
+  if(AUTH_PHASE_C){
+    // Real Supabase Auth: sign in (migrating the legacy password on first login), then
+    // build the user from the JWT claims.
+    const r=await _sbSignIn(email,pass);
+    if(r&&r.ok){
+      _applySession(r.session);
+      u=_userFromClaims(r.claims||{});
+      const _ix=S.users.findIndex(x=>x.id===u.id);if(_ix>=0)S.users[_ix]=Object.assign({},S.users[_ix],u);else if(u.id)S.users.push(u);
+    } else if(r&&r.offline){
+      showErr('Login service unavailable. Check your connection and try again.');return;
+    }
+  } else if(AUTH_PHASE_A){
+    // Server-side verification — hashes never reach the browser.
+    const res=await callFn('verify-login',{email,password:pass});
+    if(res.ok&&res.data&&res.data.user){
+      const vu=res.data.user;
+      u={id:vu.id,name:vu.name,email:vu.email,role:vu.role,linkedCrew:vu.linked_crew||'',passwordHash:'',
+         weight:parseFloat(vu.weight)||0,isPilot:vu.is_pilot||vu.role==='pilot'||false,inactive:vu.inactive||false};
+      // Keep S.users in sync with the verified record.
+      const _ix=S.users.findIndex(x=>x.id===u.id);if(_ix>=0)S.users[_ix]=Object.assign({},S.users[_ix],u);else S.users.push(u);
+    } else if(res.status===0){
+      showErr('Login service unavailable. Check your connection and try again.');return;
+    }
+  } else {
+    // find user by email first, then verify password async
+    const uByEmail=S.users.find(x=>x.email.toLowerCase()===email.toLowerCase());
+    const pwOk=uByEmail?await verifyPw(pass,uByEmail.passwordHash):false;
+    u=pwOk?uByEmail:null;
+    // auto-upgrade legacy btoa hash to SHA-256
+    if(u&&u.passwordHash===btoa(pass)){u.passwordHash=await hashPw(pass);lsSet('ts_users_cache',S.users);try{await sbUserWrite([{id:u.id,password_hash:u.passwordHash}]);}catch(e){}}
+  }
   if(!u){
     showErr('Invalid email or password. Check your details and try again.');
     // Audit failed attempt
@@ -1890,6 +2201,8 @@ async function _doLogin(emailArg,passArg){
   // Update auth header to use user's session token if available (fixes RLS for writes)
   if(u.sessionToken) SH['Authorization']='Bearer '+u.sessionToken;
   S.tab=u.role==='maint'?'maintenance':'manifest';S._appLoading=true;render();initRealtime();setTimeout(function(){restoreWorkspace();},600);setTimeout(function(){S._appLoading=false;render();},1400);
+  // Phase C: the boot fetch ran as anon (RLS hid protected tables) — reload them now the JWT is set.
+  if(AUTH_PHASE_C){_reloadCoreTables().then(function(){safeRender();});}
   // Fetch latest audit log from Supabase after login
   if(u.superAdmin){
     (async()=>{try{
@@ -1905,9 +2218,22 @@ async function _doLogin(emailArg,passArg){
   }
 }
 
-window.tryLogin=function(){_doLogin();};
+window.tryLogin=async function(){
+  if(S._loggingIn)return;                 // guard against double-submit
+  S._loggingIn=true;
+  var _b=document.querySelector('#login-form button[type=submit]');
+  if(_b){_b.disabled=true;_b.textContent='Signing in…';_b.style.opacity='.7';}
+  try{await _doLogin();}
+  finally{S._loggingIn=false;if(_b&&document.body.contains(_b)){_b.disabled=false;_b.innerHTML='✈ Sign In';_b.style.opacity='1';}}
+};
 window.updateLoginSuffix=function(){var s=document.getElementById('li_e_sfx');var e=document.getElementById('li_e');if(s&&e)s.style.display=e.value.includes('@')?'none':'';};
-function logout(){S.user=null;sessionStorage.removeItem('ts_user');localStorage.removeItem('ts_remembered_user');broadcastPresence(null);if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}S.rtStatus='offline';S.rtPresence={};S._presSection=null;clearInterval(_presInterval);render();}
+function logout(){
+  if(AUTH_PHASE_C){
+    try{if(_sbSession&&_sbSession.access_token)fetch(SB+'/auth/v1/logout',{method:'POST',headers:{'apikey':SK,'Authorization':'Bearer '+_sbSession.access_token}}).catch(function(){});}catch(e){}
+    try{localStorage.removeItem('ts_sb_session');}catch(e){}
+    clearTimeout(_sbRefreshTimer);_applySession(null);  // restores the anon key on SH
+  }
+  S.user=null;sessionStorage.removeItem('ts_user');localStorage.removeItem('ts_remembered_user');S._notifications=[];S.__notifStr='';S._notifOpen=false;broadcastPresence(null);if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}S.rtStatus='offline';S.rtPresence={};S._presSection=null;clearInterval(_presInterval);render();}
 
 // ── Shared Workspace Persistence ──
 async function saveWorkspace(){
@@ -1924,11 +2250,13 @@ async function restoreWorkspace(){
   if(!S.user)return;
   try{
     var _r=await fetch(SB+'/rest/v1/ts_settings?key=eq.workspace_shared&select=value&limit=1',{headers:{'apikey':SK,...SH}});
-    if(!_r.ok)return;
-    var _rows=await _r.json();
-    if(!_rows.length||!_rows[0].value)return;
-    _applyWorkspace(JSON.parse(_rows[0].value));
+    if(_r.ok){
+      var _rows=await _r.json();
+      if(_rows.length&&_rows[0].value)_applyWorkspace(JSON.parse(_rows[0].value));
+    }
   }catch(e){}
+  // Always return to the last-viewed page on boot/login, even with no shared workspace.
+  try{_restoreLastView();safeRender();}catch(e){}
 }
 
 function _applyWorkspace(ws){
@@ -1975,14 +2303,17 @@ function _applyWorkspace(ws){
       _render=true;
     }
   });
-  _restoreLastView();
   if(_render)safeRender();
 }
 // Return to the same page (section / tab / open loadsheet or manifest) after a reload,
 // as long as that item is still open.
 function _restoreLastView(){
+  // Read the saved view BEFORE we enable saving again — boot renders were gated so this
+  // value is still the user's real last page. From here on, renders may save the view.
+  var _savedView=null;try{_savedView=JSON.parse(localStorage.getItem('ts_lastview')||'null');}catch(e){}
+  S._viewRestored=true;
   try{
-    var v=JSON.parse(localStorage.getItem('ts_lastview')||'null');
+    var v=_savedView;
     if(!v||!v.section)return;
     if(v.section==='operations'){
       S.section='operations';

@@ -56,6 +56,29 @@ document.addEventListener('focusout',function(e){
   }
 });
 
+// Which permission a top-level section requires. Everything routes through hasRolePerm so the
+// permission grid governs access for every role (superadmin is all-true via DEFAULT_ROLE_PERMS).
+// 'leave' (My Leave) is the universal fallback every role can reach.
+function _sectionAllowed(sec){
+  if(!S.user)return false;
+  switch(sec){
+    case 'maintenance': return hasRolePerm('maintenance');
+    case 'roster':      return hasRolePerm('roster');
+    case 'leave':       return hasRolePerm('leave');
+    case 'rezdy':       return hasRolePerm('rezdy');
+    case 'settings':    return hasRolePerm('admin_users')||hasRolePerm('admin_crew');
+    case 'operations':  return hasRolePerm('operations');
+    default:            return true;
+  }
+}
+function _firstAllowedSection(){
+  var order=['operations','maintenance','roster','rezdy','leave','settings'];
+  for(var i=0;i<order.length;i++){if(_sectionAllowed(order[i]))return order[i];}
+  return 'leave';
+}
+function _defaultTabFor(sec){
+  return sec==='maintenance'?'maintenance':sec==='operations'?'manifest':sec==='settings'?'admin':sec;
+}
 function render(){
   const r=document.getElementById('root');
   if(!r)return;
@@ -64,7 +87,9 @@ function render(){
   if(typeof S._mobileInit==='undefined'){S._mobileInit=true;if(typeof S.mobileView==='undefined')S.mobileView=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)&&window.innerWidth<800;}
   document.body.classList.toggle('mobile-view',!!S.mobileView);
   // ── Remember the current view so a reload returns to the same page ──
-  if(S.user){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'manifest',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
+  // Gated on S._viewRestored so the default-view renders during boot DON'T overwrite the
+  // saved last view before _restoreLastView() has had a chance to read and apply it.
+  if(S.user&&S._viewRestored){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'manifest',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
   // ── Preserve focused input across re-renders ──
   const _ae=document.activeElement;
   const _aeId=_ae?.id||null;
@@ -102,12 +127,15 @@ function render(){
   // Hide login, show app
   if(lo) lo.style.display='none';
   r.style.display='';
-  // Maintenance-only users: redirect to maintenance if on wrong tab
-  if(S.user?.role==='maint'&&S.section!=='maintenance'){S.tab='maintenance';S.section='maintenance';}
+  // Access is permission-driven (the permission grid is the single source of truth for every
+  // role — no hardcoded role gates). If the user is on a section they're not permitted to
+  // (default boot, a stale last-view, or a revoked permission), bounce them to their first
+  // allowed section. Superadmin passes everything via DEFAULT_ROLE_PERMS; admin follows the grid.
+  if(S.user&&!_sectionAllowed(S.section||'operations')){var _fs=_firstAllowedSection();S.section=_fs;S.tab=_defaultTabFor(_fs);}
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
-  if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
+  if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest&&S._lsMapOpen)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
   // ── Restore focus after re-render ──
   // Force-focus (set by Tab handler) takes priority over activeElement detection
   if(_ffRow!==null){
@@ -143,7 +171,7 @@ function toast(msg, type){
 function renderToasts(){
   const toasts=S.toasts||[];
   if(!toasts.length) return '';
-  return '<div style="position:fixed;top:16px;right:16px;z-index:9998;display:flex;flex-direction:column;gap:8px;max-width:340px">'+
+  return '<div class="toast-wrap" style="position:fixed;z-index:9998;display:flex;flex-direction:column;gap:8px;max-width:340px">'+
     toasts.map(function(t){
       const bg=t.type==='ok'?'#166534':t.type==='err'?'#7f1d1d':t.type==='warn'?'#78350f':'#1e3a5f';
       const border=t.type==='ok'?'#22c55e':t.type==='err'?'#ef4444':t.type==='warn'?'#f59e0b':'#3b82f6';
@@ -172,11 +200,13 @@ async function auditLog(action, detail){
   S.auditLog=S.auditLog||[];
   S.auditLog.unshift(entry);
   lsSet('ts_audit_log',S.auditLog.slice(0,1000));
-  // Push to Supabase ts_audit_log table
+  // Push to Supabase ts_audit_log table (use the signed-in JWT via SH so rows are
+  // attributed to the authenticated user and a mid-session token refresh is honoured;
+  // SH falls back to the anon key pre-login, which is correct for login-failure rows).
   try{
-    await fetch(SB+'/rest/v1/ts_audit_log',{
+    await _sbFetch(SB+'/rest/v1/ts_audit_log',{
       method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK,'Prefer':'return=minimal'},
+      headers:{...SH,'Prefer':'return=minimal'},
       body:JSON.stringify({user_email:entry.user,user_name:entry.name,role:entry.role,action:entry.action,detail:entry.detail,device:entry.device,created_at:entry.time})
     });
   }catch(e){console.warn('Audit log push failed:',e);}
@@ -220,7 +250,7 @@ function renderLoginInner(){
           <label style="display:block;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase">Email</label>
           <div style="display:flex;align-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;overflow:hidden">
             <input id="li_e" type="text" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
-              style="flex:1;padding:11px 14px;background:transparent;border:none;color:#fff;font-size:14px;outline:none;min-width:0;max-width:calc(100% - 160px)"
+              style="flex:1;padding:11px 14px;background:transparent;border:none;color:#fff;font-size:14px;outline:none;min-width:0;width:100%"
               oninput="window.updateLoginSuffix()" onfocus="document.getElementById('li_e_sfx').style.display='inline';window.updateLoginSuffix()" onblur="if(!this.value)document.getElementById('li_e_sfx').style.display='none';" onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
             <span id="li_e_sfx" style="display:none;flex-shrink:0;padding:0 12px 0 0;color:rgba(255,255,255,.45);font-size:12px;white-space:nowrap;align-self:center">@truesouthflights.co.nz</span>
           </div>
@@ -286,15 +316,21 @@ window.changePasswordFromModal=async function(){
   const cur=curEl?curEl.value:'';
   const nw=newEl?newEl.value:'';
   const conf=confEl?confEl.value:'';
-  if(isOwnAccount&&!await verifyPw(cur,S.user.passwordHash)){S.admin.pwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
   if(nw.length<6){S.admin.pwMsg={ok:false,text:'Min 6 characters.'};render();return;}
   if(nw!==conf){S.admin.pwMsg={ok:false,text:'Passwords do not match.'};render();return;}
+  // Phase A: own-account change must verify the current password server-side (hash is hidden).
+  if(AUTH_PHASE_A&&isOwnAccount){
+    const res=await callFn('set-password',{mode:'self',email:S.user.email,currentPassword:cur,newPassword:nw});
+    if(!res.ok){S.admin.pwMsg={ok:false,text:res.data&&res.data.error==='invalid_login'?'Current password is incorrect.':'Could not update password.'};render();return;}
+    S.admin.pwMsg={ok:true,text:'Password updated.'};render();return;
+  }
+  if(isOwnAccount&&!await verifyPw(cur,S.user.passwordHash)){S.admin.pwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
   const user=S.users.find(function(x){return x.id===m.userId;});
   const nwHash=await hashPw(nw);
   if(user)user.passwordHash=nwHash;
   if(isOwnAccount){S.user.passwordHash=nwHash;sessionStorage.setItem('ts_user',JSON.stringify(S.user));}
   lsSet('ts_users_cache',S.users);
-  try{await sbU('ts_users',[{id:m.userId,password_hash:nwHash}]);}catch(e){}
+  try{await sbUserWrite([{id:m.userId,password_hash:nwHash}]);}catch(e){}
   S.admin.pwMsg={ok:true,text:'Password updated.'};render();
 };
 
@@ -315,9 +351,16 @@ window.changeMyPassword=async function(){
   const nw=document.getElementById('acc_new')?.value||'';
   const conf=document.getElementById('acc_conf')?.value||'';
   const u=S.user;
-  if(!await verifyPw(cur,u.passwordHash)){S.changePwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
   if(nw.length<6){S.changePwMsg={ok:false,text:'New password must be at least 6 characters.'};render();return;}
   if(nw!==conf){S.changePwMsg={ok:false,text:'New passwords do not match.'};render();return;}
+  // Phase A: verify current + set new server-side (the hash is no longer client-side).
+  if(AUTH_PHASE_A){
+    const res=await callFn('set-password',{mode:'self',email:u.email,currentPassword:cur,newPassword:nw});
+    if(!res.ok){S.changePwMsg={ok:false,text:res.data&&res.data.error==='invalid_login'?'Current password is incorrect.':'Could not update password.'};render();return;}
+    auditLog('password_change','User changed their own password (server)');
+    S.changePwMsg={ok:true,text:'Password updated successfully.'};render();return;
+  }
+  if(!await verifyPw(cur,u.passwordHash)){S.changePwMsg={ok:false,text:'Current password is incorrect.'};render();return;}
   // Update in S.users
   const stored=S.users.find(x=>x.id===u.id);
   const nwHash2=await hashPw(nw);
@@ -326,7 +369,7 @@ window.changeMyPassword=async function(){
   sessionStorage.setItem('ts_user',JSON.stringify(u));
   lsSet('ts_users_cache',S.users);
   try{
-    await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,
+    await sbUserWrite([{id:u.id,name:u.name,email:u.email,role:u.role,
       linked_crew:u.linkedCrew||'',password_hash:nwHash2,
       reset_token:null,reset_expires:null}]);
   }catch(e){}
@@ -338,29 +381,21 @@ window.changeMyPassword=async function(){
 function renderRosterPlaceholder(){
   return '<div class="card" style="text-align:center;padding:48px 24px"><div style="font-size:32px;margin-bottom:12px">🗓️</div><div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Roster</div><div style="font-size:13px;color:var(--text3)">Coming soon — staff roster and scheduling.</div></div>';
 }
-function renderRezdy(){
-  if((S.user?.role||'')!=='superadmin')return'<div class="page"><div class="card" style="text-align:center;padding:40px">Not available.</div></div>';
-  return `<div class="card" style="max-width:760px;margin:0 auto">
-    <div class="st">Rezdy Integration</div>
-    <div style="text-align:center;padding:30px 10px">
-      <div style="font-size:40px;margin-bottom:10px">🔗</div>
-      <div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Coming soon</div>
-      <div style="font-size:13px;color:var(--text3);line-height:1.7;max-width:520px;margin:0 auto">
-        Placeholder for the upcoming Rezdy integration: pulling bookings (passengers, weights, pick-ups, booking number, date, departure and payment details) into True South.
-        This will run through a secure server-side connection — the API key will never live in the app.
-      </div>
-      <div style="margin-top:18px;font-size:11px;color:var(--text3);opacity:.7">Visible to superadmin only while in development.</div>
-    </div>
-  </div>`;
-}
+/* renderRezdy() now lives in modules/rezdy.js (Bookings + Pickups + Schedule). */
 function renderDrawer(){
   const role=S.user?.role||'desk';
   const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
   const _isAdminPlus=role==='superadmin'||role==='admin';
-  const _canOps=_isAdminPlus||_navPerms.operations===true;
-  const _canCharter=_isAdminPlus||_navPerms.charter===true;
-  const _canMaint=_isAdminPlus||_navPerms.maintenance===true;
-  const _canRoster=_isAdminPlus||_navPerms.roster===true;
+  // Nav visibility is driven by the permission grid for EVERY role (superadmin is all-true via
+  // DEFAULT_ROLE_PERMS; admin follows its grid row). No blanket admin override on perm-backed items.
+  const _canOps=hasRolePerm('operations');
+  const _canCharter=hasRolePerm('charter');
+  const _canMaint=hasRolePerm('maintenance');
+  const _canLeave=hasRolePerm('leave');
+  // Roster VIEW is gated on the 'roster' permission (the grid's "Roster & Leave" column).
+  // Roles without it (e.g. maint, ground_staff, marketing) don't see the Roster nav item.
+  // Editing remains separately gated inside renderRoster on roster_edit / admin / superadmin.
+  const _canRoster=hasRolePerm('roster');
   const sec=S.section||'operations';
   // Drawer sections expand/collapse independently; default all closed (shut on login). Kept in memory so reopening the burger shows the same state.
   S._drawerExp=S._drawerExp||{};
@@ -379,8 +414,8 @@ function renderDrawer(){
   var h='<div style="position:fixed;inset:0;z-index:1000;display:flex" onclick="S._drawerOpen=false;S._notifOpen=false;render()">';
   h+='<div onclick="event.stopPropagation()" style="width:270px;height:100%;background:linear-gradient(180deg,#080c17,#0d1526);border-right:1px solid rgba(255,255,255,.1);overflow-y:auto;display:flex;flex-direction:column;padding-top:max(0px,env(safe-area-inset-top));flex-shrink:0">';
   h+='<div style="padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px">';
-  h+='<div style="width:32px;height:32px;border-radius:7px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0"><img src="'+LOGO+'" style="width:27px;height:27px;object-fit:contain" alt=""></div>';
-  h+='<div style="flex:1"><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:16px;font-weight:800;letter-spacing:.06em;color:#fff">TRUE SOUTH</div><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:10px;font-weight:600;letter-spacing:.1em;color:rgba(255,255,255,.35)">FLIGHT MANAGEMENT</div></div>';
+  h+='<img src="'+_TS_LOGO+'" alt="True South Flights" style="height:30px;width:auto;max-width:175px;object-fit:contain;flex-shrink:0">';
+  h+='<div style="flex:1"></div>';
   h+='<button onclick="S._drawerOpen=false;render()" style="background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;padding:5px 7px;border-radius:6px;flex-shrink:0;line-height:1">✕</button>';
   h+='</div>';
   h+='<nav style="flex:1;padding:10px 8px">';
@@ -394,18 +429,20 @@ function renderDrawer(){
       if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
     }
   }
-  // Roster & Leave combined
-  {var _canApproveLeaveNav=role==='superadmin'||role==='admin'||role==='cx_manager';
+  // Roster & Leave combined — show the group only if the user can reach at least one item.
+  {var _canApproveLeaveNav=hasRolePerm('leave_approve');
+  if(_canRoster||_canLeave||_canApproveLeaveNav){
   var _lvActive=sec==='leave';
-  var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending';}).length:0;
+  // Match the Approvals tab: only count pending requests this approver can actually action.
+  var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveRole!=='function'||_lvCanApproveRole(role,r.user_role||'desk'));}).length:0;
   var _rlOn=sec==='roster'||sec==='leave';
   var _rlExp=_isExp('roster');
   h+='<button tabindex="-1" onclick="S._drawerExp[\'roster\']=!S._drawerExp[\'roster\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_rlOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_rlOn?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(_rlOn?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px"><span style="flex:1">🗓️ Roster'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_rlExp?'▲':'▼')+'</span></button>';
   if(_rlExp){
     if(_canRoster)h+=_subBtn('Roster',sec==='roster',"S._drawerOpen=false;S.section='roster';render()",true);
-    h+=_subBtn('My Leave',_lvActive&&(!S._leave||S._leave.tab==='my'),"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='my';render()");
+    if(_canLeave)h+=_subBtn('My Leave',_lvActive&&(!S._leave||S._leave.tab==='my'),"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='my';render()");
     if(_canApproveLeaveNav)h+=_subBtn('Approvals',_lvActive&&S._leave&&S._leave.tab==='approvals',"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='approvals';render()");
-  }}
+  }}}
   if(_canMaint){
     h+=_secBtn('Maintenance','maintenance','🔧');
     if(_isExp('maintenance')){
@@ -415,29 +452,30 @@ function renderDrawer(){
       h+=_mn('Logs','log');
       h+=_mn('Aircraft','aircraft');
       h+=_mn('Observations','observations');
-      if(_isAdminPlus){h+=_mn('Bookings','bookings');h+=_mn('Estimator','estimator');}
+      if(hasRolePerm('maint_bookings')){h+=_mn('Bookings','bookings');h+=_mn('Estimator','estimator');}
       h+=_mn('Search','search');
     }
   }
-  {
+  {var _canUsers=hasRolePerm('admin_users');
+   var _canCrew=hasRolePerm('admin_crew');
+   if(_canUsers||_canCrew){
     h+=_secBtn('Settings','settings','⚙️');
     if(_isExp('settings')){
       var adSec=(S.admin||{}).section||'people';
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
+      h+=_sn('People','people');
+      if(_canUsers)h+=_sn('Permissions','perms');
       if(_isAdminPlus){
-        h+=_sn('People','people');
-        h+=_sn('Permissions','perms');
         h+=_sn('Drive','gdrive');
         h+=_sn('Aerodromes','aerodromes');
         h+=_sn('Statistics','statistics');
-        if(role==='superadmin')h+=_sn('Audit','audit');
-      } else {
-        h+=_subBtn('People',sec==='settings',"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='people';window.setTab('admin')");
       }
+      if(hasRolePerm('audit'))h+=_sn('Audit','audit');
     }
+   }
   }
-  // Rezdy integration — superadmin only (work in progress)
-  if(role==='superadmin'){
+  // Rezdy integration — gated on the 'rezdy' permission (superadmin only by default)
+  if(hasRolePerm('rezdy')){
     h+=_secBtn('Rezdy','rezdy','🔗');
     if(_isExp('rezdy')){
       h+=_subBtn('Integration',sec==='rezdy',"S._drawerOpen=false;S.section='rezdy';render()");
@@ -462,24 +500,24 @@ function renderOpsSubTabs(){
   h+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" style="flex-shrink:0">Seatmap</button>';
   h+='<button tabindex="-1" class="sub-tab '+(isLsView?'on':'')+'" onclick="window.switchToLoadsheets()" style="flex-shrink:0">Loadsheets</button>';
   h+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="flex-shrink:0">Saved ('+savedCount+')</button>';
-  if(_isOpsAdminPlus||_opsNavPerms.charter===true)h+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="flex-shrink:0">Charter</button>';
+  if(hasRolePerm('charter'))h+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="flex-shrink:0">Charter</button>';
   h+='</div>';
   return h;
 }
 
 function renderSettingsSubTabs(){
-  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
-  if(!isAdmin) return '';
+  // Settings sub-tabs follow the permission grid for every role (consistent with the drawer).
+  const _canUsers=hasRolePerm('admin_users');
+  const _canCrew=hasRolePerm('admin_crew');
+  const _adminPlus=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
+  if(!_canUsers&&!_canCrew&&!_adminPlus) return '';
   const ad=S.admin||{};
   const cur=ad.section||'people';
-  const sections=[
-    {id:'people',     lbl:'People'},
-    {id:'perms',      lbl:'Permissions'},
-    {id:'gdrive',     lbl:'Drive'},
-    {id:'aerodromes', lbl:'Aerodromes'},
-    {id:'statistics', lbl:'Statistics'},
-    ...(S.user?.superAdmin?[{id:'audit',lbl:'Audit'}]:[])
-  ];
+  const sections=[];
+  if(_canUsers||_canCrew)sections.push({id:'people',lbl:'People'});
+  if(_canUsers)sections.push({id:'perms',lbl:'Permissions'});
+  if(_adminPlus)sections.push({id:'gdrive',lbl:'Drive'},{id:'aerodromes',lbl:'Aerodromes'},{id:'statistics',lbl:'Statistics'});
+  if(hasRolePerm('audit'))sections.push({id:'audit',lbl:'Audit'});
   var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
   sections.forEach(function(s){
     h+='<button tabindex="-1" class="sub-tab '+(cur===s.id?'on':'')+'" onclick="if(!S.admin)S.admin={};S.admin.section=\''+s.id+'\';render()" style="flex-shrink:0">'+s.lbl+'</button>';
@@ -513,11 +551,7 @@ function renderApp(){
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:10px">
           <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;S._drawerSection=S.section;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1" title="Menu">☰</button>
-          <div style="width:38px;height:38px;border-radius:8px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden"><img src="${LOGO}" style="width:32px;height:32px;object-fit:contain" alt=""></div>
-          <div>
-            <div style="font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:800;letter-spacing:.06em;color:#fff">TRUE SOUTH</div>
-            <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.12em;color:rgba(255,255,255,.55)">FLIGHT MANAGEMENT SYSTEM</div>
-          </div>
+          <img src="${_TS_LOGO}" alt="True South Flights" style="height:38px;width:auto;display:block;object-fit:contain">
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
           <div style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)" title="${S.rtStatus==='live'?'Live — synced':S.rtStatus==='connecting'?'Connecting...':'Offline'}">
@@ -573,7 +607,10 @@ function renderApp(){
         const _sec=S.section||'operations';
         if(_sec==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';
         if(_sec==='settings')return'<div id="flash-admin">'+renderAdmin()+'</div>';
-        if(_sec==='roster')return'<div id="flash-roster">'+renderRoster()+'</div>';
+        if(_sec==='roster'){
+          if(S.user&&(S.user.role==='superadmin'||S.user.role==='admin'||hasRolePerm('roster')))return'<div id="flash-roster">'+renderRoster()+'</div>';
+          return'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">You don\'t have access to the roster.</div>';
+        }
         if(_sec==='leave')return'<div id="flash-leave">'+renderLeave()+'</div>';
         if(_sec==='rezdy')return renderRezdy();
         return renderOperations();
@@ -597,17 +634,16 @@ function _triggerFlash(ids){
 function _applyLsFlash(){
   if(!S._lsFlash)return;
   var now=Date.now();
+  // All loadsheet live-edit signals (fuel/route/seats) flash the combined loadsheet card.
+  var el=document.getElementById('lsf-loading');
   Object.keys(S._lsFlash).forEach(function(k){
     var age=now-S._lsFlash[k];
-    if(age>2200){delete S._lsFlash[k];return;}
-    var elId=k==='fuel'?'lsf-fuel':(k==='route'?'lsf-seats':'lsf-seats');
-    var el=document.getElementById(elId);
+    if(age>2200){delete S._lsFlash[k];return;}   // only drop the key once expired
     if(el&&!el.classList.contains('ls-flash')){
       el.classList.add('ls-flash');
       var rem=Math.max(100,2000-age);
       setTimeout(function(){if(el)el.classList.remove('ls-flash');},rem);
     }
-    delete S._lsFlash[k];
   });
   _triggerFlash('flash-loadsheet');
 }

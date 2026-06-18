@@ -1,10 +1,14 @@
 function renderAdmin(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
-  // Non-admin: show sub-tabs based on their role permissions
+  // Non-admin: the permission grid governs what they see. admin_users can reach the full
+  // settings area; admin_crew alone gets People. Anything the section-router lands them on
+  // that they lack permission for falls back to People (or a no-access note).
   if(!isAdmin){
-    const _role=S.user?.role||'desk';
-    const _rp=S.rolePerms?.[_role]||DEFAULT_ROLE_PERMS[_role]||{};
-    if(_rp.admin_crew!==false) return renderAdminPeople();
+    if(typeof hasRolePerm==='function'&&hasRolePerm('admin_users')){
+      const _s=(S.admin||{}).section||'people';
+      return {people:renderAdminPeople,perms:renderAdminPerms}[_s]?.()||renderAdminPeople();
+    }
+    if(typeof hasRolePerm==='function'&&hasRolePerm('admin_crew')) return renderAdminPeople();
     return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
   }
   const ad=S.admin;
@@ -274,8 +278,8 @@ function renderAdminPeople(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
   const ad=S.admin;
   const today=new Date();today.setHours(0,0,0,0);
-  const ROLE_LEVEL={superadmin:1,admin:2,cx_manager:2,pilot:3,desk:3,maint:3,ground_staff:4,ground:4,accounts:3,marketing:3};
-const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9a8d4',maint:'#a78bfa',ground_staff:'#a16207',ground:'#a16207',accounts:'#06b6d4',marketing:'#ec4899'};
+  const ROLE_LEVEL={superadmin:1,admin:2,cx_manager:2,pilot:3,desk:3,maint:3,ground_staff:4,accounts:3,marketing:3};
+const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9a8d4',maint:'#a78bfa',ground_staff:'#a16207',accounts:'#06b6d4',marketing:'#ec4899'};
   function expiryCol(v){if(!v)return'var(--text3)';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'#ef4444':dy<30?'#f59e0b':'#22c55e';}
   function expiryBg(v){if(!v)return'transparent';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'rgba(239,68,68,.08)':dy<30?'rgba(245,158,11,.08)':'transparent';}
   function fmt(v){if(!v)return'—';const p=v.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:v;}
@@ -374,8 +378,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'<option value="pilot"'+(d.role==='pilot'?' selected':'')+'>Pilot</option>'
         +'<option value="desk"'+(d.role==='desk'?' selected':'')+'>Desk</option>'
         +'<option value="maint"'+(d.role==='maint'?' selected':'')+'>Maintenance</option>'
-        +'<option value="ground_staff"'+(d.role==='ground_staff'?' selected':'')+'>Ground Staff</option>'
-        +'<option value="ground"'+(d.role==='ground'?' selected':'')+'>Ground</option>'
+        +'<option value="ground_staff"'+(d.role==='ground_staff'||d.role==='ground'?' selected':'')+'>Ground</option>'
         +'<option value="accounts"'+(d.role==='accounts'?' selected':'')+'>Accounts</option>'
         +'<option value="marketing"'+(d.role==='marketing'?' selected':'')+'>Marketing</option>'
         +'</select></div>':'')
@@ -385,14 +388,6 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
         +'background:'+(d.isPilot?'rgba(59,130,246,.3)':'rgba(255,255,255,.06)')+';'
         +'color:'+(d.isPilot?'#60a5fa':'var(--text3)')+'">✈ '+(d.isPilot?'Yes — PIC':'No')+'</button>'
-        +'</div>':'')
-        +(isAdmin&&m.userId?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border2)">'
-        +'<label style="font-size:11px;color:var(--text3);flex:1">MARK AS INACTIVE (hides from roster &amp; dropdowns from chosen date)</label>'
-        +'<button onclick="S.admin.personModal.draft.inactive=!S.admin.personModal.draft.inactive;render()" '
-        +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
-        +'background:'+(d.inactive?'rgba(239,68,68,.25)':'rgba(255,255,255,.06)')+';'
-        +'color:'+(d.inactive?'#f87171':'var(--text3)')+'">'
-        +(d.inactive?'Inactive':'Active')+'</button>'
         +'</div>':'')
         +(isAdmin&&m.userId?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border2)">'
         +'<label style="font-size:11px;color:var(--text3);flex:1">MARK AS INACTIVE (hides from roster &amp; dropdowns from chosen date)</label>'
@@ -494,13 +489,13 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;overflow:hidden">'
       +(code?'<span style="font-size:10px;background:var(--card2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;flex-shrink:0">'+code+'</span>':'')
-      +'<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+name+'</span>'
+      +'<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+esc(name)+'</span>'
       +(isMe?'<span style="font-size:10px;color:var(--text3);flex-shrink:0;white-space:nowrap">(you)</span>':'')
       +(isInactive?'<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:rgba(239,68,68,.15);color:#f87171;flex-shrink:0">Inactive</span>':'')
       +'</div>'
       +'<div style="font-size:11px;color:var(--text3);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
       +(role?'<span style="color:'+(roleColour[role]||'#64748b')+';font-weight:600">'+role+'</span>':'')
-      +(email?'<span>'+email+'</span>':'')
+      +(email?'<span>'+esc(email)+'</span>':'')
       +(endorses.length?endorses.filter(function(e){return e.startsWith('ZK-');}).map(function(e){var ec=AC_COL[e]||'#64748b';return'<span style="padding:1px 7px;border-radius:12px;background:'+ec+'22;border:1px solid '+ec+'55;color:'+ec+';font-size:9px;font-weight:700">'+e.replace('ZK-','')+'</span>';}).join(''):'')
       +(caaNum?'<span>CAA '+caaNum+'</span>':'')
       +'</div>'
@@ -596,7 +591,7 @@ window.requestReset=async()=>{
   // Store reset token in Supabase (ts_users password_hash temporarily stores token)
   u.resetToken=code;u.resetExpires=expires;
   lsSet('ts_users_cache',S.users);
-  await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,
+  await sbUserWrite([{id:u.id,name:u.name,email:u.email,role:u.role,
     linked_crew:u.linkedCrew,password_hash:u.passwordHash,
     reset_token:code,reset_expires:String(expires)}]);
   // Show code (in production this would email it - for now show in app since no email service)
@@ -607,11 +602,18 @@ window.applyReset=async()=>{
   const code=(document.getElementById('resetCode')?.value||'').trim();
   const newPw=(document.getElementById('resetNewPw')?.value||'').trim();
   if(!code||!newPw){S.resetMsg={ok:false,text:'Enter both the code and new password.'};render();return;}
+  if(AUTH_PHASE_A){
+    // Token is hidden from the client — verify + set server-side.
+    const em=(document.getElementById('resetEmail')?.value||'').toLowerCase().trim();
+    const res=await callFn('confirm-reset',{email:em,code:code,newPassword:newPw});
+    if(!res.ok){S.resetMsg={ok:false,text:res.data&&res.data.error==='invalid_code'?'Invalid or expired code.':'Could not reset password.'};render();return;}
+    S.resetMsg={ok:true,text:'Password updated. You can now log in.'};S.showReset=false;render();return;
+  }
   const u=S.users.find(x=>x.resetToken===code&&x.resetExpires&&Date.now()<x.resetExpires);
   if(!u){S.resetMsg={ok:false,text:'Invalid or expired code.'};render();return;}
   u.passwordHash=await hashPw(newPw);delete u.resetToken;delete u.resetExpires;
   lsSet('ts_users_cache',S.users);
-  await sbU('ts_users',[{id:u.id,name:u.name,email:u.email,role:u.role,linked_crew:u.linkedCrew,password_hash:u.passwordHash,reset_token:null,reset_expires:null}]);
+  await sbUserWrite([{id:u.id,name:u.name,email:u.email,role:u.role,linked_crew:u.linkedCrew,password_hash:u.passwordHash,reset_token:null,reset_expires:null}]);
   S.resetMsg={ok:true,text:'Password updated. You can now log in.'};
   S.showReset=false;render();
 };
@@ -626,6 +628,7 @@ window.switchToLoadsheets=function(){
   S.section='operations';S.tab='loadsheet';render();
 };
 window.switchOpsTab=function(tabId){
+  if(S.section==='roster'&&typeof _rosterUnsaved==='function'&&_rosterUnsaved()){window._navAway(function(){window.switchOpsTab(tabId);});return;}
   S.activeTabId=null;S._newLsTab=false;
   S.section='operations';S.tab=tabId;
   render();
@@ -635,6 +638,7 @@ window.switchOpsTab=function(tabId){
   window.scrollTo(0,0);
 };
 window.setTab=function(t){
+  if(S.section==='roster'&&typeof _rosterUnsaved==='function'&&_rosterUnsaved()){window._navAway(function(){window.setTab(t);});return;}
   if(t==='operations'){
     S.section='operations';
     if(S._newLsTab&&!S.activeTabId){S._newLsTab=false;S.tab='manifest';}
@@ -1109,7 +1113,7 @@ window.lsDropOnSeat=function(toIdx,e){
     if(!f.paxPaymentReq)f.paxPaymentReq={};swp(f.paxPaymentReq,S._dragSeat,toIdx);
     S._dragSeat=null;
   }
-  render();
+  autoSaveLS();render();
 };
 window.lsDropOnUnalloc=function(e){
   e.preventDefault();
@@ -1580,16 +1584,20 @@ window.lsCopyFlight=function(targetAc){
 
 window.lsTrimExcess=()=>{
   const a=S.aircraft[S.form.ac];if(!a)return;
-  const max=a.seats.length;
-  [S.form.seats,S.form.bags,S.form.names,S.form.infantNames].forEach(obj=>{
-    Object.keys(obj).forEach(i=>{if(parseInt(i)>=max)delete obj[i];});
+  const max=a.seats.length,removed=a.removedSeats||[];
+  [S.form.seats,S.form.bags,S.form.names,S.form.infantNames,S.form.paxGroups,S.form.paxType,S.form.paxPaymentReq].forEach(obj=>{
+    if(!obj)return;
+    Object.keys(obj).forEach(i=>{const n=parseInt(i);if(n>=max||removed.includes(n))delete obj[i];});
   });
-  render();
+  autoSaveLS();render();
 };
 window.lsDelPax=idx=>{
   _lsUndoPush();
   delete S.form.names[idx];delete S.form.seats[idx];delete S.form.bags[idx];
   if(S.form.infantNames)delete S.form.infantNames[idx];
+  if(S.form.paxGroups)delete S.form.paxGroups[idx];
+  if(S.form.paxType)delete S.form.paxType[idx];
+  if(S.form.paxPaymentReq)delete S.form.paxPaymentReq[idx];
   autoSaveLS();render();
 };
 window.lsUndo=function(){
@@ -1994,13 +2002,22 @@ window.pushAllLsToSeatmap=function(){
               bag:parseFloat((f.bags||{})[idx]||0)||0,
               type:((f.paxType||{})[idx]==='C'?'child':'adult'),
               group:(f.paxGroups||{})[idx]||'',
+              infantName:(f.infantNames||{})[idx]||null,
+              paymentReq:!!((f.paxPaymentReq||{})[idx]),
               _pushedFrom:phyId});
           }
           nameMap[key]=pid;
         }
         sm[parseInt(idx)]=pid;
-        var grpVal=(f.paxGroups||{})[idx];
-        if(grpVal!=null){var _dp=_D.pax.find(function(px){return px.id===pid;});if(_dp)_dp.group=grpVal;}
+        // Keep the seated pax record in sync with the loadsheet so group / infant / child /
+        // TO-PAY all survive (e.g. when the aircraft is later removed and pax fall to the pool).
+        var _dp=_D.pax.find(function(px){return px.id===pid;});
+        if(_dp){
+          _dp.group=(f.paxGroups||{})[idx]||'';
+          _dp.infantName=(f.infantNames||{})[idx]||null;
+          _dp.paymentReq=!!((f.paxPaymentReq||{})[idx]);
+          _dp.type=((f.paxType||{})[idx]==='C'?'child':'adult');
+        }
       });
       _D.seatMap[smKey]=sm;
     });
@@ -2468,7 +2485,8 @@ function generatePrintHTML(sheet){
   // Fuel calcs
   var fuelKgV=parseFloat(f.fuel)||0;
   var burnKgV=r?r.burnKg:0;
-  var remKg=fuelKgV-a.gndBurn-burnKgV;
+  var _gndBurnV=r?r.gndBurn:(parseFloat(f.gndBurn!=null?f.gndBurn:a.gndBurn)||0);
+  var remKg=fuelKgV-_gndBurnV-burnKgV;
   var fuelU=fuelUnit(f.ac);
   var fuelDisplay=f.ac?fromKg(fuelKgV,f.ac).toFixed(1):fuelKgV;
   var remDisplay=f.ac?fromKg(Math.max(0,remKg),f.ac).toFixed(1):Math.max(0,remKg).toFixed(1);
@@ -2509,7 +2527,7 @@ function generatePrintHTML(sheet){
       ['Empty Weight',a.ew,false],['Crew',r.crewW,false],['Passengers',r.paxW,false],
       ['Cargo / Baggage',r.cargoW,false],['Zero Fuel Weight',r.zfw,true],
       ['+ Fuel',r.fuelW,false],['Ramp Weight',r.rampW,true],
-      ['− Ground Burn',a.gndBurn,false],['Takeoff Weight',r.tow,true],
+      ['− Ground Burn',r.gndBurn,false],['Takeoff Weight',r.tow,true],
       ['− Flight Burn',r.burnKg,false],['Landing Weight',r.lw,true]
     ];
     items.forEach(function(it){
@@ -2603,7 +2621,7 @@ function generatePrintHTML(sheet){
     +'<table style="width:100%;border-collapse:collapse;margin-bottom:14px">'
     +thRow('Fuel',2)
     +'<tr><td style="'+TD+'color:#666">Fuel at departure</td><td style="'+TD+'text-align:right">'+fuelKgV.toFixed(1)+' kg ('+fuelDisplay+' '+fuelU+')</td></tr>'
-    +'<tr><td style="'+TD+'color:#666">Ground burn</td><td style="'+TD+'text-align:right">'+a.gndBurn+' kg</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Ground burn</td><td style="'+TD+'text-align:right">'+_gndBurnV+' kg</td></tr>'
     +'<tr><td style="'+TD+'color:#666">Flight burn</td><td style="'+TD+'text-align:right">'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr>'
     +'<tr style="background:'+acFaint+'"><td style="'+TD+'border-left:3px solid '+acCol+';font-weight:700">Fuel at destination</td><td style="'+TD+'text-align:right;font-weight:700">'+remDisplay+' '+fuelU+'</td></tr>'
     +'</table>'
@@ -2694,7 +2712,9 @@ window.savePerson=async function(){
   const m=S.admin.personModal;if(!m)return;
   const d=m.draft;
   const name=(d.n||'').trim();
-  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
+  // Managing user accounts/roles requires admin_users (admin/superadmin always have it);
+  // self-profile edits remain allowed below via userId===S.user.id.
+  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin||(typeof hasRolePerm==='function'&&hasRolePerm('admin_users'));
   // Validate
   if(!name&&!d.email){S.admin.err='Name is required.';render();return;}
   const finalName=name||(d.email?d.email.split('@')[0]:'');
@@ -2702,6 +2722,20 @@ window.savePerson=async function(){
   if(d.email){
     const dupUser=S.users.find(function(x){return x.email.toLowerCase()===d.email.toLowerCase()&&x.id!==m.userId;});
     if(dupUser){S.admin.err='That email is already used by another account.';render();return;}
+  }
+  // Crew code must be unique (case-insensitive). It keys the roster grid and leave-day
+  // counts, so two crew sharing a code would cross-contaminate each other's roster/payroll.
+  if((d.code||'').trim()){
+    const _code=String(d.code).trim().toUpperCase();
+    const _dupCode=(S.crew||[]).find(function(cr){return cr.id!==m.crewId&&String(cr.code||'').trim().toUpperCase()===_code;});
+    if(_dupCode){S.admin.err='Crew code "'+_code+'" is already used by '+(_dupCode.n||'another crew member')+'. Codes must be unique.';render();return;}
+  }
+  // Creating a NEW login account? Validate the password BEFORE writing the crew record,
+  // so a missing/mismatched password can't leave a half-saved person behind.
+  if(!m.userId&&d.email&&isAdmin){
+    const _confEl=document.getElementById('pm_confpw');
+    if(!d.password){S.admin.err='Password is required for a new login account.';render();return;}
+    if(_confEl&&_confEl.value&&_confEl.value!==d.password){S.admin.err='Passwords do not match.';render();return;}
   }
 
   // ── Save crew record ──
@@ -2748,11 +2782,13 @@ window.savePerson=async function(){
       const uIdx=S.users.findIndex(function(x){return x.id===userId;});
       if(uIdx>=0) S.users[uIdx]=userRec;else S.users.push(userRec);
       lsSet('ts_users_cache',S.users);
-      // Two-tier upsert: full payload first, minimal fallback if columns missing
-      const fullUR=await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,role:userRec.role,
+      // Two-tier upsert: full payload first, minimal fallback if columns missing.
+      // sbUserWrite drops an empty hash under Phase A, so editing a user without a new
+      // password never wipes their existing one.
+      const fullUR=await sbUserWrite([{id:userRec.id,name:userRec.name,email:userRec.email,role:userRec.role,
         linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash,weight:userRec.weight||0,is_pilot:!!userRec.isPilot,inactive:!!userRec.inactive}]);
       if(!fullUR){
-        const minUR=await sbU('ts_users',[{id:userRec.id,name:userRec.name,email:userRec.email,
+        const minUR=await sbUserWrite([{id:userRec.id,name:userRec.name,email:userRec.email,
           role:userRec.role,linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash}]);
         if(!minUR) toast('Warning: account may not have saved to server — check connection','warn');
       }
@@ -2775,9 +2811,11 @@ window.savePerson=async function(){
 
 window.deletePerson=async function(crewId,userId){
   if(!confirm('Delete this person? This cannot be undone.'))return;
-  if(crewId){S.crew=S.crew.filter(function(cr){return cr.id!==crewId;});lsSet('ts_crew_cache',S.crew);await sbDel('ts_crew',crewId);}
-  if(userId){S.users=S.users.filter(function(u){return u.id!==userId;});lsSet('ts_users_cache',S.users);await sbDel('ts_users',userId);}
+  var _fail=false;
+  if(crewId){S.crew=S.crew.filter(function(cr){return cr.id!==crewId;});lsSet('ts_crew_cache',S.crew);if(!(await sbDel('ts_crew',crewId)))_fail=true;}
+  if(userId){S.users=S.users.filter(function(u){return u.id!==userId;});lsSet('ts_users_cache',S.users);if(!(await sbDel('ts_users',userId)))_fail=true;}
   S.admin.personModal=null;S.admin.err='';
+  if(_fail)toast('Delete may not have saved to the server — it could reappear on reload. Check connection.','warn');
   render();
 };
 
@@ -2787,15 +2825,19 @@ window.saveAircraftDraft=async()=>{
   if(!d.ew||!d.mtow||!d.mlw){S.admin.acErr='Empty weight, MTOW and max landing required.';render();return;}
   if(d.cogMin>=d.cogMax){S.admin.acErr='C of G min must be less than max.';render();return;}
   S.aircraft[S.admin.acSel]=dc(d);S.admin.acDraft=null;S.admin.acSaved=true;lsSet('ts_aircraft_cache',S.aircraft);render();
-  await sbU('ts_aircraft',[{id:d.id,data:d}]);
+  // W&B setup feeds loadsheet weight & balance — never report "synced" on a failed write.
+  const _acR=await sbU('ts_aircraft',[{id:d.id,data:d}]);
+  if(_acR===null){S.admin.acSaved=false;toast('Aircraft setup did NOT save to server — check connection and retry','error');render();}
 };
 window.saveCharterRates=async()=>{
+  if(typeof hasRolePerm==='function'&&!hasRolePerm('charter')){toast('Not authorised to edit charter rates.','warn');return;}
   lsSet('ts_charter_rates_cache',S.charterRates);
   lsSet('ts_charter_wait_rate',S.charterWaitRate);
   const rows=Object.entries(S.charterRates).map(([acId,rates])=>({id:acId,acId,rates}));
-  await sbU('ts_charter_rates',rows);
+  const _crR=await sbU('ts_charter_rates',rows);
+  if(_crR===null){toast('Charter rates did NOT save to server — check connection and retry','error');return;}
   // Also persist wait rate to Supabase so all devices stay in sync
-  await sbU('ts_settings',[{key:'charter_wait_rate',value:String(S.charterWaitRate||150)}]).catch(function(){});
+  await sbU('ts_settings',[{key:'charter_wait_rate',value:String(S.charterWaitRate||150)}]);
 };
 
 // ── Pilot weight update ──
@@ -2863,8 +2905,11 @@ const MAINT_SEED_VERSION=5;
 
 function saveMaintenance(){
   lsSet('ts_maintenance',S.maintenance);
-  // Persist to Supabase (ts_settings key='maintenance')
-  sbU('ts_settings',[{key:'maintenance',value:JSON.stringify(S.maintenance)}]).catch(function(){});
+  // Persist to Supabase (ts_settings key='maintenance'). Surface a failure instead of
+  // swallowing it — otherwise an expired session / network drop loses data silently.
+  sbU('ts_settings',[{key:'maintenance',value:JSON.stringify(S.maintenance)}]).then(function(r){
+    if(r===null) toast('Maintenance save failed — not saved to server. Check connection and retry.','error');
+  });
 }
 async function loadMaintenanceFromCloud(){
   try{
@@ -2921,7 +2966,8 @@ function generateHalfSheetContent(sheet){
   var statusColor=allOk?'#15803d':'#b91c1c';
   var fuelKgV=parseFloat(f.fuel)||0;
   var burnKgV=r?r.burnKg:0;
-  var remKg=fuelKgV-(a.gndBurn||0)-burnKgV;
+  var _gndBurnV=r?r.gndBurn:(parseFloat(f.gndBurn!=null?f.gndBurn:(a.gndBurn||0))||0);
+  var remKg=fuelKgV-_gndBurnV-burnKgV;
   var fuelU=fuelUnit(f.ac);
   var fuelDisplay=f.ac?fromKg(fuelKgV,f.ac).toFixed(1):fuelKgV;
   var remDisplay=f.ac?fromKg(Math.max(0,remKg),f.ac).toFixed(1):Math.max(0,remKg).toFixed(1);
@@ -2965,7 +3011,7 @@ function generateHalfSheetContent(sheet){
     +'</table>'
     +'<table style="flex:1;border-collapse:collapse;font-size:9px"><tr><th colspan="2" style="'+TH+'">FUEL</th></tr>'
     +'<tr><td style="'+TD+'color:#666">Loaded</td><td style="'+TD+'">'+fuelKgV.toFixed(1)+' kg ('+fuelDisplay+' '+fuelU+')</td></tr>'
-    +'<tr><td style="'+TD+'color:#666">Gnd burn</td><td style="'+TD+'">'+(a.gndBurn||0)+' kg</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Gnd burn</td><td style="'+TD+'">'+_gndBurnV+' kg</td></tr>'
     +'<tr><td style="'+TD+'color:#666">Flt burn</td><td style="'+TD+'">'+(f.burnOff||a.burnDef)+' '+(a.burnDefUnit||'kg')+'</td></tr>'
     +'<tr style="background:'+acFaint+'"><td style="'+TD+'border-left:2px solid '+acCol+';font-weight:700">@ Dest</td><td style="'+TD+'font-weight:700">'+remDisplay+' '+fuelU+'</td></tr>'
     +'</table></div>'
@@ -3101,11 +3147,13 @@ window.calcTTIS=function(){
   }
 };
 
-function acDisp(id){return(id||"").replace("ZK-","");}function acDisp(id){return(id||"").replace("ZK-","");}
+/* acDisp() moved to shared.js (single canonical definition) */
 
 // --- Role Permissions Table ---
 let _permSaveTimer=null;
 window.toggleRolePerm=function(role,perm,val){
+  var _permOk=(S.user&&(S.user.superAdmin||S.user.role==='superadmin'))||(typeof hasRolePerm==='function'&&hasRolePerm('admin_users'));
+  if(!_permOk){toast('Not authorised to change permissions.','warn');return;}
   if(!S.rolePerms)S.rolePerms={};
   if(!S.rolePerms[role])S.rolePerms[role]=Object.assign({},(DEFAULT_ROLE_PERMS[role])||{});
   if(perm==='roster_leave'){S.rolePerms[role]['roster']=val;S.rolePerms[role]['leave']=val;}
@@ -3129,6 +3177,7 @@ window.saveRolePerms=async function(silent){
 };
 
 function renderAdminPerms(){
+  S._permsPageTs=Date.now();   // mark the grid as actively on screen (blocks reload clobber)
   var PERM_COLS=[
     {k:'operations',    lbl:'Ops',           tip:'Access to flight operations (manifests, loadsheets, seatmap)'},
     {k:'charter',       lbl:'Charter',        tip:'View and manage charter quotes'},
@@ -3140,7 +3189,9 @@ function renderAdminPerms(){
     {k:'admin_users',   lbl:'Users',          tip:'Manage user accounts, roles and passwords'},
     {k:'sign_loadsheet',lbl:'Sign',           tip:'Sign off on loadsheets as PIC'},
     {k:'maint_bookings',lbl:'Bookings',       tip:'Manage maintenance bookings'},
-    {k:'audit',         lbl:'Audit',          tip:'View the system audit log'}
+    {k:'audit',         lbl:'Audit',          tip:'View the system audit log'},
+    {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'},
+    {k:'rezdy',         lbl:'Rezdy',          tip:'Access the Rezdy bookings/pickups/schedule tab'}
   ];
   var ROLE_ROWS=[
     {k:'admin',        lbl:'Admin'},
@@ -3148,7 +3199,7 @@ function renderAdminPerms(){
     {k:'pilot',        lbl:'Pilot'},
     {k:'desk',         lbl:'Desk'},
     {k:'maint',        lbl:'Maint'},
-    {k:'ground_staff', lbl:'Ground'},{k:'ground', lbl:'Ground (new)'},
+    {k:'ground_staff', lbl:'Ground'},
     {k:'accounts',     lbl:'Accounts'},
     {k:'marketing',    lbl:'Marketing'}
   ];
@@ -3180,7 +3231,7 @@ function renderAdminPerms(){
       }
       h+='<td style="text-align:center;padding:4px">'
         +'<input type="checkbox" '+(eff?'checked':'')+' '
-        +'onchange="window.toggleRolePerm('+JSON.stringify(row.k)+','+JSON.stringify(col.k)+',this.checked)" '
+        +"onchange=\"window.toggleRolePerm('"+row.k+"','"+col.k+"',this.checked)\" "
         +'style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">'
         +'</td>';
     });
@@ -3238,14 +3289,30 @@ function renderAdminAudit(){
     if(obj.type)bits.push(obj.type);
     return bits.join(' · ');
   }
-  var rows=log.slice(0,200).map(function(e){
+  // Collapse runs of the same person doing the same action close together into one row
+  // (e.g. a burst of manifest autosaves) so the log is readable. Newest-first ordering
+  // means consecutive duplicates sit next to each other; we keep the most-recent time and
+  // tally a ×N count. The underlying audit rows are untouched — this only thins the view.
+  var GROUP_MS=10*60000; // 10 minutes
+  var grouped=[];
+  log.forEach(function(e){
+    var prev=grouped[grouped.length-1];
+    if(prev&&(prev.name||prev.user||'')===(e.name||e.user||'')&&prev.action===e.action
+       &&Math.abs(new Date(prev.time)-new Date(e.time))<GROUP_MS){
+      prev._count=(prev._count||1)+1;
+    } else {
+      grouped.push(Object.assign({},e,{_count:1}));
+    }
+  });
+  var rows=grouped.slice(0,200).map(function(e){
     var rawDet=typeof e.detail==='object'?JSON.stringify(e.detail):String(e.detail||'');
     var det=_auditDetail(e);
+    var cnt=e._count>1?' <span style="font-size:10px;font-weight:700;color:var(--acc);background:rgba(99,102,241,.12);border-radius:10px;padding:0 6px">×'+e._count+'</span>':'';
     return'<tr style="border-bottom:1px solid var(--border)">'
       +'<td style="padding:7px 8px;font-size:11px;color:var(--text3);white-space:nowrap">'+fmtTime(e.time)+'</td>'
       +'<td style="padding:7px 8px;font-size:12px;font-weight:600;white-space:nowrap">'+esc(e.name||e.user||'')+'</td>'
       +'<td style="padding:7px 8px;font-size:11px;color:var(--text3)">'+esc(e.role||'')+'</td>'
-      +'<td style="padding:7px 8px;font-size:12px">'+esc(_auditAction(e.action))+'</td>'
+      +'<td style="padding:7px 8px;font-size:12px">'+esc(_auditAction(e.action))+cnt+'</td>'
       +'<td title="'+esc(rawDet)+'" style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(det)+'</td>'
       +'</tr>';
   }).join('');

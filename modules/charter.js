@@ -15,7 +15,7 @@ function renderCharter(){
   const waitRate=S.charterWaitRate||150;
 
   const legCards=legs.map((leg,i)=>{
-    const a=S.aircraft[leg.acId];const rates=leg.acId?S.charterRates[leg.acId]:null;
+    const a=S.aircraft[leg.acId];const rates=charterRate(leg.acId);
     const dist=distNm(leg.from,leg.to);const speed=a?.layout==='ga8'?130:170;
     const flightHrs=dist>0?dist/speed:0;
     const flightMins=Math.round(flightHrs*60);
@@ -68,7 +68,7 @@ function renderCharter(){
   legs.forEach(leg=>{
     const dist2=distNm(leg.from,leg.to);const speed2=S.aircraft[leg.acId]?.layout==='ga8'?130:170;
     const fh=dist2>0?dist2/speed2:0;
-    const r2=leg.acId?S.charterRates[leg.acId]:null;
+    const r2=charterRate(leg.acId);
     const lc=r2&&fh>0?fh*r2.perHour:0;
     const wh=parseFloat(leg.waitHrs)||0;
     const wc=Math.max(0,wh-1)*waitRate;
@@ -78,8 +78,8 @@ function renderCharter(){
   // 2.5hr minimum
   const totalJourneyHrs=totalMins/60;
   if(totalJourneyHrs>0&&totalJourneyHrs<2.5){
-    const primaryLeg=legs.find(l=>l.acId&&S.charterRates[l.acId]);
-    if(primaryLeg){const r=S.charterRates[primaryLeg.acId];if(r){totalCost=Math.max(totalCost,2.5*r.perHour+totalWaitCost);}}
+    const primaryLeg=legs.find(l=>charterRate(l.acId));
+    if(primaryLeg){const r=charterRate(primaryLeg.acId);if(r){totalCost=Math.max(totalCost,2.5*r.perHour+totalWaitCost);}}
   }
 
   const charterLegs=legs.filter(l=>APT_COORDS[l.from]&&APT_COORDS[l.to]);
@@ -107,9 +107,9 @@ function renderCharter(){
     <div style="text-align:center;padding:8px 0">
       <div style="font-size:10px;color:#6ee7b7;text-transform:uppercase;letter-spacing:.08em">Total (incl. GST)</div>
       <div style="font-weight:800;font-size:28px;color:#86efac">$${totalCost.toFixed(0)}</div>
-      <div style="font-size:11px;color:#6ee7b7;margin-top:2px">GST: $${(totalCost/11).toFixed(0)} &nbsp;|&nbsp; ex. GST: $${(totalCost/1.15).toFixed(0)}</div>
+      <div style="font-size:11px;color:#6ee7b7;margin-top:2px">GST: $${(totalCost-totalCost/1.15).toFixed(0)} &nbsp;|&nbsp; ex. GST: $${(totalCost/1.15).toFixed(0)}</div>
     </div>
-    ${legs.filter(l=>l.note).map(l=>`<div style="font-size:12px;color:#6ee7b7;padding:2px 0">• ${l.from}→${l.to}: ${l.note}</div>`).join('')}
+    ${legs.filter(l=>l.note).map(l=>`<div style="font-size:12px;color:#6ee7b7;padding:2px 0">• ${l.from}→${l.to}: ${esc(l.note)}</div>`).join('')}
     <div style="font-size:11px;color:#6ee7b7;margin-top:8px;opacity:.7">* Estimate only. 2.5hr minimum applies (whole journey). All prices include GST. Subject to availability and weather.</div>
   </div>`:''}
   ${charterLegs.length?`<div class="card" style="padding:12px"><div class="st">Route Map</div><div id="charter-map" class="route-map"></div></div>`:''}`;
@@ -134,13 +134,13 @@ function renderSavedQuotes(){
     return'<div style="padding:12px 0;border-bottom:1px solid var(--border)">'
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">'
         +'<div style="min-width:0;flex:1">'
-          +'<div contenteditable="true" data-qi="'+qi+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="font-weight:700;font-size:13px;color:var(--text1);cursor:text;outline:none;border-bottom:1px dashed transparent;transition:border-color .15s" onfocus="this.style.borderBottomColor=\'var(--acc)\'" onblur="this.style.borderBottomColor=\'transparent\';window.renameCharterQuote(+this.dataset.qi,this.textContent.trim())" title="Click to rename">'+name+'</div>'
+          +'<div contenteditable="true" data-qi="'+qi+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="font-weight:700;font-size:13px;color:var(--text1);cursor:text;outline:none;border-bottom:1px dashed transparent;transition:border-color .15s" onfocus="this.style.borderBottomColor=\'var(--acc)\'" onblur="this.style.borderBottomColor=\'transparent\';window.renameCharterQuote(+this.dataset.qi,this.textContent.trim())" title="Click to rename">'+esc(name)+'</div>'
           +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+routeStr+(fqd?' · For: '+fqd:'')+'</div>'
           +'<div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">'
             +acPills
             +'<span style="color:#86efac;font-weight:700;font-size:12px">$'+totalCost.toFixed(0)+'</span>'
             +(d?'<span style="font-size:10px;color:var(--text3)">'+d+'</span>':'')
-            +(q.savedBy?'<span style="font-size:10px;color:var(--text3)">by '+q.savedBy+'</span>':'')
+            +(q.savedBy?'<span style="font-size:10px;color:var(--text3)">by '+esc(q.savedBy)+'</span>':'')
           +'</div>'
         +'</div>'
         +'<div style="display:flex;gap:6px;flex-shrink:0">'
@@ -157,13 +157,14 @@ window.clearCharterQuote=function(){
   render();
 };
 window.saveCharterQuote=function(){
+  if(typeof hasRolePerm==='function'&&!hasRolePerm('charter')){toast('Not authorised to save charter quotes.','warn');return;}
   const legs=S.charter.legs||[];
   let totalCost=0;
   const waitRate=S.charterWaitRate||150;
   legs.forEach(function(leg){
     const dist=distNm(leg.from,leg.to);const speed=(S.aircraft[leg.acId]||{}).layout==='ga8'?130:170;
     const fh=dist>0?dist/speed:0;
-    const r=leg.acId?S.charterRates[leg.acId]:null;
+    const r=charterRate(leg.acId);
     const lc=r&&fh>0?fh*r.perHour:0;
     const wh=parseFloat(leg.waitHrs)||0;
     totalCost+=lc+Math.max(0,wh-1)*waitRate;
@@ -172,7 +173,7 @@ window.saveCharterQuote=function(){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
   quotes.unshift(quote);
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   toast('Quote saved ✓','ok');
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
@@ -189,7 +190,7 @@ window.deleteCharterQuote=function(idx){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
   quotes.splice(idx,1);
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
@@ -199,7 +200,7 @@ window.renameCharterQuote=function(qi,newName){
   if(quotes[qi].name===newName)return;
   quotes[qi].name=newName;
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).catch(function(){});
+  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
 };
 

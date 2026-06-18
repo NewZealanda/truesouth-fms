@@ -46,7 +46,7 @@ var ROLE_GROUPS=[
   {key:'pilot',    label:'Pilots',   roles:['pilot'],              col:'#7B9EC6'},
   {key:'desk',     label:'Desk',     roles:['desk','cx_manager'],  col:'#f9a8d4'},
   {key:'admin',    label:'Admin',    roles:['admin','superadmin'], col:'#f59e0b'},
-  {key:'ground',   label:'Ground',   roles:['ground_staff','ground'], col:'#a16207'},
+  {key:'ground',   label:'Ground',   roles:['ground_staff'], col:'#a16207'},
   {key:'maint',    label:'Maint',    roles:['maint','maintenance'],col:'#a78bfa'},
   {key:'accounts', label:'Accounts', roles:['accounts'],           col:'#06b6d4'},
   {key:'marketing',label:'Marketing',roles:['marketing'],          col:'#ec4899'},
@@ -79,10 +79,29 @@ function _rGetStatus(u,ds,roster){
   }
   var st=(roster[ds]&&(roster[ds][u.id]||roster[ds][_ini]))||'';
   var _lvReq=S._rosterLeave&&S._rosterLeave[ds]&&S._rosterLeave[ds][u.id];
-  if(_lvReq){var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};st=_lvMap[_lvReq]||'leave';}
+  if(_lvReq){
+    // Don't let an approved-leave overlay paint over a rostered day off. If the day was
+    // already RDO/off, leave it as-is — RDOs aren't paid leave, and accounts need to see
+    // them unchanged even when AL spans them. (Mirrors the _lvStampRoster off-day guard.)
+    var _offDay={rdo:1,off:1};
+    if(!_offDay[st]){var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};st=_lvMap[_lvReq]||'leave';}
+  }
   return st;
 }
 function _rIni(u){return _rCode(u);}
+// Crew sharing a code break the roster/leave-day keying (status is stored per code as
+// well as per id). Returns {CODE:[name,...]} for any code held by more than one crew member.
+function _dupCrewCodes(){
+  var seen={},dupes={};
+  (S.crew||[]).forEach(function(c){
+    var code=String(c.code||'').trim().toUpperCase();
+    if(!code)return;
+    if(seen[code]){dupes[code]=dupes[code]||[seen[code]];dupes[code].push(c.n||'?');}
+    else seen[code]=c.n||'?';
+  });
+  return dupes;
+}
+window._dupCrewCodes=_dupCrewCodes;
 // ── Unsaved-roster guard ──
 function _rosterUnsaved(){return !!(S._rosterDraft&&Object.keys(S._rosterDraft).length>0);}
 // Run `go` immediately unless there are unsaved roster edits — then prompt first.
@@ -106,11 +125,12 @@ function _rosterSavePrompt(proceed){
   ov.addEventListener('click',function(e){if(e.target===ov)window._rosterNavChoose('cancel');});
   document.body.appendChild(ov);
 }
-window._rosterNavChoose=function(c){
+window._rosterNavChoose=async function(c){
   var ov=document.getElementById('roster-save-ov');if(ov)ov.remove();
   var go=S._rosterPendingNav;S._rosterPendingNav=null;
   if(c==='cancel')return;
-  if(c==='save'){window.saveRosterToCloud&&window.saveRosterToCloud();}   // merges draft locally + persists
+  // Await the cloud save so navigation/reload can't race ahead and lose the write.
+  if(c==='save'){try{if(window.saveRosterToCloud)await window.saveRosterToCloud();}catch(e){}}   // merges draft locally + persists
   else if(c==='discard'){S._rosterDraft={};S._rosterUndoStack=[];}
   if(typeof go==='function')go();
 };
@@ -163,7 +183,7 @@ function renderRosterView(){
   NEVER_SHOW.forEach(function(k){if(S._rosterGroupHide.indexOf(k)===-1)S._rosterGroupHide.push(k);});
   var _rGH=S._rosterGroupHide;
 
-  var _payAllowed=role==='superadmin'||role==='admin'||role==='accounts';
+  var _payAllowed=role==='superadmin'||role==='admin'||(typeof hasRolePerm==='function'&&hasRolePerm('pay_week'));
   if(typeof S._rosterPayWeek==='undefined')S._rosterPayWeek=lsGet('ts_roster_payweek')||false;
   var _payWeek=_payAllowed&&!!S._rosterPayWeek;
   // Align the displayed week to the active mode: Mon–Sun normally, Thu–Wed for pay week.
@@ -182,7 +202,7 @@ function renderRosterView(){
     var gk=_rGroupKey(u);
     return gk&&_rGH.indexOf(gk)===-1;
   });
-  var roleOrder={superadmin:0,admin:1,pilot:2,desk:3,cx_manager:3,accounts:4,marketing:5,maint:6,maintenance:6,ground_staff:7,ground:7};
+  var roleOrder={superadmin:0,admin:1,pilot:2,desk:3,cx_manager:3,accounts:4,marketing:5,maint:6,maintenance:6,ground_staff:7};
   displayUsers=displayUsers.slice().sort(function(a,b){return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');});
   var roster=S.roster||{};
 
@@ -233,6 +253,13 @@ function renderRosterView(){
   if(isAdminPlus)h+=_rTbPill('Colours','🎨',_ce,"S._rosterColorEdit=!S._rosterColorEdit;render()");
   h+='</div>';
   h+='</div>';
+  // Warn admins about duplicate crew codes (they corrupt roster/leave-day counts).
+  if(canEditRoster){
+    var _dupes=_dupCrewCodes(),_dupKeys=Object.keys(_dupes);
+    if(_dupKeys.length){
+      h+='<div style="margin:10px 14px;padding:9px 12px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);border-radius:8px;font-size:12px;color:#fbbf24;line-height:1.5">⚠ Duplicate crew codes share roster &amp; leave-day data — give each a unique code in Admin → People: '+_dupKeys.map(function(k){return '<strong>'+k+'</strong> ('+_dupes[k].join(', ')+')';}).join('; ')+'</div>';
+    }
+  }
   // Collapsible role-visibility panel
   if(_showOn){
     h+='<div style="padding:10px 14px;border-bottom:1px solid var(--border2);background:var(--card2);display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
@@ -330,7 +357,7 @@ function renderRosterView(){
           var isHidden=rawSt&&rHide.indexOf(rawSt)>-1;
           var otherNote=isOther?st.slice(6):'';
           var cfg=_rSC(rawSt||'');
-          var dispLbl=isOther?(otherNote||'?'):cfg.lbl;
+          var dispLbl=isOther?esc(otherNote||'?'):cfg.lbl;
           h+='<td style="padding:3px 2px;text-align:center;background:'+(isTdy?'rgba(124,58,237,.06)':(isWe?'rgba(255,255,255,.01)':'transparent'))+'">';
           if(isHidden){h+='<span style="display:inline-block;width:66px;height:24px"></span>';}else if(canEdit){
             var _oe=S._rosterOtherEdit;
@@ -343,16 +370,16 @@ function renderRosterView(){
               h+='<button tabindex="-1" onclick="window.rosterOtherCancel()" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:10px;cursor:pointer">X</button>';
               h+='</div></div>';
             }else{
-            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?otherNote:'')+'" style="padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:66px;text-align:center">';
+            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?esc(otherNote):'')+'" style="padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:66px;text-align:center">';
             ROSTER_ORDER.forEach(function(s){
               var c=_rSC(s);
               h+='<option value="'+s+'"'+(rawSt===s?' selected':'')+'>'+c.lbl+'</option>';
             });
             h+='</select>';
-            if(isOther&&otherNote){h+='<div style="font-size:8px;color:#94a3b8;line-height:1;margin-top:1px;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+otherNote+'</div>';}
+            if(isOther&&otherNote){h+='<div style="font-size:8px;color:#94a3b8;line-height:1;margin-top:1px;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(otherNote)+'</div>';}
             }
           } else {
-            h+='<span'+(isOther?' title="'+otherNote+'"':'')+' style="display:inline-block;padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.04)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.1)')+';font-size:11px;font-weight:700;min-width:56px">'+dispLbl+'</span>';
+            h+='<span'+(isOther?' title="'+esc(otherNote)+'"':'')+' style="display:inline-block;padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.04)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.1)')+';font-size:11px;font-weight:700;min-width:56px">'+dispLbl+'</span>';
           }
           h+='</td>';
         });
@@ -701,26 +728,27 @@ window._rBuildChoose=function(c){
 };
 
 window.saveRosterToCloud=async function(){
-  // Merge draft into roster
+  // Merge draft into roster locally, but DON'T discard the draft/undo stack until the
+  // cloud write is CONFIRMED. sbU returns null on failure (it does not throw), so a
+  // denied/failed save must not be reported as success or wipe the operator's edits.
   var draft=S._rosterDraft||{};
   if(!S.roster)S.roster={};
   Object.keys(draft).forEach(function(ds){
     if(!S.roster[ds])S.roster[ds]={};
     Object.assign(S.roster[ds],draft[ds]);
   });
+  lsSet('ts_roster',S.roster);
+  var res=await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
+  if(res===null){toast('Roster save failed — your changes are kept locally, please try again','err');return;}
   S._rosterDraft={};
   S._rosterUndoStack=[];
-  lsSet('ts_roster',S.roster);
-  try{
-    await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
-    toast('Roster saved!','success');
-    render();
-  }catch(e){toast('Roster save failed','err');}
+  toast('Roster saved!','success');
+  render();
 };
 
 window.loadRosterFromCloud=async function(){
   try{
-    var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.roster&select=value',{headers:SH});
+    var r=await _sbFetch(SB+'/rest/v1/ts_settings?key=eq.roster&select=value',{headers:{...SH}});
     if(!r.ok)return;
     var rows=await r.json();
     if(!rows||!rows.length)return;

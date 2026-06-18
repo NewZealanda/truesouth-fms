@@ -14,7 +14,7 @@ var LEAVE_SC={
 };
 
 function _lvEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function _lvDays(s,e,partial){if(!s||!e)return 0;var d=Math.round((new Date(e)-new Date(s))/86400000)+1;return partial?Math.max(0.5,d-0.5):d;}
+function _lvDays(s,e){if(!s||!e)return 0;return Math.round((new Date(e+'T00:00:00')-new Date(s+'T00:00:00'))/86400000)+1;}
 // Count the actual leave days used = days in range the person is rostered ON
 // (excludes RDOs / days already off per the roster).
 function _lvWorkingDays(userId,s,e){
@@ -22,10 +22,13 @@ function _lvWorkingDays(userId,s,e){
   var roster=S.roster||{};
   var u=(S.users||[]).find(function(x){return x.id===userId;})||{id:userId,name:''};
   var off={rdo:1,off:1};
+  var ini=(typeof _rCode==='function')?_rCode(u):'';
   var cur=new Date(s+'T00:00:00'),end=new Date(e+'T00:00:00'),n=0,guard=0;
   while(cur<=end&&guard++<3660){
     var ds=(typeof _rIso==='function')?_rIso(cur):cur.toISOString().slice(0,10);
-    var st=(typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):((roster[ds]||{})[userId]||'');
+    // Read the PERSISTED roster only — never the unsaved draft or leave overlay —
+    // so a stored leave-day total is deterministic regardless of transient UI state.
+    var st=(roster[ds]&&(roster[ds][userId]||(ini&&roster[ds][ini])))||'';
     if(!off[st])n++;
     cur.setDate(cur.getDate()+1);
   }
@@ -54,8 +57,63 @@ function _lvRosterConflicts(req){
   });
   return out;
 }
+// Auto-stamp an approved leave onto the persisted roster (so it shows on the roster and is
+// caught by future conflict checks). Skips days already RDO/off; writes by user id.
+async function _lvStampRoster(req){
+  if(!req||!req.start_date||!req.end_date||!req.user_id)return;
+  // Make sure we stamp onto the real persisted roster, not an empty one.
+  if((!S.roster||!Object.keys(S.roster).length)&&typeof window.loadRosterFromCloud==='function'){
+    try{await window.loadRosterFromCloud();}catch(e){}
+  }
+  var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};
+  var code=_lvMap[req.leave_type]||'leave';
+  if(!S.roster)S.roster={};
+  var off={rdo:1,off:1};
+  var cur=new Date(req.start_date+'T00:00:00'),end=new Date(req.end_date+'T00:00:00'),guard=0,changed=false;
+  while(cur<=end&&guard++<3660){
+    var ds=(typeof _rIso==='function')?_rIso(cur):cur.toISOString().slice(0,10);
+    if(!S.roster[ds])S.roster[ds]={};
+    var ex=S.roster[ds][req.user_id]||'';
+    if(typeof ex==='string'&&ex.indexOf('other:')===0)ex='other';
+    if(!off[ex]&&ex!==code){S.roster[ds][req.user_id]=code;changed=true;}
+    cur.setDate(cur.getDate()+1);
+  }
+  if(changed){
+    lsSet('ts_roster',S.roster);
+    var res=await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
+    if(res===null)toast('Leave approved, but the roster auto-stamp didn’t save — add it on the roster manually.','warn');
+  }
+}
+// Reverse an auto-stamp: clear the leave code from the roster for this request's days/user,
+// restoring the day to its working/empty state. Only clears cells that STILL hold the
+// stamped code (won't wipe a manual change made since).
+async function _lvUnstampRoster(req){
+  if(!req||!req.start_date||!req.end_date||!req.user_id)return;
+  if((!S.roster||!Object.keys(S.roster).length)&&typeof window.loadRosterFromCloud==='function'){
+    try{await window.loadRosterFromCloud();}catch(e){}
+  }
+  if(!S.roster)return;
+  var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};
+  var code=_lvMap[req.leave_type]||'leave';
+  var cur=new Date(req.start_date+'T00:00:00'),end=new Date(req.end_date+'T00:00:00'),guard=0,changed=false;
+  while(cur<=end&&guard++<3660){
+    var ds=(typeof _rIso==='function')?_rIso(cur):cur.toISOString().slice(0,10);
+    if(S.roster[ds]&&S.roster[ds][req.user_id]===code){delete S.roster[ds][req.user_id];changed=true;}
+    cur.setDate(cur.getDate()+1);
+  }
+  if(changed){
+    lsSet('ts_roster',S.roster);
+    var res=await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
+    if(res===null)toast('Leave removed, but the roster un-stamp didn’t save — adjust the roster manually.','warn');
+  }
+}
 function _lvFmt(ds){if(!ds)return '';var d=new Date(ds+'T00:00:00');return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'});}
-function _lvCanApprove(role){return role==='superadmin'||role==='admin'||role==='cx_manager';}
+function _lvCanApprove(role){
+  // Base "can approve leave at all" is now driven by the permission grid (leave_approve);
+  // the per-request hierarchy below (_lvCanApproveRole) still limits WHO they can approve.
+  if(role==='superadmin'||role==='admin')return true;
+  return (typeof hasRolePerm==='function')?hasRolePerm('leave_approve'):(role==='cx_manager');
+}
 function _lvCanApproveRole(myRole,reqRole){
   if(myRole==='superadmin')return true;
   if(myRole==='admin')return reqRole!=='superadmin';
@@ -85,7 +143,7 @@ function _lvInit(){
   if(lv.allReqs===undefined)lv.allReqs=null;
   if(!lv._myLoaded)lv._myLoaded=false;
   if(!lv._allLoaded)lv._allLoaded=false;
-  if(!lv.form)lv.form={show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''};
+  if(!lv.form)lv.form={show:false,type:'annual',startDate:'',endDate:'',reason:''};
   if(!lv.filter)lv.filter={status:'pending',userId:'',dateFrom:'',dateTo:''};
   if(lv.declineId===undefined)lv.declineId=null;
   if(lv.declineComment===undefined)lv.declineComment='';
@@ -137,7 +195,7 @@ function _renderMyLeave(lv){
 
   // Request form
   if(f.show){
-    var days=_lvDays(f.startDate,f.endDate,f.partialDay);
+    var days=_lvDays(f.startDate,f.endDate);
     h+='<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:20px;margin-bottom:24px">';
     h+='<h3 style="font-size:15px;font-weight:700;color:var(--text);margin:0 0 16px">New Leave Request</h3>';
 
@@ -161,6 +219,11 @@ function _renderMyLeave(lv){
       var _wd=_lvWorkingDays(S.user&&S.user.id,f.startDate,f.endDate);
       var _rd=days-_wd;
       h+='<div style="font-size:13px;color:#a78bfa;margin-bottom:12px">📅 <strong>'+_wd+' leave day'+(_wd!==1?'s':'')+'</strong> used'+(_rd>0?' <span style="color:var(--text3)">('+days+' calendar days − '+_rd+' RDO/off day'+(_rd!==1?'s':'')+')</span>':'')+'</div>';
+      // Heads-up: who else is already off during this period (from the roster).
+      var _subConf=_lvRosterConflicts({user_id:S.user&&S.user.id,start_date:f.startDate,end_date:f.endDate});
+      if(_subConf.length){
+        h+='<div style="font-size:12px;color:#fbbf24;margin-bottom:12px;line-height:1.5">⚠ Already off then (per roster): '+_subConf.map(function(c){return _lvEsc(c.name)+' ('+c.label+')';}).join(', ')+'</div>';
+      }
     }
 
     // Reason
@@ -211,9 +274,6 @@ function _lvCard(r,showUser){
   }
   h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">';
   h+='<span style="font-size:14px;font-weight:700;color:var(--text)">'+lt.icon+' '+lt.lbl+'</span>';
-  if(r.partial_day){
-    h+='<span style="font-size:11px;padding:2px 7px;border-radius:5px;background:rgba(99,102,241,.18);color:#818cf8">½ day '+(r.partial_type||'am').toUpperCase()+'</span>';
-  }
   h+='</div>';
   h+='<div style="font-size:13px;color:var(--text2);margin-bottom:4px">📅 '+_lvFmt(r.start_date)+' → '+_lvFmt(r.end_date)+'<span style="color:var(--text3);margin-left:8px">('+days+' day'+(days!==1?'s':'')+')</span></div>';
   if(r.reason){h+='<div style="font-size:12px;color:var(--text3);margin-top:4px;font-style:italic">"'+_lvEsc(r.reason)+'"</div>';}
@@ -299,7 +359,6 @@ function _renderApprovals(lv,role){
     h+='<span style="font-size:10px;padding:2px 7px;border-radius:5px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.06em">'+(r.user_role||'')+'</span>';
     h+='</div>';
     h+='<div style="font-size:13px;color:var(--text2);margin-bottom:4px">'+lt.icon+' '+lt.lbl;
-    if(r.partial_day){h+=' <span style="font-size:11px;padding:2px 6px;border-radius:5px;background:rgba(99,102,241,.18);color:#818cf8">½ '+(r.partial_type||'am').toUpperCase()+'</span>';}
     h+='</div>';
     h+='<div style="font-size:13px;color:var(--text3)">📅 '+_lvFmt(r.start_date)+' → '+_lvFmt(r.end_date)+'<span style="margin-left:8px">('+days+' leave day'+(days!==1?'s':'')+(_rdoExcl>0?', '+_rdoExcl+' RDO excl':'')+')</span></div>';
     if(r.reason){h+='<div style="font-size:12px;color:var(--text3);margin-top:4px;font-style:italic">"'+_lvEsc(r.reason)+'"</div>';}
@@ -373,6 +432,17 @@ function _renderApprovals(lv,role){
   return h;
 }
 
+// Escape a notification message, then turn any aircraft id (e.g. "ZK-SLA") into a small
+// coloured aircraft pill ("SLA" in the aircraft's colour) so loadsheet notifications read
+// at a glance. Unknown ids are left as plain text.
+function _notifFmtMsg(msg){
+  return _lvEsc(msg||'').replace(/ZK-[A-Z0-9]{2,4}/g,function(m){
+    var col=(typeof AC_COL!=='undefined'&&AC_COL[m]);
+    if(!col)return m;
+    var code=m.replace('ZK-','');
+    return '<span style="display:inline-block;padding:1px 8px;border-radius:20px;background:'+col+'22;border:1px solid '+col+'66;color:'+col+';font-weight:700;font-size:11px;line-height:1.5">'+code+'</span>';
+  });
+}
 // ── Notification panel ──
 function renderNotificationPanel(){
   var notifs=S._notifications||[];
@@ -392,13 +462,13 @@ function renderNotificationPanel(){
     notifs.forEach(function(n){
       h+='<div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05);background:'+(n.read?'transparent':'rgba(124,58,237,.07)')+'">';
       if(!n.read){h+='<div style="width:6px;height:6px;border-radius:50%;background:#c084fc;display:inline-block;margin-right:6px;vertical-align:middle"></div>';}
-      h+='<div style="font-size:12px;color:'+(n.read?'var(--text2)':'var(--text)')+';line-height:1.5;display:inline">'+_lvEsc(n.message||'')+'</div>';
+      h+='<div style="font-size:12px;color:'+(n.read?'var(--text2)':'var(--text)')+';line-height:1.5;display:inline">'+_notifFmtMsg(n.message)+'</div>';
       h+='<div style="font-size:10px;color:var(--text3);margin-top:4px">'+new Date(n.created_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</div>';
       if(n.type==='leave_submitted'&&n.reference_id){
-        h+='<div><button tabindex="-1" onclick="S.section=\'leave\';_lvInit();S._leave.tab=\'approvals\';S._notifOpen=false;render()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">View request →</button></div>';
+        h+='<div><button tabindex="-1" onclick="window.markNotifRead(\''+n.id+'\');S.section=\'leave\';_lvInit();S._leave.tab=\'approvals\';S._notifOpen=false;render()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">View request →</button></div>';
       }
       if(n.type==='loadsheet_pic'&&n.reference_id){
-        h+='<div><button tabindex="-1" onclick="window.openLoadsheetFromNotif(\''+n.reference_id+'\')" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">Open loadsheet →</button></div>';
+        h+='<div><button tabindex="-1" onclick="window.markNotifRead(\''+n.id+'\');window.openLoadsheetFromNotif(\''+n.reference_id+'\')" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">Open loadsheet →</button></div>';
       }
       h+='</div>';
     });
@@ -410,7 +480,7 @@ function renderNotificationPanel(){
 window.clearAllNotifications=async function(){
   var uid=S.user&&S.user.id;if(!uid)return;
   if(!confirm('Clear all your notifications?'))return;
-  try{await fetch(SB+'/rest/v1/ts_notifications?user_id=eq.'+uid,{method:'DELETE',headers:SH});}catch(e){}
+  try{var r=await _sbFetch(SB+'/rest/v1/ts_notifications?user_id=eq.'+uid,{method:'DELETE',headers:{...SH}});if(!r.ok){toast('Could not clear notifications — please try again','warn');return;}}catch(e){toast('Could not clear notifications — please try again','warn');return;}
   S._notifications=[];S.__notifStr='';render();
 };
 
@@ -420,13 +490,21 @@ window.clearAllNotifications=async function(){
 
 window.loadMyLeave=async function(){
   var uid=S.user?.id;if(!uid)return;
-  var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&user_id=eq.'+uid+'&order=submitted_at.desc',{headers:SH});
-  if(r.ok){_lvInit().myReqs=(await r.json()).filter(Boolean);safeRender();}
+  try{
+    var r=await _sbFetch(SB+'/rest/v1/ts_leave_requests?select=*&user_id=eq.'+uid+'&order=submitted_at.desc',{headers:{...SH}});
+    if(r.ok){_lvInit().myReqs=(await r.json()).filter(Boolean);}
+    else{_lvInit().myReqs=_lvInit().myReqs||[];toast('Could not load your leave — check connection','warn');}
+  }catch(e){_lvInit().myReqs=_lvInit().myReqs||[];}
+  safeRender();
 };
 
 window.loadAllLeave=async function(){
-  var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&order=submitted_at.desc',{headers:SH});
-  if(r.ok){_lvInit().allReqs=(await r.json()).filter(Boolean);safeRender();}
+  try{
+    var r=await _sbFetch(SB+'/rest/v1/ts_leave_requests?select=*&order=submitted_at.desc',{headers:{...SH}});
+    if(r.ok){_lvInit().allReqs=(await r.json()).filter(Boolean);}
+    else{_lvInit().allReqs=_lvInit().allReqs||[];toast('Could not load leave requests — check connection','warn');}
+  }catch(e){_lvInit().allReqs=_lvInit().allReqs||[];}
+  safeRender();
 };
 
 window.submitLeaveRequest=async function(){
@@ -434,12 +512,18 @@ window.submitLeaveRequest=async function(){
   if(!f||!f.startDate||!f.endDate){toast('Please select start and end dates.','error');return;}
   if(f.endDate<f.startDate){toast('End date must be after start date.','error');return;}
   var uid=S.user?.id;
+  if(!uid){toast('Could not identify your account — please sign in again.','error');return;}
   var uname=S.user?.name||S.user?.email||'Unknown';
   var urole=S.user?.role||'desk';
+  // Ensure the persisted roster is loaded before counting leave days, so RDO exclusion is
+  // correct and the STORED total_days isn't over-counted because the roster hadn't loaded yet.
+  if((!S.roster||!Object.keys(S.roster).length)&&typeof window.loadRosterFromCloud==='function'){
+    try{await window.loadRosterFromCloud();}catch(e){}
+  }
   var days=_lvWorkingDays(uid,f.startDate,f.endDate); // leave days actually used (RDOs excluded)
   var payload={user_id:uid,user_name:uname,user_role:urole,
     leave_type:f.type,start_date:f.startDate,end_date:f.endDate,
-    total_days:days,partial_day:f.partialDay,partial_type:f.partialType||'am',
+    total_days:days,
     reason:f.reason||null,status:'pending',submitted_at:new Date().toISOString()};
   try{
     var r=await fetch(SB+'/rest/v1/ts_leave_requests',{
@@ -452,7 +536,7 @@ window.submitLeaveRequest=async function(){
       try{await sbU('ts_leave_audit',[{request_id:res[0].id,action:'submitted',performed_by:uid,performed_by_name:uname}]);}catch(e){}
       try{await window._notifyLeaveApprovers(res[0].id,urole,uname,f.type,f.startDate,f.endDate);}catch(e){}
       try{window._triggerLeaveEmail(res[0].id,'submitted').catch(function(){});}catch(e){}
-      S._leave.form={show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''};
+      S._leave.form={show:false,type:'annual',startDate:'',endDate:'',reason:''};
       S._leave._myLoaded=false;S._leave._allLoaded=false;
       toast('Leave request submitted!','success');
       window.loadMyLeave();
@@ -473,12 +557,15 @@ window.approveLeave=async function(id){
   var me=S.user;
   var req=(S._leave?.allReqs||[]).find(function(r){return r.id===id;});
   if(!req)return;
+  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk')){toast('Not authorised to approve this request.','warn');return;}
   var overlaps=(S._leave?.allReqs||[]).filter(function(r){
     return r.id!==id&&r.status==='approved'&&r.start_date<=req.end_date&&r.end_date>=req.start_date;
   });
-  if(overlaps.length>0){
-    var names=overlaps.map(function(r){return r.user_name||'Unknown';}).join(', ');
-    if(!confirm('Warning: '+names+' also have approved leave overlapping these dates. Approve anyway?'))return;
+  // Also surface clashes that exist directly on the roster (imported / hand-entered leave).
+  var _clashNames=overlaps.map(function(r){return r.user_name||'Unknown';});
+  try{(_lvRosterConflicts(req)||[]).forEach(function(c){if(_clashNames.indexOf(c.name)<0)_clashNames.push(c.name+' ('+c.label+')');});}catch(e){}
+  if(_clashNames.length>0){
+    if(!confirm('Warning: '+_clashNames.join(', ')+' also have leave overlapping these dates. Approve anyway?'))return;
   }
   var ok=await sbPatch('ts_leave_requests',id,{
     status:'approved',reviewed_at:new Date().toISOString(),
@@ -486,6 +573,7 @@ window.approveLeave=async function(id){
   });
   if(ok){
     await sbU('ts_leave_audit',[{request_id:id,action:'approved',performed_by:me?.id,performed_by_name:me?.name||me?.email}]);
+    try{await _lvStampRoster(req);}catch(e){}   // auto-stamp the approved leave onto the roster
     await window._notifyLeaveUser(req.user_id,'approved',req.leave_type,req.start_date,req.end_date,null);
     window._triggerLeaveEmail(id,'approved').catch(function(){});
     S._leave._allLoaded=false;
@@ -499,12 +587,15 @@ window.declineLeave=async function(id){
   var comment=(document.getElementById('decline-comment-'+id)||{}).value||S._leave?.declineComment||'';
   var req=(S._leave?.allReqs||[]).find(function(r){return r.id===id;});
   if(!req)return;
+  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk')){toast('Not authorised to decline this request.','warn');return;}
+  var _wasApproved=req.status==='approved';
   var ok=await sbPatch('ts_leave_requests',id,{
     status:'declined',admin_comment:comment||null,
     reviewed_at:new Date().toISOString(),reviewed_by:me?.id,reviewed_by_name:me?.name||me?.email
   });
   if(ok){
     await sbU('ts_leave_audit',[{request_id:id,action:'declined',performed_by:me?.id,performed_by_name:me?.name||me?.email,comment:comment||null}]);
+    if(_wasApproved){try{await _lvUnstampRoster(req);}catch(e){}}   // revert the roster auto-stamp
     await window._notifyLeaveUser(req.user_id,'declined',req.leave_type,req.start_date,req.end_date,comment);
     window._triggerLeaveEmail(id,'declined').catch(function(){});
     S._leave.declineId=null;S._leave.declineComment='';S._leave._allLoaded=false;
@@ -515,8 +606,13 @@ window.declineLeave=async function(id){
 
 window.withdrawLeave=async function(id){
   if(!confirm('Withdraw this leave request?'))return;
+  var me=S.user;
+  var _wReq=((S._leave&&(S._leave.myReqs||[]).concat(S._leave.allReqs||[]))||[]).find(function(r){return r.id===id;});
+  var _wWasApproved=_wReq&&_wReq.status==='approved';
   var ok=await sbPatch('ts_leave_requests',id,{status:'withdrawn'});
   if(ok){
+    try{await sbU('ts_leave_audit',[{request_id:id,action:'withdrawn',performed_by:me&&me.id,performed_by_name:me&&(me.name||me.email)}]);}catch(e){}
+    if(_wWasApproved&&_wReq){try{await _lvUnstampRoster(_wReq);}catch(e){}}   // revert the roster auto-stamp
     S._leave._myLoaded=false;
     toast('Leave request withdrawn.','info');
     window.loadMyLeave();
@@ -527,10 +623,16 @@ window.withdrawLeave=async function(id){
 window.deleteLeaveRequest=async function(id){
   if((S.user&&S.user.role)!=='superadmin'){toast('Only a superadmin can delete leave requests.','warn');return;}
   if(!confirm('Permanently delete this leave request? This cannot be undone.'))return;
+  var _delReq=(S._leave&&S._leave.allReqs||[]).find(function(r){return r.id===id;})||{};
+  // Log to the general audit trail (ts_audit_log) since the leave-specific audit rows are deleted below.
+  try{if(typeof auditLog==='function')await auditLog('leave_delete',{id:id,user:_delReq.user_name,type:_delReq.leave_type,start:_delReq.start_date,end:_delReq.end_date});}catch(e){}
   try{
-    await fetch(SB+'/rest/v1/ts_leave_requests?id=eq.'+id,{method:'DELETE',headers:SH});
-    await fetch(SB+'/rest/v1/ts_leave_audit?request_id=eq.'+id,{method:'DELETE',headers:SH});
-  }catch(e){}
+    var _dr=await _sbFetch(SB+'/rest/v1/ts_leave_requests?id=eq.'+id,{method:'DELETE',headers:{...SH}});
+    if(!_dr.ok){toast('Delete failed on the server — not deleted. Try again.','error');return;}
+    await _sbFetch(SB+'/rest/v1/ts_leave_audit?request_id=eq.'+id,{method:'DELETE',headers:{...SH}});
+  }catch(e){toast('Delete failed — check connection.','error');return;}
+  // If this leave had been approved (and auto-stamped onto the roster), revert the roster.
+  if(_delReq.status==='approved'){try{await _lvUnstampRoster(_delReq);}catch(e){}}
   if(S._leave){
     if(S._leave.allReqs)S._leave.allReqs=S._leave.allReqs.filter(function(r){return r.id!==id;});
     if(S._leave.myReqs)S._leave.myReqs=S._leave.myReqs.filter(function(r){return r.id!==id;});
@@ -544,10 +646,12 @@ window.deleteAllLeave=async function(){
   var n=((S._leave&&S._leave.allReqs)||[]).length;
   if(!confirm('Permanently delete ALL '+n+' leave request(s) and their history? This cannot be undone.'))return;
   if(!confirm('Are you absolutely sure? This wipes every leave request in the system.'))return;
+  try{if(typeof auditLog==='function')await auditLog('leave_delete_all',{count:n});}catch(e){}
   try{
-    await fetch(SB+'/rest/v1/ts_leave_requests?id=neq.__none__',{method:'DELETE',headers:SH});
-    await fetch(SB+'/rest/v1/ts_leave_audit?id=neq.__none__',{method:'DELETE',headers:SH});
-  }catch(e){}
+    var _dar=await _sbFetch(SB+'/rest/v1/ts_leave_requests?id=neq.__none__',{method:'DELETE',headers:{...SH}});
+    if(!_dar.ok){toast('Delete failed on the server — nothing deleted. Try again.','error');return;}
+    await _sbFetch(SB+'/rest/v1/ts_leave_audit?id=neq.__none__',{method:'DELETE',headers:{...SH}});
+  }catch(e){toast('Delete failed — check connection.','error');return;}
   if(S._leave){S._leave.allReqs=[];S._leave.myReqs=[];S._leave._audit={};}
   toast('All leave requests deleted.','ok');
   render();
@@ -601,8 +705,10 @@ window.leaveEditSave=async function(){
   if(req.leave_type!==e.type){var ot=LEAVE_TYPES.find(function(t){return t.id===req.leave_type;}),nt=LEAVE_TYPES.find(function(t){return t.id===e.type;});changes.push('type '+(ot?ot.lbl:req.leave_type)+' ⇒ '+(nt?nt.lbl:e.type));}
   if((req.reason||'')!==(e.reason||''))changes.push('reason updated');
   if(!changes.length){var _o=document.getElementById('leave-edit-ov');if(_o)_o.remove();S._leaveEdit=null;toast('No changes made.','info');return;}
-  var days=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,e.startDate,e.endDate):_lvDays(e.startDate,e.endDate,false);
+  var days=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,e.startDate,e.endDate):_lvDays(e.startDate,e.endDate);
   var isOwner=req.user_id===(me&&me.id);
+  // Approvers editing someone else's request must actually be allowed to approve that role.
+  if(!isOwner&&(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk'))){toast('Not authorised to edit this request.','warn');return;}
   var reapprove=isOwner&&req.status==='approved';
   var patch={leave_type:e.type,start_date:e.startDate,end_date:e.endDate,reason:e.reason||null,total_days:days};
   if(reapprove){patch.status='pending';patch.reviewed_at=null;patch.reviewed_by=null;patch.reviewed_by_name=null;patch.admin_comment=null;}
@@ -719,6 +825,16 @@ window.markNotificationsRead=async function(){
     method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify({read:true})
   });
   (S._notifications||[]).forEach(function(n){n.read=true;});
+  S.__notifStr=JSON.stringify(S._notifications||[]);
   S._notifOpen=false;
   safeRender();
+};
+// Mark a SINGLE notification read — used when the user clicks through to it.
+window.markNotifRead=async function(id){
+  if(!id||id==='undefined')return;
+  var n=(S._notifications||[]).find(function(x){return String(x.id)===String(id);});
+  if(n&&n.read)return;            // already read — nothing to do
+  if(n)n.read=true;
+  S.__notifStr=JSON.stringify(S._notifications||[]);
+  try{await fetch(SB+'/rest/v1/ts_notifications?id=eq.'+id,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify({read:true})});}catch(e){}
 };
