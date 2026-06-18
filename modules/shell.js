@@ -551,7 +551,7 @@ function renderApp(){
     <div style="background:linear-gradient(135deg,#0a0e1a,#0f172a);border-bottom:1px solid var(--border);padding:max(14px,env(safe-area-inset-top)) 14px 0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:10px">
-          <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;S._drawerSection=S.section;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1" title="Menu">☰</button>
+          <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;S._drawerSection=S.section;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;margin-top:5px" title="Menu">☰</button>
           <img src="${_TS_LOGO}" alt="True South Flights" style="height:38px;width:auto;display:block;object-fit:contain">
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">

@@ -78,13 +78,27 @@ function renderMaintObservations(){
       h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">';
       h+='<span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:'+col+';background:'+col+'1a;padding:2px 8px;border-radius:5px">'+(TL[e.type]||'Note')+'</span>';
       if(e.type==='defect')h+='<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;background:'+(resolved?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)')+';color:'+(resolved?'#22c55e':'#ef4444')+'">'+(resolved?'Resolved':'Open')+'</span>';
-      h+='<span style="font-size:11px;color:var(--text3);margin-left:auto">'+_obsEsc(e.author||'')+' · '+dstr+'</span></div>';
-      h+='<div style="font-size:13px;color:var(--text1);white-space:pre-wrap;line-height:1.5">'+_obsEsc(e.text||'')+'</div>';
-      if(canEdit){
-        h+='<div style="display:flex;gap:8px;margin-top:8px">';
-        if(e.type==='defect')h+='<button tabindex="-1" onclick="window.maintObsResolve(\''+e.id+'\')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid '+(resolved?'var(--border2)':'rgba(34,197,94,.5)')+';background:transparent;color:'+(resolved?'var(--text3)':'#22c55e')+';cursor:pointer">'+(resolved?'Mark open':'Mark resolved')+'</button>';
-        h+='<button tabindex="-1" onclick="window.maintObsDelete(\''+e.id+'\')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;cursor:pointer">Delete</button>';
+      h+='<span style="font-size:11px;color:var(--text3);margin-left:auto">'+_obsEsc(e.author||'')+' · '+dstr+(e.editedAt?' · edited':'')+'</span></div>';
+      var _editing=canEdit&&S._obsEditId===e.id;
+      if(_editing){
+        var _etype=S._obsEditType||e.type||'observation';
+        h+='<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">';
+        [['observation','Observation'],['defect','Defect'],['note','Note']].forEach(function(t){var on=_etype===t[0];var tc=TC[t[0]]||'#94a3b8';h+='<button tabindex="-1" onclick="S._obsEditType=\''+t[0]+'\';render()" style="font-size:11px;padding:5px 12px;border-radius:14px;border:1px solid '+(on?tc:'var(--border2)')+';background:'+(on?tc+'1a':'transparent')+';color:'+(on?tc:'var(--text3)')+';cursor:pointer;font-weight:'+(on?'700':'500')+'">'+t[1]+'</button>';});
         h+='</div>';
+        h+='<textarea id="obs-edit-text" oninput="S._obsEditText=this.value" rows="3" style="width:100%;padding:10px 12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text1);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit">'+_obsEsc(S._obsEditText!=null?S._obsEditText:(e.text||''))+'</textarea>';
+        h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">';
+        h+='<button tabindex="-1" onclick="window.maintObsEditCancel()" style="font-size:12px;padding:6px 14px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer">Cancel</button>';
+        h+='<button tabindex="-1" onclick="window.maintObsEditSave(\''+e.id+'\')" style="font-size:12px;padding:6px 16px;border-radius:7px;border:none;background:var(--acc);color:#fff;font-weight:700;cursor:pointer">Save</button>';
+        h+='</div>';
+      } else {
+        h+='<div style="font-size:13px;color:var(--text1);white-space:pre-wrap;line-height:1.5">'+_obsEsc(e.text||'')+'</div>';
+        if(canEdit){
+          h+='<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">';
+          if(e.type==='defect')h+='<button tabindex="-1" onclick="window.maintObsResolve(\''+e.id+'\')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid '+(resolved?'var(--border2)':'rgba(34,197,94,.5)')+';background:transparent;color:'+(resolved?'var(--text3)':'#22c55e')+';cursor:pointer">'+(resolved?'Mark open':'Mark resolved')+'</button>';
+          h+='<button tabindex="-1" onclick="window.maintObsEditStart(\''+e.id+'\')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--acc);cursor:pointer">Edit</button>';
+          h+='<button tabindex="-1" onclick="window.maintObsDelete(\''+e.id+'\')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;cursor:pointer">Delete</button>';
+          h+='</div>';
+        }
       }
       h+='</div>';
     });
@@ -134,6 +148,32 @@ window.maintObsDelete=function(id){
   var ac=S._obsAc;if(!S.maintObs||!S.maintObs[ac])return;
   S.maintObs[ac]=S.maintObs[ac].filter(function(x){return x.id!==id;});
   _saveMaintObs();render();
+};
+window.maintObsEditStart=function(id){
+  if(!_maintGuard())return;
+  var ac=S._obsAc,e=((S.maintObs||{})[ac]||[]).find(function(x){return x.id===id;});
+  if(!e)return;
+  S._obsEditId=id;S._obsEditText=e.text||'';S._obsEditType=e.type||'observation';
+  render();
+};
+window.maintObsEditCancel=function(){S._obsEditId=null;S._obsEditText=null;S._obsEditType=null;render();};
+window.maintObsEditSave=function(id){
+  if(!_maintGuard())return;
+  var el=document.getElementById('obs-edit-text');
+  var txt=el?el.value.trim():(S._obsEditText||'').trim();
+  if(!txt){toast('Enter some text first.','err');return;}
+  var ac=S._obsAc,e=((S.maintObs||{})[ac]||[]).find(function(x){return x.id===id;});
+  if(!e){window.maintObsEditCancel();return;}
+  var newType=S._obsEditType||e.type||'observation';
+  e.text=txt;e.type=newType;
+  // Keep the defect status consistent with the (possibly changed) type.
+  if(newType==='defect'){if(!e.status)e.status='open';}
+  else{e.status=null;e.resolvedBy=null;e.resolvedAt=null;}
+  e.editedBy=(S.user&&(S.user.name||S.user.email))||'';e.editedAt=new Date().toISOString();
+  S._obsEditId=null;S._obsEditText=null;S._obsEditType=null;
+  _saveMaintObs();
+  if(typeof auditLog==='function')auditLog('maint_obs_edit',{ac:ac,id:id});
+  toast('Entry updated','ok');render();
 };
 
 function _lastUpdatedLabel(ac){
