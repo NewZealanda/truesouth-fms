@@ -625,7 +625,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.28';
+const APP_VER='v23.29';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3078,7 +3078,7 @@ function renderDrawer(){
   function _secBtn(label,section,icon){
     var isOn=sec===section;
     var isExp=_isExp(section);
-    return '<button tabindex="-1" onclick="S._drawerExp[\''+section+'\']=!S._drawerExp[\''+section+'\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(isOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(isOn?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(isOn?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px">'+icon+' <span style="flex:1">'+label+'</span><span style="font-size:10px;opacity:.45">'+(isExp?'▲':'▼')+'</span></button>';
+    return '<button tabindex="-1" onclick="S._drawerExp[\''+section+'\']=!S._drawerExp[\''+section+'\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(isOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(isOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(isOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+icon+'</span><span style="flex:1">'+label+'</span><span style="font-size:10px;opacity:.45">'+(isExp?'▲':'▼')+'</span></button>';
   }
   function _subBtn(label,active,action,noGuard){
     var oc=noGuard?action:'window._navAway(function(){'+action+'})';
@@ -3110,7 +3110,7 @@ function renderDrawer(){
   var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveRole!=='function'||_lvCanApproveRole(role,r.user_role||'desk'));}).length:0;
   var _rlOn=sec==='roster'||sec==='leave';
   var _rlExp=_isExp('roster');
-  h+='<button tabindex="-1" onclick="S._drawerExp[\'roster\']=!S._drawerExp[\'roster\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_rlOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_rlOn?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(_rlOn?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px"><span style="flex:1">🗓️ Roster'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_rlExp?'▲':'▼')+'</span></button>';
+  h+='<button tabindex="-1" onclick="S._drawerExp[\'roster\']=!S._drawerExp[\'roster\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_rlOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_rlOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_rlOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🗓️</span><span style="flex:1">Roster'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_rlExp?'▲':'▼')+'</span></button>';
   if(_rlExp){
     if(_canRoster)h+=_subBtn('Roster',sec==='roster',"S._drawerOpen=false;S.section='roster';render()",true);
     if(_canLeave)h+=_subBtn('My Leave',_lvActive&&(!S._leave||S._leave.tab==='my'),"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='my';render()");
@@ -11945,15 +11945,28 @@ function _rzPkTimeVal(p){if(!p||!p.pickupTime)return 99999;var m=/^(\d{2})(\d{2}
 // ── default van allocation ──────────────────────────────────────────────────
 // Earliest pickup time first (so a driver works straight down the list), filling Van 1 to
 // capacity then flowing into Van 2, then 3 — never overloading a van.
+// Hilton sits the opposite direction, so its pickups always get their own vehicle.
+function _rzIsHilton(loc){return /hilton/i.test(String(loc||''));}
 function _rzAutoVans(pickups){
   pickups=(pickups||[]).filter(function(p){return !p.selfDrive;}); // self-drive never goes in a van
-  const sorted=pickups.slice().sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
+  const byTime=function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);};
   const vans=[];for(let i=0;i<_RZ_VANS;i++)vans.push([]);
-  let vi=0;
-  sorted.forEach(function(p){
-    const cur=vans[vi].reduce(function(s,id){const pp=_rzPickupById(pickups,id);return s+(pp?pp.pax:0);},0);
-    if(cur>0 && cur+p.pax>_RZ_VAN_SEATS && vi<_RZ_VANS-1)vi++;
-    vans[vi].push(p.id);
+  // Pickups run by DEPARTURE: a whole departure is collected together (Van 1→2→3 by capacity),
+  // then the next departure reuses the same vans. Hilton always gets its own vehicle. Earliest first.
+  const byDep={};pickups.forEach(function(p){(byDep[p.depart||'~']=byDep[p.depart||'~']||[]).push(p);});
+  Object.keys(byDep).sort().forEach(function(dep){
+    const grp=byDep[dep];
+    const hilton=grp.filter(function(p){return _rzIsHilton(p.location);}).sort(byTime);
+    const others=grp.filter(function(p){return !_rzIsHilton(p.location);}).sort(byTime);
+    const load=[];for(let i=0;i<_RZ_VANS;i++)load.push(0);
+    let vi=0;
+    const place=function(p){
+      if(load[vi]>0 && load[vi]+p.pax>_RZ_VAN_SEATS && vi<_RZ_VANS-1)vi++;
+      vans[vi].push(p.id);load[vi]+=p.pax;
+    };
+    others.forEach(place);
+    // Hilton starts a fresh vehicle within this departure (opposite direction).
+    if(hilton.length){ if(load[vi]>0 && vi<_RZ_VANS-1)vi++; hilton.forEach(place); }
   });
   return vans;
 }
@@ -12231,6 +12244,24 @@ function _rzRenderPickups(){
   const selfDrive=pickups.filter(function(p){return p.selfDrive;});
   const vanPickups=pickups.filter(function(p){return !p.selfDrive;});
 
+  // Available ground-staff drivers for the day (from the roster) — drag a bubble onto a van.
+  if(!S._rosterLoaded&&window.loadRosterFromCloud){S._rosterLoaded=true;window.loadRosterFromCloud();}
+  const drivers=_rzAvailableDrivers();
+  const assigned=(S._pickupDrivers||[]);
+  const depFilter=S._pickupDepFilter||null;
+  let driversBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:6px">Drivers available · '+drivers.length+' <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(drag onto a van)</span></div>';
+  if(!drivers.length){
+    driversBar+='<div style="font-size:12px;color:var(--text3)">No ground staff rostered on for this day — vans without a driver go by taxi.</div>';
+  }else{
+    driversBar+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    drivers.forEach(function(nm){
+      var isAsg=assigned.indexOf(nm)>=0;
+      driversBar+='<div draggable="true" ondragstart="window.pickupDriverDragStart(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\',event)" title="Drag onto a van to assign" style="display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:16px;background:'+(isAsg?'rgba(74,222,128,.12)':'rgba(124,58,237,.12)')+';border:1px solid '+(isAsg?'rgba(74,222,128,.5)':'rgba(124,58,237,.45)')+';cursor:grab;font-size:12px;font-weight:700;color:'+(isAsg?'#4ade80':'#c4b5fd')+'">'+(isAsg?'✓ ':'👤 ')+_rzEsc(nm)+'</div>';
+    });
+    driversBar+='</div>';
+  }
+  driversBar+='</div>';
+
   // group van pickups by departure time for the summary
   const byTime={};
   vanPickups.forEach(function(p){(byTime[p.depart||'—']=byTime[p.depart||'—']||[]).push(p);});
@@ -12244,30 +12275,45 @@ function _rzRenderPickups(){
       '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.pickupSave()">💾 Save</button>'+
     '</div></div>';
 
-  // departure-time summary
-  let timeBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:6px">By Departure</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
+  // departure-time selector — click a time to focus the board on that departure's run.
+  let timeBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px">By Departure'+(depFilter?'<button onclick="window.pickupSetDepFilter(null)" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;background:none;border:none;color:#c4b5fd;cursor:pointer">showing '+_rzEsc(depFilter)+' · show all ✕</button>':'<span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(click a time)</span>')+'</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
   times.forEach(function(t){
     const grp=byTime[t];const pax=grp.reduce(function(s,p){return s+p.pax;},0);
-    timeBar+='<span style="padding:3px 9px;border-radius:12px;background:var(--card2);border:1px solid var(--border2);font-size:11px;color:var(--text2)"><b>'+_rzEsc(t)+'</b> · '+grp.length+' pk / '+pax+' pax</span>';
+    const on=depFilter===t;
+    timeBar+='<button onclick="window.pickupSetDepFilter(\''+_rzEsc(t).replace(/'/g,"\\'")+'\')" style="padding:4px 10px;border-radius:12px;background:'+(on?'rgba(124,58,237,.25)':'var(--card2)')+';border:1px solid '+(on?'#7c3aed':'var(--border2)')+';font-size:11px;color:'+(on?'#c4b5fd':'var(--text2)')+';cursor:pointer;font-weight:'+(on?'700':'400')+'"><b>'+_rzEsc(t)+'</b> · '+grp.length+' pk / '+pax+' pax</button>';
   });
   timeBar+='</div></div>';
 
   // van cards/columns (stack vertically on narrow screens via flex-wrap + min-width)
   let vansH='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">';
   S._pickupVans.forEach(function(vanIds,vi){
-    const pax=_rzVanPax(vanIds,pickups);
-    const over=pax>_RZ_VAN_SEATS;
+    // Capacity is per departure run (each ≤11), so size the warning by the busiest departure.
+    var _byDepLoad={};vanIds.forEach(function(id){var pp=_rzPickupById(pickups,id);if(pp)_byDepLoad[pp.depart||'~']=(_byDepLoad[pp.depart||'~']||0)+pp.pax;});
+    var _maxDep=0;Object.keys(_byDepLoad).forEach(function(k){if(_byDepLoad[k]>_maxDep)_maxDep=_byDepLoad[k];});
+    const pax=depFilter?(_byDepLoad[depFilter]||0):_rzVanPax(vanIds,pickups);
+    const over=depFilter?(pax>_RZ_VAN_SEATS):(_maxDep>_RZ_VAN_SEATS);
     const col=['#4a99d2','#48925f','#e3683e'][vi]||'#64748b';
     vansH+='<div ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="window.pickupDropOnVan('+vi+',event);this.style.outline=\'\'" '+
       'style="flex:1 1 260px;min-width:240px;background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px">';
-    vansH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'+
+    vansH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
       '<div style="font-weight:800;font-size:14px;color:'+col+'">Van '+(vi+1)+'</div>'+
       '<span style="font-size:12px;font-weight:700;color:'+(over?'#ef4444':'var(--text2)')+'">'+pax+' / '+_RZ_VAN_SEATS+' pax'+(over?' ⚠':'')+'</span></div>';
+    // Driver / taxi slot — drop a driver bubble anywhere on the van to assign; no driver = taxi.
+    var drv=(S._pickupDrivers||[])[vi]||null;
+    vansH+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding:5px 9px;border-radius:8px;border:1px dashed '+(drv?col+'99':(vanIds.length?'#f59e0b88':'var(--border2)'))+';background:'+(drv?col+'14':(vanIds.length?'rgba(245,158,11,.08)':'transparent'))+'">'+
+      (drv
+        ?'<span style="font-size:12px;font-weight:700;color:'+col+'">👤 '+_rzEsc(drv)+'</span><button onclick="window.pickupClearDriver('+vi+')" style="margin-left:auto;background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;line-height:1" title="Clear driver">✕</button>'
+        :(vanIds.length
+          ?'<span style="font-size:12px;font-weight:700;color:#f59e0b">🚕 Taxi — drop a driver to assign</span>'
+          :'<span style="font-size:11px;color:var(--text3)">Drop a driver here</span>'))+
+      '</div>';
+    var _vlist=vanIds.slice().sort(function(a,b){return _rzPkTimeVal(_rzPickupById(pickups,a))-_rzPkTimeVal(_rzPickupById(pickups,b));}).filter(function(id){if(!depFilter)return true;var pp=_rzPickupById(pickups,id);return pp&&pp.depart===depFilter;});
     if(!vanIds.length){
-      vansH+='<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px;border:1px dashed var(--border2);border-radius:8px">Drop pickups here</div>';
+      vansH+='<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px;border:1px dashed var(--border2);border-radius:8px">Drop pickups here</div>';
+    }else if(!_vlist.length){
+      vansH+='<div style="text-align:center;padding:14px;color:var(--text3);font-size:12px">No pickups at '+_rzEsc(depFilter)+'</div>';
     }else{
-      // earliest pickup time first within the van — a clean top-to-bottom run sheet
-      vanIds.slice().sort(function(a,b){return _rzPkTimeVal(_rzPickupById(pickups,a))-_rzPkTimeVal(_rzPickupById(pickups,b));}).forEach(function(id){
+      _vlist.forEach(function(id){
         const p=_rzPickupById(pickups,id);if(!p)return;
         const collected=!!S._pickupCollected[id];
         vansH+='<div draggable="true" ondragstart="window.pickupDragStart(\''+_rzEsc(id).replace(/'/g,"\\'")+'\',event)" '+
@@ -12296,30 +12342,38 @@ function _rzRenderPickups(){
     sdH='<div class="card" style="border-left:3px solid #a78bfa"><div style="font-weight:800;font-size:13px;color:#a78bfa;margin-bottom:8px">Self-drive — no van ('+selfDrive.length+')</div>'+
       '<div style="display:flex;flex-direction:column;gap:6px">';
     selfDrive.forEach(function(p){
-      sdH+='<div style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
-        '<div><span style="font-weight:700;font-size:13px;color:var(--text)">'+_rzEsc(p.customer||p.order)+'</span>'+
-          (p.depart?'<span style="font-size:11px;color:var(--text3);margin-left:8px">🛫 Dep '+_rzEsc(p.depart)+'</span>':'')+'</div>'+
-        '<span style="font-size:11px;font-weight:700;color:#a78bfa">'+p.pax+' pax</span>'+
+      sdH+='<div style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:9px 11px">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+          '<div><span style="font-weight:700;font-size:13px;color:var(--text)">'+_rzEsc(p.customer||p.order)+'</span>'+
+            (p.depart?'<span style="font-size:11px;color:var(--text3);margin-left:8px">🛫 Dep '+_rzEsc(p.depart)+'</span>':'')+'</div>'+
+          '<span style="font-size:11px;font-weight:700;color:#a78bfa">'+p.pax+' pax</span>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:5px;margin-top:6px"><span style="font-size:12px">📍</span>'+_rzLocSelect(p.id,p.location)+'</div>'+
       '</div>';
     });
     sdH+='</div></div>';
   }
-  return hdr+timeBar+vansH+sdH;
+  return hdr+driversBar+timeBar+vansH+sdH;
 }
 
 // Editable pickup-location dropdown for a pickup card (options = distinct locations seen).
+// Includes a "Self-drive" choice so a pickup can be switched to self-drive and back — people
+// ring up and change their minds both ways.
 function _rzLocSelect(id,current){
-  var locs=_rzAllLocations();
-  if(current&&locs.indexOf(current)<0)locs.unshift(current);
-  var opts=locs.map(function(l){return '<option value="'+_rzEsc(l)+'"'+(l===current?' selected':'')+'>'+_rzEsc(l)+'</option>';}).join('');
+  var isSD=_rzIsSelfDrive(current);
+  var locs=_rzAllLocations().filter(function(l){return !_rzIsSelfDrive(l);});
+  if(current&&!isSD&&locs.indexOf(current)<0)locs.unshift(current);
+  var opts='<option value="__selfdrive__"'+(isSD?' selected':'')+'>🚗 Self-drive (no van)</option>'+
+    locs.map(function(l){return '<option value="'+_rzEsc(l)+'"'+(l===current?' selected':'')+'>'+_rzEsc(l)+'</option>';}).join('');
   return '<select onclick="event.stopPropagation()" onchange="window.pickupSetLocation(\''+_rzEsc(id).replace(/'/g,"\\'")+'\',this.value)" '+
     'style="flex:1;min-width:0;font-size:12px;padding:3px 4px;background:var(--card);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer">'+opts+'</select>';
 }
 
-// Override a pickup's location (persists with the pickup list).
+// Override a pickup's location (persists with the pickup list). "__selfdrive__" flips it to
+// self-drive (out of the vans); picking a real location flips it back into a van.
 window.pickupSetLocation=function(id,val){
   S._pickupLocOverride=S._pickupLocOverride||{};
-  S._pickupLocOverride[id]=val;
+  S._pickupLocOverride[id]=(val==='__selfdrive__')?'Self-drive':val;
   // Reconcile van placement in-place (handles a pickup becoming / no longer being
   // self-drive) WITHOUT nulling S._pickupVans — nulling then saving wiped the operator's
   // hand-tuned van arrangement to an empty array before the rebuild ran.
@@ -12336,8 +12390,9 @@ window.rezdyLoadPickups=async function(){
     S._pickupVans=row.vans;
     S._pickupCollected=(row.collected&&typeof row.collected==='object')?row.collected:{};
     S._pickupLocOverride=(row.locOverride&&typeof row.locOverride==='object')?row.locOverride:{};
+    S._pickupDrivers=Array.isArray(row.drivers)?row.drivers:[];
   }else{
-    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};
+    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];
   }
   S._pickupLoading=false;
   render();
@@ -12362,9 +12417,14 @@ window.pickupDragStart=function(id,e){
 };
 window.pickupDropOnVan=function(vi,e){
   if(e&&e.preventDefault)e.preventDefault();
+  // A driver bubble dropped on a van assigns that driver to it.
+  if(S._rezdyDragDriver){
+    S._pickupDrivers=S._pickupDrivers||[];S._pickupDrivers[vi]=S._rezdyDragDriver;S._rezdyDragDriver=null;
+    window.pickupSave(true);render();return;
+  }
   let id=S._rezdyDragId;
   try{if(!id&&e.dataTransfer)id=e.dataTransfer.getData('text/plain');}catch(_){}
-  if(!id||!Array.isArray(S._pickupVans))return;
+  if(!id||id.indexOf('driver:')===0||!Array.isArray(S._pickupVans))return;
   // remove from any van, append to target
   S._pickupVans=S._pickupVans.map(function(v){return v.filter(function(x){return x!==id;});});
   if(!S._pickupVans[vi])S._pickupVans[vi]=[];
@@ -12379,11 +12439,23 @@ window.pickupSave=async function(silent){
   const payload={
     id:'pl_'+S.rezdyDate,
     list_date:S.rezdyDate,
-    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{}}
+    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[]}
   };
   const r=await sbU('ts_pickup_lists',[payload]);
   if(!silent)toast(r?'Pickup list saved ✓':'Save failed',r?'ok':'err');
 };
+// Ground staff rostered on (not off/leave) for the current date — i.e. available to drive.
+function _rzAvailableDrivers(){
+  var ds=S.rezdyDate;var roster=S.roster||{};var off={rdo:1,off:1,leave:1,ul:1,sick:1};
+  return (S.users||[]).filter(function(u){
+    if(!u||u.inactive||u.role!=='ground_staff')return false;
+    var st=(typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):((roster[ds]||{})[u.id]||'');
+    return !off[st];
+  }).map(function(u){return (u.name||'').trim();}).filter(Boolean);
+}
+window.pickupDriverDragStart=function(name,e){S._rezdyDragDriver=name;try{e.dataTransfer.setData('text/plain','driver:'+name);e.dataTransfer.effectAllowed='copy';}catch(_){}};
+window.pickupClearDriver=function(vi){if(S._pickupDrivers)S._pickupDrivers[vi]=null;window.pickupSave(true);render();};
+window.pickupSetDepFilter=function(t){S._pickupDepFilter=(S._pickupDepFilter===t)?null:t;render();};
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  (3) SCHEDULE — Google-Calendar-like day view
