@@ -264,6 +264,10 @@ function renderLoadsheet(){
   const _lsPilots=f.ac?pilotCrewList().filter(c=>(c.endorse||[]).includes(f.ac)):pilotCrewList();
   const crewOpts=_lsPilots.map(c=>`<option value="${c.n}"${f.pic===c.n?' selected':''}>${c.n}${c.w?' ('+c.w+'kg)':''}</option>`).join('');
   const cpOpts=`<option value="">None</option>`+pilotCrewList().filter(c=>c.n!==f.pic).map(c=>`<option value="${c.n}"${f.coPilot===c.n?' selected':''}>${c.n}</option>`).join('');
+  // dep/dest free-text "Other" support on the loadsheet (mirrors the manifest)
+  const _lsDepOther=!!S._lsOther_dep||(!!f.dep&&!_isKnownApt(f.dep));
+  const _lsDestOther=!!S._lsOther_dest||(!!f.dest&&!_isKnownApt(f.dest));
+  const _lsOtherInput=function(field,val){return '<input class="fi" type="text" value="'+(val||'').replace(/"/g,'&quot;')+'" placeholder="Type location" onclick="event.stopPropagation()" onchange="S.form.'+field+'=this.value;S.formDirty=true;autoSaveLS();safeRender()" style="margin-top:6px;width:100%;font-size:13px;font-weight:600;background:var(--card);border:1px solid var(--border2);border-radius:6px;padding:5px 7px;color:var(--text1)">';};
   const draftBanner=f.status==='unsigned'?`<div style="padding:9px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;margin-bottom:10px">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
   const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;render();}">Clear & Start Blank</button>`;
 
@@ -647,12 +651,14 @@ function renderLoadsheet(){
     <div style="display:flex;align-items:stretch;gap:6px;margin-bottom:8px">
       <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Departure</div>
-        <select class="fi" onchange="S.form.dep=this.value;S.formDirty=true;autoSaveLS();safeRender()" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(f.dep)}</select>
+        <select class="fi" onchange="window.setLsRouteField('dep',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_lsDepOther?'':f.dep, _lsDepOther)}</select>
+        ${_lsDepOther?_lsOtherInput('dep',f.dep):''}
       </div>
-      <button onclick="const t=S.form.dep;S.form.dep=S.form.dest;S.form.dest=t;autoSaveLS();safeRender()" title="Swap" style="align-self:center;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--accent);font-size:16px;cursor:pointer;flex-shrink:0;line-height:1">&#x21C4;</button>
+      <button onclick="const t=S.form.dep;S.form.dep=S.form.dest;S.form.dest=t;S._lsOther_dep=false;S._lsOther_dest=false;S.formDirty=true;autoSaveLS();safeRender()" title="Swap" style="align-self:center;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--accent);font-size:16px;cursor:pointer;flex-shrink:0;line-height:1">&#x21C4;</button>
       <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Destination</div>
-        <select class="fi" onchange="S.form.dest=this.value;autoSaveLS();safeRender()" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(f.dest)}</select>
+        <select class="fi" onchange="window.setLsRouteField('dest',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_lsDestOther?'':f.dest, _lsDestOther)}</select>
+        ${_lsDestOther?_lsOtherInput('dest',f.dest):''}
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">

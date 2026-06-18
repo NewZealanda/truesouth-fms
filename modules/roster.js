@@ -46,7 +46,7 @@ var ROLE_GROUPS=[
   {key:'pilot',    label:'Pilots',   roles:['pilot'],              col:'#7B9EC6'},
   {key:'desk',     label:'Desk',     roles:['desk','cx_manager'],  col:'#f9a8d4'},
   {key:'admin',    label:'Admin',    roles:['admin','superadmin'], col:'#f59e0b'},
-  {key:'ground',   label:'Ground',   roles:['ground_staff','ground'], col:'#a16207'},
+  {key:'ground',   label:'Ground',   roles:['ground_staff'], col:'#a16207'},
   {key:'maint',    label:'Maint',    roles:['maint','maintenance'],col:'#a78bfa'},
   {key:'accounts', label:'Accounts', roles:['accounts'],           col:'#06b6d4'},
   {key:'marketing',label:'Marketing',roles:['marketing'],          col:'#ec4899'},
@@ -196,7 +196,7 @@ function renderRosterView(){
     var gk=_rGroupKey(u);
     return gk&&_rGH.indexOf(gk)===-1;
   });
-  var roleOrder={superadmin:0,admin:1,pilot:2,desk:3,cx_manager:3,accounts:4,marketing:5,maint:6,maintenance:6,ground_staff:7,ground:7};
+  var roleOrder={superadmin:0,admin:1,pilot:2,desk:3,cx_manager:3,accounts:4,marketing:5,maint:6,maintenance:6,ground_staff:7};
   displayUsers=displayUsers.slice().sort(function(a,b){return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');});
   var roster=S.roster||{};
 

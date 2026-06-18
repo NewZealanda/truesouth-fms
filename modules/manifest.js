@@ -213,13 +213,13 @@ function renderStep1(){
     <div style="display:flex;align-items:stretch;gap:6px;margin-bottom:8px">
       <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Departure</div>
-        <select tabindex="-1" class="fi" onchange="window.setRouteField('dep',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_depOther?'':d.dep)}<option value="__other__"${_depOther?' selected':''}>✏️ Other…</option></select>
+        <select tabindex="-1" class="fi" onchange="window.setRouteField('dep',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_depOther?'':d.dep, _depOther)}</select>
         ${_depOther?_otherInput('dep',d.dep):''}
       </div>
       <button tabindex="-1" onclick="const t=S.dispatch.dep;S.dispatch.dep=S.dispatch.dest;S.dispatch.dest=t;S._rtOther_dep=false;S._rtOther_dest=false;autoSaveDispatch();safeRender()" title="Swap" style="align-self:center;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--accent);font-size:16px;cursor:pointer;flex-shrink:0;line-height:1">&#x21C4;</button>
       <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Destination</div>
-        <select tabindex="-1" class="fi" onchange="window.setRouteField('dest',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_destOther?'':d.dest)}<option value="__other__"${_destOther?' selected':''}>✏️ Other…</option></select>
+        <select tabindex="-1" class="fi" onchange="window.setRouteField('dest',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_destOther?'':d.dest, _destOther)}</select>
         ${_destOther?_otherInput('dest',d.dest):''}
       </div>
     </div>

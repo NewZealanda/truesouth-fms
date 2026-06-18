@@ -121,6 +121,7 @@ function _getCustomAerodromes(){
 function renderAerodromes(){
   var custom=_getCustomAerodromes();
   var all=NZ_AERODROMES.concat(custom);
+  var featSet=(typeof _featuredApts==='function')?_featuredApts():[];
   var srch=(S._aeroSearch||'').toLowerCase();
   var filt=srch?all.filter(function(a){return a.icao.toLowerCase().includes(srch)||a.name.toLowerCase().includes(srch);}):all;
   var sel=S._aeroSel||null;
@@ -155,6 +156,7 @@ function renderAerodromes(){
       +'<td style="padding:5px 8px;font-size:12px;color:var(--text1)">'+_aeroEsc(a.name)+(isCustom?' <span style="font-size:9px;color:var(--ok-text);border:1px solid var(--ok-text);border-radius:3px;padding:1px 3px">edited</span>':'')+'</td>'
       +'<td style="padding:5px 8px;font-size:11px;color:var(--text3)">'+a.elev+'ft</td>'
       +'<td style="padding:5px 8px;white-space:nowrap">'
+      +'<button title="'+(featSet.indexOf(a.icao)>=0?'Remove from Featured':'Add to Featured')+'" data-ficao="'+a.icao+'" onclick="event.stopPropagation();window.aeroToggleFeatured(this.dataset.ficao)" style="font-size:13px;line-height:1;padding:1px 5px;background:transparent;border:1px solid '+(featSet.indexOf(a.icao)>=0?'var(--acc)':'var(--border2)')+';border-radius:4px;color:'+(featSet.indexOf(a.icao)>=0?'#f59e0b':'var(--text3)')+';cursor:pointer;margin-right:3px">'+(featSet.indexOf(a.icao)>=0?'★':'☆')+'</button>'
       +'<button data-eicao="'+a.icao+'" onclick="event.stopPropagation();window.aeroEdit(this.dataset.eicao)" style="font-size:10px;padding:1px 6px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--acc);cursor:pointer;margin-right:3px">Edit</button>'
       +(isCustom?'<button data-deicao="'+a.icao+'" onclick="event.stopPropagation();window.aeroDeleteCustom(this.dataset.deicao)" style="font-size:10px;padding:1px 6px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--err-text);cursor:pointer">Reset</button>':'')
       +'</td>'
@@ -236,6 +238,18 @@ window.aeroDeleteCustom=function(icao){
   lsSet('custom_aerodromes',custom);
   if(typeof _rebuildAptData==='function')_rebuildAptData();
   if(S._aeroSel===icao)S._aeroSel=null;
+  render();
+};
+// Toggle an aerodrome in/out of the Featured list (the dropdown "* Featured" group).
+// The settings list is the source of truth — persisted to the cloud + every device.
+window.aeroToggleFeatured=function(icao){
+  if(!icao)return;
+  var list=(typeof _featuredApts==='function'?_featuredApts():[]).slice();
+  var i=list.indexOf(icao);
+  if(i>=0)list.splice(i,1); else list.push(icao);
+  if(typeof _saveFeaturedApts==='function')_saveFeaturedApts(list);
+  if(typeof _rebuildAptData==='function')_rebuildAptData();
+  toast(i>=0?(icao+' removed from Featured'):(icao+' added to Featured'),'ok');
   render();
 };
 window.aeroEdit=function(icao){

@@ -274,8 +274,8 @@ function renderAdminPeople(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
   const ad=S.admin;
   const today=new Date();today.setHours(0,0,0,0);
-  const ROLE_LEVEL={superadmin:1,admin:2,cx_manager:2,pilot:3,desk:3,maint:3,ground_staff:4,ground:4,accounts:3,marketing:3};
-const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9a8d4',maint:'#a78bfa',ground_staff:'#a16207',ground:'#a16207',accounts:'#06b6d4',marketing:'#ec4899'};
+  const ROLE_LEVEL={superadmin:1,admin:2,cx_manager:2,pilot:3,desk:3,maint:3,ground_staff:4,accounts:3,marketing:3};
+const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9a8d4',maint:'#a78bfa',ground_staff:'#a16207',accounts:'#06b6d4',marketing:'#ec4899'};
   function expiryCol(v){if(!v)return'var(--text3)';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'#ef4444':dy<30?'#f59e0b':'#22c55e';}
   function expiryBg(v){if(!v)return'transparent';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'rgba(239,68,68,.08)':dy<30?'rgba(245,158,11,.08)':'transparent';}
   function fmt(v){if(!v)return'—';const p=v.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:v;}
@@ -374,8 +374,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'<option value="pilot"'+(d.role==='pilot'?' selected':'')+'>Pilot</option>'
         +'<option value="desk"'+(d.role==='desk'?' selected':'')+'>Desk</option>'
         +'<option value="maint"'+(d.role==='maint'?' selected':'')+'>Maintenance</option>'
-        +'<option value="ground_staff"'+(d.role==='ground_staff'?' selected':'')+'>Ground Staff</option>'
-        +'<option value="ground"'+(d.role==='ground'?' selected':'')+'>Ground</option>'
+        +'<option value="ground_staff"'+(d.role==='ground_staff'||d.role==='ground'?' selected':'')+'>Ground</option>'
         +'<option value="accounts"'+(d.role==='accounts'?' selected':'')+'>Accounts</option>'
         +'<option value="marketing"'+(d.role==='marketing'?' selected':'')+'>Marketing</option>'
         +'</select></div>':'')
@@ -3187,7 +3186,7 @@ function renderAdminPerms(){
     {k:'pilot',        lbl:'Pilot'},
     {k:'desk',         lbl:'Desk'},
     {k:'maint',        lbl:'Maint'},
-    {k:'ground_staff', lbl:'Ground'},{k:'ground', lbl:'Ground (new)'},
+    {k:'ground_staff', lbl:'Ground'},
     {k:'accounts',     lbl:'Accounts'},
     {k:'marketing',    lbl:'Marketing'}
   ];

@@ -556,7 +556,28 @@ function _editingPerms(){return Date.now()-(S._permsPageTs||0)<12000;}
 const GRP_COLOURS=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];
 // Airport map: ICAO → full name
 var APTS={};var APT_COORDS={};var APS=[];
+// Default featured aerodromes — used only until the user-managed list (Aerodromes
+// settings → ⭐) loads. The settings list is the source of truth; see _featuredApts().
 var _APT_PINNED=["NZQN","NZMF","NZMC","NZFJ"];
+// The live featured list, in display order. Source of truth = ts_settings 'aero_featured'
+// (shared across devices), mirrored to localStorage 'featured_aerodromes' for instant boot.
+// Falls back to _APT_PINNED only when nothing has been saved yet.
+function _featuredApts(){
+  if(Array.isArray(S._aeroFeatured))return S._aeroFeatured;
+  try{var v=lsGet("featured_aerodromes");
+    if(Array.isArray(v)){S._aeroFeatured=v;return v;}
+    if(typeof v==="string"&&v){var p=JSON.parse(v);if(Array.isArray(p)){S._aeroFeatured=p;return p;}}
+  }catch(e){}
+  return _APT_PINNED.slice();
+}
+// Persist the featured list locally + to the cloud (ts_settings) so every device shares it.
+function _saveFeaturedApts(list){
+  S._aeroFeatured=list.slice();
+  try{lsSet("featured_aerodromes",S._aeroFeatured);}catch(e){}
+  if(typeof sbU==="function"){
+    try{sbU("ts_settings",[{key:"aero_featured",value:JSON.stringify(S._aeroFeatured)}]).then(function(r){if(r===null&&typeof toast==='function')toast('Featured aerodromes did not save to the server — check connection.','warn');});}catch(e){}
+  }
+}
 function _getAllApts(){
   var base=typeof NZ_AERODROMES!=="undefined"?NZ_AERODROMES:[];
   var custom=[];
@@ -581,19 +602,30 @@ window.setRouteField=function(field,val){
   else{S['_rtOther_'+field]=false;S.dispatch[field]=val;}
   autoSaveDispatch();safeRender();
 };
-function aptOpts(sel){
+// Same as setRouteField but for the LOADSHEET form (S.form), so dep/dest "Other" works there too.
+window.setLsRouteField=function(field,val){
+  if(!S.form)return;
+  if(val==='__other__'){S['_lsOther_'+field]=true;if(_isKnownApt(S.form[field]))S.form[field]='';}
+  else{S['_lsOther_'+field]=false;S.form[field]=val;}
+  S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();safeRender();
+};
+function aptOpts(sel, isOther){
   _rebuildAptData();
   var all=_getAllApts();
-  var pinned=_APT_PINNED.map(function(ic){return all.find(function(a){return a.icao===ic;});}).filter(Boolean);
-  var rest=all.filter(function(a){return _APT_PINNED.indexOf(a.icao)<0;});
+  var pinIcaos=_featuredApts();
+  var pinned=pinIcaos.map(function(ic){return all.find(function(a){return a.icao===ic;});}).filter(Boolean);
+  var rest=all.filter(function(a){return pinIcaos.indexOf(a.icao)<0;});
   var south=rest.filter(function(a){return a.lat<=-41.35;}).sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});
   var north=rest.filter(function(a){return a.lat>-41.35;}).sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});
   function opt(a){var lbl=(a.icao==='NZQN'?'\uD83C\uDFE0 ':'')+a.name+' ('+a.icao+')';return '<option value="'+a.icao+'"'+(sel===a.icao?' selected':'')+'>'+lbl+'</option>';}
-  return '<optgroup label="* Featured">'+pinned.map(opt).join('')+'</optgroup>'
+  // "Other\u2026" (free-text) at the top of Featured \u2014 only for callers that handle it (manifest /
+  // loadsheet pass the isOther flag). Callers that don't (e.g. charter legs) omit the arg.
+  var otherOpt=(isOther!==undefined)?'<option value="__other__"'+(isOther?' selected':'')+'>\u270F\uFE0F Other\u2026</option>':'';
+  return '<optgroup label="* Featured">'+otherOpt+pinned.map(opt).join('')+'</optgroup>'
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.11';
+const APP_VER='v23.14';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1456,6 +1488,11 @@ async function loadAll(){
       const _cq=await fetch(SB+'/rest/v1/ts_settings?key=eq.charter_quotes&select=value',{headers:SH});
       if(_cq.ok){const _cqd=await _cq.json();if(_cqd[0]&&_cqd[0].value){lsSet('ts_charter_quotes_cache',JSON.parse(_cqd[0].value));}}
     }catch(e){}
+    // Load the featured/pinned aerodrome list (source of truth for the dropdown "Featured" group)
+    try{
+      const _af=await fetch(SB+'/rest/v1/ts_settings?key=eq.aero_featured&select=value',{headers:SH});
+      if(_af.ok){const _afd=await _af.json();if(_afd[0]&&_afd[0].value){var _fl=JSON.parse(_afd[0].value);if(Array.isArray(_fl)){S._aeroFeatured=_fl;lsSet('featured_aerodromes',_fl);}}}
+    }catch(e){}
 
     // ── Loadsheets ──
     const ls=_pLoadsheets;
@@ -1955,12 +1992,13 @@ async function reloadTable(table){
     if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,r.rates||dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
-      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance)&select=key,value',{headers:SH});
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured)&select=key,value',{headers:SH});
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
           if(row.key==='role_perms'&&row.value&&!_editingPerms()&&Date.now()-(S._permsEditTs||0)>5000){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
+          if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
           if(row.key==='maintenance'&&row.value){
             try{const m=JSON.parse(row.value);if(m&&m.hist){S.maintenance=m;lsSet('ts_maintenance',m);changed=true;}}catch(e){}
           }
@@ -3474,13 +3512,13 @@ function renderStep1(){
     <div style="display:flex;align-items:stretch;gap:6px;margin-bottom:8px">
       <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Departure</div>
-        <select tabindex="-1" class="fi" onchange="window.setRouteField('dep',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_depOther?'':d.dep)}<option value="__other__"${_depOther?' selected':''}>✏️ Other…</option></select>
+        <select tabindex="-1" class="fi" onchange="window.setRouteField('dep',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_depOther?'':d.dep, _depOther)}</select>
         ${_depOther?_otherInput('dep',d.dep):''}
       </div>
       <button tabindex="-1" onclick="const t=S.dispatch.dep;S.dispatch.dep=S.dispatch.dest;S.dispatch.dest=t;S._rtOther_dep=false;S._rtOther_dest=false;autoSaveDispatch();safeRender()" title="Swap" style="align-self:center;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--accent);font-size:16px;cursor:pointer;flex-shrink:0;line-height:1">&#x21C4;</button>
       <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Destination</div>
-        <select tabindex="-1" class="fi" onchange="window.setRouteField('dest',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_destOther?'':d.dest)}<option value="__other__"${_destOther?' selected':''}>✏️ Other…</option></select>
+        <select tabindex="-1" class="fi" onchange="window.setRouteField('dest',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_destOther?'':d.dest, _destOther)}</select>
         ${_destOther?_otherInput('dest',d.dest):''}
       </div>
     </div>
@@ -4154,6 +4192,10 @@ function renderLoadsheet(){
   const _lsPilots=f.ac?pilotCrewList().filter(c=>(c.endorse||[]).includes(f.ac)):pilotCrewList();
   const crewOpts=_lsPilots.map(c=>`<option value="${c.n}"${f.pic===c.n?' selected':''}>${c.n}${c.w?' ('+c.w+'kg)':''}</option>`).join('');
   const cpOpts=`<option value="">None</option>`+pilotCrewList().filter(c=>c.n!==f.pic).map(c=>`<option value="${c.n}"${f.coPilot===c.n?' selected':''}>${c.n}</option>`).join('');
+  // dep/dest free-text "Other" support on the loadsheet (mirrors the manifest)
+  const _lsDepOther=!!S._lsOther_dep||(!!f.dep&&!_isKnownApt(f.dep));
+  const _lsDestOther=!!S._lsOther_dest||(!!f.dest&&!_isKnownApt(f.dest));
+  const _lsOtherInput=function(field,val){return '<input class="fi" type="text" value="'+(val||'').replace(/"/g,'&quot;')+'" placeholder="Type location" onclick="event.stopPropagation()" onchange="S.form.'+field+'=this.value;S.formDirty=true;autoSaveLS();safeRender()" style="margin-top:6px;width:100%;font-size:13px;font-weight:600;background:var(--card);border:1px solid var(--border2);border-radius:6px;padding:5px 7px;color:var(--text1)">';};
   const draftBanner=f.status==='unsigned'?`<div style="padding:9px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;margin-bottom:10px">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
   const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;render();}">Clear & Start Blank</button>`;
 
@@ -4537,12 +4579,14 @@ function renderLoadsheet(){
     <div style="display:flex;align-items:stretch;gap:6px;margin-bottom:8px">
       <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Departure</div>
-        <select class="fi" onchange="S.form.dep=this.value;S.formDirty=true;autoSaveLS();safeRender()" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(f.dep)}</select>
+        <select class="fi" onchange="window.setLsRouteField('dep',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_lsDepOther?'':f.dep, _lsDepOther)}</select>
+        ${_lsDepOther?_lsOtherInput('dep',f.dep):''}
       </div>
-      <button onclick="const t=S.form.dep;S.form.dep=S.form.dest;S.form.dest=t;autoSaveLS();safeRender()" title="Swap" style="align-self:center;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--accent);font-size:16px;cursor:pointer;flex-shrink:0;line-height:1">&#x21C4;</button>
+      <button onclick="const t=S.form.dep;S.form.dep=S.form.dest;S.form.dest=t;S._lsOther_dep=false;S._lsOther_dest=false;S.formDirty=true;autoSaveLS();safeRender()" title="Swap" style="align-self:center;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--accent);font-size:16px;cursor:pointer;flex-shrink:0;line-height:1">&#x21C4;</button>
       <div style="flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Destination</div>
-        <select class="fi" onchange="S.form.dest=this.value;autoSaveLS();safeRender()" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(f.dest)}</select>
+        <select class="fi" onchange="window.setLsRouteField('dest',this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${aptOpts(_lsDestOther?'':f.dest, _lsDestOther)}</select>
+        ${_lsDestOther?_lsOtherInput('dest',f.dest):''}
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -4940,6 +4984,7 @@ function _getCustomAerodromes(){
 function renderAerodromes(){
   var custom=_getCustomAerodromes();
   var all=NZ_AERODROMES.concat(custom);
+  var featSet=(typeof _featuredApts==='function')?_featuredApts():[];
   var srch=(S._aeroSearch||'').toLowerCase();
   var filt=srch?all.filter(function(a){return a.icao.toLowerCase().includes(srch)||a.name.toLowerCase().includes(srch);}):all;
   var sel=S._aeroSel||null;
@@ -4974,6 +5019,7 @@ function renderAerodromes(){
       +'<td style="padding:5px 8px;font-size:12px;color:var(--text1)">'+_aeroEsc(a.name)+(isCustom?' <span style="font-size:9px;color:var(--ok-text);border:1px solid var(--ok-text);border-radius:3px;padding:1px 3px">edited</span>':'')+'</td>'
       +'<td style="padding:5px 8px;font-size:11px;color:var(--text3)">'+a.elev+'ft</td>'
       +'<td style="padding:5px 8px;white-space:nowrap">'
+      +'<button title="'+(featSet.indexOf(a.icao)>=0?'Remove from Featured':'Add to Featured')+'" data-ficao="'+a.icao+'" onclick="event.stopPropagation();window.aeroToggleFeatured(this.dataset.ficao)" style="font-size:13px;line-height:1;padding:1px 5px;background:transparent;border:1px solid '+(featSet.indexOf(a.icao)>=0?'var(--acc)':'var(--border2)')+';border-radius:4px;color:'+(featSet.indexOf(a.icao)>=0?'#f59e0b':'var(--text3)')+';cursor:pointer;margin-right:3px">'+(featSet.indexOf(a.icao)>=0?'★':'☆')+'</button>'
       +'<button data-eicao="'+a.icao+'" onclick="event.stopPropagation();window.aeroEdit(this.dataset.eicao)" style="font-size:10px;padding:1px 6px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--acc);cursor:pointer;margin-right:3px">Edit</button>'
       +(isCustom?'<button data-deicao="'+a.icao+'" onclick="event.stopPropagation();window.aeroDeleteCustom(this.dataset.deicao)" style="font-size:10px;padding:1px 6px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--err-text);cursor:pointer">Reset</button>':'')
       +'</td>'
@@ -5055,6 +5101,18 @@ window.aeroDeleteCustom=function(icao){
   lsSet('custom_aerodromes',custom);
   if(typeof _rebuildAptData==='function')_rebuildAptData();
   if(S._aeroSel===icao)S._aeroSel=null;
+  render();
+};
+// Toggle an aerodrome in/out of the Featured list (the dropdown "* Featured" group).
+// The settings list is the source of truth — persisted to the cloud + every device.
+window.aeroToggleFeatured=function(icao){
+  if(!icao)return;
+  var list=(typeof _featuredApts==='function'?_featuredApts():[]).slice();
+  var i=list.indexOf(icao);
+  if(i>=0)list.splice(i,1); else list.push(icao);
+  if(typeof _saveFeaturedApts==='function')_saveFeaturedApts(list);
+  if(typeof _rebuildAptData==='function')_rebuildAptData();
+  toast(i>=0?(icao+' removed from Featured'):(icao+' added to Featured'),'ok');
   render();
 };
 window.aeroEdit=function(icao){
@@ -5856,8 +5914,8 @@ function renderAdminPeople(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
   const ad=S.admin;
   const today=new Date();today.setHours(0,0,0,0);
-  const ROLE_LEVEL={superadmin:1,admin:2,cx_manager:2,pilot:3,desk:3,maint:3,ground_staff:4,ground:4,accounts:3,marketing:3};
-const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9a8d4',maint:'#a78bfa',ground_staff:'#a16207',ground:'#a16207',accounts:'#06b6d4',marketing:'#ec4899'};
+  const ROLE_LEVEL={superadmin:1,admin:2,cx_manager:2,pilot:3,desk:3,maint:3,ground_staff:4,accounts:3,marketing:3};
+const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9a8d4',maint:'#a78bfa',ground_staff:'#a16207',accounts:'#06b6d4',marketing:'#ec4899'};
   function expiryCol(v){if(!v)return'var(--text3)';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'#ef4444':dy<30?'#f59e0b':'#22c55e';}
   function expiryBg(v){if(!v)return'transparent';const d=new Date(v+'T00:00:00');const dy=Math.round((d-today)/86400000);return dy<0?'rgba(239,68,68,.08)':dy<30?'rgba(245,158,11,.08)':'transparent';}
   function fmt(v){if(!v)return'—';const p=v.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:v;}
@@ -5956,8 +6014,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'<option value="pilot"'+(d.role==='pilot'?' selected':'')+'>Pilot</option>'
         +'<option value="desk"'+(d.role==='desk'?' selected':'')+'>Desk</option>'
         +'<option value="maint"'+(d.role==='maint'?' selected':'')+'>Maintenance</option>'
-        +'<option value="ground_staff"'+(d.role==='ground_staff'?' selected':'')+'>Ground Staff</option>'
-        +'<option value="ground"'+(d.role==='ground'?' selected':'')+'>Ground</option>'
+        +'<option value="ground_staff"'+(d.role==='ground_staff'||d.role==='ground'?' selected':'')+'>Ground</option>'
         +'<option value="accounts"'+(d.role==='accounts'?' selected':'')+'>Accounts</option>'
         +'<option value="marketing"'+(d.role==='marketing'?' selected':'')+'>Marketing</option>'
         +'</select></div>':'')
@@ -8769,7 +8826,7 @@ function renderAdminPerms(){
     {k:'pilot',        lbl:'Pilot'},
     {k:'desk',         lbl:'Desk'},
     {k:'maint',        lbl:'Maint'},
-    {k:'ground_staff', lbl:'Ground'},{k:'ground', lbl:'Ground (new)'},
+    {k:'ground_staff', lbl:'Ground'},
     {k:'accounts',     lbl:'Accounts'},
     {k:'marketing',    lbl:'Marketing'}
   ];
@@ -9979,7 +10036,7 @@ var ROLE_GROUPS=[
   {key:'pilot',    label:'Pilots',   roles:['pilot'],              col:'#7B9EC6'},
   {key:'desk',     label:'Desk',     roles:['desk','cx_manager'],  col:'#f9a8d4'},
   {key:'admin',    label:'Admin',    roles:['admin','superadmin'], col:'#f59e0b'},
-  {key:'ground',   label:'Ground',   roles:['ground_staff','ground'], col:'#a16207'},
+  {key:'ground',   label:'Ground',   roles:['ground_staff'], col:'#a16207'},
   {key:'maint',    label:'Maint',    roles:['maint','maintenance'],col:'#a78bfa'},
   {key:'accounts', label:'Accounts', roles:['accounts'],           col:'#06b6d4'},
   {key:'marketing',label:'Marketing',roles:['marketing'],          col:'#ec4899'},
@@ -10129,7 +10186,7 @@ function renderRosterView(){
     var gk=_rGroupKey(u);
     return gk&&_rGH.indexOf(gk)===-1;
   });
-  var roleOrder={superadmin:0,admin:1,pilot:2,desk:3,cx_manager:3,accounts:4,marketing:5,maint:6,maintenance:6,ground_staff:7,ground:7};
+  var roleOrder={superadmin:0,admin:1,pilot:2,desk:3,cx_manager:3,accounts:4,marketing:5,maint:6,maintenance:6,ground_staff:7};
   displayUsers=displayUsers.slice().sort(function(a,b){return (roleOrder[a.role]||9)-(roleOrder[b.role]||9)||(a.name||'').localeCompare(b.name||'');});
   var roster=S.roster||{};
 

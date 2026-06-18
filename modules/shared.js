@@ -296,7 +296,28 @@ function _editingPerms(){return Date.now()-(S._permsPageTs||0)<12000;}
 const GRP_COLOURS=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];
 // Airport map: ICAO → full name
 var APTS={};var APT_COORDS={};var APS=[];
+// Default featured aerodromes — used only until the user-managed list (Aerodromes
+// settings → ⭐) loads. The settings list is the source of truth; see _featuredApts().
 var _APT_PINNED=["NZQN","NZMF","NZMC","NZFJ"];
+// The live featured list, in display order. Source of truth = ts_settings 'aero_featured'
+// (shared across devices), mirrored to localStorage 'featured_aerodromes' for instant boot.
+// Falls back to _APT_PINNED only when nothing has been saved yet.
+function _featuredApts(){
+  if(Array.isArray(S._aeroFeatured))return S._aeroFeatured;
+  try{var v=lsGet("featured_aerodromes");
+    if(Array.isArray(v)){S._aeroFeatured=v;return v;}
+    if(typeof v==="string"&&v){var p=JSON.parse(v);if(Array.isArray(p)){S._aeroFeatured=p;return p;}}
+  }catch(e){}
+  return _APT_PINNED.slice();
+}
+// Persist the featured list locally + to the cloud (ts_settings) so every device shares it.
+function _saveFeaturedApts(list){
+  S._aeroFeatured=list.slice();
+  try{lsSet("featured_aerodromes",S._aeroFeatured);}catch(e){}
+  if(typeof sbU==="function"){
+    try{sbU("ts_settings",[{key:"aero_featured",value:JSON.stringify(S._aeroFeatured)}]).then(function(r){if(r===null&&typeof toast==='function')toast('Featured aerodromes did not save to the server — check connection.','warn');});}catch(e){}
+  }
+}
 function _getAllApts(){
   var base=typeof NZ_AERODROMES!=="undefined"?NZ_AERODROMES:[];
   var custom=[];
@@ -321,19 +342,30 @@ window.setRouteField=function(field,val){
   else{S['_rtOther_'+field]=false;S.dispatch[field]=val;}
   autoSaveDispatch();safeRender();
 };
-function aptOpts(sel){
+// Same as setRouteField but for the LOADSHEET form (S.form), so dep/dest "Other" works there too.
+window.setLsRouteField=function(field,val){
+  if(!S.form)return;
+  if(val==='__other__'){S['_lsOther_'+field]=true;if(_isKnownApt(S.form[field]))S.form[field]='';}
+  else{S['_lsOther_'+field]=false;S.form[field]=val;}
+  S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();safeRender();
+};
+function aptOpts(sel, isOther){
   _rebuildAptData();
   var all=_getAllApts();
-  var pinned=_APT_PINNED.map(function(ic){return all.find(function(a){return a.icao===ic;});}).filter(Boolean);
-  var rest=all.filter(function(a){return _APT_PINNED.indexOf(a.icao)<0;});
+  var pinIcaos=_featuredApts();
+  var pinned=pinIcaos.map(function(ic){return all.find(function(a){return a.icao===ic;});}).filter(Boolean);
+  var rest=all.filter(function(a){return pinIcaos.indexOf(a.icao)<0;});
   var south=rest.filter(function(a){return a.lat<=-41.35;}).sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});
   var north=rest.filter(function(a){return a.lat>-41.35;}).sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});
   function opt(a){var lbl=(a.icao==='NZQN'?'\uD83C\uDFE0 ':'')+a.name+' ('+a.icao+')';return '<option value="'+a.icao+'"'+(sel===a.icao?' selected':'')+'>'+lbl+'</option>';}
-  return '<optgroup label="* Featured">'+pinned.map(opt).join('')+'</optgroup>'
+  // "Other\u2026" (free-text) at the top of Featured \u2014 only for callers that handle it (manifest /
+  // loadsheet pass the isOther flag). Callers that don't (e.g. charter legs) omit the arg.
+  var otherOpt=(isOther!==undefined)?'<option value="__other__"'+(isOther?' selected':'')+'>\u270F\uFE0F Other\u2026</option>':'';
+  return '<optgroup label="* Featured">'+otherOpt+pinned.map(opt).join('')+'</optgroup>'
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.11';
+const APP_VER='v23.14';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1196,6 +1228,11 @@ async function loadAll(){
       const _cq=await fetch(SB+'/rest/v1/ts_settings?key=eq.charter_quotes&select=value',{headers:SH});
       if(_cq.ok){const _cqd=await _cq.json();if(_cqd[0]&&_cqd[0].value){lsSet('ts_charter_quotes_cache',JSON.parse(_cqd[0].value));}}
     }catch(e){}
+    // Load the featured/pinned aerodrome list (source of truth for the dropdown "Featured" group)
+    try{
+      const _af=await fetch(SB+'/rest/v1/ts_settings?key=eq.aero_featured&select=value',{headers:SH});
+      if(_af.ok){const _afd=await _af.json();if(_afd[0]&&_afd[0].value){var _fl=JSON.parse(_afd[0].value);if(Array.isArray(_fl)){S._aeroFeatured=_fl;lsSet('featured_aerodromes',_fl);}}}
+    }catch(e){}
 
     // ── Loadsheets ──
     const ls=_pLoadsheets;
@@ -1695,12 +1732,13 @@ async function reloadTable(table){
     if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,r.rates||dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
-      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance)&select=key,value',{headers:SH});
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured)&select=key,value',{headers:SH});
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
           if(row.key==='role_perms'&&row.value&&!_editingPerms()&&Date.now()-(S._permsEditTs||0)>5000){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
+          if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
           if(row.key==='maintenance'&&row.value){
             try{const m=JSON.parse(row.value);if(m&&m.hist){S.maintenance=m;lsSet('ts_maintenance',m);changed=true;}}catch(e){}
           }
