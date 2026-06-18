@@ -50,7 +50,26 @@ const LOGO='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAA
 const SB='https://wgycephyuwwfogggcbye.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndneWNlcGh5dXd3Zm9nZ2djYnllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NjEzNzAsImV4cCI6MjA5NjQzNzM3MH0.6ac1fI7NxOJla_cI6P2bMwBXr3qkBTaHoyipcG9r95Q';
 const SH={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK,'Prefer':'return=representation'};
-const sbF=async(t,q='',order='created_at')=>{try{const r=await fetch(`${SB}/rest/v1/${t}?select=*${q}&order=${order}.desc`,{headers:SH});if(!r.ok){console.error('[sbF]',t,'status:',r.status,await r.text());return null;}return r.json();}catch(e){console.error('[sbF]',t,'exception:',e);return null;}};
+// HTML-escape a dynamic string before placing it in innerHTML (prevents stored XSS via
+// user/other-device free-text such as charter notes, roster notes, names).
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Wrap a REST call so an expired JWT is transparently refreshed and retried once.
+// Background tabs throttle setTimeout, so the scheduled ~1-min-before-expiry refresh
+// can fire late; without this, the first write after waking fails 401 (PGRST303).
+async function _sbFetch(url, opts){
+  opts=opts||{};
+  let r=await fetch(url, opts);
+  if(r.status===401 && typeof AUTH_PHASE_C!=='undefined' && AUTH_PHASE_C && _sbSession && typeof _sbRefresh==='function'){
+    const refreshed=await _sbRefresh();
+    if(refreshed){
+      const h=Object.assign({}, opts.headers||{});
+      h['Authorization']=SH['Authorization'];   // fresh token set by _applySession
+      r=await fetch(url, Object.assign({}, opts, {headers:h}));
+    }
+  }
+  return r;
+}
+const sbF=async(t,q='',order='created_at')=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?select=*${q}&order=${order}.desc`,{headers:{...SH}});if(!r.ok){console.error('[sbF]',t,'status:',r.status,await r.text());return null;}return r.json();}catch(e){console.error('[sbF]',t,'exception:',e);return null;}};
 // ── Fetch window: only load recent rows from large tables (tunable) ──
 const FETCH_DAYS=90;
 const _fetchSince=()=>new Date(Date.now()-FETCH_DAYS*864e5).toISOString().slice(0,10);
@@ -119,8 +138,8 @@ function _seatmapSyncPool(){
     pool.push({id:p.id,name:p.name,weight:p.weight,bag:p.bag||0,group:p.group||'',infant:p.infantName||null,type:p.type||'adult',paymentReq:!!p.paymentReq});
   });
 }
-const sbU=async(t,d)=>{try{const r=await fetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);return null;}};
-const sbDel=async(t,id)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:SH});return r.ok;}catch{return false;}};
+const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);return null;}};
+const sbDel=async(t,id)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:{...SH}});return r.ok;}catch{return false;}};
 
 // ── Phase A auth cutover (DEFAULT OFF) ──────────────────────────────────────
 // Flip ON only AFTER (1) deploying the verify-login / set-password / confirm-reset
@@ -148,12 +167,12 @@ async function sbUserWrite(rows){
   // fall back to PATCH (UPDATE by id). Both need only INSERT/UPDATE + SELECT(id).
   try{
     for(const row of list){
-      const r=await fetch(`${SB}/rest/v1/ts_users`,{method:'POST',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(row)});
+      const r=await _sbFetch(`${SB}/rest/v1/ts_users`,{method:'POST',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(row)});
       if(r.ok)continue;                       // inserted a new row
       if(r.status===409){                     // existing id -> update it
         if(!row.id){console.error('[sbUserWrite] 409 with no id');return null;}
         const patch=Object.assign({},row);delete patch.id;   // never PATCH the PK
-        const pr=await fetch(`${SB}/rest/v1/ts_users?id=eq.${encodeURIComponent(row.id)}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(patch)});
+        const pr=await _sbFetch(`${SB}/rest/v1/ts_users?id=eq.${encodeURIComponent(row.id)}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(patch)});
         if(pr.ok)continue;
         console.error('[sbUserWrite PATCH]',pr.status,await pr.text());return null;
       }
@@ -240,7 +259,7 @@ function _userFromClaims(claims){
 async function _reloadCoreTables(){
   try{await Promise.all(['ts_crew','ts_aircraft','ts_charter_rates','ts_loadsheets','ts_manifests','ts_scratchpads','ts_settings'].map(function(t){return reloadTable(t);}));}catch(e){}
 }
-const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
+const sbPatch=async(t,id,data)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
 
 
 // ── Constants ──
@@ -304,7 +323,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.02';
+const APP_VER='v23.06';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1329,7 +1348,7 @@ async function loadAll(){
 
 // ── Supabase Realtime ──
 let _rtWs=null,_rtRef=0,_rtHb=null,_rtRecon=null,_rtPending=new Set(),_rtFlush=null,_rtConnectedOnce=false;
-const _sessionId='sess_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+const _sessionId='sess_'+((typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+'_'+Math.random().toString(36).slice(2,9)));
 
 function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
@@ -1338,7 +1357,9 @@ function initRealtime(){
   const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
+    var _rtThisWs=_rtWs;   // guard: a reconnect/refresh may replace _rtWs before this socket opens
     _rtWs.onopen=function(){
+      if(_rtThisWs!==_rtWs){try{_rtThisWs.close();}catch(e){}return;}  // stale socket — don't start a duplicate heartbeat
       _rtRef++;
       _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'phx_join',
         payload:{config:{broadcast:{self:false},postgres_changes:tables.map(function(t){return{event:'*',schema:'public',table:t};})},access_token:((AUTH_PHASE_C&&_sbSession&&_sbSession.access_token)||SK)},
@@ -1521,6 +1542,11 @@ function initRealtime(){
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_update'){
           const _lsp=msg.payload.payload;
           if(_lsp&&_lsp.sessionId!==_sessionId){
+            // Don't clobber the LIVE form out from under a user mid-edit (focused input on
+            // the active loadsheet) — that loses their in-flight keystrokes. Background tab
+            // copies still update, so it reconciles when they next blur/leave/reopen.
+            var _lsAE=document.activeElement;
+            var _lsEditing=!!(_lsAE&&/^(INPUT|SELECT|TEXTAREA)$/.test(_lsAE.tagName||'')&&(S.tab==='loadsheet'||(S.tab||'').indexOf('ls_')===0));
             // Find tab by ID (most reliable for aircraft changes) then fall back to acCode
             var _lsTF=null;
             if(_lsp.tabId)_lsTF=(S.lsTabs||[]).find(function(t){return t.id===_lsp.tabId;});
@@ -1539,11 +1565,11 @@ function initRealtime(){
                 _lsTF.form=_lsp.form;
                 // Update acId on tab if aircraft changed on other device
                 if(_lsp.form.ac&&_lsTF.acId!==_lsp.form.ac)_lsTF.acId=_lsp.form.ac;
-                if(S.activeTabId===_lsTF.id){
+                if(S.activeTabId===_lsTF.id&&!_lsEditing){
                   S.form=_lsp.form;
                   if(_lsp.form.ac)S.lsAc=_lsp.form.ac.replace('ZK-','');
                 }
-              } else if(_lsp.acCode&&S.lsAc===_lsp.acCode&&S.activeTabId){
+              } else if(_lsp.acCode&&S.lsAc===_lsp.acCode&&S.activeTabId&&!_lsEditing){
                 S.form=_lsp.form;
               }
             }
@@ -1884,11 +1910,17 @@ function mergeDispatch(remote){
   (remote.pax||[]).forEach(function(p){
     if(!paxMap[p.id]||(p._ts||0)>(paxMap[p.id]._ts||0)){paxMap[p.id]=p;}
   });
-  // Remove pax deleted by the other user (not in remote, and remote is more recent overall)
+  // Remove pax deleted by the other user (absent from remote, remote more recent overall).
+  // Guard against deleting a pax the remote simply HASN'T SEEN YET: a passenger added
+  // locally in the last 15s is protected, so a stale broadcast from another device that
+  // predates our just-added pax can't wipe it. Our autosave pushes within ~1-2s, so a
+  // genuine deletion of an older pax still propagates normally.
   if((remote._updateTs||0)>(local._updateTs||0)){
     const remIds=new Set((remote.pax||[]).map(function(p){return p.id;}));
+    const _now=Date.now();
     Object.keys(paxMap).forEach(function(id){
-      if(!remIds.has(id)&&(paxMap[id]._ts||0)<(remote._updateTs||0)){delete paxMap[id];}
+      const _pts=paxMap[id]._ts||0;
+      if(!remIds.has(id)&&_pts<(remote._updateTs||0)&&(_now-_pts)>15000){delete paxMap[id];}
     });
   }
   S.dispatch.pax=Object.values(paxMap);

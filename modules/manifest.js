@@ -150,7 +150,7 @@ function renderStep1(){
     // Name column: pill (click-to-edit) when name set, input otherwise
     const nameCol=p.name
       ?`<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-width:0">
-          <div onclick="window.openPaxFieldPopup(${oi},'name')" style="padding:4px 12px;border-radius:20px;background:${gc||'var(--card2)'};${gc?'':'border:1px solid var(--border2);'}color:${gc?'#fff':'var(--text1)'};font-size:13px;font-weight:700;cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${p.name}</div>
+          <div onclick="window.openPaxFieldPopup(${oi},'name')" style="padding:4px 12px;border-radius:20px;background:${gc||'var(--card2)'};${gc?'':'border:1px solid var(--border2);'}color:${gc?'#fff':'var(--text1)'};font-size:13px;font-weight:700;cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${esc(p.name)}</div>
           ${p.infantName?`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;background:rgba(236,72,153,.15);border:1px solid rgba(236,72,153,.35);font-size:11px;font-weight:700;color:#ec4899;white-space:nowrap">👶 ${p.infantName}<button tabindex="-1" onclick="window.rmInfant(${oi})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7;margin-left:1px">×</button></span>`:''}
           <button tabindex="-1" onclick="setPaxField(${oi},'paymentReq',${!p.paymentReq})" style="padding:2px 7px;border-radius:20px;border:1px solid ${p.paymentReq?'#ef4444':'var(--border)'};background:${p.paymentReq?'rgba(239,68,68,.2)':'transparent'};color:${p.paymentReq?'#ef4444':'var(--text3)'};font-size:9px;font-weight:800;cursor:pointer;letter-spacing:.04em;flex-shrink:0">${p.paymentReq?'$ PAY REQ':'$'}</button>
         </div>`
@@ -160,7 +160,7 @@ function renderStep1(){
     // Group column: coloured pill (click-to-edit) when set, 🏷️ button otherwise
     const _pillStyle='display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;line-height:1.6';
     const groupCol=p.group?.trim()
-      ?`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="${_pillStyle};background:${gc};color:#fff;user-select:none;max-width:80px;overflow:hidden;text-overflow:ellipsis">${p.group}</div>`
+      ?`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="${_pillStyle};background:${gc};color:#fff;user-select:none;max-width:80px;overflow:hidden;text-overflow:ellipsis">${esc(p.group)}</div>`
       :`<div onclick="window.openPaxFieldPopup(${oi},'group')" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text3)">🏷️</div>`;
     const typeBtns=`<button tabindex="-1" onclick="setPaxField(${oi},'type','adult')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(59,130,246,${(p.type||'adult')==='adult'?'.8':'.25'});background:${(p.type||'adult')==='adult'?'rgba(59,130,246,.25)':'transparent'};color:${(p.type||'adult')==='adult'?'#93c5fd':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">A</button><button tabindex="-1" onclick="setPaxField(${oi},'type','child')" style="padding:2px 7px;border-radius:20px;border:1px solid rgba(16,185,129,${p.type==='child'?'.8':'.25'});background:${p.type==='child'?'rgba(16,185,129,.25)':'transparent'};color:${p.type==='child'?'#6ee7b7':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer;line-height:1.6">C</button>`;
     const wtPill=`<div id="wt-icon-${oi}" onclick="window.inlineEditPaxField(${oi},'weight',this)" style="${_pillStyle};background:var(--card2);border:1px solid var(--border2);color:var(--text2)">⚖️ ${p.weight?p.weight+'kg':'—'}</div>`;
@@ -170,7 +170,7 @@ function renderStep1(){
     if(S.mobileView){
       // Mobile: name gets full row 1 width; controls on row 2
       const mName=p.name
-        ?`<div onclick="window.openPaxFieldPopup(${oi},'name')" style="padding:5px 14px;border-radius:20px;background:${gc||'var(--card2)'};${gc?'':'border:1px solid var(--border2);'}color:${gc?'#fff':'var(--text1)'};font-size:14px;font-weight:700;cursor:pointer;user-select:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
+        ?`<div onclick="window.openPaxFieldPopup(${oi},'name')" style="padding:5px 14px;border-radius:20px;background:${gc||'var(--card2)'};${gc?'':'border:1px solid var(--border2);'}color:${gc?'#fff':'var(--text1)'};font-size:14px;font-weight:700;cursor:pointer;user-select:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</div>
           ${p.infantName?`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;background:rgba(236,72,153,.15);border:1px solid rgba(236,72,153,.35);font-size:11px;font-weight:700;color:#ec4899;white-space:nowrap">👶 ${p.infantName}<button tabindex="-1" onclick="window.rmInfant(${oi})" style="background:none;border:none;color:#ec4899;font-size:12px;cursor:pointer;padding:0 1px;line-height:1;opacity:.7;margin-left:1px">×</button></span>`:''}`
         :`<input class="fi" type="text" placeholder="Tap to enter name" value="" style="font-size:14px;flex:1;min-width:0" data-row="${i}" data-field="name" onclick="if('ontouchstart' in document.documentElement){this.blur();window.openPaxFieldPopup(${oi},'name');}" onblur="window.paxNameBlur(${oi},this.value)">`;
       return `<div style="padding:8px 4px;border-bottom:1px solid var(--border);background:${rowBg}">
@@ -273,7 +273,7 @@ function renderStep1(){
 // ── MANIFEST STEP 2: Dual-aircraft seat map ──
 
 function cogPillClass(cog, cogMin, cogMax){
-  if(!cog||!cogMax) return 'pill-green';
+  if(!cog||!cogMax) return 'pill-blue';   // unknown CoG (no data / misconfigured aircraft) — neutral, not a reassuring green
   if(cog>cogMax||cog<cogMin) return 'pill-red';
   // Caravan: cogMax ~204.4, warn from 203 (1.4" away)
   // Airvan: cogMax ~64, warn from 63 (1" away)
@@ -426,7 +426,7 @@ function renderCabinSVG(acId,interactive,form,_sz,_ht,smKey){
           <span class="seat-lbl" style="${needPay?'margin-top:15px;':''}${p&&!isCrew?'opacity:.4;color:#334155':''}">${cell.lbl}</span>
           ${gc?`<div class="seat-dot" style="background:${gc}${needPay?';top:13px':''}"></div>`:''}
           ${isCrew?`<div class="seat-name" style="color:rgba(255,255,255,.88);font-size:9px">${crewName.split(' ').slice(-1)[0]}</div><div class="seat-wt" style="color:rgba(255,255,255,.55)">${isPIC?'PIC':'CP'}</div>`
-            :p?`<div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}${p.infantName?' 👶':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
+            :p?`<div class="seat-name" style="color:#1e293b;font-weight:700">${esc(p.name?p.name.split(' ')[0]:'?')}${p.infantName?' 👶':''}</div><div class="seat-wt" style="color:#334155">${parseFloat(p.weight||0)+parseFloat(p.bag||0)}kg</div>`:''}
         </div>`;
       }
     });
@@ -482,7 +482,7 @@ function renderStep2(){
       const ua=(d.pax||[]).filter(p=>!p.infant);
       return `<div class="card" style="text-align:center;padding:18px;color:var(--text3);margin-bottom:12px">${_poolNoAc} passenger${_poolNoAc!==1?'s':''} in the pool. Choose aircraft on the <button class="btn btn-ghost" style="font-size:13px" onclick="S.tab='manifest';render()">Manifest</button>, then Auto-Allocate — or push a manifest with aircraft.</div>
       <div class="card" style="padding:10px 12px"><div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Unassigned (${ua.length}) <button style="font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;cursor:pointer;float:right" onclick="if(confirm('Clear all pooled passengers from the seatmap? (Manifests are not affected.)'))window.clearUnassigned()">Clear All</button></div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${ua.map(p=>{const wt=parseFloat(p.weight||0)+parseFloat(p.bag||0);return`<div class="seat filled" style="background:rgba(255,255,255,.93);border-left:4px solid #64748b;flex-shrink:0"><div class="seat-name" style="color:#1e293b;font-weight:700">${p.name?p.name.split(' ')[0]:'?'}</div><div class="seat-wt" style="color:#334155">${wt>0?wt+'kg':''}</div></div>`;}).join('')}</div></div>`;
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${ua.map(p=>{const wt=parseFloat(p.weight||0)+parseFloat(p.bag||0);return`<div class="seat filled" style="background:rgba(255,255,255,.93);border-left:4px solid #64748b;flex-shrink:0"><div class="seat-name" style="color:#1e293b;font-weight:700">${esc(p.name?p.name.split(' ')[0]:'?')}</div><div class="seat-wt" style="color:#334155">${wt>0?wt+'kg':''}</div></div>`;}).join('')}</div></div>`;
     }
     S.tab='manifest';render();return'';
   }
@@ -565,7 +565,7 @@ function renderStep2(){
           ${gc?`<div class="seat-dot" style="background:${gc}${_poolPay?';top:13px':''}"></div>`:''}
           ${p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':''}
           ${p.infantName?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':''}
-          <div class="seat-name" style="color:#1e293b;font-weight:700;${_poolPay?'margin-top:11px':''}">${p.name?p.name.split(' ')[0]:'?'}</div>
+          <div class="seat-name" style="color:#1e293b;font-weight:700;${_poolPay?'margin-top:11px':''}">${esc(p.name?p.name.split(' ')[0]:'?')}</div>
           <div class="seat-wt" style="color:#334155">${wt>0?wt+'kg':''}</div>
         </div>`;
       }).join(''):''}

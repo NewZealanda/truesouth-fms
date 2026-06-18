@@ -351,7 +351,7 @@ function renderRosterView(){
           var isHidden=rawSt&&rHide.indexOf(rawSt)>-1;
           var otherNote=isOther?st.slice(6):'';
           var cfg=_rSC(rawSt||'');
-          var dispLbl=isOther?(otherNote||'?'):cfg.lbl;
+          var dispLbl=isOther?esc(otherNote||'?'):cfg.lbl;
           h+='<td style="padding:3px 2px;text-align:center;background:'+(isTdy?'rgba(124,58,237,.06)':(isWe?'rgba(255,255,255,.01)':'transparent'))+'">';
           if(isHidden){h+='<span style="display:inline-block;width:66px;height:24px"></span>';}else if(canEdit){
             var _oe=S._rosterOtherEdit;
@@ -364,16 +364,16 @@ function renderRosterView(){
               h+='<button tabindex="-1" onclick="window.rosterOtherCancel()" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:10px;cursor:pointer">X</button>';
               h+='</div></div>';
             }else{
-            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?otherNote:'')+'" style="padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:66px;text-align:center">';
+            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?esc(otherNote):'')+'" style="padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:66px;text-align:center">';
             ROSTER_ORDER.forEach(function(s){
               var c=_rSC(s);
               h+='<option value="'+s+'"'+(rawSt===s?' selected':'')+'>'+c.lbl+'</option>';
             });
             h+='</select>';
-            if(isOther&&otherNote){h+='<div style="font-size:8px;color:#94a3b8;line-height:1;margin-top:1px;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+otherNote+'</div>';}
+            if(isOther&&otherNote){h+='<div style="font-size:8px;color:#94a3b8;line-height:1;margin-top:1px;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(otherNote)+'</div>';}
             }
           } else {
-            h+='<span'+(isOther?' title="'+otherNote+'"':'')+' style="display:inline-block;padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.04)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.1)')+';font-size:11px;font-weight:700;min-width:56px">'+dispLbl+'</span>';
+            h+='<span'+(isOther?' title="'+esc(otherNote)+'"':'')+' style="display:inline-block;padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.04)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.1)')+';font-size:11px;font-weight:700;min-width:56px">'+dispLbl+'</span>';
           }
           h+='</td>';
         });
@@ -722,26 +722,27 @@ window._rBuildChoose=function(c){
 };
 
 window.saveRosterToCloud=async function(){
-  // Merge draft into roster
+  // Merge draft into roster locally, but DON'T discard the draft/undo stack until the
+  // cloud write is CONFIRMED. sbU returns null on failure (it does not throw), so a
+  // denied/failed save must not be reported as success or wipe the operator's edits.
   var draft=S._rosterDraft||{};
   if(!S.roster)S.roster={};
   Object.keys(draft).forEach(function(ds){
     if(!S.roster[ds])S.roster[ds]={};
     Object.assign(S.roster[ds],draft[ds]);
   });
+  lsSet('ts_roster',S.roster);
+  var res=await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
+  if(res===null){toast('Roster save failed — your changes are kept locally, please try again','err');return;}
   S._rosterDraft={};
   S._rosterUndoStack=[];
-  lsSet('ts_roster',S.roster);
-  try{
-    await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
-    toast('Roster saved!','success');
-    render();
-  }catch(e){toast('Roster save failed','err');}
+  toast('Roster saved!','success');
+  render();
 };
 
 window.loadRosterFromCloud=async function(){
   try{
-    var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.roster&select=value',{headers:SH});
+    var r=await _sbFetch(SB+'/rest/v1/ts_settings?key=eq.roster&select=value',{headers:{...SH}});
     if(!r.ok)return;
     var rows=await r.json();
     if(!rows||!rows.length)return;

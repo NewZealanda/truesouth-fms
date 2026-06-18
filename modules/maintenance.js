@@ -446,7 +446,7 @@ function renderMaintLog(){
       ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${starts||''}" placeholder="—" title="${cumStarts>0?'Total starts: '+cumStarts:''}" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${starts!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${landings||''}" placeholder="—" title="${cumLandings>0?'Total landings: '+cumLandings:''}" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${landings!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>`:''}
       <td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${oil||''}" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','oil',this.value)" style="width:44px;background:transparent;border:none;border-bottom:1px solid transparent;color:${oil!=null?'#f59e0b':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
       ${cwTd}${adasTd}
-      <td style="padding:2px 4px"><input type="text" value="${e.comment||''}" placeholder="notes…" onblur="window.saveMaintField('${ds}','${ac}','comment',this.value)" style="width:100%;min-width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-size:11px;font-style:italic;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
+      <td style="padding:2px 4px"><input type="text" value="${esc(e.comment||'')}" placeholder="notes…" onblur="window.saveMaintField('${ds}','${ac}','comment',this.value)" style="width:100%;min-width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-size:11px;font-style:italic;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
       <td style="padding:5px 6px;white-space:nowrap">${delBtn}</td>
     </tr>`;
   }).join('');
@@ -759,7 +759,7 @@ function renderMaintSearch(){
       return'<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(val!=null?'var(--text)':'var(--text3)')+'">'+display+'</td>';
     }).join('');
     return'<tr><td style="padding:5px 8px;font-size:12px;color:var(--text3)">'+fmtMaintDate(e.date)+'</td>'+cols+
-      (e.comment?'<td style="padding:5px 8px;font-size:11px;color:var(--text3);font-style:italic">'+e.comment+'</td>':'<td></td>')+'</tr>';
+      (e.comment?'<td style="padding:5px 8px;font-size:11px;color:var(--text3);font-style:italic">'+esc(e.comment)+'</td>':'<td></td>')+'</tr>';
   }).join('');
 
   return form+summaryHtml+`<div class="card" style="overflow-x:auto">
@@ -855,6 +855,7 @@ window.addMaintEntry=function(){
   if(cwSel==='done'){if(!S.maintenance.compwash)S.maintenance.compwash={};var _cwa=S.maintenance.compwash[ac]||[];if(!Array.isArray(_cwa))_cwa=_cwa?[_cwa]:[];if(!_cwa.includes(date))_cwa.push(date);S.maintenance.compwash[ac]=_cwa;}
   if(adasSel==='done'){if(!S.maintenance.adas)S.maintenance.adas={};var _ada=S.maintenance.adas[ac]||[];if(!Array.isArray(_ada))_ada=_ada?[_ada]:[];if(!_ada.includes(date))_ada.push(date);S.maintenance.adas[ac]=_ada;}
   saveMaintenance();
+  S.maintEditDate=null;   // exit "Update Entry" mode after saving (form returns to Add)
   toast('Entry saved: '+ac+' '+hours+'hrs on '+fmtMaintDate(date),'ok');auditLog('maint_entry_add',{date:date,ac:ac,ttis:hours,starts:starts,landings:landings,oil:oil});S.appMsg=null;render();
 };
 window.toggleCWLog=function(date,ac){
@@ -898,9 +899,15 @@ window.addOilEntry=function(){
   });
   if(Object.keys(entry).length<=1){toast('Enter at least one oil value.','warn');return;}
   S.maintenance.oil=S.maintenance.oil||[];
-  S.maintenance.oil=S.maintenance.oil.filter(function(e){return e.date!==date;});
-  S.maintenance.oil.push(entry);
-  S.maintenance.oil.sort(function(a,b){return a.date.localeCompare(b.date);});
+  // Merge into any existing oil row for this date (don't drop per-aircraft oil already
+  // entered for the day via the daily form / other columns left blank here).
+  var _oilRow=S.maintenance.oil.find(function(e){return e.date===date;});
+  if(_oilRow){
+    ['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].forEach(function(ac){if(entry[ac]!=null)_oilRow[ac]=entry[ac];});
+  }else{
+    S.maintenance.oil.push(entry);
+    S.maintenance.oil.sort(function(a,b){return a.date.localeCompare(b.date);});
+  }
   auditLog('maint_oil_entry',{date:date});
   saveMaintenance();
   toast('Oil entry saved.','ok');

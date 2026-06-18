@@ -143,7 +143,7 @@ function toast(msg, type){
 function renderToasts(){
   const toasts=S.toasts||[];
   if(!toasts.length) return '';
-  return '<div style="position:fixed;top:16px;right:16px;z-index:9998;display:flex;flex-direction:column;gap:8px;max-width:340px">'+
+  return '<div class="toast-wrap" style="position:fixed;z-index:9998;display:flex;flex-direction:column;gap:8px;max-width:340px">'+
     toasts.map(function(t){
       const bg=t.type==='ok'?'#166534':t.type==='err'?'#7f1d1d':t.type==='warn'?'#78350f':'#1e3a5f';
       const border=t.type==='ok'?'#22c55e':t.type==='err'?'#ef4444':t.type==='warn'?'#f59e0b':'#3b82f6';
@@ -172,11 +172,13 @@ async function auditLog(action, detail){
   S.auditLog=S.auditLog||[];
   S.auditLog.unshift(entry);
   lsSet('ts_audit_log',S.auditLog.slice(0,1000));
-  // Push to Supabase ts_audit_log table
+  // Push to Supabase ts_audit_log table (use the signed-in JWT via SH so rows are
+  // attributed to the authenticated user and a mid-session token refresh is honoured;
+  // SH falls back to the anon key pre-login, which is correct for login-failure rows).
   try{
-    await fetch(SB+'/rest/v1/ts_audit_log',{
+    await _sbFetch(SB+'/rest/v1/ts_audit_log',{
       method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK,'Prefer':'return=minimal'},
+      headers:{...SH,'Prefer':'return=minimal'},
       body:JSON.stringify({user_email:entry.user,user_name:entry.name,role:entry.role,action:entry.action,detail:entry.detail,device:entry.device,created_at:entry.time})
     });
   }catch(e){console.warn('Audit log push failed:',e);}

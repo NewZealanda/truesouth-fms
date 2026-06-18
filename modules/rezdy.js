@@ -28,9 +28,10 @@ function _rzRow(r){return (r&&r.data)?r.data:r||{};}
 function _rzPickups(){
   const out=[];const ov=S._pickupLocOverride||{};
   (S._rezdyBookings||[]).forEach(function(b){
-    (b.items||[]).forEach(function(it){
+    (b.items||[]).forEach(function(it,ii){
       if(!it.pickup)return;
-      const id=String(b.orderNumber||'')+'|'+(it.product||'')+'|'+(it.startTimeLocal||'');
+      // include the item index so two same-product/same-time items in one order don't collide
+      const id=String(b.orderNumber||'')+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;
       const loc=(ov[id]!=null&&ov[id]!=='')?ov[id]:(it.pickup||'');
       out.push({
         id:id,
@@ -396,11 +397,14 @@ function _rzLocSelect(id,current){
     'style="flex:1;min-width:0;font-size:12px;padding:3px 4px;background:var(--card);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer">'+opts+'</select>';
 }
 
-// Override a pickup's location (persists with the pickup list); re-derives van eligibility.
+// Override a pickup's location (persists with the pickup list).
 window.pickupSetLocation=function(id,val){
   S._pickupLocOverride=S._pickupLocOverride||{};
   S._pickupLocOverride[id]=val;
-  S._pickupVans=null;            // re-derive (self-drive may now apply/not apply)
+  // Reconcile van placement in-place (handles a pickup becoming / no longer being
+  // self-drive) WITHOUT nulling S._pickupVans — nulling then saving wiped the operator's
+  // hand-tuned van arrangement to an empty array before the rebuild ran.
+  _rzEnsureVans();
   window.pickupSave(true);
   render();
 };
@@ -610,6 +614,7 @@ window.schedSaveBlock=async function(){
   const ed=S._schedEdit;if(!ed)return;
   if(!ed.aircraft){toast('Pick an aircraft','err');return;}
   if(!ed.start||!ed.end){toast('Start and end required','err');return;}
+  if(ed.end<=ed.start){toast('End time must be after the start time','err');return;}
   const id=ed.id||('sch_'+Date.now()+'_'+Math.floor(Math.random()*1e5));
   const payload={id:id,block_date:S.rezdyDate,data:{aircraft:ed.aircraft,label:ed.label||'',start:ed.start,end:ed.end,color:ed.color||_rzAcCol(ed.aircraft),notes:ed.notes||''}};
   const r=await sbU('ts_schedule',[payload]);

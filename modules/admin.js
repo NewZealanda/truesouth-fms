@@ -486,13 +486,13 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;overflow:hidden">'
       +(code?'<span style="font-size:10px;background:var(--card2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;flex-shrink:0">'+code+'</span>':'')
-      +'<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+name+'</span>'
+      +'<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+esc(name)+'</span>'
       +(isMe?'<span style="font-size:10px;color:var(--text3);flex-shrink:0;white-space:nowrap">(you)</span>':'')
       +(isInactive?'<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:rgba(239,68,68,.15);color:#f87171;flex-shrink:0">Inactive</span>':'')
       +'</div>'
       +'<div style="font-size:11px;color:var(--text3);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
       +(role?'<span style="color:'+(roleColour[role]||'#64748b')+';font-weight:600">'+role+'</span>':'')
-      +(email?'<span>'+email+'</span>':'')
+      +(email?'<span>'+esc(email)+'</span>':'')
       +(endorses.length?endorses.filter(function(e){return e.startsWith('ZK-');}).map(function(e){var ec=AC_COL[e]||'#64748b';return'<span style="padding:1px 7px;border-radius:12px;background:'+ec+'22;border:1px solid '+ec+'55;color:'+ec+';font-size:9px;font-weight:700">'+e.replace('ZK-','')+'</span>';}).join(''):'')
       +(caaNum?'<span>CAA '+caaNum+'</span>':'')
       +'</div>'
@@ -2792,9 +2792,11 @@ window.savePerson=async function(){
 
 window.deletePerson=async function(crewId,userId){
   if(!confirm('Delete this person? This cannot be undone.'))return;
-  if(crewId){S.crew=S.crew.filter(function(cr){return cr.id!==crewId;});lsSet('ts_crew_cache',S.crew);await sbDel('ts_crew',crewId);}
-  if(userId){S.users=S.users.filter(function(u){return u.id!==userId;});lsSet('ts_users_cache',S.users);await sbDel('ts_users',userId);}
+  var _fail=false;
+  if(crewId){S.crew=S.crew.filter(function(cr){return cr.id!==crewId;});lsSet('ts_crew_cache',S.crew);if(!(await sbDel('ts_crew',crewId)))_fail=true;}
+  if(userId){S.users=S.users.filter(function(u){return u.id!==userId;});lsSet('ts_users_cache',S.users);if(!(await sbDel('ts_users',userId)))_fail=true;}
   S.admin.personModal=null;S.admin.err='';
+  if(_fail)toast('Delete may not have saved to the server — it could reappear on reload. Check connection.','warn');
   render();
 };
 
@@ -2804,16 +2806,19 @@ window.saveAircraftDraft=async()=>{
   if(!d.ew||!d.mtow||!d.mlw){S.admin.acErr='Empty weight, MTOW and max landing required.';render();return;}
   if(d.cogMin>=d.cogMax){S.admin.acErr='C of G min must be less than max.';render();return;}
   S.aircraft[S.admin.acSel]=dc(d);S.admin.acDraft=null;S.admin.acSaved=true;lsSet('ts_aircraft_cache',S.aircraft);render();
-  await sbU('ts_aircraft',[{id:d.id,data:d}]);
+  // W&B setup feeds loadsheet weight & balance — never report "synced" on a failed write.
+  const _acR=await sbU('ts_aircraft',[{id:d.id,data:d}]);
+  if(_acR===null){S.admin.acSaved=false;toast('Aircraft setup did NOT save to server — check connection and retry','error');render();}
 };
 window.saveCharterRates=async()=>{
   if(typeof hasRolePerm==='function'&&!hasRolePerm('charter')){toast('Not authorised to edit charter rates.','warn');return;}
   lsSet('ts_charter_rates_cache',S.charterRates);
   lsSet('ts_charter_wait_rate',S.charterWaitRate);
   const rows=Object.entries(S.charterRates).map(([acId,rates])=>({id:acId,acId,rates}));
-  await sbU('ts_charter_rates',rows);
+  const _crR=await sbU('ts_charter_rates',rows);
+  if(_crR===null){toast('Charter rates did NOT save to server — check connection and retry','error');return;}
   // Also persist wait rate to Supabase so all devices stay in sync
-  await sbU('ts_settings',[{key:'charter_wait_rate',value:String(S.charterWaitRate||150)}]).catch(function(){});
+  await sbU('ts_settings',[{key:'charter_wait_rate',value:String(S.charterWaitRate||150)}]);
 };
 
 // ── Pilot weight update ──
@@ -2881,8 +2886,11 @@ const MAINT_SEED_VERSION=5;
 
 function saveMaintenance(){
   lsSet('ts_maintenance',S.maintenance);
-  // Persist to Supabase (ts_settings key='maintenance')
-  sbU('ts_settings',[{key:'maintenance',value:JSON.stringify(S.maintenance)}]).catch(function(){});
+  // Persist to Supabase (ts_settings key='maintenance'). Surface a failure instead of
+  // swallowing it — otherwise an expired session / network drop loses data silently.
+  sbU('ts_settings',[{key:'maintenance',value:JSON.stringify(S.maintenance)}]).then(function(r){
+    if(r===null) toast('Maintenance save failed — not saved to server. Check connection and retry.','error');
+  });
 }
 async function loadMaintenanceFromCloud(){
   try{

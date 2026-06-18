@@ -14,10 +14,10 @@ var LEAVE_SC={
 };
 
 function _lvEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function _lvDays(s,e,partial){if(!s||!e)return 0;var d=Math.round((new Date(e+'T00:00:00')-new Date(s+'T00:00:00'))/86400000)+1;return partial?Math.max(0.5,d-0.5):d;}
+function _lvDays(s,e){if(!s||!e)return 0;return Math.round((new Date(e+'T00:00:00')-new Date(s+'T00:00:00'))/86400000)+1;}
 // Count the actual leave days used = days in range the person is rostered ON
 // (excludes RDOs / days already off per the roster).
-function _lvWorkingDays(userId,s,e,partial){
+function _lvWorkingDays(userId,s,e){
   if(!s||!e)return 0;
   var roster=S.roster||{};
   var u=(S.users||[]).find(function(x){return x.id===userId;})||{id:userId,name:''};
@@ -32,8 +32,7 @@ function _lvWorkingDays(userId,s,e,partial){
     if(!off[st])n++;
     cur.setDate(cur.getDate()+1);
   }
-  // A half-day request consumes 0.5 of a working day (mirrors _lvDays).
-  return partial?Math.max(0.5,n-0.5):n;
+  return n;
 }
 // RDO/off days within a range (the days NOT counted against leave).
 function _lvRdoDays(userId,s,e){return Math.max(0,_lvDays(s,e,false)-_lvWorkingDays(userId,s,e));}
@@ -94,7 +93,7 @@ function _lvInit(){
   if(lv.allReqs===undefined)lv.allReqs=null;
   if(!lv._myLoaded)lv._myLoaded=false;
   if(!lv._allLoaded)lv._allLoaded=false;
-  if(!lv.form)lv.form={show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''};
+  if(!lv.form)lv.form={show:false,type:'annual',startDate:'',endDate:'',reason:''};
   if(!lv.filter)lv.filter={status:'pending',userId:'',dateFrom:'',dateTo:''};
   if(lv.declineId===undefined)lv.declineId=null;
   if(lv.declineComment===undefined)lv.declineComment='';
@@ -146,7 +145,7 @@ function _renderMyLeave(lv){
 
   // Request form
   if(f.show){
-    var days=_lvDays(f.startDate,f.endDate,f.partialDay);
+    var days=_lvDays(f.startDate,f.endDate);
     h+='<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:20px;margin-bottom:24px">';
     h+='<h3 style="font-size:15px;font-weight:700;color:var(--text);margin:0 0 16px">New Leave Request</h3>';
 
@@ -220,9 +219,6 @@ function _lvCard(r,showUser){
   }
   h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">';
   h+='<span style="font-size:14px;font-weight:700;color:var(--text)">'+lt.icon+' '+lt.lbl+'</span>';
-  if(r.partial_day){
-    h+='<span style="font-size:11px;padding:2px 7px;border-radius:5px;background:rgba(99,102,241,.18);color:#818cf8">½ day '+(r.partial_type||'am').toUpperCase()+'</span>';
-  }
   h+='</div>';
   h+='<div style="font-size:13px;color:var(--text2);margin-bottom:4px">📅 '+_lvFmt(r.start_date)+' → '+_lvFmt(r.end_date)+'<span style="color:var(--text3);margin-left:8px">('+days+' day'+(days!==1?'s':'')+')</span></div>';
   if(r.reason){h+='<div style="font-size:12px;color:var(--text3);margin-top:4px;font-style:italic">"'+_lvEsc(r.reason)+'"</div>';}
@@ -308,7 +304,6 @@ function _renderApprovals(lv,role){
     h+='<span style="font-size:10px;padding:2px 7px;border-radius:5px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.06em">'+(r.user_role||'')+'</span>';
     h+='</div>';
     h+='<div style="font-size:13px;color:var(--text2);margin-bottom:4px">'+lt.icon+' '+lt.lbl;
-    if(r.partial_day){h+=' <span style="font-size:11px;padding:2px 6px;border-radius:5px;background:rgba(99,102,241,.18);color:#818cf8">½ '+(r.partial_type||'am').toUpperCase()+'</span>';}
     h+='</div>';
     h+='<div style="font-size:13px;color:var(--text3)">📅 '+_lvFmt(r.start_date)+' → '+_lvFmt(r.end_date)+'<span style="margin-left:8px">('+days+' leave day'+(days!==1?'s':'')+(_rdoExcl>0?', '+_rdoExcl+' RDO excl':'')+')</span></div>';
     if(r.reason){h+='<div style="font-size:12px;color:var(--text3);margin-top:4px;font-style:italic">"'+_lvEsc(r.reason)+'"</div>';}
@@ -419,7 +414,7 @@ function renderNotificationPanel(){
 window.clearAllNotifications=async function(){
   var uid=S.user&&S.user.id;if(!uid)return;
   if(!confirm('Clear all your notifications?'))return;
-  try{await fetch(SB+'/rest/v1/ts_notifications?user_id=eq.'+uid,{method:'DELETE',headers:SH});}catch(e){}
+  try{var r=await _sbFetch(SB+'/rest/v1/ts_notifications?user_id=eq.'+uid,{method:'DELETE',headers:{...SH}});if(!r.ok){toast('Could not clear notifications — please try again','warn');return;}}catch(e){toast('Could not clear notifications — please try again','warn');return;}
   S._notifications=[];S.__notifStr='';render();
 };
 
@@ -429,13 +424,21 @@ window.clearAllNotifications=async function(){
 
 window.loadMyLeave=async function(){
   var uid=S.user?.id;if(!uid)return;
-  var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&user_id=eq.'+uid+'&order=submitted_at.desc',{headers:SH});
-  if(r.ok){_lvInit().myReqs=(await r.json()).filter(Boolean);safeRender();}
+  try{
+    var r=await _sbFetch(SB+'/rest/v1/ts_leave_requests?select=*&user_id=eq.'+uid+'&order=submitted_at.desc',{headers:{...SH}});
+    if(r.ok){_lvInit().myReqs=(await r.json()).filter(Boolean);}
+    else{_lvInit().myReqs=_lvInit().myReqs||[];toast('Could not load your leave — check connection','warn');}
+  }catch(e){_lvInit().myReqs=_lvInit().myReqs||[];}
+  safeRender();
 };
 
 window.loadAllLeave=async function(){
-  var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&order=submitted_at.desc',{headers:SH});
-  if(r.ok){_lvInit().allReqs=(await r.json()).filter(Boolean);safeRender();}
+  try{
+    var r=await _sbFetch(SB+'/rest/v1/ts_leave_requests?select=*&order=submitted_at.desc',{headers:{...SH}});
+    if(r.ok){_lvInit().allReqs=(await r.json()).filter(Boolean);}
+    else{_lvInit().allReqs=_lvInit().allReqs||[];toast('Could not load leave requests — check connection','warn');}
+  }catch(e){_lvInit().allReqs=_lvInit().allReqs||[];}
+  safeRender();
 };
 
 window.submitLeaveRequest=async function(){
@@ -446,10 +449,15 @@ window.submitLeaveRequest=async function(){
   if(!uid){toast('Could not identify your account — please sign in again.','error');return;}
   var uname=S.user?.name||S.user?.email||'Unknown';
   var urole=S.user?.role||'desk';
-  var days=_lvWorkingDays(uid,f.startDate,f.endDate,f.partialDay); // leave days actually used (RDOs excluded; half-day aware)
+  // Ensure the persisted roster is loaded before counting leave days, so RDO exclusion is
+  // correct and the STORED total_days isn't over-counted because the roster hadn't loaded yet.
+  if((!S.roster||!Object.keys(S.roster).length)&&typeof window.loadRosterFromCloud==='function'){
+    try{await window.loadRosterFromCloud();}catch(e){}
+  }
+  var days=_lvWorkingDays(uid,f.startDate,f.endDate); // leave days actually used (RDOs excluded)
   var payload={user_id:uid,user_name:uname,user_role:urole,
     leave_type:f.type,start_date:f.startDate,end_date:f.endDate,
-    total_days:days,partial_day:f.partialDay,partial_type:f.partialType||'am',
+    total_days:days,
     reason:f.reason||null,status:'pending',submitted_at:new Date().toISOString()};
   try{
     var r=await fetch(SB+'/rest/v1/ts_leave_requests',{
@@ -462,7 +470,7 @@ window.submitLeaveRequest=async function(){
       try{await sbU('ts_leave_audit',[{request_id:res[0].id,action:'submitted',performed_by:uid,performed_by_name:uname}]);}catch(e){}
       try{await window._notifyLeaveApprovers(res[0].id,urole,uname,f.type,f.startDate,f.endDate);}catch(e){}
       try{window._triggerLeaveEmail(res[0].id,'submitted').catch(function(){});}catch(e){}
-      S._leave.form={show:false,type:'annual',startDate:'',endDate:'',partialDay:false,partialType:'am',reason:''};
+      S._leave.form={show:false,type:'annual',startDate:'',endDate:'',reason:''};
       S._leave._myLoaded=false;S._leave._allLoaded=false;
       toast('Leave request submitted!','success');
       window.loadMyLeave();
@@ -547,9 +555,10 @@ window.deleteLeaveRequest=async function(id){
   // Log to the general audit trail (ts_audit_log) since the leave-specific audit rows are deleted below.
   try{if(typeof auditLog==='function')await auditLog('leave_delete',{id:id,user:_delReq.user_name,type:_delReq.leave_type,start:_delReq.start_date,end:_delReq.end_date});}catch(e){}
   try{
-    await fetch(SB+'/rest/v1/ts_leave_requests?id=eq.'+id,{method:'DELETE',headers:SH});
-    await fetch(SB+'/rest/v1/ts_leave_audit?request_id=eq.'+id,{method:'DELETE',headers:SH});
-  }catch(e){}
+    var _dr=await _sbFetch(SB+'/rest/v1/ts_leave_requests?id=eq.'+id,{method:'DELETE',headers:{...SH}});
+    if(!_dr.ok){toast('Delete failed on the server — not deleted. Try again.','error');return;}
+    await _sbFetch(SB+'/rest/v1/ts_leave_audit?request_id=eq.'+id,{method:'DELETE',headers:{...SH}});
+  }catch(e){toast('Delete failed — check connection.','error');return;}
   if(S._leave){
     if(S._leave.allReqs)S._leave.allReqs=S._leave.allReqs.filter(function(r){return r.id!==id;});
     if(S._leave.myReqs)S._leave.myReqs=S._leave.myReqs.filter(function(r){return r.id!==id;});
@@ -565,9 +574,10 @@ window.deleteAllLeave=async function(){
   if(!confirm('Are you absolutely sure? This wipes every leave request in the system.'))return;
   try{if(typeof auditLog==='function')await auditLog('leave_delete_all',{count:n});}catch(e){}
   try{
-    await fetch(SB+'/rest/v1/ts_leave_requests?id=neq.__none__',{method:'DELETE',headers:SH});
-    await fetch(SB+'/rest/v1/ts_leave_audit?id=neq.__none__',{method:'DELETE',headers:SH});
-  }catch(e){}
+    var _dar=await _sbFetch(SB+'/rest/v1/ts_leave_requests?id=neq.__none__',{method:'DELETE',headers:{...SH}});
+    if(!_dar.ok){toast('Delete failed on the server — nothing deleted. Try again.','error');return;}
+    await _sbFetch(SB+'/rest/v1/ts_leave_audit?id=neq.__none__',{method:'DELETE',headers:{...SH}});
+  }catch(e){toast('Delete failed — check connection.','error');return;}
   if(S._leave){S._leave.allReqs=[];S._leave.myReqs=[];S._leave._audit={};}
   toast('All leave requests deleted.','ok');
   render();
@@ -621,7 +631,7 @@ window.leaveEditSave=async function(){
   if(req.leave_type!==e.type){var ot=LEAVE_TYPES.find(function(t){return t.id===req.leave_type;}),nt=LEAVE_TYPES.find(function(t){return t.id===e.type;});changes.push('type '+(ot?ot.lbl:req.leave_type)+' ⇒ '+(nt?nt.lbl:e.type));}
   if((req.reason||'')!==(e.reason||''))changes.push('reason updated');
   if(!changes.length){var _o=document.getElementById('leave-edit-ov');if(_o)_o.remove();S._leaveEdit=null;toast('No changes made.','info');return;}
-  var days=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,e.startDate,e.endDate,req.partial_day):_lvDays(e.startDate,e.endDate,req.partial_day);
+  var days=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,e.startDate,e.endDate):_lvDays(e.startDate,e.endDate);
   var isOwner=req.user_id===(me&&me.id);
   // Approvers editing someone else's request must actually be allowed to approve that role.
   if(!isOwner&&(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk'))){toast('Not authorised to edit this request.','warn');return;}

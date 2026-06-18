@@ -254,8 +254,11 @@ window.lsSeatEditPopup=function(idx){
 function renderLoadsheet(){
   const f=S.form,a=S.aircraft[f.ac],r=a?calcFormWB(f):null,allOk=r&&r.towOk&&r.lwOk&&r.cogOk;
   if(f&&f._unallocated)delete f._unallocated; // pool lives only on S.dispatch._unallocated (shared), never on the form
+  // Keep the PIC seat weight in sync with the roster weight ONLY for editable drafts.
+  // A signed loadsheet's recorded weights must never silently change on view (that would
+  // mutate signed W&B). Interactive PIC changes (lsPIC/_lsPickPic) persist this themselves.
   const picCrew=pilotCrewList().find(c=>c.n===f.pic);
-  if(picCrew&&String(f.seats[0])!==String(picCrew.w))f.seats[0]=String(picCrew.w);
+  if(picCrew&&f.status!=='signed'&&String(f.seats[0])!==String(picCrew.w))f.seats[0]=String(picCrew.w);
 
   const acOpts=Object.values(S.aircraft).map(x=>`<option value="${x.id}"${f.ac===x.id?' selected':''}>${x.name} — ${x.type}</option>`).join('');
   const _lsPilots=f.ac?pilotCrewList().filter(c=>(c.endorse||[]).includes(f.ac)):pilotCrewList();
