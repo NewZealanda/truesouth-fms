@@ -8,6 +8,7 @@
 
 // ── helpers ───────────────────────────────────────────────────────────────
 function _rzToday(){return new Date().toISOString().slice(0,10);}
+function _rzDowLabel(ds){if(!ds)return'';var d=new Date(ds+'T00:00:00');if(isNaN(d))return'';return d.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'});}
 function _rzEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function _rzAcCol(ac){return (typeof AC_COL!=='undefined'&&AC_COL[ac])||'#64748b';}
 const _RZ_VANS=3, _RZ_VAN_SEATS=11;
@@ -105,15 +106,19 @@ function renderRezdy(){
   if(!S.rezdyDate)S.rezdyDate=_rzToday();
   const sub=S.rezdyTab||'bookings';
   const tabBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    [{id:'bookings',lbl:'Bookings'},{id:'pickups',lbl:'Pickups'},{id:'schedule',lbl:'Schedule'}].map(function(t){
+    [{id:'bookings',lbl:'Bookings'},{id:'pickups',lbl:'Pickups'},{id:'schedule',lbl:'Calendar'}].map(function(t){
       return '<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.rezdyTab=\''+t.id+'\';render()">'+t.lbl+'</button>';
     }).join('')+'</div>';
 
-  // shared date picker row
-  const dateRow='<div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
-    '<div style="font-weight:700;font-size:13px;color:var(--text2)">Date</div>'+
-    '<input class="fi" type="date" style="max-width:180px" value="'+_rzEsc(S.rezdyDate)+'" onchange="window.rezdySetDate(this.value)">'+
-    (sub==='bookings'?'<button class="btn btn-ghost" style="font-size:12px" onclick="window.rezdyRefresh()">⟳ Refresh from Rezdy</button>':'')+
+  // shared date picker row — prev / next / today date-cycle controls on every tab
+  const _isToday=S.rezdyDate===_rzToday();
+  const dateRow='<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1" title="Previous day" onclick="window.rezdyShiftDate(-1)">◁</button>'+
+    '<input class="fi" type="date" style="max-width:168px" value="'+_rzEsc(S.rezdyDate)+'" onchange="window.rezdySetDate(this.value)">'+
+    '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1" title="Next day" onclick="window.rezdyShiftDate(1)">▷</button>'+
+    '<button class="btn btn-ghost" style="font-size:12px;padding:6px 12px'+(_isToday?';opacity:.45':'')+'" title="Jump to today" onclick="window.rezdySetDate(\''+_rzToday()+'\')">Today</button>'+
+    '<div style="font-size:13px;font-weight:700;color:var(--text2)">'+_rzDowLabel(S.rezdyDate)+'</div>'+
+    (sub==='bookings'?'<button class="btn btn-ghost" style="font-size:12px;margin-left:auto" onclick="window.rezdyRefresh()">⟳ Refresh from Rezdy</button>':'')+
     '</div>';
 
   if(sub==='pickups')return tabBar+dateRow+_rzRenderPickups();
@@ -263,6 +268,12 @@ window.rezdyToggleRow=function(orderNumber){
   render();
 };
 
+window.rezdyShiftDate=function(delta){
+  var d=new Date((S.rezdyDate||_rzToday())+'T00:00:00');
+  if(isNaN(d))d=new Date();
+  d.setDate(d.getDate()+(delta||0));
+  window.rezdySetDate(d.toISOString().slice(0,10));
+};
 window.rezdySetDate=function(v){
   S.rezdyDate=v||_rzToday();
   // clear date-scoped caches so each tab reloads for the new date

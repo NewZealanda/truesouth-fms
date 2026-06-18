@@ -243,7 +243,6 @@ function renderLoginInner(){
       <div style="text-align:center;margin-bottom:32px">
         <img src="${_TS_LOGO}" alt="True South Flights" style="width:240px;max-width:80%;margin-bottom:16px">
         <div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.45)">Flight Management System</div>
-        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;color:rgba(255,255,255,.32);margin-top:7px">${APP_VER}</div>
       </div>
       <div style="background:rgba(10,15,25,.78);backdrop-filter:blur(20px);border-radius:16px;border:1px solid rgba(255,255,255,.12);padding:32px 28px;box-shadow:0 24px 60px rgba(0,0,0,.5)">
         <div id="login-err" style="display:${S.loginErr?'block':'none'};background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#fca5a5">${S.loginErr||''}</div>
