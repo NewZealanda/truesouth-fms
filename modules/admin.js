@@ -1,10 +1,14 @@
 function renderAdmin(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
-  // Non-admin: show sub-tabs based on their role permissions
+  // Non-admin: the permission grid governs what they see. admin_users can reach the full
+  // settings area; admin_crew alone gets People. Anything the section-router lands them on
+  // that they lack permission for falls back to People (or a no-access note).
   if(!isAdmin){
-    const _role=S.user?.role||'desk';
-    const _rp=S.rolePerms?.[_role]||DEFAULT_ROLE_PERMS[_role]||{};
-    if(_rp.admin_crew!==false) return renderAdminPeople();
+    if(typeof hasRolePerm==='function'&&hasRolePerm('admin_users')){
+      const _s=(S.admin||{}).section||'people';
+      return {people:renderAdminPeople,perms:renderAdminPerms}[_s]?.()||renderAdminPeople();
+    }
+    if(typeof hasRolePerm==='function'&&hasRolePerm('admin_crew')) return renderAdminPeople();
     return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
   }
   const ad=S.admin;

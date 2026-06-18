@@ -625,7 +625,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.23';
+const APP_VER='v23.24';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2729,6 +2729,29 @@ document.addEventListener('focusout',function(e){
   }
 });
 
+// Which permission a top-level section requires. Everything routes through hasRolePerm so the
+// permission grid governs access for every role (superadmin is all-true via DEFAULT_ROLE_PERMS).
+// 'leave' (My Leave) is the universal fallback every role can reach.
+function _sectionAllowed(sec){
+  if(!S.user)return false;
+  switch(sec){
+    case 'maintenance': return hasRolePerm('maintenance');
+    case 'roster':      return hasRolePerm('roster');
+    case 'leave':       return hasRolePerm('leave');
+    case 'rezdy':       return hasRolePerm('rezdy');
+    case 'settings':    return hasRolePerm('admin_users')||hasRolePerm('admin_crew');
+    case 'operations':  return hasRolePerm('operations');
+    default:            return true;
+  }
+}
+function _firstAllowedSection(){
+  var order=['operations','maintenance','roster','rezdy','leave','settings'];
+  for(var i=0;i<order.length;i++){if(_sectionAllowed(order[i]))return order[i];}
+  return 'leave';
+}
+function _defaultTabFor(sec){
+  return sec==='maintenance'?'maintenance':sec==='operations'?'manifest':sec==='settings'?'admin':sec;
+}
 function render(){
   const r=document.getElementById('root');
   if(!r)return;
@@ -2777,8 +2800,11 @@ function render(){
   // Hide login, show app
   if(lo) lo.style.display='none';
   r.style.display='';
-  // Maintenance-only users: redirect to maintenance if on wrong tab
-  if(S.user?.role==='maint'&&S.section!=='maintenance'){S.tab='maintenance';S.section='maintenance';}
+  // Access is permission-driven (the permission grid is the single source of truth for every
+  // role — no hardcoded role gates). If the user is on a section they're not permitted to
+  // (default boot, a stale last-view, or a revoked permission), bounce them to their first
+  // allowed section. Superadmin passes everything via DEFAULT_ROLE_PERMS; admin follows the grid.
+  if(S.user&&!_sectionAllowed(S.section||'operations')){var _fs=_firstAllowedSection();S.section=_fs;S.tab=_defaultTabFor(_fs);}
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
@@ -3033,13 +3059,16 @@ function renderDrawer(){
   const role=S.user?.role||'desk';
   const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
   const _isAdminPlus=role==='superadmin'||role==='admin';
-  const _canOps=_isAdminPlus||_navPerms.operations===true;
-  const _canCharter=_isAdminPlus||_navPerms.charter===true;
-  const _canMaint=_isAdminPlus||_navPerms.maintenance===true;
+  // Nav visibility is driven by the permission grid for EVERY role (superadmin is all-true via
+  // DEFAULT_ROLE_PERMS; admin follows its grid row). No blanket admin override on perm-backed items.
+  const _canOps=hasRolePerm('operations');
+  const _canCharter=hasRolePerm('charter');
+  const _canMaint=hasRolePerm('maintenance');
+  const _canLeave=hasRolePerm('leave');
   // Roster VIEW is gated on the 'roster' permission (the grid's "Roster & Leave" column).
   // Roles without it (e.g. maint, ground_staff, marketing) don't see the Roster nav item.
   // Editing remains separately gated inside renderRoster on roster_edit / admin / superadmin.
-  const _canRoster=_isAdminPlus||_navPerms.roster===true;
+  const _canRoster=hasRolePerm('roster');
   const sec=S.section||'operations';
   // Drawer sections expand/collapse independently; default all closed (shut on login). Kept in memory so reopening the burger shows the same state.
   S._drawerExp=S._drawerExp||{};
@@ -3058,8 +3087,8 @@ function renderDrawer(){
   var h='<div style="position:fixed;inset:0;z-index:1000;display:flex" onclick="S._drawerOpen=false;S._notifOpen=false;render()">';
   h+='<div onclick="event.stopPropagation()" style="width:270px;height:100%;background:linear-gradient(180deg,#080c17,#0d1526);border-right:1px solid rgba(255,255,255,.1);overflow-y:auto;display:flex;flex-direction:column;padding-top:max(0px,env(safe-area-inset-top));flex-shrink:0">';
   h+='<div style="padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px">';
-  h+='<div style="width:32px;height:32px;border-radius:7px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0"><img src="'+LOGO+'" style="width:27px;height:27px;object-fit:contain" alt=""></div>';
-  h+='<div style="flex:1"><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:16px;font-weight:800;letter-spacing:.06em;color:#fff">TRUE SOUTH</div><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:10px;font-weight:600;letter-spacing:.1em;color:rgba(255,255,255,.35)">FLIGHT MANAGEMENT</div></div>';
+  h+='<img src="'+_TS_LOGO+'" alt="True South Flights" style="height:30px;width:auto;max-width:175px;object-fit:contain;flex-shrink:0">';
+  h+='<div style="flex:1"></div>';
   h+='<button onclick="S._drawerOpen=false;render()" style="background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;padding:5px 7px;border-radius:6px;flex-shrink:0;line-height:1">✕</button>';
   h+='</div>';
   h+='<nav style="flex:1;padding:10px 8px">';
@@ -3073,8 +3102,9 @@ function renderDrawer(){
       if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
     }
   }
-  // Roster & Leave combined
-  {var _canApproveLeaveNav=_isAdminPlus||hasRolePerm('leave_approve');
+  // Roster & Leave combined — show the group only if the user can reach at least one item.
+  {var _canApproveLeaveNav=hasRolePerm('leave_approve');
+  if(_canRoster||_canLeave||_canApproveLeaveNav){
   var _lvActive=sec==='leave';
   // Match the Approvals tab: only count pending requests this approver can actually action.
   var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveRole!=='function'||_lvCanApproveRole(role,r.user_role||'desk'));}).length:0;
@@ -3083,9 +3113,9 @@ function renderDrawer(){
   h+='<button tabindex="-1" onclick="S._drawerExp[\'roster\']=!S._drawerExp[\'roster\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_rlOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_rlOn?'#c084fc':'rgba(255,255,255,.65)')+';font-size:14px;font-weight:'+(_rlOn?'700':'500')+';cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:2px"><span style="flex:1">🗓️ Roster'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_rlExp?'▲':'▼')+'</span></button>';
   if(_rlExp){
     if(_canRoster)h+=_subBtn('Roster',sec==='roster',"S._drawerOpen=false;S.section='roster';render()",true);
-    h+=_subBtn('My Leave',_lvActive&&(!S._leave||S._leave.tab==='my'),"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='my';render()");
+    if(_canLeave)h+=_subBtn('My Leave',_lvActive&&(!S._leave||S._leave.tab==='my'),"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='my';render()");
     if(_canApproveLeaveNav)h+=_subBtn('Approvals',_lvActive&&S._leave&&S._leave.tab==='approvals',"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='approvals';render()");
-  }}
+  }}}
   if(_canMaint){
     h+=_secBtn('Maintenance','maintenance','🔧');
     if(_isExp('maintenance')){
@@ -3095,12 +3125,12 @@ function renderDrawer(){
       h+=_mn('Logs','log');
       h+=_mn('Aircraft','aircraft');
       h+=_mn('Observations','observations');
-      if(_isAdminPlus||hasRolePerm('maint_bookings')){h+=_mn('Bookings','bookings');h+=_mn('Estimator','estimator');}
+      if(hasRolePerm('maint_bookings')){h+=_mn('Bookings','bookings');h+=_mn('Estimator','estimator');}
       h+=_mn('Search','search');
     }
   }
-  {var _canUsers=_isAdminPlus||hasRolePerm('admin_users');
-   var _canCrew=_isAdminPlus||hasRolePerm('admin_crew');
+  {var _canUsers=hasRolePerm('admin_users');
+   var _canCrew=hasRolePerm('admin_crew');
    if(_canUsers||_canCrew){
     h+=_secBtn('Settings','settings','⚙️');
     if(_isExp('settings')){
@@ -3143,24 +3173,24 @@ function renderOpsSubTabs(){
   h+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" style="flex-shrink:0">Seatmap</button>';
   h+='<button tabindex="-1" class="sub-tab '+(isLsView?'on':'')+'" onclick="window.switchToLoadsheets()" style="flex-shrink:0">Loadsheets</button>';
   h+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="flex-shrink:0">Saved ('+savedCount+')</button>';
-  if(_isOpsAdminPlus||_opsNavPerms.charter===true)h+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="flex-shrink:0">Charter</button>';
+  if(hasRolePerm('charter'))h+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="flex-shrink:0">Charter</button>';
   h+='</div>';
   return h;
 }
 
 function renderSettingsSubTabs(){
-  const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
-  if(!isAdmin) return '';
+  // Settings sub-tabs follow the permission grid for every role (consistent with the drawer).
+  const _canUsers=hasRolePerm('admin_users');
+  const _canCrew=hasRolePerm('admin_crew');
+  const _adminPlus=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
+  if(!_canUsers&&!_canCrew&&!_adminPlus) return '';
   const ad=S.admin||{};
   const cur=ad.section||'people';
-  const sections=[
-    {id:'people',     lbl:'People'},
-    {id:'perms',      lbl:'Permissions'},
-    {id:'gdrive',     lbl:'Drive'},
-    {id:'aerodromes', lbl:'Aerodromes'},
-    {id:'statistics', lbl:'Statistics'},
-    ...(S.user?.superAdmin?[{id:'audit',lbl:'Audit'}]:[])
-  ];
+  const sections=[];
+  if(_canUsers||_canCrew)sections.push({id:'people',lbl:'People'});
+  if(_canUsers)sections.push({id:'perms',lbl:'Permissions'});
+  if(_adminPlus)sections.push({id:'gdrive',lbl:'Drive'},{id:'aerodromes',lbl:'Aerodromes'},{id:'statistics',lbl:'Statistics'});
+  if(hasRolePerm('audit'))sections.push({id:'audit',lbl:'Audit'});
   var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
   sections.forEach(function(s){
     h+='<button tabindex="-1" class="sub-tab '+(cur===s.id?'on':'')+'" onclick="if(!S.admin)S.admin={};S.admin.section=\''+s.id+'\';render()" style="flex-shrink:0">'+s.lbl+'</button>';
@@ -3194,11 +3224,7 @@ function renderApp(){
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:10px">
           <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;S._drawerSection=S.section;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1" title="Menu">☰</button>
-          <div style="width:38px;height:38px;border-radius:8px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden"><img src="${LOGO}" style="width:32px;height:32px;object-fit:contain" alt=""></div>
-          <div>
-            <div style="font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:800;letter-spacing:.06em;color:#fff">TRUE SOUTH</div>
-            <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.12em;color:rgba(255,255,255,.55)">FLIGHT MANAGEMENT SYSTEM</div>
-          </div>
+          <img src="${_TS_LOGO}" alt="True South Flights" style="height:38px;width:auto;display:block;object-fit:contain">
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
           <div style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)" title="${S.rtStatus==='live'?'Live — synced':S.rtStatus==='connecting'?'Connecting...':'Offline'}">
@@ -5704,11 +5730,15 @@ function renderCharterRates(){
 // ── ADMIN ──
 function renderAdmin(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
-  // Non-admin: show sub-tabs based on their role permissions
+  // Non-admin: the permission grid governs what they see. admin_users can reach the full
+  // settings area; admin_crew alone gets People. Anything the section-router lands them on
+  // that they lack permission for falls back to People (or a no-access note).
   if(!isAdmin){
-    const _role=S.user?.role||'desk';
-    const _rp=S.rolePerms?.[_role]||DEFAULT_ROLE_PERMS[_role]||{};
-    if(_rp.admin_crew!==false) return renderAdminPeople();
+    if(typeof hasRolePerm==='function'&&hasRolePerm('admin_users')){
+      const _s=(S.admin||{}).section||'people';
+      return {people:renderAdminPeople,perms:renderAdminPerms}[_s]?.()||renderAdminPeople();
+    }
+    if(typeof hasRolePerm==='function'&&hasRolePerm('admin_crew')) return renderAdminPeople();
     return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
   }
   const ad=S.admin;
