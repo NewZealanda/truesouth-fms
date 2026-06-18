@@ -238,7 +238,7 @@ function _userFromClaims(claims){
 // Under Phase C the boot fetch runs as anon (RLS hides protected tables), so reload the
 // core tables once a JWT is in place after login/restore.
 async function _reloadCoreTables(){
-  try{await Promise.all(['ts_crew','ts_aircraft','ts_charter_rates','ts_loadsheets','ts_manifests','ts_scratchpads'].map(function(t){return reloadTable(t);}));}catch(e){}
+  try{await Promise.all(['ts_crew','ts_aircraft','ts_charter_rates','ts_loadsheets','ts_manifests','ts_scratchpads','ts_settings'].map(function(t){return reloadTable(t);}));}catch(e){}
 }
 const sbPatch=async(t,id,data)=>{try{const r=await fetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
 
@@ -304,7 +304,7 @@ function aptOpts(sel){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.01';
+const APP_VER='v23.02';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
