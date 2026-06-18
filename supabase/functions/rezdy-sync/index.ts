@@ -50,6 +50,8 @@ function normalize(b: any) {
     product: it.productName || it.productCode || "",
     startTimeLocal: it.startTimeLocal || it.startTime || "",
     quantity: it.totalQuantity || (it.quantities || []).reduce((s: number, q: any) => s + (q.value || 0), 0),
+    // Keep the per-price-option breakdown (Adult / Child / Infant …) for the A/C/i counts.
+    quantities: (it.quantities || []).map((q: any) => ({ label: q.optionLabel || q.label || q.priceOptionLabel || "", value: q.value || 0 })),
     pickup: it.pickupLocation ? (it.pickupLocation.locationName || it.pickupLocation.additionalInstructions || "") : "",
     pickupTime: it.pickupLocation?.pickupTime ?? "",
     extras: (it.extras || []).map((e: any) => ({ name: e.name || e.extraName || "", qty: e.quantity || 1 })),

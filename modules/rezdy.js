@@ -165,6 +165,10 @@ function renderRezdy(){
 function _rzGroupColor(s){s=String(s||'');var h=0;for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffffff;var pal=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];return pal[Math.abs(h)%pal.length];}
 function _rzPaxMeta(order){S._rezdyPaxMeta=S._rezdyPaxMeta||{};order=String(order);return S._rezdyPaxMeta[order]||(S._rezdyPaxMeta[order]={});}
 function _rzSavePaxMeta(){if(window.pickupSave)window.pickupSave(true);}
+// Authoritative A/C/i counts from Rezdy's price-option quantities (Adult / Child / Infant …).
+function _rzBreakdown(b){var a=0,c=0,i=0,has=false;((b&&b.items)||[]).forEach(function(it){((it&&it.quantities)||[]).forEach(function(q){has=true;var l=String((q&&q.label)||'').toLowerCase();var v=parseInt(q&&q.value,10)||0;if(/infant/.test(l))i+=v;else if(/child/.test(l))c+=v;else a+=v;});});return has?{a:a,c:c,i:i}:null;}
+// Per-participant type from Rezdy's captured age field (when present).
+function _rzAgeType(p){var a=String((p&&p.age)||'').toLowerCase();if(/infant/.test(a))return 'infant';if(/child/.test(a))return 'child';var n=parseInt(a,10);if(!isNaN(n)){if(n<=2)return 'infant';if(n<13)return 'child';}return 'adult';}
 // Passenger "bubbles" for a booking — loadsheet style: white card, group-colour left border,
 // C (child) / i (infant) corner badges, TO PAY banner. opts.drag enables in-booking dragging:
 // drop one bubble on another to make it that passenger's lap infant; tap toggles child.
@@ -185,20 +189,25 @@ function _rzPaxBubbles(b,opts){
     var wRaw=(p&&p.weight!=null&&p.weight!=='')?String(p.weight):'';
     var tbc=!wRaw||/^tbc$/i.test(wRaw);
     var w=tbc?'TBC':_rzEsc(wRaw.replace(/\s*kg$/i,''))+'kg';
-    var isChild=types[idx]==='child';
+    var _t=types[idx]||_rzAgeType(p); // manual override else Rezdy age → adult/child/infant
+    var isChild=_t==='child';var isInf=_t==='infant';
     var infName=null,infIdx=null;Object.keys(infantOf).forEach(function(ii){if(String(infantOf[ii])===String(idx)){infIdx=ii;var ip=parts[ii];if(ip&&ip.name)infName=String(ip.name).trim().split(/\s+/)[0];}});
+    var showI=isInf||!!infName;
     var dd=opts.drag?(' draggable="true" ondragstart="window.rezdyPaxDragStart(\''+order.replace(/'/g,"\\'")+'\','+idx+',event)" ondragover="event.preventDefault()" ondrop="window.rezdyPaxDropInfant(\''+order.replace(/'/g,"\\'")+'\','+idx+',event)" onclick="window.rezdyPaxToggleChild(\''+order.replace(/'/g,"\\'")+'\','+idx+')"'):'';
     bubs+='<div title="'+_rzEsc(full+(infName?' (+ infant '+infName+')':''))+'"'+dd+' style="position:relative;overflow:hidden;background:rgba(255,255,255,.93);border-radius:8px;'+(owing?'border:2px solid #ef4444':'border-left:4px solid '+gcol)+';min-width:60px;flex-shrink:0;'+(opts.drag?'cursor:grab;':'')+'">'+
       (owing?'<div style="background:#ef4444;color:#fff;font-size:8px;font-weight:900;letter-spacing:.04em;text-align:center;line-height:1.7">$ TO PAY</div>':'')+
       (isChild?'<div style="position:absolute;bottom:3px;left:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')+
-      (infName?'<div'+(opts.drag?' onclick="event.stopPropagation();window.rezdyPaxRemoveInfant(\''+order.replace(/'/g,"\\'")+'\','+infIdx+')"':'')+' title="Infant: '+_rzEsc(infName)+(opts.drag?' (tap to remove)':'')+'" style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)'+(opts.drag?';cursor:pointer':'')+'">i</div>':'')+
+      (showI?'<div'+(opts.drag&&infName?' onclick="event.stopPropagation();window.rezdyPaxRemoveInfant(\''+order.replace(/'/g,"\\'")+'\','+infIdx+')"':'')+' title="'+(infName?'Infant: '+_rzEsc(infName)+(opts.drag?' (tap to remove)':''):'Infant')+'" style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)'+(opts.drag&&infName?';cursor:pointer':'')+'">i</div>':'')+
       '<div style="padding:'+(owing?'2px 7px 4px':'4px 7px')+'">'+
         '<div style="font-size:11px;font-weight:700;color:#1e293b;white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'+
         '<div style="font-size:10px;font-weight:'+(tbc?'700':'400')+';color:'+(tbc?'#b45309':'#334155')+'">'+w+'</div>'+
       '</div></div>';
   });
   if(!bubs)return '';
-  var nA=0,nC=0,nI=0;parts.forEach(function(p,idx){if(infantOf[idx]!=null)nI++;else if(types[idx]==='child')nC++;else nA++;});
+  // Breakdown: Rezdy's quantities are authoritative; fall back to per-bubble types otherwise.
+  var rb=_rzBreakdown(b);var nA,nC,nI;
+  if(rb){nA=rb.a;nC=rb.c;nI=rb.i;}
+  else{nA=0;nC=0;nI=0;parts.forEach(function(p,idx){if(infantOf[idx]!=null){nI++;}else{var tt=types[idx]||_rzAgeType(p);if(tt==='child')nC++;else if(tt==='infant')nI++;else nA++;}});}
   var bd='<span style="font-size:12px;font-weight:800;color:var(--text1);align-self:center">'+nA+'A'+(nC?' · '+nC+'C':'')+(nI?' · '+nI+'i':'')+'</span>';
   return '<div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 10px;align-items:stretch">'+
     '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;align-self:center;margin-right:2px">Pax</span>'+bd+bubs+'</div>';
@@ -214,8 +223,9 @@ window.rezdyPaxDropInfant=function(order,hostIdx,e){
   _rzSavePaxMeta();render();
 };
 window.rezdyPaxToggleChild=function(order,idx){
-  var m=_rzPaxMeta(order);m.types=m.types||{};
-  if(m.types[idx]==='child')delete m.types[idx];else m.types[idx]='child';
+  // Cycle the manual override: auto (Rezdy) → child → adult → auto.
+  var m=_rzPaxMeta(order);m.types=m.types||{};var cur=m.types[idx];
+  if(!cur)m.types[idx]='child';else if(cur==='child')m.types[idx]='adult';else delete m.types[idx];
   _rzSavePaxMeta();render();
 };
 window.rezdyPaxRemoveInfant=function(order,infIdx){var m=_rzPaxMeta(order);if(m.infantOf)delete m.infantOf[infIdx];_rzSavePaxMeta();render();};
