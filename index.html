@@ -625,7 +625,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.14';
+const APP_VER='v23.15';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3526,7 +3526,7 @@ function renderStep1(){
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative" onclick="var i=this.querySelector('input[type=date]');try{i.showPicker&&i.showPicker()}catch(e){i.click()}">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Date</div>
         <div style="font-size:13px;font-weight:600;color:var(--text1)">${_fmtLsDate(d.date)}</div>
-        <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();safeRender()" onclick="event.stopPropagation();try{this.showPicker&&this.showPicker()}catch(e){}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;touch-action:manipulation;cursor:pointer">
+        <input type="date" class="fi" value="${d.date}" onchange="S.dispatch.date=this.value;autoSaveDispatch();this.blur();render()" onclick="event.stopPropagation();try{this.showPicker&&this.showPicker()}catch(e){}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;touch-action:manipulation;cursor:pointer">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">ETD</div>
@@ -4593,7 +4593,7 @@ function renderLoadsheet(){
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer;position:relative" onclick="var i=this.querySelector('input[type=date]');try{i.showPicker&&i.showPicker()}catch(e){i.click()}">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;pointer-events:none">Date</div>
         <div style="font-size:13px;font-weight:600;color:var(--text1);pointer-events:none">${_fmtLsDate(f.date)}</div>
-        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();safeRender()" onclick="event.stopPropagation();try{this.showPicker&&this.showPicker()}catch(e){}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;cursor:pointer;z-index:10;touch-action:manipulation">
+        <input type="date" class="fi" value="${f.date}" onchange="S.form.date=this.value;autoSaveLS();this.blur();render()" onclick="event.stopPropagation();try{this.showPicker&&this.showPicker()}catch(e){}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;background:transparent;cursor:pointer;z-index:10;touch-action:manipulation">
       </div>
       <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2)">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">ETD</div>
