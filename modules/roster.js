@@ -55,7 +55,7 @@ var ROLE_GROUPS=[
 // is grouped under Pilots so their aircraft ratings show alongside the other pilots.
 function _rGroupKey(u){
   if(!u)return null;
-  if(u.isPilot||u.role==='pilot')return 'pilot';
+  if(u.role==='pilot'||(typeof _picEligible==='function'&&_picEligible(u)))return 'pilot';
   var g=ROLE_GROUPS.filter(function(g){return g.roles.indexOf(u.role)>=0;})[0];
   return g?g.key:null;
 }
@@ -328,7 +328,7 @@ function renderRosterView(){
         var ini=_rIni(u);
         var rc=ROLE_GROUPS.filter(function(g2){return g2.key===_rGroupKey(u);})[0];
         var rowCol=rc?rc.col:'#94a3b8';
-        var isPilot=!!(u.isPilot||u.role==='pilot');
+        var isPilot=!!(u.role==='pilot'||(typeof _picEligible==='function'&&_picEligible(u)));
         h+='<tr style="border-top:1px solid rgba(255,255,255,.035)">';
         // Sticky name cell
         h+='<td style="padding:5px 10px;white-space:nowrap;position:sticky;left:0;z-index:1;background:var(--card);border-right:1px solid rgba(255,255,255,.06)">';

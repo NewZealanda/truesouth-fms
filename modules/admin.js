@@ -364,6 +364,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em">EXPIRY DATES</div>'
         +expiryRows+'</div>'
         +'<div><label style="font-size:11px;color:var(--text3)">AIRCRAFT APPROVALS</label>'
+        +'<div style="font-size:10px;color:var(--text3);margin-top:2px;opacity:.8">Anyone approved on at least one aircraft is PIC-eligible and appears in the manifest pilot list.</div>'
         +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'+endorseButtons+'</div></div>';
     } else if(tab==='login'){
       const isOwnAccount=m.userId===S.user?.id;
@@ -382,13 +383,6 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'<option value="accounts"'+(d.role==='accounts'?' selected':'')+'>Accounts</option>'
         +'<option value="marketing"'+(d.role==='marketing'?' selected':'')+'>Marketing</option>'
         +'</select></div>':'')
-        +(isAdmin?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0">'
-        +'<label style="font-size:11px;color:var(--text3)">PIC ELIGIBLE (appears in pilot dropdowns)</label>'
-        +'<button onclick="S.admin.personModal.draft.isPilot=!S.admin.personModal.draft.isPilot;render()" '
-        +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
-        +'background:'+(d.isPilot?'rgba(59,130,246,.3)':'rgba(255,255,255,.06)')+';'
-        +'color:'+(d.isPilot?'#60a5fa':'var(--text3)')+'">✈ '+(d.isPilot?'Yes — PIC':'No')+'</button>'
-        +'</div>':'')
         +(isAdmin&&m.userId?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border2)">'
         +'<label style="font-size:11px;color:var(--text3);flex:1">MARK AS INACTIVE (hides from roster &amp; dropdowns from chosen date)</label>'
         +'<button onclick="S.admin.personModal.draft.inactive=!S.admin.personModal.draft.inactive;render()" '

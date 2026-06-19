@@ -293,6 +293,12 @@ const DEFAULT_ROLE_PERMS={
   marketing: {operations:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,rezdy:false, pay_week:false}
 };
 function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
+// Flight / PIC eligibility is derived from a crew member's AIRCRAFT APPROVALS (endorsements)
+// in their profile — there is no separate "PIC eligible" flag. Anyone approved on at least
+// one aircraft can fly / act as PIC. Resolves the user's crew record by name/linkedCrew.
+function _crewForUser(u){if(!u)return null;return (S.crew||[]).find(function(c){return c.n===u.name||c.n===u.linkedCrew;})||null;}
+function _picEligible(u){var cr=_crewForUser(u);return !!(cr&&cr.endorse&&cr.endorse.length);}
+window._picEligible=_picEligible;window._crewForUser=_crewForUser;
 // True while the Admin > Permissions grid is actively on screen (renderAdminPerms bumps
 // S._permsPageTs on every render). While editing, background reloads must NOT overwrite
 // S.rolePerms or they wipe unsaved ticks (the 5s edit-timer alone is not enough — a
@@ -371,7 +377,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.53';
+const APP_VER='v23.54';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
