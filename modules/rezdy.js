@@ -168,7 +168,7 @@ function renderRezdy(){
   if(sub==='schedule'&&S._rzPrevSub!=='schedule'){S._schedBlocks=null;S._rezdyBookings=null;}
   S._rzPrevSub=sub;
   const tabBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    [{id:'bookings',lbl:'Bookings'},{id:'manifest',lbl:'Manifest'},{id:'schedule',lbl:'Calendar'},{id:'pickups',lbl:'Pickups'},{id:'mypickups',lbl:'My Pickups'}].map(function(t){
+    [{id:'bookings',lbl:'Bookings'},{id:'manifest',lbl:'Manifest'},{id:'loadsheets',lbl:'Loadsheets'},{id:'schedule',lbl:'Calendar'},{id:'pickups',lbl:'Pickups'},{id:'mypickups',lbl:'My Pickups'}].map(function(t){
       return '<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.rezdyTab=\''+t.id+'\';render()">'+t.lbl+'</button>';
     }).join('')+'</div>';
 
@@ -188,6 +188,7 @@ function renderRezdy(){
   if(sub==='pickups')return tabBar+dateRow+_rzRenderPickups();
   if(sub==='mypickups')return tabBar+dateRow+_rzRenderMyPickups();
   if(sub==='manifest')return tabBar+dateRow+_rzRenderManifest();
+  if(sub==='loadsheets')return tabBar+dateRow+_rzRenderLoadsheets();
   if(sub==='schedule')return tabBar+dateRow+_rzRenderSchedule();
   return tabBar+dateRow+_rzRenderBookings();
 }
@@ -203,6 +204,29 @@ function _rzSavePaxMeta(){if(window.pickupSave)window.pickupSave(true);}
 function _rzHasPaxOverrides(order){var m=(S._rezdyPaxMeta||{})[String(order)];if(!m)return false;return (m.types&&Object.keys(m.types).length>0)||(m.infantOf&&Object.keys(m.infantOf).length>0);}
 // Revert ONE booking's passengers to the Rezdy standard (clears manual child/infant edits).
 window.rezdyResetPax=function(order){order=String(order);if(S._rezdyPaxMeta)delete S._rezdyPaxMeta[order];_rzSavePaxMeta();render();};
+// The aircraft assigned to a booking: a manual pill override, else whatever the comments note.
+function _rzBookingAc(b,order){return (S._rzBookingAc||{})[String(order)]||_rzAircraftFromComments(b);}
+// Aircraft selector pills for one booking. Comments supply the default; a pill overrides it.
+function _rzBookingAcPills(b,order){
+  var fleet=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
+  var manual=(S._rzBookingAc||{})[String(order)];
+  var cur=manual||_rzAircraftFromComments(b);
+  var oE=_rzEsc(String(order)).replace(/'/g,"\\'");
+  var pills='';
+  fleet.forEach(function(id){
+    var on=cur===id;var col=_rzAcCol(id);
+    pills+='<button onclick="window.rezdyBookingSetAc(\''+oE+'\',\''+id.replace(/'/g,"\\'")+'\')" class="pill" style="cursor:pointer;border:1.5px solid '+col+';background:'+(on?col:'transparent')+';color:'+(on?'#fff':col)+';font-weight:800;font-size:11px;padding:3px 10px;border-radius:14px">'+id.replace('ZK-','')+'</button>';
+  });
+  var note=cur?'<span style="font-size:10px;color:var(--text3);margin-left:2px">'+(manual?'set':'from comments')+'</span>':'';
+  return '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:7px 10px">'+
+    '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Aircraft</span>'+pills+note+'</div>';
+}
+window.rezdyBookingSetAc=function(order,ac){
+  order=String(order);S._rzBookingAc=S._rzBookingAc||{};
+  if(S._rzBookingAc[order]===ac)delete S._rzBookingAc[order]; // tap the selected pill to revert to comments
+  else S._rzBookingAc[order]=ac;
+  if(window.pickupSave)window.pickupSave(true);render();
+};
 // Authoritative A/C/i counts from Rezdy's price-option quantities (Adult / Child / Infant …).
 function _rzBreakdown(b){var a=0,c=0,i=0,has=false;((b&&b.items)||[]).forEach(function(it){((it&&it.quantities)||[]).forEach(function(q){has=true;var l=String((q&&q.label)||'').toLowerCase();var v=parseInt(q&&q.value,10)||0;if(/infant/.test(l))i+=v;else if(/child/.test(l))c+=v;else a+=v;});});return has?{a:a,c:c,i:i}:null;}
 // Per-participant type from Rezdy's captured age field (when present).
@@ -388,9 +412,14 @@ function _rzRenderBookings(){
       var _rst=_ovr?'<button onclick="window.rezdyResetPax(\''+_rzEsc(ono).replace(/'/g,"\\'")+'\')" title="Reset this booking to the Rezdy standard" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:rgba(255,255,255,.05);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">↺ Reset</button>':'';
       body+='<tr><td colspan="'+NCOL+'" style="padding:0;border-top:1px dashed var(--border2);background:var(--card2)"><div style="display:flex;align-items:stretch">'+_bub+_rst+'</div></td></tr>';
     }
+    if(!/cancel/i.test(b.status||'')){
+      body+='<tr><td colspan="'+NCOL+'" style="padding:0;background:var(--card2)">'+_rzBookingAcPills(b,ono)+'</td></tr>';
+    }
     if(open){
       body+='<tr><td colspan="'+NCOL+'" style="padding:0;border-top:1px solid var(--border)"><div style="background:var(--card2);padding:12px 14px">'+_rzBookingDetail(b)+'</div></td></tr>';
     }
+    // Gap between bookings so each one is clearly separated.
+    body+='<tr aria-hidden="true"><td colspan="'+NCOL+'" style="height:12px;padding:0;background:transparent;border-bottom:2px solid var(--border)"></td></tr>';
   });
   const th='font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);text-align:left;padding:6px 6px;font-weight:700';
   const table='<div class="card" style="overflow-x:auto;padding:10px"><table style="width:100%;border-collapse:collapse;font-size:12.5px;color:var(--text)">'+
@@ -710,8 +739,9 @@ window.rezdyLoadPickups=async function(){
     S._pickupExtraDrivers=Array.isArray(row.extraDrivers)?row.extraDrivers:[];
     S._rezdyPaxMeta=(row.paxMeta&&typeof row.paxMeta==='object')?row.paxMeta:{};
     S._schedPilots=(row.schedPilots&&typeof row.schedPilots==='object')?row.schedPilots:{};
+    S._rzBookingAc=(row.bookingAc&&typeof row.bookingAc==='object')?row.bookingAc:{};
   }else{
-    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];S._pickupExtraDrivers=[];S._rezdyPaxMeta={};S._schedPilots={};
+    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];S._pickupExtraDrivers=[];S._rezdyPaxMeta={};S._schedPilots={};S._rzBookingAc={};
   }
   S._pickupLoading=false;
   render();
@@ -758,7 +788,7 @@ window.pickupSave=async function(silent){
   const payload={
     id:'pl_'+S.rezdyDate,
     list_date:S.rezdyDate,
-    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{}}
+    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{}}
   };
   const r=await sbU('ts_pickup_lists',[payload]);
   if(!silent)toast(r?'Pickup list saved ✓':'Save failed',r?'ok':'err');
@@ -887,8 +917,10 @@ function _rzRenderManifest(){
   if(!S._rzManLoaded){if(window.rezdyLoadManifest)window.rezdyLoadManifest();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading manifest…</div>';}
   var pax=S._rzManPax||[];
   var pool=pax.filter(function(p){return !p.ac&&!p.infantOf;});
-  var fleet=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
-  pax.forEach(function(p){if(p.ac&&fleet.indexOf(p.ac)<0)fleet.push(p.ac);});
+  var hidden=S._rzManHidden||[];
+  var fleetAll=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
+  pax.forEach(function(p){if(p.ac&&fleetAll.indexOf(p.ac)<0)fleetAll.push(p.ac);});
+  var fleet=fleetAll.filter(function(id){return hidden.indexOf(id)<0;});
   var h='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
     '<div><div class="st" style="margin-bottom:0">Manifest</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzDowLabel(S.rezdyDate)+' · '+pax.length+' pax · '+pool.length+' unallocated</p></div>'+
@@ -925,29 +957,71 @@ function _rzRenderManifest(){
     });
   }
   h+='</div>';
-  if(!fleet.length)return h+'<div class="card" style="text-align:center;padding:30px;color:var(--text3)">No aircraft configured.</div>';
+  if(!fleet.length&&!fleetAll.length)return h+'<div class="card" style="text-align:center;padding:30px;color:var(--text3)">No aircraft configured.</div>';
+  // Available pilots for the day — drag onto an aircraft's PIC slot (type-rating checked).
+  var _mPilots=_rzAvailablePilots();
+  if(_mPilots.length){
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'+
+      '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Pilots</span>';
+    _mPilots.forEach(function(p){h+='<div draggable="true" ondragstart="window.rezdySchedPilotDragStart(\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\',event)" title="'+_rzEsc(p.name)+' — drag onto an aircraft to set PIC" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:16px;background:rgba(96,165,250,.14);border:1px solid rgba(96,165,250,.5);cursor:grab;font-size:12px;font-weight:800;color:#60a5fa">✈ '+_rzEsc(p.code)+'</div>';});
+    h+='</div>';
+  }
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">';
   fleet.forEach(function(id){
     var col=(typeof AC_COL!=='undefined'&&AC_COL[id])||'#64748b';
+    var a=S.aircraft[id];
     var list=pax.filter(function(p){return p.ac===id&&!p.infantOf;});
     var nA=0,nC=0,nI=0;list.forEach(function(p){if(p.type==='child')nC++;else nA++;if(p.infantName)nI++;});
     nI+=pax.filter(function(p){return p.ac===id&&p.infantOf;}).length; // manually-folded lap infants
+    var picCode=(S._rzManPic||{})[id]||'';
+    var unit=(a&&a.layout==='ga8')?'L':'lbs';
+    var std=a?Math.round(fromKg(a.fuelKg,id)):0;
+    var fuelVal=(S._rzManFuel&&S._rzManFuel[id]!=null&&S._rzManFuel[id]!=='')?S._rzManFuel[id]:std;
+    var idE=id.replace(/'/g,"\\'");
     h+='<div ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.rezdyManDrop(\''+id+'\',event)" style="flex:1 1 240px;min-width:230px;background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+'</div><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span></div>';
-    if(!list.length)h+='<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px;border:1px dashed var(--border2);border-radius:8px">Drop passengers here</div>';
-    else{h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';list.forEach(function(p){h+=_rzManBubble(p,pax);});h+='</div>';}
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px"><div style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+'</div>'+
+        '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span>'+
+        '<button onclick="window.rezdyManDeleteAc(\''+idE+'\')" title="Remove this aircraft (returns its pax to the pool)" style="background:none;border:none;color:#ef444488;cursor:pointer;font-size:13px;padding:0 2px">🗑</button></div></div>';
+    // PIC slot (drop a pilot here)
+    h+='<div ondragover="event.preventDefault();event.stopPropagation();this.style.outline=\'2px solid #60a5fa\'" ondragleave="this.style.outline=\'\'" ondrop="event.stopPropagation();this.style.outline=\'\';window.rezdyManDropPilot(\''+idE+'\',event)" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:5px 8px;border-radius:7px;border:1px dashed '+(picCode?'#60a5fa':'var(--border2)')+';background:'+(picCode?'rgba(96,165,250,.1)':'transparent')+'">'+
+      '<span style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800">PIC</span>'+
+      (picCode?'<span style="font-size:12px;font-weight:800;color:#60a5fa">✈ '+_rzEsc(picCode)+'</span><button onclick="window.rezdyManClearPic(\''+idE+'\')" title="Clear PIC" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:auto;padding:0 2px">✕</button>':'<span style="font-size:11px;color:var(--text3)">drag a pilot here</span>')+
+    '</div>';
+    // Fuel
+    h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'+
+      '<span style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800">Fuel</span>'+
+      '<input type="number" inputmode="decimal" value="'+_rzEsc(String(fuelVal))+'" onchange="window.rezdyManFuel(\''+idE+'\',this.value)" style="width:70px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;color:var(--text1);font-size:12px;font-weight:700;text-align:right;padding:4px 6px;outline:none">'+
+      '<span style="font-size:11px;color:var(--text3)">'+unit+'</span>'+
+      '<span style="font-size:10px;color:var(--text3);margin-left:auto" title="Standard fuel">std '+std+'</span>'+
+    '</div>';
+    if(!list.length)h+='<div style="text-align:center;padding:14px;color:var(--text3);font-size:12px;border:1px dashed var(--border2);border-radius:8px;margin-bottom:8px">Drop passengers here</div>';
+    else{h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';list.forEach(function(p){h+=_rzManBubble(p,pax);});h+='</div>';}
+    h+='<button class="btn btn-primary" style="width:100%;padding:8px;font-size:12px;'+(list.length?'':'opacity:.5')+'" onclick="window.rezdyManCreateLoadsheet(\''+idE+'\')">📋 Create loadsheet</button>';
     h+='</div>';
   });
   h+='</div>';
+  // Re-add a removed aircraft
+  var hiddenAvail=fleetAll.filter(function(id){return hidden.indexOf(id)>=0;});
+  if(hiddenAvail.length){
+    h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px">'+
+      '<span style="font-size:11px;color:var(--text3);font-weight:700">Add aircraft:</span>';
+    hiddenAvail.forEach(function(id){var col=_rzAcCol(id);h+='<button onclick="window.rezdyManAddAc(\''+id.replace(/'/g,"\\'")+'\')" style="font-size:12px;font-weight:700;padding:4px 11px;border-radius:16px;border:1px solid '+col+';background:transparent;color:'+col+';cursor:pointer">+ '+id.replace('ZK-','')+'</button>';});
+    h+='</div>';
+  }
   return h;
 }
-function _rzManSave(){if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_manifest_'+S.rezdyDate,value:JSON.stringify({pax:S._rzManPax||[]})}]).catch(function(){});}
+function _rzManSave(){if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_manifest_'+S.rezdyDate,value:JSON.stringify({pax:S._rzManPax||[],pic:S._rzManPic||{},fuel:S._rzManFuel||{},hidden:S._rzManHidden||[]})}]).catch(function(){});}
 window.rezdyLoadManifest=async function(){
   try{
     var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.'+encodeURIComponent('rz_manifest_'+S.rezdyDate)+'&select=value',{headers:SH});
-    if(r.ok){var rows=await r.json();var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}S._rzManPax=(v&&Array.isArray(v.pax))?v.pax:[];}
-    else S._rzManPax=[];
-  }catch(e){S._rzManPax=S._rzManPax||[];}
+    if(r.ok){var rows=await r.json();var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}
+      S._rzManPax=(v&&Array.isArray(v.pax))?v.pax:[];
+      S._rzManPic=(v&&v.pic&&typeof v.pic==='object')?v.pic:{};
+      S._rzManFuel=(v&&v.fuel&&typeof v.fuel==='object')?v.fuel:{};
+      S._rzManHidden=(v&&Array.isArray(v.hidden))?v.hidden:[];
+    }
+    else{S._rzManPax=[];S._rzManPic={};S._rzManFuel={};S._rzManHidden=[];}
+  }catch(e){S._rzManPax=S._rzManPax||[];S._rzManPic=S._rzManPic||{};S._rzManFuel=S._rzManFuel||{};S._rzManHidden=S._rzManHidden||[];}
   S._rzManLoaded=true;render();
 };
 window.rezdyManPull=function(){
@@ -967,7 +1041,7 @@ window.rezdyManPull=function(){
       var infName=null;Object.keys(infantOf).forEach(function(ii){if(String(infantOf[ii])===String(idx)){var ip=parts[ii];if(ip&&ip.name)infName=String(ip.name).trim();}});
       var wRaw=(p&&p.weight!=null&&p.weight!=='')?String(p.weight).replace(/\s*kg$/i,''):'';
       var ex=existing[id];
-      out.push({id:id,name:(p&&p.name)?String(p.name).trim():'',weight:wRaw,type:(ex&&ex.type)?ex.type:(t==='child'?'child':'adult'),infantName:infName,group:order,paymentReq:owing,ac:ex?ex.ac:null,acHint:_rzAircraftFromComments(b),infantOf:ex?ex.infantOf:undefined});
+      out.push({id:id,name:(p&&p.name)?String(p.name).trim():'',weight:wRaw,type:(ex&&ex.type)?ex.type:(t==='child'?'child':'adult'),infantName:infName,group:order,paymentReq:owing,ac:ex?ex.ac:null,acHint:_rzBookingAc(b,order),infantOf:ex?ex.infantOf:undefined});
     });
   });
   (S._rzManPax||[]).forEach(function(p){if(String(p.id).indexOf('m_')===0)out.push(p);}); // keep manually-added
@@ -1021,6 +1095,112 @@ window.rezdyManRemove=function(id){
   S._rzManPax=(S._rzManPax||[]).filter(function(x){return x.id!==id;});_rzManSave();render();
 };
 window.rezdyManClear=function(){if(!confirm('Clear the whole manifest for this day?'))return;S._rzManPax=[];_rzManSave();render();};
+
+// ── Manifest PIC / fuel / aircraft controls ──
+window.rezdyManDropPilot=function(acId,e){
+  if(e&&e.preventDefault)e.preventDefault();if(e&&e.stopPropagation)e.stopPropagation();
+  var code=S._schedPilotDrag;S._schedPilotDrag=null;if(!code||!acId)return;
+  var en=_rzPilotEndorse(code);
+  if(en&&en.length&&en.indexOf(acId)<0){if(typeof toast==='function')toast(code+' is not type-rated on '+String(acId).replace('ZK-','')+'.','warn');return;}
+  S._rzManPic=S._rzManPic||{};S._rzManPic[acId]=code;_rzManSave();render();
+};
+window.rezdyManClearPic=function(acId){if(S._rzManPic)delete S._rzManPic[acId];_rzManSave();render();};
+window.rezdyManFuel=function(acId,v){S._rzManFuel=S._rzManFuel||{};var n=String(v).replace(/[^0-9.]/g,'');if(n==='')delete S._rzManFuel[acId];else S._rzManFuel[acId]=n;_rzManSave();};
+window.rezdyManDeleteAc=function(acId){
+  (S._rzManPax||[]).forEach(function(p){if(p.ac===acId){p.ac=null;}}); // pax back to the pool
+  if(S._rzManPic)delete S._rzManPic[acId];
+  S._rzManHidden=S._rzManHidden||[];if(S._rzManHidden.indexOf(acId)<0)S._rzManHidden.push(acId);
+  _rzManSave();render();
+};
+window.rezdyManAddAc=function(acId){if(!acId)return;S._rzManHidden=(S._rzManHidden||[]).filter(function(x){return x!==acId;});_rzManSave();render();};
+// Build a real loadsheet for this aircraft from the manifest allocation, reusing the
+// existing W&B engine, and open it (saved into the shared ts_loadsheets / Saved list).
+window.rezdyManCreateLoadsheet=function(acId){
+  var phys=acId;var a=S.aircraft[phys];
+  if(!a){if(typeof toast==='function')toast('Aircraft not configured.','warn');return;}
+  var list=(S._rzManPax||[]).filter(function(p){return p.ac===phys&&!p.infantOf;});
+  if(!list.length){if(typeof toast==='function')toast('No passengers allocated to '+phys.replace('ZK-','')+'.','warn');return;}
+  var form=bF_ac(phys);
+  form.date=S.rezdyDate||form.date;
+  // PIC (manifest stores the 2-letter code → resolve to the crew name the loadsheet expects)
+  var picCode=(S._rzManPic||{})[phys];
+  if(picCode){
+    var pu=_rzAvailablePilots().find(function(x){return x.code===picCode;});
+    var picName=pu?pu.name:'';
+    if(picName){form.pic=picName;form.names[0]=picName;var cr=(typeof anyCrewList==='function'?anyCrewList():[]).find(function(c){return c.n===picName;});if(cr&&cr.w)form.seats[0]=String(cr.w);}
+  }
+  // Fuel: manifest display value (else standard) → kg
+  var fuelDisp=(S._rzManFuel&&S._rzManFuel[phys]!=null&&S._rzManFuel[phys]!=='')?S._rzManFuel[phys]:fromKg(a.fuelKg,phys);
+  form.fuel=String(toKg(fuelDisp,phys));
+  // Seat the passengers (index 0 = PIC; pax fill from index 1 up to capacity)
+  var cap=(a.seats?a.seats.length:0)-1,idx=1,overflow=0;
+  list.forEach(function(p){
+    if(idx>cap){overflow++;return;}
+    form.names[idx]=p.name||'';
+    form.seats[idx]=(p.weight!=null&&p.weight!=='')?String(p.weight):'';
+    form.bags[idx]='';
+    if(p.group)form.paxGroups[idx]=p.group;
+    if(p.type==='child')form.paxType[idx]='C';
+    if(p.paymentReq)form.paxPaymentReq[idx]=true;
+    var inf=(S._rzManPax||[]).find(function(x){return x.infantOf===p.id;});
+    var infNm=p.infantName||(inf?inf.name:null);
+    if(infNm)form.infantNames[idx]=infNm;
+    idx++;
+  });
+  if(overflow&&typeof toast==='function')toast(overflow+' pax over seat capacity — adjust on the loadsheet','warn');
+  // Open as a new loadsheet tab + persist to the shared list (mirrors duplicateSaved).
+  var newId='ls_rz_'+phys.replace('ZK-','')+'_'+Date.now();
+  var savedAt=new Date().toISOString();
+  form.status='unsigned';
+  S.saved=S.saved||[];S.saved.push({id:newId,form:form,status:'unsigned',savedAt:savedAt});
+  var acCode=phys.replace('ZK-','');
+  S.lsForms=S.lsForms||{};S.lsForms[acCode]=form;S.lsAc=acCode;S.form=form;S.editId=newId;S.formDirty=false;
+  S.lsTabs=S.lsTabs||[];S.lsTabs.push({id:newId,acId:phys,form:form,status:'unsigned',savedAt:savedAt,isNew:true});
+  S.activeTabId=newId;S.section='operations';S.tab='loadsheet';
+  if(typeof sbU==='function')sbU('ts_loadsheets',[{id:newId,form:form,saved_at:savedAt,status:'unsigned'}]).catch(function(){});
+  try{window.scrollTo(0,0);}catch(_){}
+  render();
+  if(typeof toast==='function')toast('Loadsheet created for '+acCode+' — review & sign','ok');
+};
+// ── Rezdy Loadsheets sub-tab — per-aircraft launcher that reuses the real loadsheet engine ──
+function _rzRenderLoadsheets(){
+  if(!S._rzManLoaded){if(window.rezdyLoadManifest)window.rezdyLoadManifest();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading…</div>';}
+  var pax=S._rzManPax||[];
+  var fleet=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
+  pax.forEach(function(p){if(p.ac&&fleet.indexOf(p.ac)<0)fleet.push(p.ac);});
+  var withPax=fleet.filter(function(id){return pax.some(function(p){return p.ac===id&&!p.infantOf;});});
+  var h='<div class="card"><div class="st" style="margin-bottom:4px">Loadsheets</div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:0">'+_rzDowLabel(S.rezdyDate)+' · build a loadsheet per aircraft from the manifest allocation. Created loadsheets open in the loadsheet editor and appear in Saved.</p></div>';
+  if(!withPax.length){
+    h+='<div class="card" style="text-align:center;padding:30px;color:var(--text3)">No aircraft have passengers allocated yet. Allocate passengers in the <b>Manifest</b> tab first.</div>';
+    return h;
+  }
+  h+='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">';
+  withPax.forEach(function(id){
+    var col=_rzAcCol(id);var a=S.aircraft[id];
+    var list=pax.filter(function(p){return p.ac===id&&!p.infantOf;});
+    var nA=0,nC=0,nI=0;list.forEach(function(p){if(p.type==='child')nC++;else nA++;if(p.infantName)nI++;});
+    nI+=pax.filter(function(p){return p.ac===id&&p.infantOf;}).length;
+    var picCode=(S._rzManPic||{})[id]||'';
+    var unit=(a&&a.layout==='ga8')?'L':'lbs';
+    var std=a?Math.round(fromKg(a.fuelKg,id)):0;
+    var fuelVal=(S._rzManFuel&&S._rzManFuel[id]!=null&&S._rzManFuel[id]!=='')?S._rzManFuel[id]:std;
+    var existing=(S.saved||[]).filter(function(s){return s.id&&String(s.id).indexOf('ls_rz_'+id.replace('ZK-',''))===0&&s.form&&s.form.date===S.rezdyDate;});
+    var idE=id.replace(/'/g,"\\'");
+    h+='<div style="flex:1 1 240px;min-width:230px;background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-weight:800;font-size:15px;color:'+col+'">'+id.replace('ZK-','')+'</div><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span></div>'+
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">PIC '+(picCode?'<b style="color:#60a5fa">'+_rzEsc(picCode)+'</b>':'<span style="color:var(--text3)">—</span>')+' · Fuel '+_rzEsc(String(fuelVal))+' '+unit+(fuelVal!=std?' <span style="color:var(--text3)">(std '+std+')</span>':'')+'</div>'+
+      '<button class="btn btn-primary" style="width:100%;padding:8px;font-size:12px" onclick="window.rezdyManCreateLoadsheet(\''+idE+'\')">📋 Create loadsheet</button>';
+    if(existing.length){
+      h+='<div style="margin-top:8px;border-top:1px solid var(--border2);padding-top:6px">';
+      existing.forEach(function(s){var signed=s.status==='complete'||s.status==='signed'||(s.form&&s.form.sig);h+='<button class="btn btn-ghost" style="width:100%;font-size:11px;margin-top:4px;text-align:left" onclick="window.viewSaved(\''+String(s.id).replace(/'/g,"\\'")+'\')">'+(signed?'✓ ':'○ ')+'Open loadsheet</button>';});
+      h+='</div>';
+    }
+    h+='</div>';
+  });
+  h+='</div>';
+  return h;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  (3) SCHEDULE — Google-Calendar-like day view
