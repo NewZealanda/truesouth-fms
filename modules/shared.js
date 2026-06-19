@@ -371,8 +371,12 @@ window.setLsRouteField=function(field,val){
   if(!S.form)return;
   if(val==='__other__'){S['_lsOther_'+field]=true;if(_isKnownApt(S.form[field]))S.form[field]='';}
   else{S['_lsOther_'+field]=false;S.form[field]=val;}
-  // A Milford departure prefills the reduced Milford fuel default for the aircraft.
-  if(field==='dep'&&_isMilford(S.form[field])&&S.form.ac){var _mf=_milfordFuelKg(S.form.ac);if(_mf!=null)S.form.fuel=String(_mf);}
+  // Departure-driven fuel default: a Milford departure uses the reduced Milford fuel; changing
+  // the departure back to anywhere else (e.g. Queenstown) restores the aircraft's standard fuel.
+  if(field==='dep'&&S.form.ac){
+    if(_isMilford(S.form[field])){var _mf=_milfordFuelKg(S.form.ac);if(_mf!=null)S.form.fuel=String(_mf);}
+    else{var _a=S.aircraft[S.form.ac];if(_a&&_a.fuelKg!=null)S.form.fuel=String(_a.fuelKg);}
+  }
   S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();safeRender();
 };
 function aptOpts(sel, isOther){
@@ -391,7 +395,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.69';
+const APP_VER='v23.71';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

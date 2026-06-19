@@ -1612,6 +1612,7 @@ window.lsPIC=v=>{S.form.pic=v;const c=anyCrewList().find(x=>x.n===v);if(c&&c.w){
 // Draggable PIC pool → drag a pilot bubble onto the PIC slot to set them as PIC.
 window.lsPilotDragStart=function(e,name){S._lsPilotDrag=name;try{e.dataTransfer.effectAllowed='copy';e.dataTransfer.setData('text/plain',name);}catch(_){}};
 window.lsPicDrop=function(e){var name=S._lsPilotDrag;S._lsPilotDrag=null;try{if(!name&&e&&e.dataTransfer)name=e.dataTransfer.getData('text/plain');}catch(_){}if(name&&typeof window.lsPIC==='function')window.lsPIC(name);};
+window.lsCopilotDrop=function(e){var name=S._lsPilotDrag;S._lsPilotDrag=null;try{if(!name&&e&&e.dataTransfer)name=e.dataTransfer.getData('text/plain');}catch(_){}if(name&&typeof window.lsCoPilot==='function')window.lsCoPilot(name);};
 window.lsCoPilot=v=>{
   const f=S.form;
   // Save displaced seat-1 passenger to unallocated before overwriting

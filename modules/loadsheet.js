@@ -647,7 +647,7 @@ function renderLoadsheet(){
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">PIC</div>
         <select class="fi" onchange="lsPIC(this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)"><option value="">&#x2014; select &#x2014;</option>${crewOpts}</select>
       </div>
-      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
+      <div ondragover="event.preventDefault();this.style.outline='2px solid #818cf8'" ondragleave="this.style.outline=''" ondrop="event.preventDefault();this.style.outline='';window.lsCopilotDrop(event)" style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Co-Pilot</div>
         <select class="fi" onchange="lsCoPilot(this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${cpOpts}</select>
       </div>

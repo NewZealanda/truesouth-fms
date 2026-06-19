@@ -685,8 +685,12 @@ window.setLsRouteField=function(field,val){
   if(!S.form)return;
   if(val==='__other__'){S['_lsOther_'+field]=true;if(_isKnownApt(S.form[field]))S.form[field]='';}
   else{S['_lsOther_'+field]=false;S.form[field]=val;}
-  // A Milford departure prefills the reduced Milford fuel default for the aircraft.
-  if(field==='dep'&&_isMilford(S.form[field])&&S.form.ac){var _mf=_milfordFuelKg(S.form.ac);if(_mf!=null)S.form.fuel=String(_mf);}
+  // Departure-driven fuel default: a Milford departure uses the reduced Milford fuel; changing
+  // the departure back to anywhere else (e.g. Queenstown) restores the aircraft's standard fuel.
+  if(field==='dep'&&S.form.ac){
+    if(_isMilford(S.form[field])){var _mf=_milfordFuelKg(S.form.ac);if(_mf!=null)S.form.fuel=String(_mf);}
+    else{var _a=S.aircraft[S.form.ac];if(_a&&_a.fuelKg!=null)S.form.fuel=String(_a.fuelKg);}
+  }
   S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();safeRender();
 };
 function aptOpts(sel, isOther){
@@ -705,7 +709,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.69';
+const APP_VER='v23.71';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -4761,7 +4765,7 @@ function renderLoadsheet(){
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">PIC</div>
         <select class="fi" onchange="lsPIC(this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)"><option value="">&#x2014; select &#x2014;</option>${crewOpts}</select>
       </div>
-      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
+      <div ondragover="event.preventDefault();this.style.outline='2px solid #818cf8'" ondragleave="this.style.outline=''" ondrop="event.preventDefault();this.style.outline='';window.lsCopilotDrop(event)" style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Co-Pilot</div>
         <select class="fi" onchange="lsCoPilot(this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${cpOpts}</select>
       </div>
@@ -7453,6 +7457,7 @@ window.lsPIC=v=>{S.form.pic=v;const c=anyCrewList().find(x=>x.n===v);if(c&&c.w){
 // Draggable PIC pool → drag a pilot bubble onto the PIC slot to set them as PIC.
 window.lsPilotDragStart=function(e,name){S._lsPilotDrag=name;try{e.dataTransfer.effectAllowed='copy';e.dataTransfer.setData('text/plain',name);}catch(_){}};
 window.lsPicDrop=function(e){var name=S._lsPilotDrag;S._lsPilotDrag=null;try{if(!name&&e&&e.dataTransfer)name=e.dataTransfer.getData('text/plain');}catch(_){}if(name&&typeof window.lsPIC==='function')window.lsPIC(name);};
+window.lsCopilotDrop=function(e){var name=S._lsPilotDrag;S._lsPilotDrag=null;try{if(!name&&e&&e.dataTransfer)name=e.dataTransfer.getData('text/plain');}catch(_){}if(name&&typeof window.lsCoPilot==='function')window.lsCoPilot(name);};
 window.lsCoPilot=v=>{
   const f=S.form;
   // Save displaced seat-1 passenger to unallocated before overwriting
