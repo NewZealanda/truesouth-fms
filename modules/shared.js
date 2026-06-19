@@ -371,7 +371,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.44';
+const APP_VER='v23.45';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1662,6 +1662,13 @@ function initRealtime(){
               var _prevAuto=S.solverAutoApply;try{S.solverAutoApply=false;runSolver();}catch(e){}S.solverAutoApply=_prevAuto;
               if(_saet==='INPUT'||_saet==='SELECT'||_saet==='TEXTAREA')safeRender();else render();
             }
+          }
+        }
+        // Live Rezdy manifest: another device edited the manifest for a date we're viewing.
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='rz_manifest_update'){
+          var _rmp=msg.payload.payload;
+          if(_rmp&&_rmp.sessionId!==_sessionId&&_rmp.date===S.rezdyDate&&typeof window.rezdyReloadManifestLive==='function'){
+            window.rezdyReloadManifestLive();
           }
         }
       }catch(err){}
