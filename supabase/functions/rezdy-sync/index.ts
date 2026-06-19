@@ -59,6 +59,18 @@ function normalize(b: any) {
   }))
   const totalAmount = num(b.totalAmount)
   const totalPaid = num(b.totalPaid)
+  // Resolve the marketplace/agent NAME (Viator, GetYourGuide, …) ahead of Rezdy's source code.
+  const _agentName = (typeof b.agent === "string" ? b.agent : (b.agent && b.agent.companyName))
+    || (typeof b.reseller === "string" ? b.reseller : (b.reseller && b.reseller.companyName))
+    || b.resellerName || b.marketplaceName || b.agentName || ""
+  const _rawSource = b.source || ""
+  const _resolvedSource = _agentName || _rawSource || ""
+  // Diagnostic: when we still can't find an agent name (marketplace code or empty source), capture
+  // the booking's source-ish fields so we can identify the right one. Surfaced to superadmin only.
+  const _isMktOrEmpty = !_agentName && (/MARKETPLACE/i.test(_rawSource) || !_rawSource)
+  const _srcDbg = _isMktOrEmpty
+    ? Object.keys(b).reduce((o: any, k: string) => { if (/agent|resell|market|source|channel|partner|company|affili/i.test(k)) o[k] = b[k]; return o }, { _keys: Object.keys(b) })
+    : undefined
   return {
     id: String(b.orderNumber || b.id || ""),
     orderNumber: b.orderNumber || "",
@@ -68,14 +80,8 @@ function normalize(b: any) {
     email: c.email || "",
     comments: b.comments || "",
     fields: fieldsToObj(b.fields), // booking-level custom fields (e.g. Special Requirements)
-    // Prefer the marketplace/agent NAME (Viator, GetYourGuide, …) over Rezdy's source code
-    // ("MARKETPLACE_PREF_RATE"). The reseller can appear as a string or an object with companyName,
-    // under a few different field names depending on the channel.
-    source: ((typeof b.agent === "string" ? b.agent : (b.agent && b.agent.companyName))
-          || (typeof b.reseller === "string" ? b.reseller : (b.reseller && b.reseller.companyName))
-          || b.resellerName || b.marketplaceName || b.agentName
-          || (b.source && b.source !== "MARKETPLACE_PREF_RATE" ? b.source : "")
-          || b.source || ""),
+    source: _resolvedSource,
+    _srcDbg, // diagnostic (only present on marketplace/empty-source bookings) — superadmin-visible
     totalPax: items.reduce((s: number, i: any) => s + (i.quantity || 0), 0),
     totalAmount, totalPaid,
     balanceDue: Math.max(0, totalAmount - totalPaid),
