@@ -703,7 +703,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.62';
+const APP_VER='v23.63';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -12510,19 +12510,23 @@ function _rzEffBreakdown(b){
 }
 function _rzBdText(bd){return bd.a+'A'+(bd.c?' · '+bd.c+'C':'')+(bd.i?' · '+bd.i+'i':'');}
 function _rzBdCompact(bd){return bd.a+'A'+(bd.c?bd.c+'C':'')+(bd.i?bd.i+'i':'');} // 10A2C1i
-// Pilots rostered on for the day (available to fly) with their 2-letter crew code.
-// Pilots available to fly on the selected date: ROSTERED ON (a duty, not off/leave/blank),
-// and either a pilot or an admin/superadmin (who also fly). Shared by manifest + calendar.
+// Pilots available to fly — the single source of truth is the AIRCRAFT APPROVAL pills in each
+// crew profile, so this reads from S.crew (every aircraft-approved crew member), NOT just login
+// accounts. Each carries a `rostered` flag (rostered-on for the day) so the UI can sort/dim the
+// off-duty ones; everyone approved still appears so they can be assigned. Shared by seatmap + calendar.
 function _rzAvailablePilots(){
   var ds=S.rezdyDate,roster=S.roster||{},off={rdo:1,off:1,leave:1,ul:1,sick:1,training:1};
-  return (S.users||[]).filter(function(u){
-    if(!u||u.inactive)return false;
-    // Flight eligibility = has at least one aircraft approval (endorsement) in their profile.
-    if(!(typeof _picEligible==='function'&&_picEligible(u)))return false;
-    var st=(typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):((roster[ds]||{})[u.id]||'');
-    if(off[st])return false;                                   // explicitly rostered off → never
-    return !!st||u.role==='admin'||u.role==='superadmin';      // rostered on, or an admin/superadmin who flies ad-hoc
-  }).map(function(u){return {code:(typeof _rCode==='function')?_rCode(u):(u.name||'').slice(0,2).toUpperCase(),name:(u.name||'').trim()};});
+  var out=[],seen={};
+  (S.crew||[]).forEach(function(cr){
+    if(!cr||!(cr.endorse||[]).some(function(e){return String(e).indexOf('ZK-')===0;}))return; // aircraft-approved only
+    var u=(S.users||[]).find(function(x){return x&&(x.name===cr.n||x.linkedCrew===cr.n);});
+    if(u&&u.inactive)return;
+    var code=cr.code?String(cr.code).toUpperCase():((u&&typeof _rCode==='function')?_rCode(u):(cr.n||'').replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase());
+    if(!code||seen[code])return;seen[code]=1;
+    var st=(u&&typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):((roster[ds]&&roster[ds][code])||'');
+    out.push({code:code,name:(cr.n||code).trim(),rostered:(!!st&&!off[st])});
+  });
+  return out.sort(function(a,b){if(a.rostered!==b.rostered)return a.rostered?-1:1;return String(a.name).localeCompare(String(b.name));});
 }
 window.rezdySchedPilotDragStart=function(code,e){S._schedPilotDrag=code;try{e.dataTransfer.effectAllowed='copy';e.dataTransfer.setData('text/plain','pilot:'+code);}catch(_){}};
 // A pilot's aircraft endorsements (type ratings) from their crew profile.
@@ -12536,23 +12540,27 @@ function _rzPilotEndorse(code){
 // users (not just the available list) so an assigned PIC's weight still feeds the W&B.
 function _rzPilotByCode(code){
   var u=(S.users||[]).find(function(x){return ((typeof _rCode==='function')?_rCode(x):'')===code;});
-  if(!u)return null;
-  var cr=(S.crew||[]).find(function(c){return c.n===u.name||c.n===u.linkedCrew;});
-  // Authority to act as PIC = approved on at least one aircraft (endorsements in the profile).
-  var auth=!!(cr&&cr.endorse&&cr.endorse.length);
-  return {code:code,name:(u.name||'').trim(),weight:(cr&&cr.w)||u.weight||0,endorse:(cr&&cr.endorse)||[],picAuth:auth};
+  if(u){
+    var cr=(S.crew||[]).find(function(c){return c.n===u.name||c.n===u.linkedCrew;});
+    var auth=!!(cr&&cr.endorse&&cr.endorse.length); // PIC authority = aircraft approvals
+    return {code:code,name:(u.name||'').trim(),weight:(cr&&cr.w)||u.weight||0,endorse:(cr&&cr.endorse)||[],picAuth:auth};
+  }
+  // No login account — fall back to the crew member whose code matches (crew can fly without a login).
+  var cr2=(S.crew||[]).find(function(c){return String(c.code||'').toUpperCase()===String(code).toUpperCase();});
+  if(cr2)return {code:code,name:(cr2.n||'').trim(),weight:cr2.w||0,endorse:cr2.endorse||[],picAuth:!!(cr2.endorse&&cr2.endorse.length)};
+  return null;
 }
 // Pilots who can be PIC of a SPECIFIC aircraft — single source of truth = the AIRCRAFT APPROVAL
 // pills in the crew profile (cr.endorse). Returns {code,name,weight,rostered}, rostered-on first.
 function _rzPilotsForAc(acId){
-  var avail={};_rzAvailablePilots().forEach(function(p){avail[p.code]=1;});
+  var rost={};_rzAvailablePilots().forEach(function(p){rost[p.code]=!!p.rostered;});
   var out=[],seen={};
   (S.crew||[]).forEach(function(cr){
     if(!cr||!(cr.endorse||[]).some(function(e){return e===acId;}))return; // must hold THIS aircraft's pill
     var u=(S.users||[]).find(function(x){return x&&!x.inactive&&(x.name===cr.n||x.linkedCrew===cr.n);});
-    var code=(typeof _rCode==='function'&&u)?_rCode(u):(cr.code?String(cr.code).toUpperCase():(cr.n||'').slice(0,2).toUpperCase());
+    var code=cr.code?String(cr.code).toUpperCase():((typeof _rCode==='function'&&u)?_rCode(u):(cr.n||'').replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase());
     if(!code||seen[code])return;seen[code]=1;
-    out.push({code:code,name:cr.n||code,weight:cr.w||(u&&u.weight)||0,rostered:!!avail[code]});
+    out.push({code:code,name:cr.n||code,weight:cr.w||(u&&u.weight)||0,rostered:!!rost[code]});
   });
   return out.sort(function(a,b){if(a.rostered!==b.rostered)return a.rostered?-1:1;return String(a.name).localeCompare(String(b.name));});
 }
@@ -13553,7 +13561,7 @@ function _rzRenderManifest(){
   if(_mPilots.length){
     h+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'+
       '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Pilots</span>';
-    _mPilots.forEach(function(p){h+='<div draggable="true" ondragstart="window.rezdySchedPilotDragStart(\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\',event)" title="'+_rzEsc(p.name)+' — drag onto an aircraft to set PIC" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:16px;background:rgba(96,165,250,.14);border:1px solid rgba(96,165,250,.5);cursor:grab;font-size:12px;font-weight:800;color:#60a5fa">✈ '+_rzEsc(p.code)+'</div>';});
+    _mPilots.forEach(function(p){var off=!p.rostered;h+='<div draggable="true" ondragstart="window.rezdySchedPilotDragStart(\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\',event)" title="'+_rzEsc(p.name)+(off?' (not rostered on today)':'')+' — drag onto an aircraft to set PIC" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:16px;background:rgba(96,165,250,'+(off?'.06':'.14')+');border:1px solid rgba(96,165,250,'+(off?'.28':'.5')+');cursor:grab;font-size:12px;font-weight:800;color:#60a5fa;opacity:'+(off?'.55':'1')+'">✈ '+_rzEsc(p.code)+(off?' <span style="font-size:8px;opacity:.8;font-weight:700">off</span>':'')+'</div>';});
     h+='</div>';
   }
   // Aircraft with pax allocated THIS departure come first (flying); idle aircraft sort last.
@@ -14445,10 +14453,10 @@ function _rzRenderSchedule(){
   // Available pilots — drag a code bubble onto a flight block to allocate.
   var _pilots=_rzAvailablePilots();
   var pilotsBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:8px">Pilots <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(drag onto a flight)</span></div>';
-  if(!_pilots.length){pilotsBar+='<div style="font-size:12px;color:var(--text3)">No pilots rostered on for this day.</div>';}
+  if(!_pilots.length){pilotsBar+='<div style="font-size:12px;color:var(--text3)">No aircraft-approved pilots found.</div>';}
   else{
     pilotsBar+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
-    _pilots.forEach(function(p){pilotsBar+='<div draggable="true" ondragstart="window.rezdySchedPilotDragStart(\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\',event)" title="'+_rzEsc(p.name)+' — drag onto a flight block" style="display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:16px;background:rgba(96,165,250,.14);border:1px solid rgba(96,165,250,.5);cursor:grab;font-size:12px;font-weight:800;color:#60a5fa">✈ '+_rzEsc(p.code)+'</div>';});
+    _pilots.forEach(function(p){var off=!p.rostered;pilotsBar+='<div draggable="true" ondragstart="window.rezdySchedPilotDragStart(\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\',event)" title="'+_rzEsc(p.name)+(off?' (not rostered on today)':'')+' — drag onto a flight block" style="display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:16px;background:rgba(96,165,250,'+(off?'.06':'.14')+');border:1px solid rgba(96,165,250,'+(off?'.28':'.5')+');cursor:grab;font-size:12px;font-weight:800;color:#60a5fa;opacity:'+(off?'.55':'1')+'">✈ '+_rzEsc(p.code)+(off?' <span style="font-size:8px;opacity:.8;font-weight:700">off</span>':'')+'</div>';});
     pilotsBar+='</div>';
   }
   pilotsBar+='</div>';
