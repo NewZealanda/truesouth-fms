@@ -386,13 +386,9 @@ function _rzPilotByCode(code){
   var u=(S.users||[]).find(function(x){return ((typeof _rCode==='function')?_rCode(x):'')===code;});
   if(!u)return null;
   var cr=(S.crew||[]).find(function(c){return c.n===u.name||c.n===u.linkedCrew;});
-  var auth=cr&&(S._picAuth||{})[cr.id]!=null?!!(S._picAuth||{})[cr.id]:!!(u.picAuthority||(cr&&cr.picAuthority));
+  // "PIC eligible" (the isPilot profile flag) IS the authority to act as PIC.
+  var auth=!!u.isPilot||u.role==='pilot';
   return {code:code,name:(u.name||'').trim(),weight:(cr&&cr.w)||u.weight||0,endorse:(cr&&cr.endorse)||[],picAuth:auth};
-}
-// Load the PIC-authority map (settings key) — cached locally, refreshed from the cloud.
-function _rzPicAuthLoad(){
-  try{var cached=(typeof lsGet==='function')?lsGet('ts_pic_auth'):null;if(cached&&typeof cached==='object')S._picAuth=cached;}catch(e){}
-  try{fetch(SB+'/rest/v1/ts_settings?key=eq.pic_authority&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}if(v&&typeof v==='object'){S._picAuth=v;try{lsSet('ts_pic_auth',v);}catch(e){}if(typeof safeRender==='function')safeRender();}}).catch(function(){});}catch(e){}
 }
 // All seat rows for an aircraft (incl. the PIC seat 0), grouped by arm, front-to-back.
 function _rzAcRows(acId){
@@ -1135,7 +1131,6 @@ function _rzManBubble(p,allPax){
   '</div>';
 }
 function _rzRenderManifest(){
-  if(!S._picAuthLoaded){S._picAuthLoaded=true;_rzPicAuthLoad();}
   if(!S._rzManLoaded){if(window.rezdyLoadManifest)window.rezdyLoadManifest();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading manifest…</div>';}
   var pax=S._rzManPax||[];
   var deps=_rzManDeps();
@@ -1522,7 +1517,7 @@ window.rezdyManDropPilot=function(acId,e){
   var code=S._schedPilotDrag;S._schedPilotDrag=null;if(!code||!acId)return;
   var pil=_rzPilotByCode(code);
   // Must hold Authority to act as PIC (profile flag) AND be type-rated (passed out) on this aircraft.
-  if(pil&&!pil.picAuth){if(typeof toast==='function')toast(code+' is not authorised to act as PIC (set it in their profile).','warn');return;}
+  if(pil&&!pil.picAuth){if(typeof toast==='function')toast(code+' is not PIC-eligible (enable it in their profile).','warn');return;}
   var en=(pil&&pil.endorse)||_rzPilotEndorse(code);
   if(en&&en.length&&en.indexOf(acId)<0){if(typeof toast==='function')toast(code+' is not passed out (type-rated) on '+String(acId).replace('ZK-','')+'.','warn');return;}
   S._rzManPic=S._rzManPic||{};S._rzManPic[acId]=code;_rzManSave();render();

@@ -650,7 +650,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.48';
+const APP_VER='v23.49';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -6158,13 +6158,6 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'background:'+(d.isPilot?'rgba(59,130,246,.3)':'rgba(255,255,255,.06)')+';'
         +'color:'+(d.isPilot?'#60a5fa':'var(--text3)')+'">✈ '+(d.isPilot?'Yes — PIC':'No')+'</button>'
         +'</div>':'')
-        +(isAdmin?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0">'
-        +'<label style="font-size:11px;color:var(--text3)">AUTHORITY TO ACT AS PIC</label>'
-        +'<button onclick="S.admin.personModal.draft.picAuthority=!S.admin.personModal.draft.picAuthority;render()" '
-        +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
-        +'background:'+(d.picAuthority?'rgba(34,197,94,.25)':'rgba(255,255,255,.06)')+';'
-        +'color:'+(d.picAuthority?'#4ade80':'var(--text3)')+'">'+(d.picAuthority?'✓ Authorised':'No')+'</button>'
-        +'</div>':'')
         +(isAdmin&&m.userId?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border2)">'
         +'<label style="font-size:11px;color:var(--text3);flex:1">MARK AS INACTIVE (hides from roster &amp; dropdowns from chosen date)</label>'
         +'<button onclick="S.admin.personModal.draft.inactive=!S.admin.personModal.draft.inactive;render()" '
@@ -8456,7 +8449,6 @@ window.openPersonModal=async function(crewId,userId){
       email:u?u.email||'':'',
       role:u?u.role||'desk':'desk',
       isPilot:u?!!u.isPilot:false,
-      picAuthority:(cr&&((S._picAuth||{})[cr.id]!=null?!!(S._picAuth||{})[cr.id]:!!cr.picAuthority))||false,
       inactive:u?!!u.inactive:false,
       password:'',
     }
@@ -8520,7 +8512,7 @@ window.savePerson=async function(){
   if(crewId||finalName){
     crewId=crewId||('c_'+Date.now());
     const crewRec={id:crewId,n:finalName,w:parseFloat(d.w)||0,endorse:d.endorse||[],
-      code:d.code||'',dlNum:d.dlNum||'',caaNum:d.caaNum||'',picAuthority:!!d.picAuthority,
+      code:d.code||'',dlNum:d.dlNum||'',caaNum:d.caaNum||'',
       medExpiry:d.medExpiry||'',ocaDue:d.ocaDue||'',firstAid:d.firstAid||'',
       avsecExpiry:d.avsecExpiry||'',photo:d.photo||''};
     const existIdx=S.crew.findIndex(function(cr){return cr.id===crewId;});
@@ -8540,11 +8532,6 @@ window.savePerson=async function(){
         if(!minR) toast('Warning: profile may not have saved to server — check connection','warn');
       }
     }
-    // Authority to act as PIC — stored in a settings key (no crew-table column needed) so it
-    // persists across devices and is read by the Rezdy manifest's PIC checks.
-    S._picAuth=S._picAuth||{};S._picAuth[crewId]=!!d.picAuthority;
-    try{lsSet('ts_pic_auth',S._picAuth);}catch(e){}
-    if(typeof sbU==='function')sbU('ts_settings',[{key:'pic_authority',value:JSON.stringify(S._picAuth)}]).catch(function(){});
   }
 
   // ── Save user record (only if email present OR already has userId) ──
@@ -12316,13 +12303,9 @@ function _rzPilotByCode(code){
   var u=(S.users||[]).find(function(x){return ((typeof _rCode==='function')?_rCode(x):'')===code;});
   if(!u)return null;
   var cr=(S.crew||[]).find(function(c){return c.n===u.name||c.n===u.linkedCrew;});
-  var auth=cr&&(S._picAuth||{})[cr.id]!=null?!!(S._picAuth||{})[cr.id]:!!(u.picAuthority||(cr&&cr.picAuthority));
+  // "PIC eligible" (the isPilot profile flag) IS the authority to act as PIC.
+  var auth=!!u.isPilot||u.role==='pilot';
   return {code:code,name:(u.name||'').trim(),weight:(cr&&cr.w)||u.weight||0,endorse:(cr&&cr.endorse)||[],picAuth:auth};
-}
-// Load the PIC-authority map (settings key) — cached locally, refreshed from the cloud.
-function _rzPicAuthLoad(){
-  try{var cached=(typeof lsGet==='function')?lsGet('ts_pic_auth'):null;if(cached&&typeof cached==='object')S._picAuth=cached;}catch(e){}
-  try{fetch(SB+'/rest/v1/ts_settings?key=eq.pic_authority&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}if(v&&typeof v==='object'){S._picAuth=v;try{lsSet('ts_pic_auth',v);}catch(e){}if(typeof safeRender==='function')safeRender();}}).catch(function(){});}catch(e){}
 }
 // All seat rows for an aircraft (incl. the PIC seat 0), grouped by arm, front-to-back.
 function _rzAcRows(acId){
@@ -13065,7 +13048,6 @@ function _rzManBubble(p,allPax){
   '</div>';
 }
 function _rzRenderManifest(){
-  if(!S._picAuthLoaded){S._picAuthLoaded=true;_rzPicAuthLoad();}
   if(!S._rzManLoaded){if(window.rezdyLoadManifest)window.rezdyLoadManifest();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading manifest…</div>';}
   var pax=S._rzManPax||[];
   var deps=_rzManDeps();
@@ -13452,7 +13434,7 @@ window.rezdyManDropPilot=function(acId,e){
   var code=S._schedPilotDrag;S._schedPilotDrag=null;if(!code||!acId)return;
   var pil=_rzPilotByCode(code);
   // Must hold Authority to act as PIC (profile flag) AND be type-rated (passed out) on this aircraft.
-  if(pil&&!pil.picAuth){if(typeof toast==='function')toast(code+' is not authorised to act as PIC (set it in their profile).','warn');return;}
+  if(pil&&!pil.picAuth){if(typeof toast==='function')toast(code+' is not PIC-eligible (enable it in their profile).','warn');return;}
   var en=(pil&&pil.endorse)||_rzPilotEndorse(code);
   if(en&&en.length&&en.indexOf(acId)<0){if(typeof toast==='function')toast(code+' is not passed out (type-rated) on '+String(acId).replace('ZK-','')+'.','warn');return;}
   S._rzManPic=S._rzManPic||{};S._rzManPic[acId]=code;_rzManSave();render();
