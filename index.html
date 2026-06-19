@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="True South FMS">
 <meta name="theme-color" content="#0f1117">
 <meta name="mobile-web-app-capable" content="yes">
+<script>(function(){try{if(localStorage.getItem('ts_theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
 <title>True South FMS</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -21,12 +22,30 @@
 :root{
   --bg:#1a1f2e;--card:#0f172a;--card2:#080d14;--border:#1e293b;--border2:#334155;
   --text:#f1f5f9;--text2:#cbd5e1;--text3:#94a3b8;
-  --sky:#7B9EC6;--sky2:#4A6D96;
+  --sky:#7B9EC6;--sky2:#4A6D96;--accent:#7B9EC6;--acc:#7B9EC6;
+  --appbg:#0f172a;
   --ok-bg:#052e16;--ok-border:#166534;--ok-text:#86efac;
   --warn-bg:#1c1003;--warn-border:#854d0e;--warn-text:#fcd34d;
   --err-bg:#2d0a0a;--err-border:#7f1d1d;--err-text:#fca5a5;
 }
-html,body{height:100%;min-height:100dvh;min-height:-webkit-fill-available;background:#0f172a;color:var(--text);font-family:'Barlow',sans-serif;}
+/* ── Light theme ── flips the core palette; subtle white overlays used inline stay faint but
+   readable. Toggled by setting data-theme="light" on <html>. */
+html[data-theme="light"]{
+  --bg:#eef2f7;--card:#ffffff;--card2:#f1f5f9;--border:#dbe2ea;--border2:#c2ccd8;
+  --text:#0f172a;--text2:#334155;--text3:#64748b;
+  --accent:#3f6390;--acc:#3f6390;--appbg:#eef2f7;
+  --ok-bg:#dcfce7;--ok-border:#86efac;--ok-text:#166534;
+  --warn-bg:#fef9c3;--warn-border:#fde047;--warn-text:#854d0e;
+  --err-bg:#fee2e2;--err-border:#fca5a5;--err-text:#991b1b;
+}
+html[data-theme="light"] .sub-tab{background:#e2e8f0;color:#475569;border-color:#cbd5e1;}
+html[data-theme="light"] .sub-tab:hover{background:#d4dde8;color:#1e293b;}
+html[data-theme="light"] .sub-tab.on{background:#3f6390;border-color:#3f6390;color:#fff;}
+html[data-theme="light"] .nav-tab.off{background:#e2e8f0;color:#475569;}
+html[data-theme="light"] .nav-tab.off:hover{background:#d4dde8;}
+html[data-theme="light"] .btn-ghost:hover{background:#e2e8f0;}
+html[data-theme="light"] input[type=date]::-webkit-calendar-picker-indicator{filter:none;}
+html,body{height:100%;min-height:100dvh;min-height:-webkit-fill-available;background:var(--appbg);color:var(--text);font-family:'Barlow',sans-serif;}
 /* ── Width safety: the page itself must NEVER scroll sideways on a phone. ──
    overflow-x:clip (not hidden) avoids creating a scroll container, so it won't
    break position:sticky or vertical scrolling. Long words/emails wrap instead of
@@ -594,6 +613,18 @@ function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r
 function _crewForUser(u){if(!u)return null;return (S.crew||[]).find(function(c){return c.n===u.name||c.n===u.linkedCrew;})||null;}
 function _picEligible(u){var cr=_crewForUser(u);return !!(cr&&cr.endorse&&cr.endorse.length);}
 window._picEligible=_picEligible;window._crewForUser=_crewForUser;
+// ── Light / dark theme ── persisted in localStorage, applied to <html data-theme>. Dark is the
+// default (no attribute); light is opt-in. An early inline script in head.html applies the saved
+// choice before first paint to avoid a flash.
+function _themeIsLight(){try{return document.documentElement.getAttribute('data-theme')==='light';}catch(e){return false;}}
+window._themeIsLight=_themeIsLight;
+window.toggleTheme=function(){
+  try{
+    if(_themeIsLight()){document.documentElement.removeAttribute('data-theme');localStorage.setItem('ts_theme','dark');}
+    else{document.documentElement.setAttribute('data-theme','light');localStorage.setItem('ts_theme','light');}
+  }catch(e){}
+  if(typeof render==='function')render();
+};
 // True while the Admin > Permissions grid is actively on screen (renderAdminPerms bumps
 // S._permsPageTs on every render). While editing, background reloads must NOT overwrite
 // S.rolePerms or they wipe unsaved ticks (the 5s edit-timer alone is not enough — a
@@ -672,7 +703,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.56';
+const APP_VER='v23.58';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3022,6 +3053,7 @@ function renderAccountModal(){
         <button onclick="S.showAccount=false;S.changePwMsg=null;render()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">×</button>
       </div>
       ${changePwMsg?`<div style="padding:8px 12px;border-radius:7px;margin-bottom:12px;font-size:13px;font-weight:600;background:${changePwMsg.ok?'var(--ok-bg)':'var(--err-bg)'};color:${changePwMsg.ok?'var(--ok-text)':'var(--err-text)'};border:1px solid ${changePwMsg.ok?'var(--ok-border)':'var(--err-border)'}">${changePwMsg.text}</div>`:''}
+      <button onclick="window.toggleTheme()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">${(typeof _themeIsLight==='function'&&_themeIsLight())?'\u{1F319} Switch to dark mode':'☀️ Switch to light mode'}</button>
       <button onclick="window.goToMyProfile()" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">&#x270F; Edit My Profile</button>
       <button onclick="logout();S.showAccount=false;" style="width:100%;padding:10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#f87171;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px">Sign Out</button>
       <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Change Password</div>
@@ -11991,6 +12023,15 @@ window.pickupToggleVehicles=function(){S._pickupVehPanel=!S._pickupVehPanel;rend
 window.pickupVehSet=function(i,field,val){var veh=_rzVehicles();if(!veh[i])return;if(field==='seats')veh[i].seats=Math.max(1,parseInt(val)||11);else veh[i][field]=val;_rzVehSave();render();};
 window.pickupVehAdd=function(){var veh=_rzVehicles();var pal=['#4a99d2','#48925f','#e3683e','#a855f7','#f59e0b','#ec4899','#14b8a6','#ef4444'];veh.push({name:'Van '+(veh.length+1),seats:11,color:pal[veh.length%pal.length]});S._pickupVans=null;_rzVehSave();render();};
 window.pickupVehRemove=function(i){var veh=_rzVehicles();if(veh.length<=1)return;veh.splice(i,1);S._pickupVans=null;_rzVehSave();render();};
+// ── Active vs spare (parked) vehicles ──
+// A parked vehicle is a spare resource: it isn't a van on the board and takes no pickups until
+// it's dragged back in. Keyed by vehicle index in S._pickupSpare.
+function _rzVanParked(vi){return !!(S._pickupSpare||{})[vi];}
+function _rzActiveVanCount(){var n=_rzVehicles().length,sp=S._pickupSpare||{},c=0;for(var i=0;i<n;i++)if(!sp[i])c++;return c;}
+window.pickupVehParkDragStart=function(vi,e){S._pickupVehDrag=vi;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','veh:'+vi);}catch(_){}};
+window.pickupActivateVehicle=function(vi){S._pickupSpare=S._pickupSpare||{};delete S._pickupSpare[vi];if(window.pickupSave)window.pickupSave(true);render();};
+window.pickupParkVehicle=function(vi){if(_rzActiveVanCount()<=1){if(typeof toast==='function')toast('Keep at least one active vehicle.','warn');return;}S._pickupSpare=S._pickupSpare||{};S._pickupSpare[vi]=1;if(window.pickupSave)window.pickupSave(true);render();};
+window.pickupDropActivateVehicle=function(e){if(e&&e.preventDefault)e.preventDefault();var vi=S._pickupVehDrag;S._pickupVehDrag=null;if(vi==null||vi==='')return;window.pickupActivateVehicle(parseInt(vi,10));};
 function _rzVehSeats(vi){var v=_rzVehicles()[vi];return (v&&v.seats)||11;}
 function _rzVehColor(vi){var v=_rzVehicles()[vi];return (v&&v.color)||'#64748b';}
 function _rzVehName(vi){var v=_rzVehicles()[vi];return (v&&v.name)||('Van '+(vi+1));}
@@ -12104,9 +12145,12 @@ function _rzIsHilton(loc){return /hilton/i.test(String(loc||''));}
 function _rzAutoVans(pickups){
   pickups=(pickups||[]).filter(function(p){return !p.selfDrive;}); // self-drive never goes in a van
   var N=_rzVehicles().length;
+  // Only ACTIVE (non-parked) vehicles take pickups; parked vehicles stay as spare resources.
+  var spare=S._pickupSpare||{};var act=[];for(let i=0;i<N;i++)if(!spare[i])act.push(i);
+  if(!act.length)act=[0];
   const byTime=function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);};
   const vans=[];for(let i=0;i<N;i++)vans.push([]);
-  // Pickups run by DEPARTURE: a whole departure is collected together (Van 1→2→3 by capacity),
+  // Pickups run by DEPARTURE: a whole departure is collected together (active vans by capacity),
   // then the next departure reuses the same vans. Hilton always gets its own vehicle. Earliest first.
   const byDep={};pickups.forEach(function(p){(byDep[p.depart||'~']=byDep[p.depart||'~']||[]).push(p);});
   Object.keys(byDep).sort().forEach(function(dep){
@@ -12114,14 +12158,15 @@ function _rzAutoVans(pickups){
     const hilton=grp.filter(function(p){return _rzIsHilton(p.location);}).sort(byTime);
     const others=grp.filter(function(p){return !_rzIsHilton(p.location);}).sort(byTime);
     const load=[];for(let i=0;i<N;i++)load.push(0);
-    let vi=0;
+    let ai=0; // pointer into the active-vehicle list
     const place=function(p){
-      if(load[vi]>0 && load[vi]+p.pax>_rzVehSeats(vi) && vi<N-1)vi++;
+      var vi=act[ai];
+      if(load[vi]>0 && load[vi]+p.pax>_rzVehSeats(vi) && ai<act.length-1){ai++;vi=act[ai];}
       vans[vi].push(p.id);load[vi]+=p.pax;
     };
     others.forEach(place);
     // Hilton starts a fresh vehicle within this departure (opposite direction).
-    if(hilton.length){ if(load[vi]>0 && vi<N-1)vi++; hilton.forEach(place); }
+    if(hilton.length){ if(load[act[ai]]>0 && ai<act.length-1)ai++; hilton.forEach(place); }
   });
   return vans;
 }
@@ -12141,8 +12186,14 @@ function _rzEnsureVans(){
     const sd={};pickups.forEach(function(p){if(p.selfDrive)sd[p.id]=1;});
     const placed={};
     S._pickupVans=vans.map(function(v){return v.filter(function(id){if(placed[id]||sd[id]||ids.indexOf(id)<0)return false;placed[id]=1;return true;});});
-    ids.forEach(function(id){if(!placed[id]&&!sd[id])S._pickupVans[0].push(id);});
+    // First active (non-parked) vehicle catches new + displaced pickups.
+    var spare0=S._pickupSpare||{};var firstAct=0;for(var _fa=0;_fa<S._pickupVans.length;_fa++){if(!spare0[_fa]){firstAct=_fa;break;}}
+    ids.forEach(function(id){if(!placed[id]&&!sd[id])S._pickupVans[firstAct].push(id);});
   }
+  // Move any pickups parked in a spare vehicle into the first active vehicle.
+  var spare=S._pickupSpare||{};var firstActive=-1;
+  for(var _vi=0;_vi<S._pickupVans.length;_vi++){if(!spare[_vi]){firstActive=_vi;break;}}
+  if(firstActive>=0){for(var _vj=0;_vj<S._pickupVans.length;_vj++){if(spare[_vj]&&S._pickupVans[_vj]&&S._pickupVans[_vj].length){S._pickupVans[firstActive]=S._pickupVans[firstActive].concat(S._pickupVans[_vj]);S._pickupVans[_vj]=[];}}}
   if(!S._pickupCollected||typeof S._pickupCollected!=='object')S._pickupCollected={};
   return pickups;
 }
@@ -12162,7 +12213,7 @@ function renderRezdy(){
   if(sub==='schedule'&&S._rzPrevSub!=='schedule'){S._schedBlocks=null;S._rezdyBookings=null;}
   S._rzPrevSub=sub;
   const tabBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    [{id:'bookings',lbl:'Bookings'},{id:'manifest',lbl:'Manifest'},{id:'loadsheets',lbl:'Loadsheets'},{id:'schedule',lbl:'Calendar'},{id:'pickups',lbl:'Pickups'},{id:'mypickups',lbl:'My Pickups'}].map(function(t){
+    [{id:'bookings',lbl:'Bookings'},{id:'manifest',lbl:'Seatmap'},{id:'loadsheets',lbl:'Loadsheets'},{id:'schedule',lbl:'Calendar'},{id:'pickups',lbl:'Pickups'},{id:'mypickups',lbl:'My Pickups'}].map(function(t){
       return '<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.rezdyTab=\''+t.id+'\';render()">'+t.lbl+'</button>';
     }).join('')+'</div>';
 
@@ -12501,9 +12552,9 @@ function _rzPaxBubbles(b,opts){
     var isChild=r.type==='child';var infName=r.infName;
     bubs+='<div title="'+_rzEsc((r.name||'')+(infName?' (+ infant '+infName+')':''))+'" style="position:relative;overflow:hidden;background:rgba(255,255,255,.93);border-radius:8px;'+(owing?'border:2px solid #ef4444':'border-left:4px solid '+gcol)+';min-width:60px;flex-shrink:0;'+(isInf?'opacity:.85;':'')+'">'+
       (owing?'<div style="background:#ef4444;color:#fff;font-size:8px;font-weight:900;letter-spacing:.04em;text-align:center;line-height:1.7">$ TO PAY</div>':'')+
-      (isChild?'<div style="position:absolute;bottom:3px;left:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')+
+      (isChild?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')+
       (isInf?'<div title="Infant" style="position:absolute;bottom:3px;left:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')+
-      (infName?'<div title="Infant: '+_rzEsc(infName)+'" style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')+
+      (infName?'<div title="Infant: '+_rzEsc(infName)+'" style="position:absolute;bottom:3px;'+(isChild?'left:3px':'right:3px')+';font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')+
       '<div style="padding:'+(owing?'2px 7px 4px':'4px 7px')+'">'+
         '<div style="font-size:11px;font-weight:700;color:#1e293b;white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'+
         '<div title="'+wTitle+'" style="font-size:10px;font-weight:700;color:'+wCol+'">'+wTxt+'</div>'+
@@ -12592,6 +12643,51 @@ function _rzBkMatch(b,q){
 // Live search — re-render and keep focus/caret in the search box so results update as you type.
 window.rezdyBkSearch=function(v){S._bkSearch=v;render();var el=document.getElementById('rzBkSearch');if(el){el.focus();var L=el.value.length;try{el.setSelectionRange(L,L);}catch(_){}}};
 window.rezdyBkSearchClear=function(){S._bkSearch='';render();var el=document.getElementById('rzBkSearch');if(el)el.focus();};
+// Re-focus the search box (used after an async re-render so typing isn't interrupted).
+function _rzRefocusSearch(){var el=document.getElementById('rzBkSearch');if(el&&S._bkSearch){el.focus();var L=el.value.length;try{el.setSelectionRange(L,L);}catch(_){}}}
+// Load EVERY cached booking (all tour dates) so search can span any day, not just the one in
+// view. Cached ~2 min; each booking keeps its tour_date on b._tourDate so results can show the
+// date and jump straight to it.
+window.rezdyLoadAllBookings=async function(){
+  if(S._rzAllBkLoading)return;
+  S._rzAllBkLoading=true;safeRender();
+  try{
+    var rows=await sbF('ts_rezdy_bookings','','tour_date'); // all dates, no tour_date filter
+    var out=(rows||[]).map(function(r){var b=(r&&r.data)?r.data:null;if(b)b._tourDate=r.tour_date;return b;}).filter(Boolean).filter(function(b){
+      var src=String((b&&b.source)||'').toUpperCase();var on=String((b&&b.orderNumber)||'');
+      if(src.indexOf('MARKETPLACE_PREF_RATE')>=0&&on&&!/^TSF/i.test(on))return false;
+      return true;
+    });
+    S._rzAllBk=out;S._rzAllBkAt=Date.now();
+  }catch(e){S._rzAllBk=S._rzAllBk||[];}
+  S._rzAllBkLoading=false;render();_rzRefocusSearch();
+};
+// A compact, clickable search-result row (works across days). Tapping jumps to that booking's
+// date and opens it.
+function _rzBkSearchRow(b){
+  var order=String(b.orderNumber||'');var oE=_rzEsc(order).replace(/'/g,"\\'");
+  var date=String(b._tourDate||S.rezdyDate);var dE=_rzEsc(date).replace(/'/g,"\\'");
+  var dep=_rzBookingDep(b);var depE=_rzEsc(dep).replace(/'/g,"\\'");
+  var prod=_rzProduct((((b.items||[])[0])||{}).product||'');
+  var bd=_rzBdText(_rzEffBreakdown(b));
+  var ci=(date===S.rezdyDate&&(S._rzBookingCheckedIn||{})[order])?'<span style="color:#22c55e;font-weight:800;font-size:10px;margin-left:6px">✓ checked in</span>':'';
+  var cancelled=/cancel/i.test(b.status||'');
+  return '<div onclick="window.rezdyBkOpenResult(\''+dE+'\',\''+oE+'\',\''+depE+'\')" class="card" style="cursor:pointer;padding:10px 12px;margin-bottom:8px'+(cancelled?';opacity:.55':'')+'">'+
+    '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">'+
+      '<span style="font-size:14px;font-weight:800;color:var(--text1)">'+_rzEsc(b.customerName||order)+(cancelled?' <span style="font-size:10px;color:#ef4444;font-weight:800">✕ cancelled</span>':'')+'</span>'+
+      '<span style="font-size:11px;color:var(--text3);font-weight:700;white-space:nowrap">#'+_rzEsc(order)+'</span>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--text3);margin-top:3px">📅 '+_rzEsc(_rzDowLabel(date))+' · 🛫 '+_rzEsc(dep)+(prod?' · '+_rzEsc(prod):'')+' · '+bd+ci+'</div>'+
+  '</div>';
+}
+// Jump from a search result to its booking: load that day if needed and open the card.
+window.rezdyBkOpenResult=function(date,order,dep){
+  order=String(order);S._bkSearch='';
+  if(date&&date!==S.rezdyDate){window.rezdySetDate(date);} // clears date caches + async-loads
+  S._rezdyOpen=S._rezdyOpen||{};S._rezdyOpen[order]=true;
+  if(dep)S._bkDepFilter=dep;
+  render();
+};
 function _rzRenderBookings(){
   if(!S._rezdyBookings){if(!S._rezdyLoading)window.rezdyLoadBookings();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading bookings…</div>';}
   if(!S._rezdyOpen||typeof S._rezdyOpen!=='object')S._rezdyOpen={};
@@ -12604,11 +12700,13 @@ function _rzRenderBookings(){
   const searching=q.length>0;
   // One departure at a time — default to the first departure when none is chosen. (No "All".)
   const depFilter=searching?null:((S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:(deps[0]||null));
-  var _ciCount=active.filter(function(b){return (S._rzBookingCheckedIn||{})[String(b.orderNumber||'')];}).length;
+  if(depFilter)S._bkDepFilter=depFilter; // persist the resolved departure so Push knows which one
+  // Checked-in count for the SELECTED departure (push is departure-scoped).
+  var _ciCount=active.filter(function(b){return _rzBookingDep(b)===depFilter&&(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')];}).length;
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
     '<div><div class="st" style="margin-bottom:0">Rezdy Bookings</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+(allRows.length?active.length+' active'+(cancelledRows.length?' · '+cancelledRows.length+' cancelled':'')+' for '+_rzDowLabel(S.rezdyDate):'No cached bookings')+'</p></div>'+
-    '<button class="btn btn-primary" style="font-size:12px;padding:7px 12px'+(_ciCount?'':';opacity:.55')+'" title="Send all checked-in passengers to the Manifest for seat allocation" onclick="window.rezdyPushToManifest()">⤒ Push to manifest'+(_ciCount?' ('+_ciCount+')':'')+'</button>'+
+    '<button class="btn btn-primary" style="font-size:12px;padding:7px 12px'+(_ciCount?'':';opacity:.55')+'" title="Send this departure’s checked-in passengers to the Seatmap" onclick="window.rezdyPushToManifest()">⤒ Push to seatmap'+(_ciCount?' ('+_ciCount+')':'')+'</button>'+
     '</div>';
   // Live search box (name / part-name / TSF booking reference).
   const searchH='<div class="card" style="padding:8px 10px;display:flex;align-items:center;gap:8px">'+
@@ -12638,12 +12736,17 @@ function _rzRenderBookings(){
   }
   let body='';
   if(searching){
-    // Search overrides the departure filter — match across every booking on the date.
-    var matches=allRows.filter(function(b){return _rzBkMatch(b,q);})
-      .sort(function(a,b){return _rzBookingDep(a).localeCompare(_rzBookingDep(b));});
-    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🔍 '+matches.length+' result'+(matches.length===1?'':'s')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">for “'+_rzEsc(q)+'”</span></div>';
-    if(!matches.length)body+='<div class="card" style="text-align:center;padding:30px;color:var(--text3);font-size:13px">No bookings match “'+_rzEsc(q)+'”.</div>';
-    else matches.forEach(function(b){body+=_rzBookingCard(b);});
+    // Search spans EVERY cached day (not just the one in view). Load the all-days corpus if we
+    // don't have a fresh copy; until it arrives, search today's already-loaded set.
+    var haveAll=!!(S._rzAllBk&&S._rzAllBk.length);
+    if((!haveAll||(Date.now()-(S._rzAllBkAt||0)>120000))&&!S._rzAllBkLoading)window.rezdyLoadAllBookings();
+    var corpus=haveAll?S._rzAllBk:allRows;
+    var matches=corpus.filter(function(b){return _rzBkMatch(b,q);})
+      .sort(function(a,b){var da=String(a._tourDate||S.rezdyDate),db=String(b._tourDate||S.rezdyDate);if(da!==db)return db.localeCompare(da);return _rzBookingDep(a).localeCompare(_rzBookingDep(b));});
+    var note=S._rzAllBkLoading?' · searching all days…':(haveAll?' · all days':' · this day');
+    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🔍 '+matches.length+' result'+(matches.length===1?'':'s')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">for “'+_rzEsc(q)+'”'+note+'</span></div>';
+    if(!matches.length)body+='<div class="card" style="text-align:center;padding:30px;color:var(--text3);font-size:13px">'+(S._rzAllBkLoading?'Searching all days…':'No bookings match “'+_rzEsc(q)+'”.')+'</div>';
+    else matches.forEach(function(b){body+=_rzBkSearchRow(b);});
     return top+body;
   }
   // Single departure view.
@@ -12885,6 +12988,18 @@ function _rzRenderPickups(){
     if(!_anyPick)driversBar+='<div style="font-size:12px;color:var(--text3)">Everyone rostered on is already listed.</div>';
     driversBar+='</div>';
   }
+  // Spare vehicles — parked resources sitting next to the drivers. Drag (or tap) one to add it
+  // to the run; an active van can be parked back here from its card.
+  var _spareV=[];_rzVehicles().forEach(function(v,vi){if(_rzVanParked(vi))_spareV.push({v:v,vi:vi});});
+  driversBar+='<div style="margin-top:10px;border-top:1px solid var(--border2);padding-top:8px">'+
+    '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:6px">Spare vehicles <span style="font-weight:400;text-transform:none;letter-spacing:0">(drag below / tap to add)</span></div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
+  if(!_spareV.length){driversBar+='<span style="font-size:12px;color:var(--text3)">None — all vehicles are in use.</span>';}
+  else _spareV.forEach(function(o){var col=o.v.color||'#64748b';
+    driversBar+='<div draggable="true" ondragstart="window.pickupVehParkDragStart('+o.vi+',event)" onclick="window.pickupActivateVehicle('+o.vi+')" title="Tap or drag onto the run to add" style="display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:14px;border:1px dashed '+col+';background:'+col+'18;color:'+col+';cursor:grab;font-size:12px;font-weight:800">🚐 '+_rzEsc(o.v.name||('Van '+(o.vi+1)))+' <span style="opacity:.7;font-weight:600">'+(o.v.seats||11)+'p</span></div>';
+  });
+  driversBar+='<button onclick="window.pickupVehAdd()" title="Create a new vehicle" style="padding:5px 10px;border-radius:14px;border:1px dashed var(--border2);background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">+ New</button>';
+  driversBar+='</div></div>';
   driversBar+='</div>';
 
   // group van pickups by departure time for the summary
@@ -12922,6 +13037,7 @@ function _rzRenderPickups(){
   // van cards/columns (stack vertically on narrow screens via flex-wrap + min-width)
   let vansH='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">';
   S._pickupVans.forEach(function(vanIds,vi){
+    if(_rzVanParked(vi))return; // parked vehicles are spares, shown by the drivers, not on the board
     // Capacity is per departure run (each ≤11), so size the warning by the busiest departure.
     var _byDepLoad={};vanIds.forEach(function(id){var pp=_rzPickupById(pickups,id);if(pp)_byDepLoad[pp.depart||'~']=(_byDepLoad[pp.depart||'~']||0)+pp.pax;});
     var _maxDep=0;Object.keys(_byDepLoad).forEach(function(k){if(_byDepLoad[k]>_maxDep)_maxDep=_byDepLoad[k];});
@@ -12931,9 +13047,10 @@ function _rzRenderPickups(){
     const col=_rzVehColor(vi);
     vansH+='<div ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="window.pickupDropOnVan('+vi+',event);this.style.outline=\'\'" '+
       'style="flex:1 1 260px;min-width:240px;background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px">';
-    vansH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
+    vansH+='<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">'+
       '<div style="font-weight:800;font-size:14px;color:'+col+'">'+_rzEsc(_rzVehName(vi))+'</div>'+
-      '<span style="font-size:12px;font-weight:700;color:'+(over?'#ef4444':'var(--text2)')+'">'+pax+' / '+seats+' pax'+(over?' ⚠':'')+'</span></div>';
+      '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:700;color:'+(over?'#ef4444':'var(--text2)')+'">'+pax+' / '+seats+' pax'+(over?' ⚠':'')+'</span>'+
+      '<button onclick="window.pickupParkVehicle('+vi+')" title="Park this vehicle (move to spares)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0 2px">🅿</button></div></div>';
     // Driver / taxi slot — drop a driver bubble anywhere on the van to assign; no driver = taxi.
     var drv=(S._pickupDrivers||[])[vi]||null;
     vansH+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding:5px 9px;border-radius:8px;border:1px dashed '+(drv?col+'99':(vanIds.length?'#f59e0b88':'var(--border2)'))+';background:'+(drv?col+'14':(vanIds.length?'rgba(245,158,11,.08)':'transparent'))+'">'+
@@ -12970,6 +13087,10 @@ function _rzRenderPickups(){
     }
     vansH+='</div>';
   });
+  // Drop zone to add a spare vehicle to the run.
+  if(_rzVehicles().some(function(v,vi){return _rzVanParked(vi);})){
+    vansH+='<div ondragover="event.preventDefault();this.style.borderColor=\'var(--acc)\';this.style.color=\'var(--text2)\'" ondragleave="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\'" ondrop="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\';window.pickupDropActivateVehicle(event)" style="flex:1 1 200px;min-width:180px;align-self:stretch;min-height:90px;display:flex;align-items:center;justify-content:center;text-align:center;border:2px dashed var(--border2);border-radius:10px;color:var(--text3);font-size:12px;font-weight:700;padding:12px">🚐 Drop a spare vehicle here to add it</div>';
+  }
   vansH+='</div>';
 
   // Self-drive: listed to the side (only the selected departure).
@@ -13029,6 +13150,8 @@ window.rezdyLoadPickups=async function(){
     S._pickupLocOverride=(row.locOverride&&typeof row.locOverride==='object')?row.locOverride:{};
     S._pickupDrivers=Array.isArray(row.drivers)?row.drivers:[];
     S._pickupExtraDrivers=Array.isArray(row.extraDrivers)?row.extraDrivers:[];
+    S._pickupSpare=(row.spare&&typeof row.spare==='object')?row.spare:{};
+    S._pickupOrder=(row.order&&typeof row.order==='object')?row.order:{};
     S._rezdyPaxMeta=(row.paxMeta&&typeof row.paxMeta==='object')?row.paxMeta:{};
     S._schedPilots=(row.schedPilots&&typeof row.schedPilots==='object')?row.schedPilots:{};
     S._rzBookingAc=(row.bookingAc&&typeof row.bookingAc==='object')?row.bookingAc:{};
@@ -13037,7 +13160,7 @@ window.rezdyLoadPickups=async function(){
     S._rzSchedAttach=(row.schedAttach&&typeof row.schedAttach==='object')?row.schedAttach:{};
     S._rzCheckin=(row.checkin&&typeof row.checkin==='object')?row.checkin:{};
   }else{
-    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];S._pickupExtraDrivers=[];S._rezdyPaxMeta={};S._schedPilots={};S._rzBookingAc={};S._rzBookingWx={};S._rzBookingCheckedIn={};S._rzSchedAttach={};S._rzCheckin={};
+    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];S._pickupExtraDrivers=[];S._pickupSpare={};S._pickupOrder={};S._rezdyPaxMeta={};S._schedPilots={};S._rzBookingAc={};S._rzBookingWx={};S._rzBookingCheckedIn={};S._rzSchedAttach={};S._rzCheckin={};
   }
   S._pickupLoading=false;
   render();
@@ -13084,7 +13207,7 @@ window.pickupSave=async function(silent){
   const payload={
     id:'pl_'+S.rezdyDate,
     list_date:S.rezdyDate,
-    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{}}
+    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{}}
   };
   const r=await sbU('ts_pickup_lists',[payload]);
   if(!silent)toast(r?'Pickup list saved ✓':'Save failed',r?'ok':'err');
@@ -13123,6 +13246,29 @@ window.pickupRemoveExtraDriver=function(name){S._pickupExtraDrivers=(S._pickupEx
 // ─────────────────────────────────────────────────────────────────────────────
 //  (2b) MY PICKUPS — mobile-first run sheet for the signed-in driver
 // ─────────────────────────────────────────────────────────────────────────────
+// Apply a driver's manual stop order (per van + departure) over the default time sort.
+function _rzApplyMyOrder(grp,vi,dep){
+  var key=vi+'|'+dep;var ord=(S._pickupOrder||{})[key];
+  if(!ord||!ord.length)return grp;
+  var byId={};grp.forEach(function(p){byId[p.id]=p;});
+  var out=[];ord.forEach(function(id){if(byId[id]){out.push(byId[id]);delete byId[id];}});
+  grp.forEach(function(p){if(byId[p.id])out.push(p);}); // any new stops keep their time order at the end
+  return out;
+}
+window.myPkDragStart=function(id,e){S._myPkDrag=id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}};
+window.myPkDrop=function(vi,dep,targetId,e){
+  if(e&&e.preventDefault)e.preventDefault();if(e&&e.stopPropagation)e.stopPropagation();
+  var id=S._myPkDrag;S._myPkDrag=null;try{if(!id&&e.dataTransfer)id=e.dataTransfer.getData('text/plain');}catch(_){}
+  if(!id||id===targetId)return;
+  var pickups=_rzPickups();
+  var grp=((S._pickupVans||[])[vi]||[]).map(function(pid){return _rzPickupById(pickups,pid);}).filter(function(p){return p&&(p.depart||'—')===dep;}).sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
+  grp=_rzApplyMyOrder(grp,vi,dep);
+  var ids=grp.map(function(p){return p.id;});
+  var from=ids.indexOf(id);if(from<0)return;ids.splice(from,1);
+  var to=ids.indexOf(targetId);if(to<0)to=ids.length;ids.splice(to,0,id);
+  S._pickupOrder=S._pickupOrder||{};S._pickupOrder[vi+'|'+dep]=ids;
+  if(window.pickupSave)window.pickupSave(true);render();
+};
 function _rzRenderMyPickups(){
   if(S._pickupLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading…</div>';
   if(!S._rezdyBookings){
@@ -13160,15 +13306,18 @@ function _rzRenderMyPickups(){
                  .filter(function(p){return p&&(p.depart||'—')===selDep;})
                  .sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
     if(!grp.length)return; // this van has nothing for the selected departure
+    grp=_rzApplyMyOrder(grp,v.vi,selDep); // honour the driver's manual reorder
+    var _viD=v.vi,_depD=_rzEsc(selDep).replace(/'/g,"\\'");
     var depPax=grp.reduce(function(s,p){return s+(p.pax||0);},0);
     h+='<div class="card" style="border-top:4px solid '+col+';padding:14px;margin-bottom:14px">';
     h+='<div style="font-weight:800;font-size:18px;color:'+col+'">'+_rzEsc(_rzVehName(v.vi))+'</div>';
     h+='<div style="font-size:12px;color:var(--text3);margin-bottom:10px">'+grp.length+' stop'+(grp.length===1?'':'s')+' · '+depPax+' pax</div>';
     grp.forEach(function(p){
       var collected=!!(S._pickupCollected||{})[p.id];
-      h+='<div style="background:var(--card2);border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:10px;padding:13px;margin-bottom:10px;'+(collected?'opacity:.55':'')+'">'+
+      var _idD=_rzEsc(p.id).replace(/'/g,"\\'");
+      h+='<div draggable="true" ondragstart="window.myPkDragStart(\''+_idD+'\',event)" ondragover="event.preventDefault()" ondrop="window.myPkDrop('+_viD+',\''+_depD+'\',\''+_idD+'\',event)" style="background:var(--card2);border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:10px;padding:13px;margin-bottom:10px;cursor:grab;'+(collected?'opacity:.55':'')+'">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">'+
-          '<div style="font-weight:800;font-size:16px;color:var(--text1);'+(collected?'text-decoration:line-through':'')+'">'+_rzEsc(p.customer||p.order)+'</div>'+
+          '<div style="font-weight:800;font-size:16px;color:var(--text1);'+(collected?'text-decoration:line-through':'')+'"><span style="color:var(--text3);font-weight:600;margin-right:6px;cursor:grab" title="Drag to reorder">≡</span>'+_rzEsc(p.customer||p.order)+'</div>'+
           '<span style="flex-shrink:0;font-size:13px;font-weight:800;color:'+col+'">'+p.pax+' pax</span>'+
         '</div>'+
         (p.pickupTime?'<div style="font-size:15px;font-weight:700;color:var(--text1);margin-bottom:3px">🕑 Pickup '+_rzEsc(p.pickupTime)+'</div>':'')+
@@ -13222,7 +13371,7 @@ function _rzRenderManifest(){
   pax.forEach(function(p){if(p.ac&&fleetAll.indexOf(p.ac)<0)fleetAll.push(p.ac);});
   var fleet=fleetAll.filter(function(id){return hidden.indexOf(id)<0;});
   var h='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
-    '<div><div class="st" style="margin-bottom:0">Manifest</div>'+
+    '<div><div class="st" style="margin-bottom:0">Seatmap</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzDowLabel(S.rezdyDate)+' · '+pax.length+' pax · '+pool.length+' unallocated'+(selDep&&selDep!=='—'?' @ '+_rzEsc(selDep):'')+'</p></div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.rezdyManAdd()">+ Add passenger</button>'+
@@ -13274,6 +13423,9 @@ function _rzRenderManifest(){
     _mPilots.forEach(function(p){h+='<div draggable="true" ondragstart="window.rezdySchedPilotDragStart(\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\',event)" title="'+_rzEsc(p.name)+' — drag onto an aircraft to set PIC" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:16px;background:rgba(96,165,250,.14);border:1px solid rgba(96,165,250,.5);cursor:grab;font-size:12px;font-weight:800;color:#60a5fa">✈ '+_rzEsc(p.code)+'</div>';});
     h+='</div>';
   }
+  // Aircraft with pax allocated THIS departure come first (flying); idle aircraft sort last.
+  var _depLoad={};fleet.forEach(function(id){_depLoad[id]=pax.filter(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===selDep;}).length;});
+  fleet=fleet.slice().sort(function(a,b){return (_depLoad[b]>0?1:0)-(_depLoad[a]>0?1:0);}); // stable: flying first
   h+='<div class="rzman-fleet">';
   fleet.forEach(function(id){
     var col=(typeof AC_COL!=='undefined'&&AC_COL[id])||'#64748b';
@@ -13286,10 +13438,21 @@ function _rzRenderManifest(){
     var std=a?Math.round(fromKg(a.fuelKg,id)):0;
     var fuelVal=(S._rzManFuel&&S._rzManFuel[id]!=null&&S._rzManFuel[id]!=='')?S._rzManFuel[id]:std;
     var idE=id.replace(/'/g,"\\'");
-    h+='<div class="rzman-card" ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.rezdyManDrop(\''+id+'\',event)" style="background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px"><div style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+'</div>'+
+    // Collapsible: open by default only when this aircraft has pax this departure; a manual
+    // toggle (keyed by departure+aircraft) overrides the auto state.
+    var _ckey=selDep+'|'+id;var _ov=(S._rzManCardOpen||{})[_ckey];
+    var open=(_ov!=null)?_ov:(list.length>0);
+    h+='<div class="rzman-card" ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.rezdyManDrop(\''+id+'\',event)" style="background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px'+(open?'':';opacity:.92')+'">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px'+(open?';margin-bottom:8px':'')+'">'+
+        '<div onclick="window.rezdyManToggleCard(\''+idE+'\')" style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0">'+
+          '<span style="display:inline-block;transition:transform .12s;color:var(--text3);font-size:11px;'+(open?'transform:rotate(90deg)':'')+'">▸</span>'+
+          '<span style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+'</span>'+
+          (picCode?'<span style="font-size:10px;font-weight:800;color:#60a5fa">✈ '+_rzEsc(picCode)+'</span>':'')+
+          (list.length?'':'<span style="font-size:10px;color:var(--text3);font-weight:600">idle</span>')+
+        '</div>'+
         '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span>'+
         '<button onclick="window.rezdyManDeleteAc(\''+idE+'\')" title="Remove this aircraft (returns its pax to the pool)" style="background:none;border:none;color:#ef444488;cursor:pointer;font-size:13px;padding:0 2px">🗑</button></div></div>';
+    if(open){
     // PIC slot (drop a pilot here)
     h+='<div ondragover="event.preventDefault();event.stopPropagation();this.style.outline=\'2px solid #60a5fa\'" ondragleave="this.style.outline=\'\'" ondrop="event.stopPropagation();this.style.outline=\'\';window.rezdyManDropPilot(\''+idE+'\',event)" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:5px 8px;border-radius:7px;border:1px dashed '+(picCode?'#60a5fa':'var(--border2)')+';background:'+(picCode?'rgba(96,165,250,.1)':'transparent')+'">'+
       '<span style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800">PIC</span>'+
@@ -13313,6 +13476,7 @@ function _rzRenderManifest(){
       if(_over.length){h+='<div style="font-size:10px;color:#f59e0b;font-weight:800;margin:2px 0 4px">Unseated ('+_over.length+') — drag to a seat:</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';_over.forEach(function(p){h+=_rzManBubble(p,pax);});h+='</div>';}
     }
     h+='<button class="btn btn-primary" style="width:100%;padding:8px;font-size:12px;'+(list.length?'':'opacity:.5')+'" onclick="window.rezdyManCreateLoadsheet(\''+idE+'\',\''+_rzEsc(selDep).replace(/'/g,"\\'")+'\')">📋 Create loadsheet</button>';
+    } // /open
     h+='</div>';
   });
   h+='</div>';
@@ -13369,45 +13533,74 @@ window.rezdyLoadManifest=async function(){
   }catch(e){S._rzManPax=S._rzManPax||[];S._rzManPic=S._rzManPic||{};S._rzManFuel=S._rzManFuel||{};S._rzManHidden=S._rzManHidden||[];S._rzManSeats=S._rzManSeats||{};S._rzManCargo=S._rzManCargo||{};}
   S._rzManLoaded=true;render();
 };
-// Push the day's checked-in bookings into the Manifest (from the Bookings tab). Loads the saved
-// manifest first (so manual pax / seating aren't clobbered), then runs the same pull.
+// The currently-selected Bookings departure (resolved the same way as _rzRenderBookings).
+function _rzCurBookingsDep(){
+  var deps=[];(S._rezdyBookings||[]).forEach(function(b){if(/cancel/i.test(b.status||''))return;var d=_rzBookingDep(b);if(deps.indexOf(d)<0)deps.push(d);});
+  deps.sort();
+  return (S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:(deps[0]||null);
+}
+// Push the SELECTED departure's checked-in bookings into the Seatmap (from the Bookings tab).
+// Departure-scoped — other departures already in the Seatmap are left untouched, and there's no
+// nag about bookings on other runs that aren't checked in.
 window.rezdyPushToManifest=async function(){
   if(!S._rezdyBookings){if(window.rezdyLoadBookings)window.rezdyLoadBookings();if(typeof toast==='function')toast('Loading bookings — tap Push again in a moment.','info');return;}
   if(!S._rzManLoaded&&window.rezdyLoadManifest){try{await window.rezdyLoadManifest();}catch(_){}}
-  window.rezdyManPull();
+  var dep=_rzCurBookingsDep();
+  window.rezdyManPull(dep);
+  if(dep)S._rzManDepFilter=dep; // focus the seatmap on the pushed departure
 };
-window.rezdyManPull=function(){
+// Pull checked-in pax into the Seatmap. With a departure scope, ONLY that departure's pax are
+// (re)built; pax from other departures and manually-added pax are preserved.
+window.rezdyManPull=function(depScope){
   if(!S._rezdyBookings){if(window.rezdyLoadBookings)window.rezdyLoadBookings();toast('Loading bookings — tap Push again in a moment.','info');return;}
   var existing={};(S._rzManPax||[]).forEach(function(p){existing[p.id]=p;});
-  var out=[],skipped=0;
+  var fresh=[];
   (S._rezdyBookings||[]).forEach(function(b){
     if(/cancel/i.test(b.status||''))return;
+    if(depScope&&_rzBookingDep(b)!==depScope)return; // only the pushed departure
     var order=String(b.orderNumber||'');
-    // Only CHECKED-IN passengers appear in the manifest (with captured names + ACTUAL weights).
+    // Only CHECKED-IN passengers appear in the seatmap (with captured names + weights).
     var ci=_rzCheckinPax(order);
-    if(!(S._rzBookingCheckedIn||{})[order]||!ci){skipped++;return;}
+    if(!(S._rzBookingCheckedIn||{})[order]||!ci)return;
     var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
     var acHint=_rzBookingAc(b,order);
     ci.forEach(function(r,i){
       var id=order+'|c'+i;var ex=existing[id];var isInf=r.type==='infant';
       // Weight = actual if captured, else the declared weight (Rezdy +4kg) flagged as declared.
+      // declared is ALSO kept on every pax so an aircraft can switch to all-declared mode.
       var hasA=!isInf&&r.actual!=null;var useDecl=!isInf&&!hasA&&r.declared!=null;
       var wv=isInf?'':(hasA?String(r.actual):(useDecl?String(r.declared):''));
-      out.push({id:id,name:r.name||'',weight:wv,declaredWeight:useDecl,type:isInf?'adult':(r.type==='child'?'child':'adult'),infantName:null,group:order,paymentReq:owing,ac:ex?ex.ac:null,acHint:acHint,infantOf:isInf?(r.attach!=null?order+'|c'+r.attach:undefined):(ex?ex.infantOf:undefined)});
+      fresh.push({id:id,name:r.name||'',weight:wv,declared:(r.declared!=null?r.declared:null),declaredWeight:useDecl,type:isInf?'adult':(r.type==='child'?'child':'adult'),infantName:null,group:order,paymentReq:owing,ac:ex?ex.ac:null,acHint:acHint,infantOf:isInf?(r.attach!=null?order+'|c'+r.attach:undefined):(ex?ex.infantOf:undefined)});
     });
   });
   // Lap infants follow their host's aircraft (they aren't seated).
-  out.forEach(function(p){if(p.infantOf){var host=out.find(function(x){return x.id===p.infantOf;});if(host)p.ac=host.ac;}});
-  (S._rzManPax||[]).forEach(function(p){if(String(p.id).indexOf('m_')===0)out.push(p);}); // keep manually-added
-  S._rzManPax=out;_rzManSave();
-  toast(out.length+' checked-in pax loaded'+(skipped?' · '+skipped+' booking'+(skipped===1?'':'s')+' not checked in':''),skipped?'warn':'ok');
+  fresh.forEach(function(p){if(p.infantOf){var host=fresh.find(function(x){return x.id===p.infantOf;});if(host)p.ac=host.ac;}});
+  // Preserve manual pax + (when scoped) every other departure's pax; replace only this departure.
+  var freshIds={};fresh.forEach(function(p){freshIds[p.id]=1;});
+  var keep=(S._rzManPax||[]).filter(function(p){
+    if(freshIds[p.id])return false;                       // refreshed below
+    if(String(p.id).indexOf('m_')===0)return true;        // manually-added pax stay
+    if(depScope)return _rzPaxDep(p)!==depScope;            // other departures stay
+    return false;                                         // full refresh when unscoped
+  });
+  S._rzManPax=keep.concat(fresh);_rzManSave();
+  toast(fresh.length+' checked-in pax pushed to seatmap'+(depScope&&depScope!=='—'?' · '+depScope:''),'ok');
   render();
+};
+// Collapse / expand an aircraft card on the seatmap (per departure + aircraft).
+window.rezdyManToggleCard=function(id){
+  var dep=_rzManSelDep();var key=dep+'|'+id;
+  var has=(S._rzManPax||[]).filter(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===dep;}).length>0;
+  S._rzManCardOpen=S._rzManCardOpen||{};
+  var cur=S._rzManCardOpen[key];var eff=(cur!=null)?cur:has;
+  S._rzManCardOpen[key]=!eff;render();
 };
 window.rezdyManAdd=function(){
   var nm=prompt('Passenger name:');if(nm==null)return;
   var wt=prompt('Weight (kg) — leave blank for TBC:')||'';
   S._rzManPax=S._rzManPax||[];
-  S._rzManPax.push({id:'m_'+Date.now()+'_'+Math.floor(Math.random()*1e4),name:String(nm).trim(),weight:String(wt).replace(/[^0-9.]/g,''),type:'adult',infantName:null,group:'manual',paymentReq:false,ac:null});
+  var dep=_rzManSelDep(); // drop into the departure currently in view (not a new '—' departure)
+  S._rzManPax.push({id:'m_'+Date.now()+'_'+Math.floor(Math.random()*1e4),name:String(nm).trim(),weight:String(wt).replace(/[^0-9.]/g,''),type:'adult',infantName:null,group:'manual',_dep:(dep&&dep!=='—')?dep:null,paymentReq:false,ac:null});
   _rzManSave();render();
 };
 window.rezdyManDragStart=function(id,e){S._rzManDrag=id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}};
@@ -13463,7 +13656,7 @@ window.rezdyManRemove=function(id){
 };
 window.rezdyManClear=function(){if(!confirm('Clear the whole manifest for this day?'))return;S._rzManPax=[];S._rzManSeats={};_rzManSave();render();};
 // Enter / edit a passenger's ACTUAL weight directly in the manifest.
-window.rezdyManEditWeight=function(id){var p=(S._rzManPax||[]).find(function(x){return x.id===id;});if(!p)return;var v=prompt('Actual weight (kg) for '+(p.name||'passenger')+':',p.weight||'');if(v==null)return;p.weight=String(v).replace(/[^0-9.]/g,'');var dep=_rzPaxDep(p);if(p.ac&&typeof window.rezdyManReseat==='function')window.rezdyManReseat(dep,p.ac);_rzManSave();render();};
+window.rezdyManEditWeight=function(id){var p=(S._rzManPax||[]).find(function(x){return x.id===id;});if(!p)return;var v=prompt('Actual weight (kg) for '+(p.name||'passenger')+':',p.weight||'');if(v==null)return;p.weight=String(v).replace(/[^0-9.]/g,'');if(p.weight)p.declaredWeight=false;var dep=_rzPaxDep(p);if(p.ac&&typeof window.rezdyManReseat==='function')window.rezdyManReseat(dep,p.ac);_rzManSave();render();};
 
 // ── Manifest: departure scoping, seat allocation (W&B solver), per-aircraft W&B ──
 function _rzManDepInfo(order){
@@ -13471,7 +13664,9 @@ function _rzManDepInfo(order){
   if(!b)return null;
   return {dep:_rzBookingDep(b),prod:_rzProduct((((b.items||[])[0]||{}).product)||'')};
 }
-function _rzPaxDep(p){if(!p)return '—';var i=_rzManDepInfo(p.group);return (i&&i.dep)||'—';}
+function _rzPaxDep(p){if(!p)return '—';if(p._dep)return p._dep;var i=_rzManDepInfo(p.group);return (i&&i.dep)||'—';}
+// The departure currently focused on the seatmap (defaults to the first one present).
+function _rzManSelDep(){var deps=_rzManDeps();return (S._rzManDepFilter&&deps.indexOf(S._rzManDepFilter)>=0)?S._rzManDepFilter:(deps[0]||'—');}
 // Distinct departures present in the manifest, sorted.
 function _rzManDeps(){
   var set={};(S._rzManPax||[]).forEach(function(p){if(!p.infantOf)set[_rzPaxDep(p)]=1;});
@@ -13484,6 +13679,17 @@ function _rzManDepLabel(dep){
 }
 function _rzSeatKey(dep,acId){return String(dep||'—')+'|'+acId;}
 function _rzManSeatsFor(dep,acId){S._rzManSeats=S._rzManSeats||{};return S._rzManSeats[_rzSeatKey(dep,acId)]||{};}
+// An aircraft must use ONE weight basis for all pax (except the PIC): all ACTUAL, or all DECLARED.
+// If any seated/allocated pax on this aircraft lacks an actual weight, the whole aircraft falls
+// back to declared weights. Returns true = declared mode.
+function _rzManDeclMode(dep,acId){
+  var list=(S._rzManPax||[]).filter(function(p){return p.ac===acId&&!p.infantOf&&_rzPaxDep(p)===dep;});
+  if(!list.length)return false;
+  return list.some(function(p){return !!p.declaredWeight;});
+}
+// The weight to use for a pax given the aircraft's mode (declared overrides actual when in
+// declared mode and a declared value exists).
+function _rzPaxWeight(p,declMode){return (declMode&&p&&p.declared!=null)?p.declared:(p?p.weight:'');}
 // Build a loadsheet form for one departure's aircraft so we can run the shared W&B engine.
 function _rzManAcForm(dep,acId){
   var a=S.aircraft[acId];if(!a)return null;
@@ -13493,7 +13699,8 @@ function _rzManAcForm(dep,acId){
   var fuelDisp=(S._rzManFuel&&S._rzManFuel[acId]!=null&&S._rzManFuel[acId]!=='')?S._rzManFuel[acId]:fromKg(a.fuelKg,acId);
   form.fuel=String(toKg(fuelDisp,acId));
   var seats=_rzManSeatsFor(dep,acId);
-  Object.keys(seats).forEach(function(idx){var p=(S._rzManPax||[]).find(function(x){return x.id===seats[idx];});if(!p)return;form.names[idx]=p.name||'';form.seats[idx]=(p.weight!=null&&p.weight!=='')?String(p.weight):'';if(p.type==='child')form.paxType[idx]='C';});
+  var declMode=_rzManDeclMode(dep,acId);
+  Object.keys(seats).forEach(function(idx){var p=(S._rzManPax||[]).find(function(x){return x.id===seats[idx];});if(!p)return;form.names[idx]=p.name||'';var wv=_rzPaxWeight(p,declMode);form.seats[idx]=(wv!=null&&wv!=='')?String(wv):'';if(p.type==='child')form.paxType[idx]='C';});
   var cargo=_rzManCargoFor(dep,acId);form.cargo=form.cargo||{};Object.keys(cargo).forEach(function(zi){form.cargo[zi]=String(cargo[zi]);});
   return form;
 }
@@ -13561,6 +13768,7 @@ function _rzManSeatGrid(dep,acId,col){
   var rows=(typeof acLayout==='function')?acLayout(acId):[];
   if(!rows.length)return '';
   var seats=_rzManSeatsFor(dep,acId);
+  var declMode=_rzManDeclMode(dep,acId);
   var byId={};(S._rzManPax||[]).forEach(function(p){byId[p.id]=p;});
   var picCode=(S._rzManPic||{})[acId]||'';var pic=picCode?_rzPilotByCode(picCode):null;
   var depE=_rzEsc(dep).replace(/'/g,"\\'"),acE=acId.replace(/'/g,"\\'");
@@ -13581,8 +13789,9 @@ function _rzManSeatGrid(dep,acId,col){
       if(p){
         var gcol=_rzGroupColor(p.group||'');
         var nm=_rzEsc(String(p.name||'').split(/\s+/)[0]);
-        var tbc=!p.weight;var decld=!tbc&&!!p.declaredWeight;
-        var wTxt=tbc?'TBC':(_rzEsc(String(p.weight))+'kg'+(decld?' (d)':''));
+        var wv=_rzPaxWeight(p,declMode);
+        var tbc=(wv==null||wv==='');var decld=!tbc&&declMode;
+        var wTxt=tbc?'TBC':(_rzEsc(String(wv))+'kg'+(decld?' (d)':''));
         var wCol=tbc?'#b45309':(decld?'#dc2626':'#15803d');
         var isChild=p.type==='child';var inf=(S._rzManPax||[]).find(function(x){return x.infantOf===p.id;});var infN=p.infantName||(inf?String(inf.name||'').split(/\s+/)[0]:null);
         var idEsc=_rzEsc(p.id).replace(/'/g,"\\'");
@@ -13605,10 +13814,11 @@ function _rzManSeatGrid(dep,acId,col){
 // W&B readout chip for a departure's aircraft.
 function _rzManWBReadout(dep,acId){
   var wb=_rzManAcWB(dep,acId);if(!wb)return '';
-  var okT=wb.towOk,okC=wb.cogOk,ok=okT&&okC;
+  var okT=wb.towOk,okL=wb.lwOk,okC=wb.cogOk,ok=okT&&okL&&okC;
   var c=ok?'#4ade80':'#ef4444';
   return '<div style="font-size:10px;font-weight:700;color:'+c+';margin-bottom:6px;display:flex;gap:8px;flex-wrap:wrap">'+
     '<span>TOW '+Math.round(wb.tow)+'kg'+(okT?'':' ⚠')+'</span>'+
+    '<span>LDW '+Math.round(wb.lw)+'kg'+(okL?'':' ⚠')+'</span>'+
     '<span>CG '+(wb.towCog!=null?wb.towCog.toFixed(3):'—')+(okC?'':' ⚠')+'</span>'+
     '<span style="color:'+c+'">'+(ok?'✓ in envelope':'⚠ check W&B')+'</span></div>';
 }

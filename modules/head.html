@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="True South FMS">
 <meta name="theme-color" content="#0f1117">
 <meta name="mobile-web-app-capable" content="yes">
+<script>(function(){try{if(localStorage.getItem('ts_theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
 <title>True South FMS</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -21,12 +22,30 @@
 :root{
   --bg:#1a1f2e;--card:#0f172a;--card2:#080d14;--border:#1e293b;--border2:#334155;
   --text:#f1f5f9;--text2:#cbd5e1;--text3:#94a3b8;
-  --sky:#7B9EC6;--sky2:#4A6D96;
+  --sky:#7B9EC6;--sky2:#4A6D96;--accent:#7B9EC6;--acc:#7B9EC6;
+  --appbg:#0f172a;
   --ok-bg:#052e16;--ok-border:#166534;--ok-text:#86efac;
   --warn-bg:#1c1003;--warn-border:#854d0e;--warn-text:#fcd34d;
   --err-bg:#2d0a0a;--err-border:#7f1d1d;--err-text:#fca5a5;
 }
-html,body{height:100%;min-height:100dvh;min-height:-webkit-fill-available;background:#0f172a;color:var(--text);font-family:'Barlow',sans-serif;}
+/* ── Light theme ── flips the core palette; subtle white overlays used inline stay faint but
+   readable. Toggled by setting data-theme="light" on <html>. */
+html[data-theme="light"]{
+  --bg:#eef2f7;--card:#ffffff;--card2:#f1f5f9;--border:#dbe2ea;--border2:#c2ccd8;
+  --text:#0f172a;--text2:#334155;--text3:#64748b;
+  --accent:#3f6390;--acc:#3f6390;--appbg:#eef2f7;
+  --ok-bg:#dcfce7;--ok-border:#86efac;--ok-text:#166534;
+  --warn-bg:#fef9c3;--warn-border:#fde047;--warn-text:#854d0e;
+  --err-bg:#fee2e2;--err-border:#fca5a5;--err-text:#991b1b;
+}
+html[data-theme="light"] .sub-tab{background:#e2e8f0;color:#475569;border-color:#cbd5e1;}
+html[data-theme="light"] .sub-tab:hover{background:#d4dde8;color:#1e293b;}
+html[data-theme="light"] .sub-tab.on{background:#3f6390;border-color:#3f6390;color:#fff;}
+html[data-theme="light"] .nav-tab.off{background:#e2e8f0;color:#475569;}
+html[data-theme="light"] .nav-tab.off:hover{background:#d4dde8;}
+html[data-theme="light"] .btn-ghost:hover{background:#e2e8f0;}
+html[data-theme="light"] input[type=date]::-webkit-calendar-picker-indicator{filter:none;}
+html,body{height:100%;min-height:100dvh;min-height:-webkit-fill-available;background:var(--appbg);color:var(--text);font-family:'Barlow',sans-serif;}
 /* ── Width safety: the page itself must NEVER scroll sideways on a phone. ──
    overflow-x:clip (not hidden) avoids creating a scroll container, so it won't
    break position:sticky or vertical scrolling. Long words/emails wrap instead of

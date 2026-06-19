@@ -299,6 +299,18 @@ function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r
 function _crewForUser(u){if(!u)return null;return (S.crew||[]).find(function(c){return c.n===u.name||c.n===u.linkedCrew;})||null;}
 function _picEligible(u){var cr=_crewForUser(u);return !!(cr&&cr.endorse&&cr.endorse.length);}
 window._picEligible=_picEligible;window._crewForUser=_crewForUser;
+// ── Light / dark theme ── persisted in localStorage, applied to <html data-theme>. Dark is the
+// default (no attribute); light is opt-in. An early inline script in head.html applies the saved
+// choice before first paint to avoid a flash.
+function _themeIsLight(){try{return document.documentElement.getAttribute('data-theme')==='light';}catch(e){return false;}}
+window._themeIsLight=_themeIsLight;
+window.toggleTheme=function(){
+  try{
+    if(_themeIsLight()){document.documentElement.removeAttribute('data-theme');localStorage.setItem('ts_theme','dark');}
+    else{document.documentElement.setAttribute('data-theme','light');localStorage.setItem('ts_theme','light');}
+  }catch(e){}
+  if(typeof render==='function')render();
+};
 // True while the Admin > Permissions grid is actively on screen (renderAdminPerms bumps
 // S._permsPageTs on every render). While editing, background reloads must NOT overwrite
 // S.rolePerms or they wipe unsaved ticks (the 5s edit-timer alone is not enough — a
@@ -377,7 +389,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.56';
+const APP_VER='v23.58';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
