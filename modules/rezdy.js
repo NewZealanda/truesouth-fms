@@ -1564,12 +1564,16 @@ function _rzRenderManifest(){
   }
   // Departure tabs (e.g. "0800 FCF") — one departure at a time.
   if(deps.length>1||(deps.length===1&&deps[0]!=='—')){
-    h+='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch;scrollbar-width:none">';
+    h+='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center">';
     deps.forEach(function(d){var cnt=pax.filter(function(p){return !p.infantOf&&_rzPaxDep(p)===d;}).length;h+='<button onclick="S._rzManDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" class="sub-tab '+(selDep===d?'on':'')+'" style="white-space:nowrap;flex-shrink:0">🛫 '+_rzManDepLabel(d)+' <span style="opacity:.6">('+cnt+')</span></button>';});
+    // Un-merge the selected departure if it's a combined group.
+    if(selDep&&String(selDep).indexOf('+')>=0){h+='<button onclick="window.rezdyManSplitDep(\''+_rzEsc(selDep).replace(/'/g,"\\'")+'\')" title="Split this combined departure back apart" style="flex-shrink:0;white-space:nowrap;font-size:11px;font-weight:800;padding:5px 11px;border-radius:14px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer">⤬ Unmerge</button>';}
     h+='</div>';
   }
   h+='<div class="card" ondragover="event.preventDefault();this.style.outline=\'2px solid var(--acc)\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.rezdyManDrop(\'__pool__\',event)" style="padding:10px 12px">'+
-    '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:8px">Unallocated ('+pool.length+')</div>';
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">Unallocated ('+pool.length+')</span>'+
+    (pool.length?'<button onclick="window.rezdyManAllocate()" title="Auto-allocate these passengers to aircraft" style="margin-left:auto;font-size:11px;font-weight:800;padding:5px 12px;border-radius:14px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer">✈ Reallocate</button>':'')+
+    '</div>';
   if(!pool.length)h+='<div style="font-size:12px;color:var(--text3);min-height:46px">All allocated. Push checked-in bookings from the Bookings tab, or add a passenger.</div>';
   else{
     // Group the pool by the aircraft noted on the booking, then by booking group.
@@ -1971,20 +1975,27 @@ function _rzReserveCoSeat(sm,acId){
   var pid=sm[1];delete sm[1];if(free!=null)sm[free]=pid; // else pid becomes unseated overflow
 }
 function _rzManCap(id){var a=S.aircraft[id];return (a&&a.seats)?paxSeatIdxs(id).length:0;}
-// Allocate this departure's unallocated passengers to aircraft (booking-noted aircraft first,
-// else first with capacity), then seat each aircraft via the W&B engine.
+// Allocate this departure's unallocated passengers to aircraft using the same rules as the main
+// seatmap allocator: a booking-noted aircraft (acHint) acts like a pin; the rest keep their
+// booking group together, heaviest first, and flow to the aircraft with the most spare capacity
+// (load-balanced across the fleet). Each aircraft is then seated by the shared W&B engine.
 window.rezdyManAllocate=function(){
   var dep=S._rzManDepFilter;if(!dep){var ds=_rzManDeps();dep=ds[0];}
-  var unalloc=(S._rzManPax||[]).filter(function(p){return !p.ac&&!p.infantOf&&_rzPaxDep(p)===dep;});
+  var pax=S._rzManPax||[];
+  var unalloc=pax.filter(function(p){return !p.ac&&!p.infantOf&&_rzPaxDep(p)===dep;});
   if(!unalloc.length){if(typeof toast==='function')toast('Nothing to allocate for '+dep+'.','info');return;}
   var fleet=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id]&&(S._rzManHidden||[]).indexOf(id)<0;});
-  function load(id){return (S._rzManPax||[]).filter(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===dep;}).length;}
-  unalloc.forEach(function(p){
-    var hint=(p.acHint&&fleet.indexOf(p.acHint)>=0)?p.acHint:null;
-    var target=(hint&&load(hint)<_rzManCap(hint))?hint:null;
-    if(!target){for(var i=0;i<fleet.length;i++){if(load(fleet[i])<_rzManCap(fleet[i])){target=fleet[i];break;}}}
-    if(target){p.ac=target;(S._rzManPax||[]).forEach(function(x){if(x.infantOf===p.id)x.ac=target;});}
-  });
+  var cap={},load={};fleet.forEach(function(id){cap[id]=_rzManCap(id);load[id]=pax.filter(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===dep;}).length;});
+  function free(id){return cap[id]-load[id];}
+  function place(p,id){p.ac=id;load[id]++;pax.forEach(function(x){if(x.infantOf===p.id)x.ac=id;});} // lap infants follow the host
+  // 1) Honour the booking-noted aircraft when it still has room (a pin).
+  var unpinned=[];
+  unalloc.forEach(function(p){var hint=(p.acHint&&fleet.indexOf(p.acHint)>=0)?p.acHint:null;if(hint&&free(hint)>0)place(p,hint);else unpinned.push(p);});
+  // 2) Keep groups together, heaviest first.
+  unpinned.sort(function(a,b){if((a.group||'')!==(b.group||''))return String(a.group||'').localeCompare(String(b.group||''));return (parseFloat(b.weight||0))-(parseFloat(a.weight||0));});
+  // 3) Each flows to the aircraft with the MOST spare capacity.
+  unpinned.forEach(function(p){var best=fleet.filter(function(id){return free(id)>0;}).sort(function(a,b){return free(b)-free(a);})[0];if(best)place(p,best);else if(typeof toast==='function')toast('No seat left for '+(p.name||'a passenger')+' — add an aircraft.','warn');});
+  // 4) Seat each aircraft (groups together, heavy-front for CoG).
   fleet.forEach(function(id){window.rezdyManReseat(dep,id);});
   _rzManSave();render();
   if(typeof toast==='function')toast('Allocated '+unalloc.length+' to aircraft','ok');
