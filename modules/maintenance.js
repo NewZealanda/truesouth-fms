@@ -120,6 +120,9 @@ function _saveMaintObs(){
 // Defense-in-depth: gate every maintenance write on the maint_bookings permission
 // (the UI hides the controls; this stops console/edge-case writes too).
 function _maintGuard(){if(typeof hasRolePerm==='function'&&!hasRolePerm('maint_bookings')){toast('Not authorised to edit maintenance.','warn');return false;}return true;}
+// Daily ADAS-download / comp-wash ticks are an operational task pilots do — allow anyone with
+// maintenance VIEW (e.g. pilots), not only maint_bookings editors.
+function _maintTickGuard(){if(typeof hasRolePerm==='function'&&!hasRolePerm('maintenance')&&!hasRolePerm('maint_bookings')){toast('Not authorised.','warn');return false;}return true;}
 window.maintObsAdd=function(){
   if(!_maintGuard())return;
   var el=document.getElementById('obs-new-text');var txt=el?el.value.trim():(S._obsNewText||'').trim();
@@ -914,14 +917,14 @@ window.addMaintEntry=function(){
   toast('Entry saved: '+ac+' '+hours+'hrs on '+fmtMaintDate(date),'ok');auditLog('maint_entry_add',{date:date,ac:ac,ttis:hours,starts:starts,landings:landings,oil:oil});S.appMsg=null;render();
 };
 window.toggleCWLog=function(date,ac){
-  if(!_maintGuard())return;
+  if(!_maintTickGuard())return;
   if(!S.maintenance.compwash)S.maintenance.compwash={};
   var arr=S.maintenance.compwash[ac]||[];if(!Array.isArray(arr))arr=arr?[arr]:[];
   var ix=arr.indexOf(date);if(ix>=0)arr.splice(ix,1);else arr.push(date);
   S.maintenance.compwash[ac]=arr;auditLog('maint_compwash_toggle',{date:date,ac:ac});saveMaintenance();render();
 };
 window.toggleADASLog=function(date,ac){
-  if(!_maintGuard())return;
+  if(!_maintTickGuard())return;
   if(!S.maintenance.adas)S.maintenance.adas={};
   var arr=S.maintenance.adas[ac]||[];if(!Array.isArray(arr))arr=arr?[arr]:[];
   var ix=arr.indexOf(date);if(ix>=0)arr.splice(ix,1);else arr.push(date);
