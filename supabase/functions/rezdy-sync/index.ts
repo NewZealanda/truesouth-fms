@@ -87,8 +87,17 @@ serve(async (req) => {
   const date = (body.date || "").trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ ok: false, error: "missing_or_bad_date" }, 400)
 
-  const minT = `${date}T00:00:00Z`
-  const maxT = `${date}T23:59:59Z`
+  // Rezdy's min/maxTourStartTime filter is in UTC, but our tour "day" is NZ-local
+  // (UTC+12 NZST / +13 NZDT). A plain ${date}T00:00:00Z..23:59:59Z window therefore
+  // straddles two NZ days and pulls the NEXT morning's tours into this date. Query a
+  // day either side so nothing on the boundary is missed, then keep only the bookings
+  // whose LOCAL start date actually matches `date` (DST-proof — no fixed offset).
+  const shiftDay = (d: string, days: number) => {
+    const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + days)
+    return t.toISOString().slice(0, 10)
+  }
+  const minT = `${shiftDay(date, -1)}T00:00:00Z`
+  const maxT = `${shiftDay(date, 1)}T23:59:59Z`
 
   const all: any[] = []
   let offset = 0
@@ -109,9 +118,19 @@ serve(async (req) => {
     offset += 100
   }
 
-  const norm = all.map(normalize).filter((n) => n.id)
+  const normAll = all.map(normalize).filter((n) => n.id)
+
+  // Keep only bookings whose LOCAL tour start date matches the requested NZ day.
+  // startTimeLocal looks like "2026-06-21 09:30:00" or "2026-06-21T09:30:00".
+  const localDate = (s: string) => String(s || "").slice(0, 10).replace(/\//g, "-")
+  const norm = normAll.filter((n) =>
+    (n.items || []).some((it: any) => localDate(it.startTimeLocal) === date)
+  )
 
   if (body.store !== false) {
+    // This sync is authoritative for the date: clear the date's existing rows first so any
+    // previously mis-dated bookings (the off-by-one) are removed, then write the fresh set.
+    try { await admin.from("ts_rezdy_bookings").delete().eq("tour_date", date) } catch (_) { /* keep going */ }
     for (const n of norm) {
       try {
         await admin.from("ts_rezdy_bookings").upsert(
