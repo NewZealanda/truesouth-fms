@@ -160,9 +160,17 @@ function _rzRow(r){return (r&&r.data)?r.data:r||{};}
 // hide marketplace bookings whose order number is NOT a TSF order.
 function _rzMapBookings(rows){
   return (rows||[]).map(_rzRow).filter(Boolean).filter(function(b){
-    var src=String((b&&b.source)||'').toUpperCase();
     var on=String((b&&b.orderNumber)||'');
-    if(src.indexOf('MARKETPLACE_PREF_RATE')>=0&&on&&!/^TSF/i.test(on))return false;
+    // Supplier-side marketplace duplicate (e.g. the Tasman Glacier Heli Hike component): real
+    // customer orders always carry a "TSF…" number; the duplicate component has an auto-generated
+    // non-TSF reference. We check the RAW source code (sourceCode) since the display `source` now
+    // resolves to the agent name (Viator/BookMe/…). Older cached rows have no sourceCode yet, so
+    // for those the non-TSF order number alone is the reliable signature (synced rows only —
+    // manual bookings are merged separately and never reach here).
+    if(on&&!/^TSF/i.test(on)){
+      var rawCode=String((b&&b.sourceCode)||'');
+      if(!rawCode||/MARKETPLACE/i.test(rawCode))return false;
+    }
     return true;
   });
 }

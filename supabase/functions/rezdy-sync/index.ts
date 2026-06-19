@@ -75,6 +75,7 @@ function normalize(b: any) {
     comments: b.comments || "",
     fields: fieldsToObj(b.fields), // booking-level custom fields (e.g. Special Requirements)
     source: _resolvedSource,
+    sourceCode: _rawSource, // raw Rezdy source (e.g. MARKETPLACE_PREF_RATE) — used to drop supplier-side duplicates
     totalPax: items.reduce((s: number, i: any) => s + (i.quantity || 0), 0),
     totalAmount, totalPaid,
     balanceDue: Math.max(0, totalAmount - totalPaid),
