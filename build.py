@@ -10,7 +10,6 @@ Modules (in order):
     head.html      HTML head, CSS, meta tags
     shared.js      State, DB, utility functions, calcFormWB
     shell.js       renderApp, renderOperations, presence/flash system
-    manifest.js    Manifest + seatmap (renderManifest, renderStep1/2, renderCabinSVG)
     loadsheet.js   renderLoadsheet
     saved.js       renderSaved
     charter.js     renderCharter, renderCharterRates
@@ -28,7 +27,6 @@ ORDER = [
     ('head',        'html'),
     ('shared',      'js'),
     ('shell',       'js'),
-    ('manifest',    'js'),
     ('loadsheet',  'js'),
     ('scratchpad',  'js'),
     ('aerodromes',  'js'),

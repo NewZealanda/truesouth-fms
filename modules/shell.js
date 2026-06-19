@@ -665,62 +665,14 @@ function _applyLsFlash(){
   _triggerFlash('flash-loadsheet');
 }
 function renderOperations(){
-  const role=S.user?.role||'desk';
   const opsTab=S.tab||'bookings';
-  const isLsView=!!(S.activeTabId||S._newLsTab);
-
-
-  // Level 3 LS tab pills — only shown when loadsheets view is active
-  var _l3='';
-  if(isLsView){
-    _l3='<div style="display:flex;gap:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin-bottom:10px;align-items:center;padding-bottom:2px">';
-    (S.lsTabs||[]).forEach(function(tab){
-      var _ac=tab.acId.replace('ZK-','');var _isAct=S.activeTabId===tab.id&&!S._newLsTab;
-      var _col=AC_COL[tab.acId]||'#64748b';var _signed=tab.status==='complete';
-      var _sel=!!(S._lsTabSel&&S._lsTabSel[tab.id]);
-      if(S._lsManageMode){
-        _l3+='<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;border:1px solid '+(_sel?'#ef4444':_col+'55')+';background:'+(_sel?'rgba(239,68,68,.15)':_col+'18')+';cursor:pointer;flex-shrink:0;font-size:11px;font-weight:700;color:'+(_sel?'#fca5a5':_col)+'"><input type="checkbox" '+(_sel?'checked':'')+' onchange="window.toggleLsTabSel(\''+tab.id+'\')" style="cursor:pointer">'+_ac+'</label>';
-      } else {
-        _l3+='<div draggable="true" ondragstart="window._lsDragStart(event,\''+tab.id+'\')" ondragover="event.preventDefault()" ondrop="window._lsDrop(event,\''+tab.id+'\')" ondragend="window._lsDragEnd&&window._lsDragEnd()" style="display:inline-flex;align-items:stretch;border-radius:8px;overflow:hidden;border:1.5px solid '+(_isAct?_col:_col+'55')+';flex-shrink:0;cursor:grab"><button tabindex="-1" onclick="window.switchLsTab(\''+tab.id+'\')" style="padding:4px 9px;font-size:11px;font-weight:700;background:'+(_isAct?_col+'55':_col+'18')+';border:none;cursor:pointer;color:'+(_isAct?_col:_col+'cc')+';white-space:nowrap">'+_ac+(_signed?' ✓':'')+' </button><button tabindex="-1" onclick="window.closeLsTab(\''+tab.id+'\')" style="padding:4px 7px;font-size:13px;line-height:1;background:'+(_isAct?_col+'33':_col+'0f')+';border:none;border-left:1px solid '+(_isAct?_col:_col+'44')+';cursor:pointer;color:'+(_isAct?_col:_col+'99')+'" title="Close">&#xd7;</button></div>';
-      }
-    });
-    if(S._lsManageMode){
-      var _sc=Object.values(S._lsTabSel||{}).filter(Boolean).length;
-      _l3+='<button tabindex="-1" onclick="window.deleteSelectedLsTabs()" '+(_sc?'':'disabled ')+' style="padding:4px 8px;border-radius:8px;border:1px solid #ef4444;background:rgba(239,68,68,.15);color:#fca5a5;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">Delete '+(_sc||0)+'</button>';
-      _l3+='<button tabindex="-1" onclick="window.toggleLsManage()" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:rgba(255,255,255,.5);font-size:11px;cursor:pointer;flex-shrink:0">Cancel</button>';
-    }
-    _l3+='<button tabindex="-1" onclick="window.newLsTab()" title="New Loadsheet" style="padding:4px 9px;font-size:15px;line-height:1;font-weight:700;background:'+(S._newLsTab?'rgba(124,58,237,.4)':'rgba(255,255,255,.08)')+';border:1px solid '+(S._newLsTab?'rgba(124,58,237,.8)':'rgba(255,255,255,.2)')+';border-radius:8px;cursor:pointer;color:'+(S._newLsTab?'#c084fc':'rgba(255,255,255,.45)')+';flex-shrink:0">+</button>';
-    _l3+='</div>';
-  }
-
-  // Content routing
-  // New Operations flow (Rezdy-powered): Bookings / Seatmap / Loadsheets. Checked first so the
-  // inline loadsheet editor (which sets S.activeTabId) doesn't fall into the legacy LS view.
-  if(opsTab==='bookings'){try{return window.rezdyOpsBookings();}catch(e){return '<div class="card" style="color:var(--err-text)">Bookings error: '+e.message+'</div>';}}
+  // Content routing — the Rezdy-powered Operations flow: Bookings / Seatmap / Loadsheets.
+  // (The legacy manifest/seatmap/loadsheet-tab UI was retired in v23.76.)
   if(opsTab==='rseatmap'){try{return window.rezdyOpsSeatmap();}catch(e){return '<div class="card" style="color:var(--err-text)">Seatmap error: '+e.message+'</div>';}}
   if(opsTab==='rloadsheets'){try{return window.rezdyOpsLoadsheets();}catch(e){return '<div class="card" style="color:var(--err-text)">Loadsheets error: '+e.message+'</div>';}}
-  if(isLsView&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return _l3+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return _l3+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
-  if(S._newLsTab&&opsTab!=='saved'&&opsTab!=='seatmap'&&opsTab!=='charter'){return _l3+renderNewLsPanel();}
-  if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
   if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return renderSaved();}
   if(opsTab==='charter'){if(S._presSection)broadcastPresence(null);return '<div id="flash-charter">'+renderCharter()+'</div>';}
-  startPresenceBroadcast('manifest');return presBarH('manifest')+'<div id="flash-manifest">'+renderManifest()+'</div>';
-}
-
-function renderNewLsPanel(){
-  var aircraft=Object.values(S.aircraft);
-  var h='<div class="card"><div class="st">New Loadsheet</div>';
-  h+='<p style="font-size:13px;color:var(--text3);margin-bottom:14px">Select aircraft to create a new loadsheet.</p>';
-  h+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
-  aircraft.forEach(function(a){
-    var col=AC_COL[a.id]||'#64748b';
-    h+='<button onclick="window.createBlankLsTab(\''+a.id+'\')" style="padding:14px 22px;border-radius:12px;border:2px solid '+col+';background:'+col+'1a;color:'+col+';font-size:16px;font-weight:800;cursor:pointer;letter-spacing:.06em">'+a.id.replace('ZK-','')+'</button>';
-  });
-  h+='</div>';
-  h+='<div style="margin-top:14px;border-top:1px solid var(--border2);padding-top:14px">';
-  h+='<button onclick="S.section=\'operations\';S.tab=\'saved\';S.savedTab=\'loadsheets\';S._newLsTab=false;render()" style="padding:10px 18px;border-radius:10px;border:1.5px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">📂 Open Saved Loadsheet</button>';
-  h+='</div>';
-  h+='</div>';
-  return h;
+  // Default / fallback (including 'bookings' and any stale legacy tab id) → Bookings.
+  try{return window.rezdyOpsBookings();}catch(e){return '<div class="card" style="color:var(--err-text)">Bookings error: '+e.message+'</div>';}
 }
 

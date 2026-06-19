@@ -612,15 +612,7 @@ window.applyReset=async()=>{
   S.showReset=false;render();
 };
 
-window.switchToLoadsheets=function(){
-  if(S.lsTabs&&S.lsTabs.length){
-    if(!S.activeTabId)S.activeTabId=S.lsTabs[0].id;
-    S._newLsTab=false;
-  } else {
-    S._newLsTab=true;S.activeTabId=null;
-  }
-  S.section='operations';S.tab='loadsheet';render();
-};
+// (window.switchToLoadsheets removed in v23.76 — legacy loadsheet route retired.)
 window.switchOpsTab=function(tabId){
   if(S.section==='roster'&&typeof _rosterUnsaved==='function'&&_rosterUnsaved()){window._navAway(function(){window.switchOpsTab(tabId);});return;}
   S.activeTabId=null;S._newLsTab=false;
@@ -1778,7 +1770,7 @@ window.handleSubmit=async()=>{
   } else {S.tab='saved';}
   render();
 };
-window.newSheet=function(){S._newLsTab=true;S.activeTabId=null;S.tab='manifest';render();};
+// (window.newSheet removed in v23.76 — legacy loadsheet route retired.)
 
 // ── Drag-to-reorder loadsheet tabs ──
 window._lsDragStart=function(e,id){S._lsDrag=id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}};
@@ -1881,7 +1873,7 @@ function _execCloseLsTab(id,idx,tab,action){
   }
   window.saveWorkspace&&window.saveWorkspace();render();
 }
-window.newLsTab=function(){S._newLsTab=true;S.activeTabId=null;S.tab='manifest';render();};
+// (window.newLsTab removed in v23.76 — legacy loadsheet route retired.)
 window.toggleLsManage=function(){S._lsManageMode=!S._lsManageMode;S._lsTabSel={};render();};
 window.toggleLsTabSel=function(id){S._lsTabSel[id]=!S._lsTabSel[id];render();};
 window.deleteSelectedLsTabs=function(){

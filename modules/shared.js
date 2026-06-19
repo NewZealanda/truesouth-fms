@@ -395,7 +395,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.75';
+const APP_VER='v23.77';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -453,15 +453,32 @@ function _milfordFuelKg(acId){const a=_acSpec(acId);if(!a)return null;return a.l
 window._isMilford=_isMilford;window._milfordFuelKg=_milfordFuelKg;
 function burnToKg(v,acId){const a=_acSpec(acId);if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.layout==='ga8'||a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*AVGAS;if(a.burnDefUnit==='kg') return val;return val*LB;}
 function seat1IsCoPilot(acId){return !!((curDisp().acSetup||[]).find(s=>(s._seatmapKey||s.acId)===acId||s.acId===acId)?.coPilot);}
-function paxSeatIdxs(acId){const a=_acSpec(acId);if(!a||!a.seats)return[];const removed=a.removedSeats||[];return a.seats.map((_,i)=>i).filter(i=>i!==0&&!(i===1&&seat1IsCoPilot(acId))&&!removed.includes(i));}
+// coSeat1 (optional) forces seat 1 to be reserved for a co-pilot regardless of the legacy dispatch
+// (used by the Rezdy seatmap, whose co-pilot lives in S._rzManCoPic, not curDisp().acSetup).
+function paxSeatIdxs(acId,coSeat1){const a=_acSpec(acId);if(!a||!a.seats)return[];const removed=a.removedSeats||[];const co=(coSeat1==null)?seat1IsCoPilot(acId):coSeat1;return a.seats.map((_,i)=>i).filter(i=>i!==0&&!(i===1&&co)&&!removed.includes(i));}
 
 // Row pairs = seats at same arm (same physical row)
-function rowPairsForAc(acId){
+function rowPairsForAc(acId,coSeat1){
   const a=_acSpec(acId);if(!a||!a.seats)return[];
-  const idxs=paxSeatIdxs(acId);
+  const idxs=paxSeatIdxs(acId,coSeat1);
   const byArm={};
   idxs.forEach(i=>{if(!a.seats[i])return;const k=a.seats[i].arm.toFixed(4);if(!byArm[k])byArm[k]=[];byArm[k].push(i);});
   return Object.entries(byArm).sort((a,b)=>parseFloat(a[0])-parseFloat(b[0])).map(([,v])=>[...v].sort((a,b)=>a-b));
+}
+
+// CoG status → pill class (shared by the loadsheet W&B readout). Relocated from the retired
+// legacy manifest module so loadsheet.js keeps a live home for it.
+function cogPillClass(cog, cogMin, cogMax){
+  if(!cog||!cogMax) return 'pill-blue';   // unknown CoG (no data / misconfigured aircraft) — neutral, not a reassuring green
+  if(cog>cogMax||cog<cogMin) return 'pill-red';
+  const range=cogMax-cogMin;
+  const warnDist=range<100?1.0:1.4; // 1" airvan, 1.4" caravan
+  const warnMin=cogMin+warnDist; const warnMax=cogMax-warnDist;
+  const orangeDist=warnDist*0.5;
+  const orangeMax=cogMax-orangeDist; const orangeMin=cogMin+orangeDist;
+  if(cog>=orangeMax||cog<=orangeMin) return 'pill-orange';
+  if(cog>=warnMax||cog<=warnMin) return 'pill-warn';
+  return 'pill-green';
 }
 
 // ── W&B Calculations ──
@@ -526,9 +543,10 @@ function scoreAssign(acId,paxList){
 // ── Seat Assignment Engine ──
 // Rules: groups fill consecutive rows; heaviest groups front; solos to seat 1 if free; 
 // co-pilot seat used for odd-group overflow if no co-pilot assigned
-function assignSeats(acId,paxList){
+function assignSeats(acId,paxList,opts){
   const a=S.aircraft[acId];if(!a||!paxList.length)return{};
-  const rows=rowPairsForAc(acId); // [[idx,idx],...]  front-to-back
+  const coPilot=(opts&&opts.coSeat1!=null)?opts.coSeat1:seat1IsCoPilot(acId); // reserve seat 1 for a co-pilot
+  const rows=rowPairsForAc(acId,coPilot); // [[idx,idx],...]  front-to-back
   if(!rows.length)return{};
 
   const result={};
@@ -1641,7 +1659,7 @@ function initRealtime(){
             // the active loadsheet) — that loses their in-flight keystrokes. Background tab
             // copies still update, so it reconciles when they next blur/leave/reopen.
             var _lsAE=document.activeElement;
-            var _lsEditing=!!(_lsAE&&/^(INPUT|SELECT|TEXTAREA)$/.test(_lsAE.tagName||'')&&(S.tab==='loadsheet'||(S.tab||'').indexOf('ls_')===0));
+            var _lsEditing=!!(_lsAE&&/^(INPUT|SELECT|TEXTAREA)$/.test(_lsAE.tagName||'')&&(S.tab==='loadsheet'||S.tab==='rloadsheets'||(S.tab||'').indexOf('ls_')===0));
             // Find tab by ID (most reliable for aircraft changes) then fall back to acCode
             var _lsTF=null;
             if(_lsp.tabId)_lsTF=(S.lsTabs||[]).find(function(t){return t.id===_lsp.tabId;});

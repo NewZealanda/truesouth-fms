@@ -1886,9 +1886,9 @@ window.rezdyManDrop=function(ac,e){
   // Place into the first FREE pax seat (preserves everyone else's manual seating).
   if(dest){
     var key=_rzSeatKey(dep,dest);var sm=S._rzManSeats[key]||{};
-    var paxSeats=(typeof paxSeatIdxs==='function')?paxSeatIdxs(dest):[];var freeIdx=null;
     var _coSeat=((S._rzManCoPic||{})[dest])?1:-1; // seat 1 is the co-pilot's, never a pax
-    for(var i=0;i<paxSeats.length;i++){if(paxSeats[i]===_coSeat)continue;if(!sm[paxSeats[i]]){freeIdx=paxSeats[i];break;}}
+    var paxSeats=(typeof paxSeatIdxs==='function')?paxSeatIdxs(dest,_coSeat===1):[];var freeIdx=null;
+    for(var i=0;i<paxSeats.length;i++){if(!sm[paxSeats[i]]){freeIdx=paxSeats[i];break;}}
     if(freeIdx!=null){sm[freeIdx]=p.id;S._rzManSeats[key]=sm;}
   }
   _rzManSave();render();
@@ -1984,8 +1984,9 @@ function _rzManAcWB(dep,acId){try{var f=_rzManAcForm(dep,acId);return f?calcForm
 window.rezdyManReseat=function(dep,acId){
   var list=(S._rzManPax||[]).filter(function(p){return p.ac===acId&&!p.infantOf&&_rzPaxDep(p)===dep;});
   var paxList=list.map(function(p){return {id:p.id,weight:parseFloat(p.weight)||0,bag:0,group:p.group||''};});
-  var sm={};try{sm=assignSeats(acId,paxList)||{};}catch(e){sm={};}
-  if((S._rzManCoPic||{})[acId])_rzReserveCoSeat(sm,acId); // seat 1 belongs to the co-pilot
+  var _coPic=!!(S._rzManCoPic||{})[acId];
+  var sm={};try{sm=assignSeats(acId,paxList,{coSeat1:_coPic})||{};}catch(e){sm={};}
+  if(_coPic)_rzReserveCoSeat(sm,acId); // safety: ensure seat 1 stays clear for the co-pilot
   S._rzManSeats=S._rzManSeats||{};S._rzManSeats[_rzSeatKey(dep,acId)]=sm;
   return sm;
 };
@@ -1998,7 +1999,7 @@ function _rzReserveCoSeat(sm,acId){
   var free=null;for(var i=2;i<a.seats.length;i++){if(removed.indexOf(i)>=0)continue;if(!occ[i]){free=i;break;}}
   var pid=sm[1];delete sm[1];if(free!=null)sm[free]=pid; // else pid becomes unseated overflow
 }
-function _rzManCap(id){var a=S.aircraft[id];return (a&&a.seats)?paxSeatIdxs(id).length:0;}
+function _rzManCap(id){var a=S.aircraft[id];return (a&&a.seats)?paxSeatIdxs(id,!!(S._rzManCoPic||{})[id]).length:0;}
 // Allocate this departure's unallocated passengers to aircraft using the same rules as the main
 // seatmap allocator: a booking-noted aircraft (acHint) acts like a pin; the rest keep their
 // booking group together, heaviest first, and flow to the aircraft with the most spare capacity
@@ -2009,8 +2010,8 @@ window.rezdyManAllocate=function(){
   var unalloc=pax.filter(function(p){return !p.ac&&!p.infantOf&&_rzPaxDep(p)===dep;});
   if(!unalloc.length){if(typeof toast==='function')toast('Nothing to allocate for '+dep+'.','info');return;}
   var fleet=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id]&&(S._rzManHidden||[]).indexOf(id)<0;});
-  // Capacity = pax seats minus the co-pilot seat when one is assigned (so we don't over-allocate by one).
-  var cap={},load={};fleet.forEach(function(id){cap[id]=_rzManCap(id)-(((S._rzManCoPic||{})[id])?1:0);load[id]=pax.filter(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===dep;}).length;});
+  // _rzManCap already excludes the co-pilot's seat 1 when one is assigned, so don't over-allocate.
+  var cap={},load={};fleet.forEach(function(id){cap[id]=_rzManCap(id);load[id]=pax.filter(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===dep;}).length;});
   function free(id){return cap[id]-load[id];}
   function place(p,id){p.ac=id;load[id]++;pax.forEach(function(x){if(x.infantOf===p.id)x.ac=id;});} // lap infants follow the host
   // 1) Honour the booking-noted aircraft when it still has room (a pin).
