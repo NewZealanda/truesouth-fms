@@ -1609,6 +1609,9 @@ window.lsUndo=function(){
   autoSaveLS();autoSaveDispatch();render();
 };
 window.lsPIC=v=>{S.form.pic=v;const c=anyCrewList().find(x=>x.n===v);if(c&&c.w){S.form.seats[0]=String(c.w);S.form.names[0]=v;}else{S.form.names[0]=v;}autoSaveLS();render();};
+// Draggable PIC pool → drag a pilot bubble onto the PIC slot to set them as PIC.
+window.lsPilotDragStart=function(e,name){S._lsPilotDrag=name;try{e.dataTransfer.effectAllowed='copy';e.dataTransfer.setData('text/plain',name);}catch(_){}};
+window.lsPicDrop=function(e){var name=S._lsPilotDrag;S._lsPilotDrag=null;try{if(!name&&e&&e.dataTransfer)name=e.dataTransfer.getData('text/plain');}catch(_){}if(name&&typeof window.lsPIC==='function')window.lsPIC(name);};
 window.lsCoPilot=v=>{
   const f=S.form;
   // Save displaced seat-1 passenger to unallocated before overwriting
@@ -2320,6 +2323,13 @@ window.handleEtdSel=function(v,key){
   if(v==='other'){
     if(obj){obj.etdCustom=true;obj.etd='';}
   } else {
+    // A 1530 departure that isn't already Milford → offer to set it up as a flyback (return leg).
+    if(key==='form'&&v==='15:30'&&obj&&typeof _isMilford==='function'&&!_isMilford(obj.dep)){
+      if(confirm('Flybacks? Selecting yes will prefill fuel and departure points.')){
+        obj.dep='NZMF';obj.dest='NZQN';S._lsOther_dep=false;S._lsOther_dest=false;
+        if(obj.ac){var _mf=_milfordFuelKg(obj.ac);if(_mf!=null)obj.fuel=String(_mf);}
+      }
+    }
     if(obj){obj.etd=v;obj.etdCustom=false;}
   }
   if(key==='dispatch'){autoSaveDispatch();render();}

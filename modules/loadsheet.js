@@ -638,8 +638,12 @@ function renderLoadsheet(){
         ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){var col=AC_COL['ZK-'+ac]||'#64748b';return'<button style="font-size:10px;padding:3px 9px;border-radius:6px;border:1.5px solid '+col+';background:transparent;color:'+col+';font-weight:700;cursor:pointer" onclick="window.changeLsAircraft(\'ZK-'+ac+'\')">'+ac+'</button>';}).join('')}
       </div>
     </div>
+    ${_lsPilots.length?`<div style="background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:8px 10px;margin-bottom:8px">
+      <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">${f.ac.replace('ZK-','')}-rated pilots — drag onto PIC</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${_lsPilots.map(function(c){var nm=(c.n||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');var lbl=(c.code||(c.n||'').split(/\\s+/)[0]||'').toString();return '<div draggable="true" ondragstart="window.lsPilotDragStart(event,\''+nm+'\')" title="'+(c.n||'')+(c.w?' ('+c.w+'kg)':'')+'" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:16px;background:rgba(96,165,250,.14);border:1px solid rgba(96,165,250,.5);cursor:grab;font-size:12px;font-weight:800;color:#60a5fa">✈ '+lbl+(c.w?' <span style=\\"opacity:.7;font-weight:600\\">'+c.w+'kg</span>':'')+'</div>';}).join('')}</div>
+    </div>`:''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-      <div style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
+      <div ondragover="event.preventDefault();this.style.outline='2px solid #60a5fa'" ondragleave="this.style.outline=''" ondrop="event.preventDefault();this.style.outline='';window.lsPicDrop(event)" style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">PIC</div>
         <select class="fi" onchange="lsPIC(this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)"><option value="">&#x2014; select &#x2014;</option>${crewOpts}</select>
       </div>

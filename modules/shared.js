@@ -371,6 +371,8 @@ window.setLsRouteField=function(field,val){
   if(!S.form)return;
   if(val==='__other__'){S['_lsOther_'+field]=true;if(_isKnownApt(S.form[field]))S.form[field]='';}
   else{S['_lsOther_'+field]=false;S.form[field]=val;}
+  // A Milford departure prefills the reduced Milford fuel default for the aircraft.
+  if(field==='dep'&&_isMilford(S.form[field])&&S.form.ac){var _mf=_milfordFuelKg(S.form.ac);if(_mf!=null)S.form.fuel=String(_mf);}
   S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();safeRender();
 };
 function aptOpts(sel, isOther){
@@ -389,7 +391,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.68';
+const APP_VER='v23.69';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -440,6 +442,11 @@ function fuelUnit(acId){return _acSpec(acId)?.layout==='ga8'?'L':'lbs';}
 function toKg(v,acId){const n=parseFloat(v)||0;const a=_acSpec(acId);if(!a)return n;return a.layout==='ga8'?n*AVGAS:n*LB;}
 function fromKg(kg,acId){return _acSpec(acId)?.layout==='ga8'?kg/AVGAS:kg/LB;}
 function fuelKgForSetup(acId){const a=_acSpec(acId);if(!a)return 0;const s=(curDisp().acSetup||[]).find(x=>(x._seatmapKey||x.acId)===acId||x.acId===acId);const raw=s?.fuelInput!=null?s.fuelInput:fromKg(a.fuelKg,acId);return toKg(raw,acId);}
+// ── Milford Sound departure fuel default ── a Milford departure (the flyback return leg) carries
+// less fuel: 115 L for an airvan (GA8) / 613 lb for a caravan (C208). Returns kg.
+function _isMilford(code){return code==='NZMF'||/milford/i.test(String(code||''));}
+function _milfordFuelKg(acId){const a=_acSpec(acId);if(!a)return null;return a.layout==='ga8'?toKg(115,acId):toKg(613,acId);}
+window._isMilford=_isMilford;window._milfordFuelKg=_milfordFuelKg;
 function burnToKg(v,acId){const a=_acSpec(acId);if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.layout==='ga8'||a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*AVGAS;if(a.burnDefUnit==='kg') return val;return val*LB;}
 function seat1IsCoPilot(acId){return !!((curDisp().acSetup||[]).find(s=>(s._seatmapKey||s.acId)===acId||s.acId===acId)?.coPilot);}
 function paxSeatIdxs(acId){const a=_acSpec(acId);if(!a||!a.seats)return[];const removed=a.removedSeats||[];return a.seats.map((_,i)=>i).filter(i=>i!==0&&!(i===1&&seat1IsCoPilot(acId))&&!removed.includes(i));}

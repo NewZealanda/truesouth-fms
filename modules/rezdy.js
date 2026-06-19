@@ -2188,6 +2188,9 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   var _firstLeg=String(dep||'').split('+')[0];
   var _etd=(_firstLeg===RZ_FLYBACK_DEP)?'15:30':_rzHHMMcolon(_firstLeg);
   if(_etd&&/^\d{1,2}:\d{2}$/.test(_etd)){form.etd=_etd;form.etdCustom=true;}
+  // Flybacks fly the RETURN leg Milford → Queenstown with reduced fuel.
+  var _isFb=(dep===RZ_FLYBACK_DEP)||(String(dep||'').split('+').indexOf(RZ_FLYBACK_DEP)>=0);
+  if(_isFb){form.dep='NZMF';form.dest='NZQN';}
   // PIC (manifest stores the 2-letter code → resolve to the crew name the loadsheet expects)
   var picCode=(S._rzManPic||{})[phys];
   if(picCode){
@@ -2197,9 +2200,11 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   // Co-pilot → seat 1 (crew); passengers fill from seat 2.
   var coCode=(S._rzManCoPic||{})[phys];var _hasCo=false;
   if(coCode){var copil=_rzPilotByCode(coCode);if(copil&&copil.name){form.coPilot=copil.name;form.names[1]=copil.name;if(copil.weight)form.seats[1]=String(copil.weight);_hasCo=true;}}
-  // Fuel: manifest display value (else standard) → kg
+  // Fuel: manifest display value (else standard) → kg. A Milford departure (flyback) uses the
+  // reduced Milford default (115 L airvan / 613 lb caravan).
   var fuelDisp=(S._rzManFuel&&S._rzManFuel[phys]!=null&&S._rzManFuel[phys]!=='')?S._rzManFuel[phys]:fromKg(a.fuelKg,phys);
   form.fuel=String(toKg(fuelDisp,phys));
+  if(typeof _isMilford==='function'&&_isMilford(form.dep)){var _mfk=_milfordFuelKg(phys);if(_mfk!=null)form.fuel=String(_mfk);}
   // Seat the passengers at their manifest seat positions (run/refresh the seat plan first).
   var sm=_rzManSeatsFor(dep,phys);if(!sm||!Object.keys(sm).length)sm=(typeof window.rezdyManReseat==='function')?window.rezdyManReseat(dep,phys):{};
   var seatOf={};Object.keys(sm).forEach(function(idx){seatOf[sm[idx]]=parseInt(idx);});
