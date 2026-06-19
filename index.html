@@ -173,6 +173,22 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 @media(min-width:1400px){.page{max-width:1400px;padding:16px 48px 80px;}}
 
 .route-map{height:260px;border-radius:10px;border:1px solid var(--border);overflow:hidden;margin-top:10px;}
+
+/* ── Rezdy manifest fleet (masonry) ── cards have very different heights (an allocated
+   aircraft is tall, an empty one short). A CSS grid leaves big gaps because each row is as
+   tall as its tallest card. Multi-column lets the short cards tuck up under one another for
+   a compact, dynamic layout that reflows by width. */
+.rzman-fleet{column-gap:12px;column-count:4;}
+.rzman-fleet>.rzman-card{break-inside:avoid;-webkit-column-break-inside:avoid;display:inline-block;width:100%;margin:0 0 12px;vertical-align:top;}
+@media(max-width:1200px){.rzman-fleet{column-count:3;}}
+@media(max-width:860px){.rzman-fleet{column-count:2;}}
+@media(max-width:560px){.rzman-fleet{column-count:1;}}
+
+/* ── Check-in modal ── keep the dialog clear of the iOS status bar / notch and never let a
+   tall (many-passenger) modal run off the top of the screen. The overlay anchors the dialog
+   near the top with safe-area padding; the dialog itself scrolls internally. */
+.rzci-overlay{position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:max(28px,env(safe-area-inset-top,0px)) 12px calc(28px + env(safe-area-inset-bottom,0px));}
+.rzci-dialog{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:18px;max-width:480px;width:100%;box-shadow:0 16px 50px rgba(0,0,0,.5);max-height:calc(100dvh - 64px);overflow:auto;}
 #login-overlay{
   position:fixed;inset:0;z-index:9999;display:none;
   align-items:center;justify-content:center;
@@ -656,7 +672,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.54';
+const APP_VER='v23.56';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -12304,8 +12320,8 @@ function _rzCheckinModal(){
   var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===d.order;});
   var cust=b?(b.customerName||d.order):d.order;
   var already=!!((S._rzBookingCheckedIn||{})[d.order]);
-  var h='<div onclick="window.rezdyCheckinCancel()" style="position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 12px">'+
-    '<div onclick="event.stopPropagation()" style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:18px;max-width:480px;width:100%;box-shadow:0 16px 50px rgba(0,0,0,.5)">'+
+  var h='<div onclick="window.rezdyCheckinCancel()" class="rzci-overlay">'+
+    '<div onclick="event.stopPropagation()" class="rzci-dialog">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px"><div class="st" style="margin-bottom:0">'+(already?'Edit check-in':'Check in')+' — '+_rzEsc(cust)+'</div><button onclick="window.rezdyCheckinCancel()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>'+
     '<p style="font-size:12px;color:var(--text3);margin:0 0 12px">Enter every passenger’s name. <b>Actual weight</b> is optional — leave it blank to fall back to the declared weight (shown red with a “(d)”). The toggle cycles <b>A</b>dult → <b>C</b>hild → <b>i</b>nfant; an infant is a lap pax and you pick who they sit with.</p>';
   d.rows.forEach(function(r,i){
@@ -12565,6 +12581,17 @@ function _rzBookingCard(b){
   h+='</div>';
   return h;
 }
+// Does a booking match a free-text query (by customer name, any passenger name, or order #)?
+function _rzBkMatch(b,q){
+  if(!q)return true;q=String(q).toLowerCase();
+  if(String(b.orderNumber||'').toLowerCase().indexOf(q)>=0)return true;
+  if(String(b.customerName||'').toLowerCase().indexOf(q)>=0)return true;
+  var hit=false;(b.items||[]).forEach(function(it){(it.participants||[]).forEach(function(p){if(p&&p.name&&String(p.name).toLowerCase().indexOf(q)>=0)hit=true;});});
+  return hit;
+}
+// Live search — re-render and keep focus/caret in the search box so results update as you type.
+window.rezdyBkSearch=function(v){S._bkSearch=v;render();var el=document.getElementById('rzBkSearch');if(el){el.focus();var L=el.value.length;try{el.setSelectionRange(L,L);}catch(_){}}};
+window.rezdyBkSearchClear=function(){S._bkSearch='';render();var el=document.getElementById('rzBkSearch');if(el)el.focus();};
 function _rzRenderBookings(){
   if(!S._rezdyBookings){if(!S._rezdyLoading)window.rezdyLoadBookings();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading bookings…</div>';}
   if(!S._rezdyOpen||typeof S._rezdyOpen!=='object')S._rezdyOpen={};
@@ -12573,41 +12600,72 @@ function _rzRenderBookings(){
   const cancelledRows=allRows.filter(function(b){return /cancel/i.test(b.status||'');});
   const deps=[];active.forEach(function(b){var d=_rzBookingDep(b);if(deps.indexOf(d)<0)deps.push(d);});
   deps.sort();
-  const depFilter=(S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:null;
-  // Departure filter tabs
-  let depTabs='<div class="card" style="padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
-  depTabs+='<button onclick="S._bkDepFilter=null;render()" class="sub-tab '+(!depFilter?'on':'')+'" style="font-size:12px;padding:5px 12px">All</button>';
-  deps.forEach(function(d){var cnt=active.filter(function(b){return _rzBookingDep(b)===d;}).length;depTabs+='<button onclick="S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" class="sub-tab '+(depFilter===d?'on':'')+'" style="font-size:12px;padding:5px 12px">🛫 '+_rzEsc(d)+' <span style="opacity:.6">('+cnt+')</span></button>';});
-  depTabs+='</div>';
+  const q=String(S._bkSearch||'').trim();
+  const searching=q.length>0;
+  // One departure at a time — default to the first departure when none is chosen. (No "All".)
+  const depFilter=searching?null:((S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:(deps[0]||null));
   var _ciCount=active.filter(function(b){return (S._rzBookingCheckedIn||{})[String(b.orderNumber||'')];}).length;
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
     '<div><div class="st" style="margin-bottom:0">Rezdy Bookings</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+(allRows.length?active.length+' active'+(cancelledRows.length?' · '+cancelledRows.length+' cancelled':'')+' for '+_rzDowLabel(S.rezdyDate):'No cached bookings')+'</p></div>'+
     '<button class="btn btn-primary" style="font-size:12px;padding:7px 12px'+(_ciCount?'':';opacity:.55')+'" title="Send all checked-in passengers to the Manifest for seat allocation" onclick="window.rezdyPushToManifest()">⤒ Push to manifest'+(_ciCount?' ('+_ciCount+')':'')+'</button>'+
-    '</div>'+depTabs;
+    '</div>';
+  // Live search box (name / part-name / TSF booking reference).
+  const searchH='<div class="card" style="padding:8px 10px;display:flex;align-items:center;gap:8px">'+
+    '<span style="font-size:15px;color:var(--text3);flex-shrink:0">🔍</span>'+
+    '<input id="rzBkSearch" type="search" autocomplete="off" value="'+_rzEsc(S._bkSearch||'')+'" oninput="window.rezdyBkSearch(this.value)" placeholder="Search name or booking ref (e.g. Smith or TSF1234)…" style="flex:1;min-width:0;font-size:16px;padding:9px 10px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:8px;outline:none">'+
+    (searching?'<button onclick="window.rezdyBkSearchClear()" title="Clear search" style="flex-shrink:0;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:0 4px">✕</button>':'')+
+    '</div>';
+  // Prominent departure selector — big pills, one selected at a time, horizontally scrollable.
+  let depSel='';
+  if(deps.length){
+    depSel='<div class="card" style="padding:10px 12px'+(searching?';opacity:.5':'')+'">'+
+      '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:800;margin-bottom:8px">Departure'+(searching?' — paused while searching':'')+'</div>'+
+      '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">';
+    deps.forEach(function(d){
+      var cnt=active.filter(function(b){return _rzBookingDep(b)===d;}).length;
+      var on=!searching&&depFilter===d;
+      depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:800">'+
+        '<span style="font-size:17px;letter-spacing:.02em;line-height:1.1">'+_rzEsc(d)+'</span>'+
+        '<span style="font-size:10px;font-weight:700;opacity:'+(on?'.9':'.6')+'">'+cnt+' bkg'+(cnt===1?'':'s')+'</span>'+
+      '</button>';
+    });
+    depSel+='</div></div>';
+  }
+  const top=hdr+searchH+depSel;
   if(!allRows.length){
-    return hdr+'<div class="card" style="text-align:center;padding:36px;color:var(--text3);font-size:13px">No bookings cached for this date.<br>Tap <b>Refresh from Rezdy</b> to pull the latest.</div>';
+    return top+'<div class="card" style="text-align:center;padding:36px;color:var(--text3);font-size:13px">No bookings cached for this date.<br>Tap <b>Refresh from Rezdy</b> to pull the latest.</div>';
   }
   let body='';
-  var shownDeps=depFilter?[depFilter]:deps;
-  shownDeps.forEach(function(dep){
-    var grp=active.filter(function(b){return _rzBookingDep(b)===dep;}).sort(function(a,b){var ca=(S._rzBookingCheckedIn||{})[String(a.orderNumber||'')]?1:0,cb=(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')]?1:0;return ca-cb;}); // checked-in to the bottom
-    if(!grp.length)return;
+  if(searching){
+    // Search overrides the departure filter — match across every booking on the date.
+    var matches=allRows.filter(function(b){return _rzBkMatch(b,q);})
+      .sort(function(a,b){return _rzBookingDep(a).localeCompare(_rzBookingDep(b));});
+    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🔍 '+matches.length+' result'+(matches.length===1?'':'s')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">for “'+_rzEsc(q)+'”</span></div>';
+    if(!matches.length)body+='<div class="card" style="text-align:center;padding:30px;color:var(--text3);font-size:13px">No bookings match “'+_rzEsc(q)+'”.</div>';
+    else matches.forEach(function(b){body+=_rzBookingCard(b);});
+    return top+body;
+  }
+  // Single departure view.
+  if(depFilter){
+    var grp=active.filter(function(b){return _rzBookingDep(b)===depFilter;}).sort(function(a,b){var ca=(S._rzBookingCheckedIn||{})[String(a.orderNumber||'')]?1:0,cb=(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')]?1:0;return ca-cb;}); // checked-in to the bottom
     var gbd={a:0,c:0,i:0};grp.forEach(function(x){var e=_rzEffBreakdown(x);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
     var prod=_rzProduct((((grp[0]||{}).items||[])[0]||{}).product||'');
-    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(dep)+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+(prod?' · '+_rzEsc(prod):'')+'</span></div>';
+    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(depFilter)+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+(prod?' · '+_rzEsc(prod):'')+'</span></div>';
     grp.forEach(function(b){body+=_rzBookingCard(b);});
-  });
-  if(!depFilter&&cancelledRows.length){
-    var cOpen=!!S._bkShowCancelled;
-    body+='<div class="card" style="padding:0;margin-top:16px;overflow:hidden">'+
-      '<div onclick="S._bkShowCancelled=!S._bkShowCancelled;render()" style="cursor:pointer;padding:11px 14px;display:flex;align-items:center;gap:8px;color:var(--text2)">'+
-        '<span style="display:inline-block;transition:transform .12s;'+(cOpen?'transform:rotate(90deg)':'')+'">▸</span>'+
-        '<span style="font-size:13px;font-weight:700">✕ Cancelled ('+cancelledRows.length+')</span></div>';
-    if(cOpen){body+='<div style="padding:4px 10px 8px">';cancelledRows.forEach(function(b){body+=_rzBookingCard(b);});body+='</div>';}
-    body+='</div>';
+    // Cancelled bookings for THIS departure (collapsed).
+    var depCancelled=cancelledRows.filter(function(b){return _rzBookingDep(b)===depFilter;});
+    if(depCancelled.length){
+      var cOpen=!!S._bkShowCancelled;
+      body+='<div class="card" style="padding:0;margin-top:16px;overflow:hidden">'+
+        '<div onclick="S._bkShowCancelled=!S._bkShowCancelled;render()" style="cursor:pointer;padding:11px 14px;display:flex;align-items:center;gap:8px;color:var(--text2)">'+
+          '<span style="display:inline-block;transition:transform .12s;'+(cOpen?'transform:rotate(90deg)':'')+'">▸</span>'+
+          '<span style="font-size:13px;font-weight:700">✕ Cancelled ('+depCancelled.length+')</span></div>';
+      if(cOpen){body+='<div style="padding:4px 10px 8px">';depCancelled.forEach(function(b){body+=_rzBookingCard(b);});body+='</div>';}
+      body+='</div>';
+    }
   }
-  return hdr+body;
+  return top+body;
 }
 
 // Format a currency amount (e.g. 123.5 + 'NZD' → "$123.50").
@@ -13216,7 +13274,7 @@ function _rzRenderManifest(){
     _mPilots.forEach(function(p){h+='<div draggable="true" ondragstart="window.rezdySchedPilotDragStart(\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\',event)" title="'+_rzEsc(p.name)+' — drag onto an aircraft to set PIC" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:16px;background:rgba(96,165,250,.14);border:1px solid rgba(96,165,250,.5);cursor:grab;font-size:12px;font-weight:800;color:#60a5fa">✈ '+_rzEsc(p.code)+'</div>';});
     h+='</div>';
   }
-  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:12px;align-items:start">';
+  h+='<div class="rzman-fleet">';
   fleet.forEach(function(id){
     var col=(typeof AC_COL!=='undefined'&&AC_COL[id])||'#64748b';
     var a=S.aircraft[id];
@@ -13228,7 +13286,7 @@ function _rzRenderManifest(){
     var std=a?Math.round(fromKg(a.fuelKg,id)):0;
     var fuelVal=(S._rzManFuel&&S._rzManFuel[id]!=null&&S._rzManFuel[id]!=='')?S._rzManFuel[id]:std;
     var idE=id.replace(/'/g,"\\'");
-    h+='<div ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.rezdyManDrop(\''+id+'\',event)" style="flex:1 1 240px;min-width:230px;background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px">'+
+    h+='<div class="rzman-card" ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.rezdyManDrop(\''+id+'\',event)" style="background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px"><div style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+'</div>'+
         '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span>'+
         '<button onclick="window.rezdyManDeleteAc(\''+idE+'\')" title="Remove this aircraft (returns its pax to the pool)" style="background:none;border:none;color:#ef444488;cursor:pointer;font-size:13px;padding:0 2px">🗑</button></div></div>';
