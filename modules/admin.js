@@ -1300,7 +1300,7 @@ window.reopenSaved=async function(id){
 };
 window.deleteManifest=async function(id){if(!confirm('Move this manifest to Bin?'))return;var m=S.manifests.find(function(x){return x.id===id;});if(!m)return;if(!m.data)m.data={};m.data._deleted=true;m._deleted=true;lsSet('ts_manifests_cache',S.manifests);render();await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);};
 window.toggleSavedSel=id=>{if(S.savedSel[id])delete S.savedSel[id];else S.savedSel[id]=true;render();};
-window.selectAllSaved=ids=>{ids.forEach(id=>S.savedSel[id]=true);render();};
+window.selectAllSaved=ids=>{var all=ids.length&&ids.every(id=>S.savedSel[id]);ids.forEach(id=>{if(all)delete S.savedSel[id];else S.savedSel[id]=true;});render();};
 window.clearSavedSel=()=>{S.savedSel={};render();};
 window.bulkDeleteSaved=async function(){
   const ids=Object.keys(S.savedSel);

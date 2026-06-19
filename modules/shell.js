@@ -43,6 +43,18 @@ document.addEventListener('keydown',function(e){
       window.lsUndo();
     }
   }
+  // ← / → cycle the Operations sub-tabs (Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved ↔ Charter),
+  // unless focus is in a field or a modal/account panel is open.
+  if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&!e.metaKey&&!e.ctrlKey&&!e.altKey){
+    var _ae=document.activeElement,_t=_ae&&_ae.tagName;
+    if(_t==='INPUT'||_t==='SELECT'||_t==='TEXTAREA'||(_ae&&_ae.isContentEditable))return;
+    if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
+    if(S.section!=='operations')return;
+    var _tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
+    var _cur=_tabs.indexOf(S.tab);if(_cur<0)_cur=0;
+    var _next=_cur+(e.key==='ArrowRight'?1:-1);if(_next<0)_next=_tabs.length-1;if(_next>=_tabs.length)_next=0;
+    e.preventDefault();if(typeof window.switchOpsTab==='function')window.switchOpsTab(_tabs[_next]);
+  }
 });
 // Fire deferred render when focus fully leaves all inputs
 document.addEventListener('focusout',function(e){
@@ -429,8 +441,6 @@ function renderDrawer(){
       h+=_subBtn('Loadsheets',t==='rloadsheets'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('rloadsheets')");
       h+=_subBtn('Saved',t==='saved'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('saved')");
       if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
-      h+=_subBtn('Manifest (legacy)',t==='manifest'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('manifest')");
-      h+=_subBtn('Seatmap (legacy)',t==='seatmap'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('seatmap')");
     }
   }
   // Roster & Leave combined — show the group only if the user can reach at least one item.
@@ -508,9 +518,6 @@ function renderOpsSubTabs(){
   h+='<button tabindex="-1" class="sub-tab '+(opsTab==='rloadsheets'?'on':'')+'" onclick="window.switchOpsTab(\'rloadsheets\')" style="flex-shrink:0">Loadsheets</button>';
   h+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="flex-shrink:0">Saved ('+savedCount+')</button>';
   if(hasRolePerm('charter'))h+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="flex-shrink:0">Charter</button>';
-  h+='<span style="flex-shrink:0;color:var(--border2);padding:0 2px">|</span>';
-  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='manifest'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'manifest\')" title="Legacy manifest" style="flex-shrink:0;opacity:.7">Manifest∗</button>';
-  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" title="Legacy seatmap" style="flex-shrink:0;opacity:.7">Seatmap∗</button>';
   h+='</div>';
   return h;
 }

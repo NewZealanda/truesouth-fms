@@ -887,10 +887,12 @@ function _rzRenderBookings(){
       '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:800;margin-bottom:8px">Departure'+(searching?' — paused while searching':'')+'</div>'+
       '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">';
     deps.forEach(function(d){
-      var cnt=active.filter(function(b){return _rzBookingDep(b)===d;}).length;
+      var depB=active.filter(function(b){return _rzBookingDep(b)===d;});
+      var cnt=depB.length;
+      var prod='';depB.some(function(b){var c=_rzProduct((((b.items||[])[0]||{}).product)||'');if(c){prod=c;return true;}return false;});
       var on=!searching&&depFilter===d;
       depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:800">'+
-        '<span style="font-size:17px;letter-spacing:.02em;line-height:1.1">'+_rzEsc(d)+'</span>'+
+        '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">'+_rzEsc(d)+(prod?' '+_rzEsc(prod):'')+'</span>'+
         '<span style="font-size:10px;font-weight:700;opacity:'+(on?'.9':'.6')+'">'+cnt+' bkg'+(cnt===1?'':'s')+'</span>'+
       '</button>';
     });
@@ -920,7 +922,7 @@ function _rzRenderBookings(){
     var grp=active.filter(function(b){return _rzBookingDep(b)===depFilter;}).sort(function(a,b){var ca=(S._rzBookingCheckedIn||{})[String(a.orderNumber||'')]?1:0,cb=(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')]?1:0;return ca-cb;}); // checked-in to the bottom
     var gbd={a:0,c:0,i:0};grp.forEach(function(x){var e=_rzEffBreakdown(x);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
     var prod=_rzProduct((((grp[0]||{}).items||[])[0]||{}).product||'');
-    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(depFilter)+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+(prod?' · '+_rzEsc(prod):'')+'</span></div>';
+    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(depFilter)+(prod?' '+_rzEsc(prod):'')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+'</span></div>';
     grp.forEach(function(b){body+=_rzBookingCard(b);});
     // Cancelled bookings for THIS departure (collapsed).
     var depCancelled=cancelledRows.filter(function(b){return _rzBookingDep(b)===depFilter;});
@@ -1521,8 +1523,8 @@ function _rzManBubble(p,allPax){
   var infRemove=infant?(' onclick="event.stopPropagation();window.rezdyManRemoveInfant(\''+_rzEsc(infant.id).replace(/'/g,"\\'")+'\')" title="Infant: '+_rzEsc(infName||'')+' (tap to remove)" style="cursor:pointer;'):' title="Infant'+(infName?': '+_rzEsc(infName):'')+'" style="';
   return '<div draggable="true" ondragstart="window.rezdyManDragStart(\''+idEsc+'\',event)" ondragover="event.preventDefault()" ondrop="window.rezdyManDropInfant(\''+idEsc+'\',event)" onclick="window.rezdyManToggleChild(\''+idEsc+'\')" title="'+_rzEsc(p.name||'')+(infName?' (+ infant '+_rzEsc(infName)+')':'')+'" style="position:relative;overflow:hidden;background:rgba(255,255,255,.93);border-radius:8px;'+(p.paymentReq?'border:2px solid #ef4444':'border-left:4px solid '+gcol)+';min-width:62px;flex-shrink:0;cursor:grab">'+
     (p.paymentReq?'<div style="background:#ef4444;color:#fff;font-size:8px;font-weight:900;text-align:center;line-height:1.7">$ TO PAY</div>':'')+
-    (isChild?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')+
-    (infName?'<div'+infRemove+'position:absolute;bottom:3px;'+(isChild?'left:3px':'right:3px')+';font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')+
+    (isChild?'<div title="Child" style="position:absolute;bottom:3px;right:3px;font-size:10px;font-weight:900;background:#f97316;color:#fff;border-radius:3px;padding:0 4px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.3)">C</div>':'')+
+    (infName?'<div'+infRemove+'position:absolute;bottom:3px;'+(isChild?'left:3px':'right:3px')+';font-size:10px;font-weight:900;background:#ec4899;color:#fff;border-radius:3px;padding:0 4px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.3)">i</div>':'')+
     '<div style="padding:'+(p.paymentReq?'2px 7px 4px':'4px 7px')+'">'+
       '<div style="font-size:11px;font-weight:700;color:#1e293b;white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'+
       '<div onclick="event.stopPropagation();window.rezdyManEditWeight(\''+idEsc+'\')" title="'+(decld?'Declared weight — tap to enter actual':'Tap to enter / edit actual weight')+'" style="font-size:10px;font-weight:700;color:'+wCol+';cursor:pointer">'+w+'</div>'+
@@ -1655,7 +1657,6 @@ function _rzRenderManifest(){
         '<div onclick="window.rezdyManToggleCard(\''+idE+'\')" style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0">'+
           '<span style="display:inline-block;transition:transform .12s;color:var(--text3);font-size:11px;'+(open?'transform:rotate(90deg)':'')+'">▸</span>'+
           '<span style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+'</span>'+
-          (picCode?'<span style="font-size:10px;font-weight:800;color:#60a5fa">✈ '+_rzEsc(picCode)+'</span>':'')+
           (list.length?'':'<span style="font-size:10px;color:var(--text3);font-weight:600">idle</span>')+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span>'+
@@ -2070,7 +2071,7 @@ function _rzManSeatGrid(dep,acId,col){
       var idx=cell.i;
       if(idx===0){ // PIC seat — locked, can't be moved
         h+='<div title="PIC'+(pic?' '+_rzEsc(pic.name):'')+'" style="width:'+SW+'px;height:'+SH+'px;border-radius:7px;border:1.5px solid #60a5fa;background:rgba(96,165,250,.12);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden">'+
-          (pic?'<div style="font-size:9px;font-weight:800;color:#60a5fa;white-space:nowrap">✈ '+_rzEsc(pic.code)+' · PIC</div><div style="font-size:9px;font-weight:700;color:#60a5fa">'+(pic.weight?pic.weight+'kg':'set wt')+'</div>':'<div style="font-size:9px;color:#60a5fa;font-weight:700">PIC</div>')+
+          '<div style="font-size:9px;font-weight:800;color:#60a5fa">PIC</div>'+(pic&&pic.weight?'<div style="font-size:9px;font-weight:700;color:#60a5fa">'+pic.weight+'kg</div>':'')+
         '</div>';
         return;
       }
@@ -2093,8 +2094,8 @@ function _rzManSeatGrid(dep,acId,col){
         var isChild=p.type==='child';var inf=(S._rzManPax||[]).find(function(x){return x.infantOf===p.id;});var infN=p.infantName||(inf?String(inf.name||'').split(/\s+/)[0]:null);
         var idEsc=_rzEsc(p.id).replace(/'/g,"\\'");
         h+='<div draggable="true" ondragstart="window.rezdyManDragStart(\''+idEsc+'\',event)" ondragover="event.preventDefault()" ondrop="window.rezdyManDropSeat(\''+depE+'\',\''+acE+'\','+idx+',event)" title="'+_rzEsc(p.name||'')+'" style="position:relative;width:'+SW+'px;height:'+SH+'px;border-radius:7px;border:1.5px solid '+(p.paymentReq?'#ef4444':gcol)+';border-left:4px solid '+gcol+';background:rgba(255,255,255,.93);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;cursor:grab">'+
-          (isChild?'<div style="position:absolute;bottom:2px;right:2px;font-size:7px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:2px;padding:0 2px">C</div>':'')+
-          (infN?'<div title="Infant: '+_rzEsc(infN)+'" style="position:absolute;bottom:2px;'+(isChild?'left:2px':'right:2px')+';font-size:7px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:2px;padding:0 2px">i</div>':'')+
+          (isChild?'<div title="Child" style="position:absolute;bottom:2px;right:2px;font-size:10px;font-weight:900;background:#f97316;color:#fff;border-radius:3px;padding:0 4px;line-height:1.4;box-shadow:0 1px 2px rgba(0,0,0,.3)">C</div>':'')+
+          (infN?'<div title="Infant: '+_rzEsc(infN)+'" style="position:absolute;bottom:2px;'+(isChild?'left:2px':'right:2px')+';font-size:10px;font-weight:900;background:#ec4899;color:#fff;border-radius:3px;padding:0 4px;line-height:1.4;box-shadow:0 1px 2px rgba(0,0,0,.3)">i</div>':'')+
           '<div onclick="event.stopPropagation();window.rezdyManRemove(\''+idEsc+'\')" title="Remove" style="position:absolute;top:-1px;right:1px;font-size:9px;color:#94a3b8;cursor:pointer;padding:0 1px">✕</div>'+
           '<div style="font-size:9.5px;font-weight:700;color:#1e293b;white-space:nowrap;max-width:'+(SW-10)+'px;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'+
           '<div onclick="event.stopPropagation();window.rezdyManEditWeight(\''+idEsc+'\')" title="'+(decld?'Declared weight — tap to enter actual':'Tap to edit actual weight')+'" style="font-size:8.5px;font-weight:700;color:'+wCol+';cursor:pointer">'+wTxt+'</div>'+
@@ -2111,13 +2112,12 @@ function _rzManSeatGrid(dep,acId,col){
 // W&B readout chip for a departure's aircraft.
 function _rzManWBReadout(dep,acId){
   var wb=_rzManAcWB(dep,acId);if(!wb)return '';
-  var okT=wb.towOk,okL=wb.lwOk,okC=wb.cogOk,ok=okT&&okL&&okC;
-  var c=ok?'#4ade80':'#ef4444';
-  return '<div style="font-size:10px;font-weight:700;color:'+c+';margin-bottom:6px;display:flex;gap:8px;flex-wrap:wrap">'+
-    '<span>TOW '+Math.round(wb.tow)+'kg'+(okT?'':' ⚠')+'</span>'+
-    '<span>LDW '+Math.round(wb.lw)+'kg'+(okL?'':' ⚠')+'</span>'+
-    '<span>CG '+(wb.towCog!=null?wb.towCog.toFixed(3):'—')+(okC?'':' ⚠')+'</span>'+
-    '<span style="color:'+c+'">'+(ok?'✓ in envelope':'⚠ check W&B')+'</span></div>';
+  var red='#ef4444',ok='var(--text2)';
+  return '<div style="font-size:10px;font-weight:700;margin-bottom:6px;display:flex;gap:10px;flex-wrap:wrap">'+
+    '<span style="color:'+(wb.towOk?ok:red)+'">TOW '+Math.round(wb.tow)+'kg'+(wb.towOk?'':' ⚠')+'</span>'+
+    '<span style="color:'+(wb.lwOk?ok:red)+'">LDW '+Math.round(wb.lw)+'kg'+(wb.lwOk?'':' ⚠')+'</span>'+
+    '<span style="color:'+(wb.cogOk?ok:red)+'">CG '+(wb.towCog!=null?wb.towCog.toFixed(3):'—')+(wb.cogOk?'':' ⚠')+'</span>'+
+  '</div>';
 }
 // Editable cargo zones for a departure's aircraft (fed into the W&B + loadsheet).
 function _rzManCargoFor(dep,acId){S._rzManCargo=S._rzManCargo||{};return S._rzManCargo[_rzSeatKey(dep,acId)]||{};}
@@ -2312,8 +2312,10 @@ function _rzLsTabAdd(id,ac,label){
   _rzLsTabsSave();
 }
 window.rezdyCloseLsTab=function(id){
-  if(!confirm('Remove this loadsheet from the open tabs? (The saved loadsheet itself is kept.)'))return;
+  if(!confirm('Close this loadsheet? (It stays saved and can be re-opened from Saved this day.)'))return;
   S._rzLsTabs=(S._rzLsTabs||[]).filter(function(t){return t.id!==id;});
+  S.lsTabs=(S.lsTabs||[]).filter(function(t){return t.id!==id;}); // drop the editor tab too
+  if(S._rzLsActiveId===id){S._rzLsActiveId=null;S.activeTabId=null;S.editId=null;S.form=null;} // closing the open one returns to the list
   _rzLsTabsSave();render();
 };
 // Point S.form/S.lsTabs at a loadsheet id WITHOUT touching S.tab (so we stay on the Operations

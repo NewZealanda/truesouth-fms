@@ -31,7 +31,7 @@ function renderLsSeatGrid(f,a){
       var wt=f.seats[idx]||'';
       var bg=f.bags[idx]||'';
       var grp=(!isPIC&&!isCoPilot&&f.paxGroups)?f.paxGroups[idx]||'':'';
-      var gc=grp?groupColor(grp):null;
+      var gc=grp?_rzGroupColor(grp):null;
       var paxType=(!isPIC&&!isCoPilot&&f.paxType)?f.paxType[idx]||'A':'A';
       var hasInfant=!!(f.infantNames&&f.infantNames[idx]);
       var payReq=!!(f.paxPaymentReq&&f.paxPaymentReq[idx]);
@@ -348,7 +348,7 @@ function renderLoadsheet(){
       const displayNm=nameHasInfant?nm.split(' + ')[0]:nm;
       const infantNm=rawInfant||(nameHasInfant?nm.split(' + ').slice(1).join(' + '):'');
       const grp=f.paxGroups?.[idx]||(curDisp()?.pax||[]).find(p=>p.name===nm||p.name===displayNm)?.group||'';
-      const gc=grp?groupColor(grp):null;
+      const gc=grp?_rzGroupColor(grp):null;
       const payReq=(f.paxPaymentReq||{})[idx]||false;
       const hasPerson=nm||parseFloat(wt);
       const selUnalloc=S._selUnalloc!=null;const selSeat=S._selFormSeat===idx;
@@ -590,7 +590,7 @@ function renderLoadsheet(){
       const _emptySlots=_totalSlots-_filled;
       const cards=ua.map(function(p,i){
         const sel=selIdx===i;
-        const gc=p.group?.trim()?groupColor(p.group.trim()):null;
+        const gc=p.group?.trim()?_rzGroupColor(p.group.trim()):null;
         const wt=parseFloat(p.weight||0)+parseFloat(p.bag||0);
         const borderCol=gc||'#64748b';
         const cardStyle=sel
@@ -633,7 +633,6 @@ function renderLoadsheet(){
         ${a?`<div style="font-size:11px;color:var(--text3);background:var(--card2);padding:3px 10px;border-radius:20px;border:1px solid var(--border2)">${a.type} &middot; EW ${a.ew}kg &middot; MTOW ${a.mtow}kg</div>`:''}
       </div>
       <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-        ${f.ac?`<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button>`:''}
         <span style="font-size:10px;color:var(--text3)">Change:</span>
         ${['SLA','SLB','SLD','SLQ','SDB'].filter(function(ac){return ac!==(S.lsAc||f.ac.replace('ZK-',''));}).map(function(ac){var col=AC_COL['ZK-'+ac]||'#64748b';return'<button style="font-size:10px;padding:3px 9px;border-radius:6px;border:1.5px solid '+col+';background:transparent;color:'+col+';font-weight:700;cursor:pointer" onclick="window.changeLsAircraft(\'ZK-'+ac+'\')">'+ac+'</button>';}).join('')}
       </div>
@@ -648,7 +647,7 @@ function renderLoadsheet(){
         <select class="fi" onchange="lsPIC(this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)"><option value="">&#x2014; select &#x2014;</option>${crewOpts}</select>
       </div>
       <div ondragover="event.preventDefault();this.style.outline='2px solid #818cf8'" ondragleave="this.style.outline=''" ondrop="event.preventDefault();this.style.outline='';window.lsCopilotDrop(event)" style="background:var(--card2);border-radius:10px;padding:10px 12px;border:1px solid var(--border2);cursor:pointer" onclick="this.querySelector('select,input').focus()">
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Co-Pilot</div>
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between">Co-Pilot${f.coPilot?`<button onclick="event.stopPropagation();window.lsCoPilot('')" title="Clear co-pilot" style="background:none;border:none;color:#818cf8;font-size:12px;cursor:pointer;padding:0;line-height:1">✕ clear</button>`:''}</div>
         <select class="fi" onchange="lsCoPilot(this.value)" style="border:none;background:transparent;width:100%;font-size:13px;font-weight:600;padding:0;color:var(--text1)">${cpOpts}</select>
       </div>
     </div>

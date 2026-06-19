@@ -225,7 +225,7 @@ function renderSaved(){
     </div>`:'';
     return tabBar+`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      ${activeItems.length?`<button class="btn btn-ghost" style="font-size:12px" onclick="window.selectAllSaved(${JSON.stringify(activeItems.map(s=>s.id))})">${_aSelCnt===activeItems.length?'Deselect All':'Select All'}</button>`:''}
+      ${activeItems.length?`<button class="btn btn-ghost" style="font-size:12px" onclick="window.selectAllSaved(${JSON.stringify(activeItems.map(s=>s.id)).replace(/"/g,'&quot;')})">${_aSelCnt===activeItems.length?'Deselect All':'Select All'}</button>`:''}
     </div>
     ${_aBulk}
     ${!activeItems.length
@@ -245,7 +245,7 @@ function renderSaved(){
     </div>`:'';
     return tabBar+`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      ${signedItems.length?`<button class="btn btn-ghost" style="font-size:12px" onclick="window.selectAllSaved(${JSON.stringify(signedItems.map(s=>s.id))})">${_sSelCnt===signedItems.length?'Deselect All':'Select All'}</button>`:''}
+      ${signedItems.length?`<button class="btn btn-ghost" style="font-size:12px" onclick="window.selectAllSaved(${JSON.stringify(signedItems.map(s=>s.id)).replace(/"/g,'&quot;')})">${_sSelCnt===signedItems.length?'Deselect All':'Select All'}</button>`:''}
     </div>
     ${_sBulk}
     ${!signedItems.length
