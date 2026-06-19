@@ -122,12 +122,17 @@ function _rzAllLocations(){var set={};(S._rezdyBookings||[]).forEach(function(b)
 
 // Pull a normalized booking out of a cached row (rows store payload on .data).
 function _rzRow(r){return (r&&r.data)?r.data:r||{};}
-// Drop marketplace activity/supplier-side bookings (e.g. MARKETPLACE_PREF_RATE heli-hike
-// components) — they're duplicates of the customer's real flight order and aren't on Rezdy's
-// flight manifest. Maps the cached rows AND filters them out in one pass.
+// Drop marketplace activity/supplier-side duplicate bookings (e.g. the heli-hike component).
+// Real customer orders all carry a "TSF…" order number; the duplicate supplier components come
+// through MARKETPLACE_PREF_RATE with an auto-generated, non-TSF reference (e.g. RAFLTY0). Real
+// Viator/website flights are also MARKETPLACE_PREF_RATE but keep their TSF number, so we only
+// hide marketplace bookings whose order number is NOT a TSF order.
 function _rzMapBookings(rows){
   return (rows||[]).map(_rzRow).filter(Boolean).filter(function(b){
-    return String((b&&b.source)||'').toUpperCase().indexOf('MARKETPLACE_PREF_RATE')<0;
+    var src=String((b&&b.source)||'').toUpperCase();
+    var on=String((b&&b.orderNumber)||'');
+    if(src.indexOf('MARKETPLACE_PREF_RATE')>=0&&on&&!/^TSF/i.test(on))return false;
+    return true;
   });
 }
 
