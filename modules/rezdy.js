@@ -1050,6 +1050,8 @@ window.rezdySetDate=function(v){
   S.rezdyDate=v||_rzToday();
   // clear date-scoped caches so each tab reloads for the new date
   S._rezdyBookings=null;S._rezdyOpen={};S._pickupVans=null;S._pickupCollected=null;S._schedBlocks=null;S._schedGroupKey=null;S._schedEdit=null;S._rzManLoaded=false;S._rzManPax=null;S._rzLsTabsLoaded=false;S._rzLsTabs=null;
+  // clear seatmap view-state that's scoped to a specific day (stale labels would mis-target Allocate/Create)
+  S._rzManDepFilter=null;S._rzManShow=null;S._rzCombA=null;S._rzCombB=null;S._rzManCombineOpen=false;S._rzManCardOpen=null;S._rzManCoPic=null;
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -1776,8 +1778,9 @@ window.rezdyPushToManifest=async function(){
   if(!S._rezdyBookings){if(window.rezdyLoadBookings)window.rezdyLoadBookings();if(typeof toast==='function')toast('Loading bookings — tap Push again in a moment.','info');return;}
   if(!S._rzManLoaded&&window.rezdyLoadManifest){try{await window.rezdyLoadManifest();}catch(_){}}
   var dep=_rzCurBookingsDep();
+  if(!dep){if(typeof toast==='function')toast('No departure selected to push.','info');return;} // never full-wipe the seatmap
   window.rezdyManPull(dep);
-  if(dep)S._rzManDepFilter=dep; // focus the seatmap on the pushed departure
+  S._rzManDepFilter=dep; // focus the seatmap on the pushed departure
 };
 // Pull checked-in pax into the Seatmap. With a departure scope, ONLY that departure's pax are
 // (re)built; pax from other departures and manually-added pax are preserved.
@@ -2001,12 +2004,13 @@ function _rzManCap(id){var a=S.aircraft[id];return (a&&a.seats)?paxSeatIdxs(id).
 // booking group together, heaviest first, and flow to the aircraft with the most spare capacity
 // (load-balanced across the fleet). Each aircraft is then seated by the shared W&B engine.
 window.rezdyManAllocate=function(){
-  var dep=S._rzManDepFilter;if(!dep){var ds=_rzManDeps();dep=ds[0];}
+  var dep=_rzManSelDep();if(!dep||dep==='—'){var ds=_rzManDeps();dep=ds[0];}
   var pax=S._rzManPax||[];
   var unalloc=pax.filter(function(p){return !p.ac&&!p.infantOf&&_rzPaxDep(p)===dep;});
   if(!unalloc.length){if(typeof toast==='function')toast('Nothing to allocate for '+dep+'.','info');return;}
   var fleet=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id]&&(S._rzManHidden||[]).indexOf(id)<0;});
-  var cap={},load={};fleet.forEach(function(id){cap[id]=_rzManCap(id);load[id]=pax.filter(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===dep;}).length;});
+  // Capacity = pax seats minus the co-pilot seat when one is assigned (so we don't over-allocate by one).
+  var cap={},load={};fleet.forEach(function(id){cap[id]=_rzManCap(id)-(((S._rzManCoPic||{})[id])?1:0);load[id]=pax.filter(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===dep;}).length;});
   function free(id){return cap[id]-load[id];}
   function place(p,id){p.ac=id;load[id]++;pax.forEach(function(x){if(x.infantOf===p.id)x.ac=id;});} // lap infants follow the host
   // 1) Honour the booking-noted aircraft when it still has room (a pin).

@@ -101,7 +101,7 @@ function render(){
   // ── Remember the current view so a reload returns to the same page ──
   // Gated on S._viewRestored so the default-view renders during boot DON'T overwrite the
   // saved last view before _restoreLastView() has had a chance to read and apply it.
-  if(S.user&&S._viewRestored){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'manifest',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
+  if(S.user&&S._viewRestored){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'bookings',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
   // ── Preserve focused input across re-renders ──
   const _ae=document.activeElement;
   const _aeId=_ae?.id||null;

@@ -268,7 +268,7 @@ function renderLoadsheet(){
   const _lsDepOther=!!S._lsOther_dep||(!!f.dep&&!_isKnownApt(f.dep));
   const _lsDestOther=!!S._lsOther_dest||(!!f.dest&&!_isKnownApt(f.dest));
   const _lsOtherInput=function(field,val){return '<input class="fi" type="text" value="'+(val||'').replace(/"/g,'&quot;')+'" placeholder="Type location" onclick="event.stopPropagation()" onchange="S.form.'+field+'=this.value;S.formDirty=true;autoSaveLS();safeRender()" style="margin-top:6px;width:100%;font-size:13px;font-weight:600;background:var(--card);border:1px solid var(--border2);border-radius:6px;padding:5px 7px;color:var(--text1)">';};
-  const draftBanner=f.status==='unsigned'?`<div style="padding:9px 14px;background:#0c1a3a;border:1px solid #1e3a5f;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;margin-bottom:10px">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
+  const draftBanner=f.status==='unsigned'?`<div class="pill-blue" style="display:block;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px;text-transform:none;letter-spacing:0">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
   const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;render();}">Clear & Start Blank</button>`;
 
 
@@ -675,7 +675,7 @@ function renderLoadsheet(){
         ${etdSelect(f.etd,f.date,"form")}
       </div>
     </div>
-    ${f.createdBy?`<div style="text-align:right;margin-top:6px;font-size:9px;color:rgba(255,255,255,.18);letter-spacing:.04em">Created by ${f.createdBy}</div>`:''}
+    ${f.createdBy?`<div style="text-align:right;margin-top:6px;font-size:9px;color:var(--text3);opacity:.6;letter-spacing:.04em">Created by ${f.createdBy}</div>`:''}
   </div>  ${unallocH}${loadingH}${calcH}
   ${f.dep&&f.dest&&APT_COORDS[f.dep]&&APT_COORDS[f.dest]?`<div class="card" style="padding:12px;border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}"><div class="st" style="margin:0;cursor:pointer;display:flex;align-items:center;gap:7px;user-select:none" onclick="window.toggleLsMap()" title="Show / hide the route map"><span style="font-size:10px;display:inline-block;transition:transform .15s;${S._lsMapOpen?'transform:rotate(90deg)':''}">▶</span>Route — ${APTS[f.dep]||f.dep} → ${APTS[f.dest]||f.dest}</div>${S._lsMapOpen?`<div id="ls-map" class="route-map"></div>`:''}</div>`:''}
   ${sigH}`;

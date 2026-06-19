@@ -387,7 +387,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'<label style="font-size:11px;color:var(--text3);flex:1">MARK AS INACTIVE (hides from roster &amp; dropdowns from chosen date)</label>'
         +'<button onclick="S.admin.personModal.draft.inactive=!S.admin.personModal.draft.inactive;render()" '
         +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
-        +'background:'+(d.inactive?'rgba(239,68,68,.25)':'rgba(255,255,255,.06)')+';'
+        +'background:'+(d.inactive?'rgba(239,68,68,.25)':'var(--card2)')+';'
         +'color:'+(d.inactive?'#f87171':'var(--text3)')+'">⊘ '+(d.inactive?'Inactive':'Active')+'</button>'
         +'</div>':'')
         +(m.userId?'<div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px">'
@@ -624,6 +624,7 @@ window.switchToLoadsheets=function(){
 window.switchOpsTab=function(tabId){
   if(S.section==='roster'&&typeof _rosterUnsaved==='function'&&_rosterUnsaved()){window._navAway(function(){window.switchOpsTab(tabId);});return;}
   S.activeTabId=null;S._newLsTab=false;
+  if(tabId!=='rloadsheets')S._rzLsActiveId=null; // leaving Loadsheets closes the inline editor
   S.section='operations';S.tab=tabId;
   render();
   if(tabId==='saved'){
@@ -1871,7 +1872,7 @@ function _execCloseLsTab(id,idx,tab,action){
   var _closedAcCode=tab.acId?tab.acId.replace('ZK-',''):null;
   if(S.activeTabId===id){
     if(S.lsTabs.length>1){var next=S.lsTabs[idx>0?idx-1:1];S.activeTabId=next.id;S.form=next.form;S.lsAc=next.acId.replace('ZK-','');S.editId=next.id;}
-    else{S.activeTabId=null;S.editId=null;S._newLsTab=false;S.tab='manifest';S.form=bF();}
+    else{S.activeTabId=null;S.editId=null;S._newLsTab=false;S._rzLsActiveId=null;S.tab='rloadsheets';S.form=bF();}
   }
   S.lsTabs.splice(idx,1);
   // Clear stale form cache for this aircraft if no other tabs remain for it
@@ -1893,7 +1894,7 @@ window.deleteSelectedLsTabs=function(){
   });
   lsSet('ts_loadsheets_cache',S.saved);
   S.lsTabs=S.lsTabs.filter(function(t){return!S._lsTabSel[t.id];});
-  if(S.activeTabId&&S._lsTabSel[S.activeTabId]){S.activeTabId=null;S.editId=null;S.tab='manifest';}
+  if(S.activeTabId&&S._lsTabSel[S.activeTabId]){S.activeTabId=null;S.editId=null;S._rzLsActiveId=null;S.tab='rloadsheets';}
   S._lsManageMode=false;S._lsTabSel={};window.saveWorkspace&&window.saveWorkspace();render();
 };
 window.createLsTab=function(acId){S._newLsTab=false;generateLoadsheet(acId);};
@@ -2643,7 +2644,7 @@ function generatePrintHTML(sheet){
 }
 
 function setupSig(){
-  const c=document.getElementById('sigCanvas');if(!c)return;
+  const c=document.getElementById('sigCanvas');if(!c||!S.form)return;
   if(S.form.sig){const img=new Image();img.onload=()=>c.getContext('2d').drawImage(img,0,0,c.width,c.height);img.src=S.form.sig;}
   let drawing=false;
   const pos=e=>{const r=c.getBoundingClientRect(),s=e.touches?e.touches[0]:e,sx=c.width/r.width,sy=c.height/r.height;return{x:(s.clientX-r.left)*sx,y:(s.clientY-r.top)*sy};};
@@ -3243,7 +3244,7 @@ function renderAdminPerms(){
     h+='</tr>';
   });
   h+='</tbody></table></div>'
-    +'<div style="margin-top:16px;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px">'
+    +'<div style="margin-top:16px;padding:12px 14px;background:var(--card2);border:1px solid var(--border);border-radius:8px">'
     +'<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Column Guide</div>'
     +'<div style="display:flex;flex-wrap:wrap;gap:6px 22px">';
   PERM_COLS.forEach(function(col){

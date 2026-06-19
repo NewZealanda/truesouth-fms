@@ -222,8 +222,8 @@ function renderMaintOverview(){
     const hrsUsed=nc&&latest!=null&&lastCheckHrs!=null?Math.max(0,latest-lastCheckHrs):0;
     const pct=checkInterval>0?Math.min(100,Math.max(0,(hrsUsed/checkInterval)*100)):0;
     const isPriority=(m.priority||[]).includes(ac);
-    const _priBg=isPriority?'#f59e0b':'rgba(255,255,255,.08)';
-    const _priCol=isPriority?'#000':'rgba(255,255,255,.4)';
+    const _priBg=isPriority?'#f59e0b':'var(--card2)';
+    const _priCol=isPriority?'#000':'var(--text3)';
     const _priLbl=isPriority?'★ PRIORITY':'☆';
     const _priOc=canEditM?('event.stopPropagation();window.toggleMaintPriority(\'' + ac + '\')'):'event.stopPropagation()';
     const _priCursor=canEditM?'pointer':'default';
@@ -489,7 +489,7 @@ function renderMaintLog(){
     const cwTd=isCaravan?`<td style="padding:3px 4px;text-align:center"><button onclick="window.toggleCWLog('${ds}','${ac}')" style="padding:2px 7px;border-radius:4px;border:1px solid ${cwDone?'#06b6d4':'var(--border2)'};background:${cwDone?'rgba(6,182,212,.15)':'transparent'};color:${cwDone?'#06b6d4':'var(--text3)'};font-size:11px;font-weight:700;cursor:pointer;min-width:28px">${cwDone?'✓':'○'}</button></td>`:'';
     const adasTd=isCaravan?`<td style="padding:3px 4px;text-align:center"><button onclick="window.toggleADASLog('${ds}','${ac}')" style="padding:2px 7px;border-radius:4px;border:1px solid ${adasDone?'#a78bfa':'var(--border2)'};background:${adasDone?'rgba(167,139,250,.15)':'transparent'};color:${adasDone?'#a78bfa':'var(--text3)'};font-size:11px;font-weight:700;cursor:pointer;min-width:28px">${adasDone?'✓':'○'}</button></td>`:'';
     if(!hasFlightData){
-      return `<tr style="opacity:.35;border-bottom:1px solid rgba(255,255,255,.02)${isWe?';background:rgba(255,255,255,.01)':''}">
+      return `<tr style="opacity:.35;border-bottom:1px solid var(--border)${isWe?';background:var(--card2)':''}">
         <td style="padding:3px 6px;font-size:10px;color:var(--text3);white-space:nowrap">${fmtMaintDate(ds)}</td>
         <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','ttis',this.value)" style="width:58px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)';this.closest('tr').style.opacity='1'" onblur2="this.style.borderBottomColor='transparent'"></td>
         <td style="padding:5px 6px;text-align:right;font-size:12px;color:var(--border)">—</td>
@@ -499,7 +499,7 @@ function renderMaintLog(){
         <td style="padding:2px 4px"><input type="text" value="" placeholder="notes…" onblur="window.saveMaintField('${ds}','${ac}','comment',this.value)" style="width:100%;min-width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-size:11px;font-style:italic;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)';this.closest('tr').style.opacity='1'"></td>
         <td></td></tr>`;
     }
-    return `<tr style="border-bottom:1px solid rgba(255,255,255,.05)${isWe?';background:rgba(255,255,255,.01)':''}">
+    return `<tr style="border-bottom:1px solid var(--border)${isWe?';background:var(--card2)':''}">
       <td style="padding:5px 6px;font-size:11px;color:var(--text3);white-space:nowrap">${fmtMaintDate(ds)}</td>
       <td style="padding:2px 4px;text-align:right"><input type="number" step="0.1" value="${ttis||''}" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','ttis',this.value)" style="width:58px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${ttis?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
       <td style="padding:5px 6px;text-align:right;font-size:12px">${hrsUsedToday!=null?`<span style="color:${col2}">+${hrsUsedToday}</span>`:'<span style="color:var(--border)">—</span>'}</td>
@@ -1041,7 +1041,7 @@ window.onload=()=>{
 </script>
 
 <div id="ptr-indicator" style="position:fixed;top:0;left:0;right:0;z-index:99999;display:flex;align-items:center;justify-content:center;height:0;overflow:hidden;background:var(--bg,#0f172a);transition:height .15s;pointer-events:none">
-  <div id="ptr-inner" style="display:flex;align-items:center;gap:14px;font-size:22px;color:rgba(255,255,255,.6);padding:18px 0">
+  <div id="ptr-inner" style="display:flex;align-items:center;gap:14px;font-size:22px;color:var(--text2);padding:18px 0">
     <span id="ptr-icon" style="font-size:42px;transition:transform .3s">↓</span>
     <span id="ptr-label">Pull to refresh</span>
   </div>

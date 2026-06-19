@@ -2,7 +2,7 @@
 
 // ── Status config ──
 var ROSTER_SC={
-  '':         {bg:'transparent',           bd:'rgba(255,255,255,.08)', col:'rgba(255,255,255,.2)',  lbl:'-'},
+  '':         {bg:'transparent',           bd:'var(--border)', col:'var(--text3)',  lbl:'-'},
   c208b:      {bg:'rgba(59,130,246,.18)',   bd:'#3b82f6',               col:'#60a5fa',              lbl:'C208B'},
   ga8:        {bg:'rgba(168,85,247,.18)',   bd:'#a855f7',               col:'#c084fc',              lbl:'GA8'},
   desk:       {bg:'rgba(20,184,166,.18)',   bd:'#14b8a6',               col:'#2dd4bf',              lbl:'Desk'},
@@ -278,20 +278,20 @@ function renderRosterView(){
 
   // Sticky header
   h+='<thead style="position:sticky;top:0;z-index:20">';
-  h+='<tr style="background:#0d1526">';
-  h+='<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:155px;position:sticky;left:0;z-index:21;background:#0d1526;border-right:1px solid rgba(255,255,255,.07)">Crew</th>';
+  h+='<tr style="background:var(--card2)">';
+  h+='<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:155px;position:sticky;left:0;z-index:21;background:var(--card2);border-right:1px solid var(--border)">Crew</th>';
   days.forEach(function(d,i){
     var ds=_rIso(d),isTdy=ds===todayStr,isWe=i>=5;
-    h+='<th style="padding:5px 3px;text-align:center;min-width:66px;background:'+(isTdy?'rgba(124,58,237,.14)':'#0d1526')+';border-bottom:1px solid rgba(255,255,255,.05)">';
+    h+='<th style="padding:5px 3px;text-align:center;min-width:66px;background:'+(isTdy?'rgba(124,58,237,.14)':'var(--card2)')+';border-bottom:1px solid var(--border)">';
     var _DSHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    h+='<div style="font-size:10px;font-weight:700;color:'+(isTdy?'#a78bfa':(isWe?'rgba(255,255,255,.28)':'var(--text3)'))+'">'+_DSHORT[d.getDay()]+'</div>';
+    h+='<div style="font-size:10px;font-weight:700;color:'+(isTdy?'#a78bfa':'var(--text3)')+'">'+_DSHORT[d.getDay()]+'</div>';
     h+='<div style="font-size:16px;font-weight:800;color:'+(isTdy?'#a78bfa':'var(--text1)')+'">'+d.getDate()+'</div>';
     h+='<div style="font-size:9px;font-weight:500;color:var(--text3)">'+MONTHS[d.getMonth()]+'</div>';
     h+='</th>';
   });
   h+='</tr>';
-  h+='<tr style="background:rgba(13,21,38,.97);border-bottom:2px solid rgba(255,255,255,.1)">';
-  h+='<td style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--text3);position:sticky;left:0;z-index:21;background:rgba(13,21,38,.97);border-right:1px solid rgba(255,255,255,.07)">Totals</td>';
+  h+='<tr style="background:var(--card2);border-bottom:2px solid var(--border2)">';
+  h+='<td style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--text3);position:sticky;left:0;z-index:21;background:var(--card2);border-right:1px solid var(--border)">Totals</td>';
   days.forEach(function(d,i){
     var ds=_rIso(d),isTdy=ds===todayStr;
     var tots=_dayTots(ds);
@@ -320,7 +320,7 @@ function renderRosterView(){
     if(ungrouped.length)grouped.push({g:{key:'other',label:'Other',col:'#94a3b8'},members:ungrouped});
 
     grouped.forEach(function(grp){
-      h+='<tr style="background:rgba(255,255,255,.025)">';
+      h+='<tr style="background:var(--card2)">';
       h+='<td colspan="8" style="padding:4px 12px;font-size:10px;font-weight:800;color:'+grp.g.col+';text-transform:uppercase;letter-spacing:.08em;position:sticky;left:0">'+grp.g.label+'</td>';
       h+='</tr>';
 
@@ -329,9 +329,9 @@ function renderRosterView(){
         var rc=ROLE_GROUPS.filter(function(g2){return g2.key===_rGroupKey(u);})[0];
         var rowCol=rc?rc.col:'#94a3b8';
         var isPilot=!!(u.role==='pilot'||(typeof _picEligible==='function'&&_picEligible(u)));
-        h+='<tr style="border-top:1px solid rgba(255,255,255,.035)">';
+        h+='<tr style="border-top:1px solid var(--border)">';
         // Sticky name cell
-        h+='<td style="padding:5px 10px;white-space:nowrap;position:sticky;left:0;z-index:1;background:var(--card);border-right:1px solid rgba(255,255,255,.06)">';
+        h+='<td style="padding:5px 10px;white-space:nowrap;position:sticky;left:0;z-index:1;background:var(--card);border-right:1px solid var(--border)">';
         h+='<div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:2px">'+u.name+'</div>';
         h+='<div style="display:flex;gap:2px;flex-wrap:wrap;align-items:center">';
         h+='<span style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:'+rowCol+'1a;color:'+rowCol+'">'+ini+'</span>';
@@ -358,7 +358,7 @@ function renderRosterView(){
           var otherNote=isOther?st.slice(6):'';
           var cfg=_rSC(rawSt||'');
           var dispLbl=isOther?esc(otherNote||'?'):cfg.lbl;
-          h+='<td style="padding:3px 2px;text-align:center;background:'+(isTdy?'rgba(124,58,237,.06)':(isWe?'rgba(255,255,255,.01)':'transparent'))+'">';
+          h+='<td style="padding:3px 2px;text-align:center;background:'+(isTdy?'rgba(124,58,237,.06)':(isWe?'var(--card2)':'transparent'))+'">';
           if(isHidden){h+='<span style="display:inline-block;width:66px;height:24px"></span>';}else if(canEdit){
             var _oe=S._rosterOtherEdit;
             var _editingOther=_oe&&_oe.uid===u.id&&_oe.ds===ds;
@@ -370,7 +370,7 @@ function renderRosterView(){
               h+='<button tabindex="-1" onclick="window.rosterOtherCancel()" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:10px;cursor:pointer">X</button>';
               h+='</div></div>';
             }else{
-            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?esc(otherNote):'')+'" style="padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.06)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.15)')+';font-size:11px;font-weight:700;cursor:pointer;width:66px;text-align:center">';
+            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?esc(otherNote):'')+'" style="padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'var(--border)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'var(--text3)')+';font-size:11px;font-weight:700;cursor:pointer;width:66px;text-align:center">';
             ROSTER_ORDER.forEach(function(s){
               var c=_rSC(s);
               h+='<option value="'+s+'"'+(rawSt===s?' selected':'')+'>'+c.lbl+'</option>';
@@ -379,7 +379,7 @@ function renderRosterView(){
             if(isOther&&otherNote){h+='<div style="font-size:8px;color:#94a3b8;line-height:1;margin-top:1px;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(otherNote)+'</div>';}
             }
           } else {
-            h+='<span'+(isOther?' title="'+esc(otherNote)+'"':'')+' style="display:inline-block;padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'rgba(255,255,255,.04)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'rgba(255,255,255,.1)')+';font-size:11px;font-weight:700;min-width:56px">'+dispLbl+'</span>';
+            h+='<span'+(isOther?' title="'+esc(otherNote)+'"':'')+' style="display:inline-block;padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'var(--border)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'var(--text3)')+';font-size:11px;font-weight:700;min-width:56px">'+dispLbl+'</span>';
           }
           h+='</td>';
         });
@@ -474,7 +474,7 @@ function renderRosterBuild(){
   // Template grid
   h+='<div style="overflow:auto;border:1px solid var(--border2);border-radius:10px;margin-bottom:14px">';
   h+='<table style="width:100%;border-collapse:collapse;min-width:620px">';
-  h+='<thead><tr style="background:rgba(255,255,255,.04);border-bottom:1px solid var(--border2)">';
+  h+='<thead><tr style="background:var(--card2);border-bottom:1px solid var(--border2)">';
   h+='<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:48px">Inc.</th>';
   h+='<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:140px">Name</th>';
   DNAMES.forEach(function(dn){
@@ -490,7 +490,7 @@ function renderRosterBuild(){
       var rowCol=rc?rc.col:'#94a3b8';
       var enabled=bs.enabled[u.id]!==false;  // default on
       var rowOpacity=enabled?'1':'0.38';
-      h+='<tr style="border-top:1px solid rgba(255,255,255,.04);opacity:'+rowOpacity+'">';
+      h+='<tr style="border-top:1px solid var(--border);opacity:'+rowOpacity+'">';
       // Toggle button
       var togBg=enabled?'var(--accent)':'var(--card2)';
       var togCol=enabled?'#fff':'var(--text3)';

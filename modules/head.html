@@ -45,6 +45,13 @@ html[data-theme="light"] .nav-tab.off{background:#e2e8f0;color:#475569;}
 html[data-theme="light"] .nav-tab.off:hover{background:#d4dde8;}
 html[data-theme="light"] .btn-ghost:hover{background:#e2e8f0;}
 html[data-theme="light"] input[type=date]::-webkit-calendar-picker-indicator{filter:none;}
+/* Light overrides for dark-first surfaces that don't follow the palette vars (white overlays / fixed dark hex). */
+html[data-theme="light"] .pill-blue{background:#dbeafe;color:#1e40af;}
+html[data-theme="light"] .seat{background:#e8edf3;border-color:#c2ccd8;}
+html[data-theme="light"] .seat:not(.filled):not(.crew){background:#e8edf3;}
+html[data-theme="light"] .seat:not(.filled):not(.crew):hover,html[data-theme="light"] .seat.drop-target{background:rgba(63,99,144,.16);border-color:var(--accent);}
+html[data-theme="light"] .seat.crew{background:#cbd5e1;border-color:#94a3b8;}
+html[data-theme="light"] .seat-lbl{color:#475569;}
 html,body{height:100%;min-height:100dvh;min-height:-webkit-fill-available;background:var(--appbg);color:var(--text);font-family:'Barlow',sans-serif;}
 /* ── Width safety: the page itself must NEVER scroll sideways on a phone. ──
    overflow-x:clip (not hidden) avoids creating a scroll container, so it won't

@@ -123,7 +123,7 @@ function _lvCanApproveRole(myRole,reqRole){
 
 function _lvTab(label,id,cur){
   var on=cur===id;
-  return '<button tabindex="-1" onclick="if(!S._leave)S._leave={};S._leave.tab=\''+id+'\';render()" style="padding:8px 18px;border:none;border-radius:8px 8px 0 0;background:'+(on?'rgba(124,58,237,.2)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.45)')+';font-size:13px;font-weight:'+(on?'700':'500')+';cursor:pointer;border-bottom:2px solid '+(on?'#c084fc':'transparent')+'">'+label+'</button>';
+  return '<button tabindex="-1" onclick="if(!S._leave)S._leave={};S._leave.tab=\''+id+'\';render()" style="padding:8px 18px;border:none;border-radius:8px 8px 0 0;background:'+(on?'rgba(124,58,237,.2)':'transparent')+';color:'+(on?'#c084fc':'var(--text3)')+';font-size:13px;font-weight:'+(on?'700':'500')+';cursor:pointer;border-bottom:2px solid '+(on?'#c084fc':'transparent')+'">'+label+'</button>';
 }
 
 function _lvToggle(on,onclick){
@@ -196,7 +196,7 @@ function _renderMyLeave(lv){
   // Request form
   if(f.show){
     var days=_lvDays(f.startDate,f.endDate);
-    h+='<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:20px;margin-bottom:24px">';
+    h+='<div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px">';
     h+='<h3 style="font-size:15px;font-weight:700;color:var(--text);margin:0 0 16px">New Leave Request</h3>';
 
     // Leave type
@@ -204,16 +204,16 @@ function _renderMyLeave(lv){
     h+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
     LEAVE_TYPES.forEach(function(lt){
       var on=f.type===lt.id;
-      h+='<button tabindex="-1" onclick="S._leave.form.type=\''+lt.id+'\';render()" style="padding:7px 14px;border-radius:8px;border:1.5px solid '+(on?'#c084fc':'rgba(255,255,255,.15)')+';background:'+(on?'rgba(124,58,237,.2)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.55)')+';font-size:13px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+lt.icon+' '+lt.lbl+'</button>';
+      h+='<button tabindex="-1" onclick="S._leave.form.type=\''+lt.id+'\';render()" style="padding:7px 14px;border-radius:8px;border:1.5px solid '+(on?'#c084fc':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.2)':'transparent')+';color:'+(on?'#c084fc':'var(--text2)')+';font-size:13px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+lt.icon+' '+lt.lbl+'</button>';
     });
     h+='</div></div>';
 
     // Dates
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">';
     h+='<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:6px">Start Date</div>';
-    h+='<input type="date" value="'+f.startDate+'" onchange="S._leave.form.startDate=this.value;safeRender()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+    h+='<input type="date" value="'+f.startDate+'" onchange="S._leave.form.startDate=this.value;safeRender()" style="width:100%;padding:9px 12px;background:var(--card2);border:1.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
     h+='<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:6px">End Date</div>';
-    h+='<input type="date" value="'+f.endDate+'" onchange="S._leave.form.endDate=this.value;safeRender()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
+    h+='<input type="date" value="'+f.endDate+'" onchange="S._leave.form.endDate=this.value;safeRender()" style="width:100%;padding:9px 12px;background:var(--card2);border:1.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>';
     h+='</div>';
     if(f.startDate&&f.endDate&&days>0){
       var _wd=_lvWorkingDays(S.user&&S.user.id,f.startDate,f.endDate);
@@ -228,11 +228,11 @@ function _renderMyLeave(lv){
 
     // Reason
     h+='<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:6px">Reason / Comments</div>';
-    h+='<textarea oninput="S._leave.form.reason=this.value" placeholder="Optional — add any relevant details" rows="3" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit">'+_lvEsc(f.reason||'')+'</textarea></div>';
+    h+='<textarea oninput="S._leave.form.reason=this.value" placeholder="Optional — add any relevant details" rows="3" style="width:100%;padding:9px 12px;background:var(--card2);border:1.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit">'+_lvEsc(f.reason||'')+'</textarea></div>';
 
     h+='<div style="display:flex;gap:8px">';
     h+='<button tabindex="-1" onclick="window.submitLeaveRequest()" style="padding:10px 22px;background:#7c3aed;border:none;border-radius:9px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Submit Request</button>';
-    h+='<button tabindex="-1" onclick="S._leave.form.show=false;render()" style="padding:10px 16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer">Cancel</button>';
+    h+='<button tabindex="-1" onclick="S._leave.form.show=false;render()" style="padding:10px 16px;background:var(--card2);border:1px solid var(--border);border-radius:9px;color:var(--text2);font-size:13px;cursor:pointer">Cancel</button>';
     h+='</div>';
     h+='</div>';
   }
@@ -243,7 +243,7 @@ function _renderMyLeave(lv){
     return h+'<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Loading...</div>';
   }
   if(reqs.length===0){
-    return h+'<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:40px;text-align:center;color:var(--text3);font-size:13px">No leave requests yet.</div>';
+    return h+'<div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:40px;text-align:center;color:var(--text3);font-size:13px">No leave requests yet.</div>';
   }
 
   var today=new Date().toISOString().slice(0,10);
@@ -266,7 +266,7 @@ function _lvCard(r,showUser){
   var sc=LEAVE_SC[r.status]||LEAVE_SC.pending;
   var lt=LEAVE_TYPES.find(function(t){return t.id===r.leave_type;})||{icon:'📝',lbl:r.leave_type||'Leave'};
   var days=r.total_days||1;
-  var h='<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;margin-bottom:8px">';
+  var h='<div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px">';
   h+='<div style="display:flex;align-items:flex-start;gap:10px">';
   h+='<div style="flex:1;min-width:0">';
   if(showUser){
@@ -281,7 +281,7 @@ function _lvCard(r,showUser){
   h+='</div>';
   h+='<div style="flex-shrink:0">'+_lvStatusBadge(r.status)+'</div>';
   h+='</div>';
-  h+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:8px;flex-wrap:wrap">';
+  h+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">';
   if(r.status==='pending'||r.status==='approved'){
     h+='<button tabindex="-1" onclick="window.leaveEditOpen(\''+r.id+'\')" style="padding:5px 12px;border-radius:7px;border:1px solid rgba(124,58,237,.4);background:rgba(124,58,237,.1);color:#c084fc;font-size:12px;cursor:pointer">✎ Edit</button>';
   }
@@ -309,13 +309,13 @@ function _renderApprovals(lv,role){
       var canSee=_lvCanApproveRole(role,r.user_role||'desk');
       return canSee&&(s.id==='all'||r.status===s.id);
     }).length:0;
-    h+='<button tabindex="-1" onclick="S._leave.filter.status=\''+s.id+'\';render()" style="padding:5px 12px;border-radius:7px;border:1.5px solid '+(on?'#c084fc':'rgba(255,255,255,.12)')+';background:'+(on?'rgba(124,58,237,.18)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.45)')+';font-size:12px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+s.lbl+(cnt>0?' ('+cnt+')':'')+'</button>';
+    h+='<button tabindex="-1" onclick="S._leave.filter.status=\''+s.id+'\';render()" style="padding:5px 12px;border-radius:7px;border:1.5px solid '+(on?'#c084fc':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.18)':'transparent')+';color:'+(on?'#c084fc':'var(--text3)')+';font-size:12px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+s.lbl+(cnt>0?' ('+cnt+')':'')+'</button>';
   });
   h+='<div style="display:flex;gap:6px;align-items:center;margin-left:auto">';
-  h+='<input type="date" value="'+f.dateFrom+'" onchange="S._leave.filter.dateFrom=this.value;safeRender()" title="From" style="padding:5px 9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--text);font-size:12px">';
+  h+='<input type="date" value="'+f.dateFrom+'" onchange="S._leave.filter.dateFrom=this.value;safeRender()" title="From" style="padding:5px 9px;background:var(--card2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px">';
   h+='<span style="color:var(--text3);font-size:12px">to</span>';
-  h+='<input type="date" value="'+f.dateTo+'" onchange="S._leave.filter.dateTo=this.value;safeRender()" title="To" style="padding:5px 9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--text);font-size:12px">';
-  h+='<button tabindex="-1" onclick="S._leave._allLoaded=false;window.loadAllLeave()" style="padding:5px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;color:rgba(255,255,255,.5);font-size:12px;cursor:pointer">⟳</button>';
+  h+='<input type="date" value="'+f.dateTo+'" onchange="S._leave.filter.dateTo=this.value;safeRender()" title="To" style="padding:5px 9px;background:var(--card2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px">';
+  h+='<button tabindex="-1" onclick="S._leave._allLoaded=false;window.loadAllLeave()" style="padding:5px 10px;background:var(--card2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:12px;cursor:pointer">⟳</button>';
   if(role==='superadmin')h+='<button tabindex="-1" onclick="window.deleteAllLeave()" title="Permanently delete ALL leave requests (superadmin — for clearing test data)" style="padding:5px 10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.4);border-radius:7px;color:#f87171;font-size:12px;font-weight:600;cursor:pointer">🗑 Delete all</button>';
   h+='</div>';
   h+='</div>';
@@ -333,7 +333,7 @@ function _renderApprovals(lv,role){
   });
 
   if(filtered.length===0){
-    return h+'<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:40px;text-align:center;color:var(--text3);font-size:13px">No leave requests found.</div>';
+    return h+'<div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:40px;text-align:center;color:var(--text3);font-size:13px">No leave requests found.</div>';
   }
 
   filtered.forEach(function(r){
@@ -349,14 +349,14 @@ function _renderApprovals(lv,role){
       return o.id!==r.id&&(o.status==='approved'||o.status==='pending')&&o.start_date<=r.end_date&&o.end_date>=r.start_date;
     });
 
-    h+='<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px;margin-bottom:10px">';
+    h+='<div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px">';
 
     // Name + role tag
     h+='<div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">';
     h+='<div style="flex:1;min-width:200px">';
     h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">';
     h+='<span style="font-size:14px;font-weight:700;color:var(--text)">'+_lvEsc(r.user_name||'Unknown')+'</span>';
-    h+='<span style="font-size:10px;padding:2px 7px;border-radius:5px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.06em">'+(r.user_role||'')+'</span>';
+    h+='<span style="font-size:10px;padding:2px 7px;border-radius:5px;background:var(--card2);color:var(--text3);text-transform:uppercase;letter-spacing:.06em">'+(r.user_role||'')+'</span>';
     h+='</div>';
     h+='<div style="font-size:13px;color:var(--text2);margin-bottom:4px">'+lt.icon+' '+lt.lbl;
     h+='</div>';
@@ -412,10 +412,10 @@ function _renderApprovals(lv,role){
         h+='<button tabindex="-1" onclick="S._leave.declineId=\''+r.id+'\';S._leave.declineComment=\'\';render()" style="padding:7px 14px;background:rgba(239,68,68,.12);border:1.5px solid rgba(239,68,68,.5);border-radius:8px;color:#f87171;font-size:13px;font-weight:700;cursor:pointer">✕ Decline</button>';
       } else {
         h+='<div style="width:100%">';
-        h+='<textarea id="decline-comment-'+r.id+'" oninput="S._leave.declineComment=this.value" placeholder="Reason for declining (optional)" rows="2" style="width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;font-family:inherit;resize:none;margin-bottom:8px">'+_lvEsc(lv.declineComment||'')+'</textarea>';
+        h+='<textarea id="decline-comment-'+r.id+'" oninput="S._leave.declineComment=this.value" placeholder="Reason for declining (optional)" rows="2" style="width:100%;padding:8px 12px;background:var(--card2);border:1.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;font-family:inherit;resize:none;margin-bottom:8px">'+_lvEsc(lv.declineComment||'')+'</textarea>';
         h+='<div style="display:flex;gap:8px">';
         h+='<button tabindex="-1" onclick="window.declineLeave(\''+r.id+'\')" style="padding:7px 14px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer">Confirm Decline</button>';
-        h+='<button tabindex="-1" onclick="S._leave.declineId=null;render()" style="padding:7px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(255,255,255,.5);font-size:13px;cursor:pointer">Cancel</button>';
+        h+='<button tabindex="-1" onclick="S._leave.declineId=null;render()" style="padding:7px 12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:13px;cursor:pointer">Cancel</button>';
         h+='</div></div>';
       }
       h+='</div>';
@@ -451,8 +451,8 @@ function renderNotificationPanel(){
   var _nPos=_nMob
     ?'position:fixed;top:56px;right:8px;left:8px;width:auto;max-height:75vh'
     :'position:absolute;top:calc(100% + 6px);right:0;width:320px;max-width:calc(100vw - 16px);max-height:420px';
-  var h='<div id="notif-panel" onclick="event.stopPropagation()" style="'+_nPos+';overflow-y:auto;background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);z-index:2100">';
-  h+='<div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#111827">';
+  var h='<div id="notif-panel" onclick="event.stopPropagation()" style="'+_nPos+';overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);z-index:2100">';
+  h+='<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--card)">';
   h+='<span style="font-size:13px;font-weight:700;color:var(--text)">🔔 Notifications</span>';
   if(unread>0){h+='<button tabindex="-1" onclick="window.markNotificationsRead()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0">Mark all read</button>';}
   h+='</div>';
@@ -460,7 +460,7 @@ function renderNotificationPanel(){
     h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No notifications</div>';
   } else {
     notifs.forEach(function(n){
-      h+='<div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05);background:'+(n.read?'transparent':'rgba(124,58,237,.07)')+'">';
+      h+='<div style="padding:12px 16px;border-bottom:1px solid var(--border);background:'+(n.read?'transparent':'rgba(124,58,237,.07)')+'">';
       if(!n.read){h+='<div style="width:6px;height:6px;border-radius:50%;background:#c084fc;display:inline-block;margin-right:6px;vertical-align:middle"></div>';}
       h+='<div style="font-size:12px;color:'+(n.read?'var(--text2)':'var(--text)')+';line-height:1.5;display:inline">'+_notifFmtMsg(n.message)+'</div>';
       h+='<div style="font-size:10px;color:var(--text3);margin-top:4px">'+new Date(n.created_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</div>';
@@ -472,7 +472,7 @@ function renderNotificationPanel(){
       }
       h+='</div>';
     });
-    h+='<div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.08);text-align:center;position:sticky;bottom:0;background:#111827"><button tabindex="-1" onclick="window.clearAllNotifications()" style="font-size:12px;color:#f87171;background:none;border:none;cursor:pointer;padding:4px">🗑 Clear all notifications</button></div>';
+    h+='<div style="padding:10px 16px;border-top:1px solid var(--border);text-align:center;position:sticky;bottom:0;background:var(--card)"><button tabindex="-1" onclick="window.clearAllNotifications()" style="font-size:12px;color:#f87171;background:none;border:none;cursor:pointer;padding:4px">🗑 Clear all notifications</button></div>';
   }
   h+='</div>';
   return h;
@@ -670,7 +670,7 @@ function _leaveEditRender(){
   var ex=document.getElementById('leave-edit-ov');if(ex)ex.remove();
   var ov=document.createElement('div');ov.id='leave-edit-ov';
   ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:18px';
-  var typeBtns=LEAVE_TYPES.map(function(lt){var on=e.type===lt.id;return '<button onclick="S._leaveEdit.type=\''+lt.id+'\';_leaveEditRender()" style="padding:6px 12px;border-radius:8px;border:1.5px solid '+(on?'#c084fc':'rgba(255,255,255,.15)')+';background:'+(on?'rgba(124,58,237,.2)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.55)')+';font-size:12px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+lt.icon+' '+lt.lbl+'</button>';}).join('');
+  var typeBtns=LEAVE_TYPES.map(function(lt){var on=e.type===lt.id;return '<button onclick="S._leaveEdit.type=\''+lt.id+'\';_leaveEditRender()" style="padding:6px 12px;border-radius:8px;border:1.5px solid '+(on?'#c084fc':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.2)':'transparent')+';color:'+(on?'#c084fc':'var(--text2)')+';font-size:12px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+lt.icon+' '+lt.lbl+'</button>';}).join('');
   var isOwner=e.user_id===(S.user&&S.user.id);
   var reappWarn=(isOwner&&e.status==='approved')?'<div style="font-size:12px;color:#fbbf24;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:7px;padding:7px 10px;margin-bottom:12px">⚠ Editing approved leave sets it back to pending for re-approval.</div>':'';
   ov.innerHTML='<div style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:20px;max-width:420px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 12px 44px rgba(0,0,0,.55)">'
@@ -679,14 +679,14 @@ function _leaveEditRender(){
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:6px">Type</div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">'+typeBtns+'</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
-    +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Start</div><input type="date" value="'+e.startDate+'" onchange="S._leaveEdit.startDate=this.value" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>'
-    +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:5px">End</div><input type="date" value="'+e.endDate+'" onchange="S._leaveEdit.endDate=this.value" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>'
+    +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Start</div><input type="date" value="'+e.startDate+'" onchange="S._leaveEdit.startDate=this.value" style="width:100%;padding:8px 10px;background:var(--card2);border:1.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>'
+    +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:5px">End</div><input type="date" value="'+e.endDate+'" onchange="S._leaveEdit.endDate=this.value" style="width:100%;padding:8px 10px;background:var(--card2);border:1.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box"></div>'
     +'</div>'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:5px">Reason / comments</div>'
-    +'<textarea onchange="S._leaveEdit.reason=this.value" rows="2" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;margin-bottom:16px">'+_lvEsc(e.reason||'')+'</textarea>'
+    +'<textarea onchange="S._leaveEdit.reason=this.value" rows="2" style="width:100%;padding:8px 10px;background:var(--card2);border:1.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;margin-bottom:16px">'+_lvEsc(e.reason||'')+'</textarea>'
     +'<div style="display:flex;gap:8px">'
     +'<button onclick="window.leaveEditSave()" style="flex:1;padding:10px;background:#7c3aed;border:none;border-radius:9px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Save changes</button>'
-    +'<button onclick="var o=document.getElementById(\'leave-edit-ov\');if(o)o.remove();S._leaveEdit=null" style="padding:10px 16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer">Cancel</button>'
+    +'<button onclick="var o=document.getElementById(\'leave-edit-ov\');if(o)o.remove();S._leaveEdit=null" style="padding:10px 16px;background:var(--card2);border:1px solid var(--border);border-radius:9px;color:var(--text2);font-size:13px;cursor:pointer">Cancel</button>'
     +'</div></div>';
   ov.addEventListener('click',function(ev){if(ev.target===ov){ov.remove();S._leaveEdit=null;}});
   document.body.appendChild(ov);
@@ -742,7 +742,7 @@ function _lvHistoryHtml(id){
   if(rows===undefined)return '<div style="font-size:11px;color:var(--text3);padding:6px 2px">Loading history…</div>';
   if(!rows.length)return '<div style="font-size:11px;color:var(--text3);padding:6px 2px">No history yet.</div>';
   var LBL={submitted:'Submitted',approved:'Approved ✓',declined:'Declined',withdrawn:'Withdrawn',edited:'Edited',edited_resubmit:'Edited → re-approval',edited_by_approver:'Edited by approver'};
-  return '<div style="margin-top:8px;border-top:1px solid rgba(255,255,255,.08);padding-top:8px;display:flex;flex-direction:column;gap:3px">'+rows.map(function(a){
+  return '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;display:flex;flex-direction:column;gap:3px">'+rows.map(function(a){
     var when=a.created_at?new Date(a.created_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
     return '<div style="font-size:11px;color:var(--text2);display:flex;gap:8px"><span style="color:var(--text3);min-width:118px;flex-shrink:0">'+when+'</span><span style="flex:1"><strong>'+(LBL[a.action]||a.action)+'</strong>'+(a.performed_by_name?' · '+_lvEsc(a.performed_by_name):'')+(a.comment?'<div style="color:var(--text3);margin-top:1px">'+_lvEsc(a.comment)+'</div>':'')+'</span></div>';
   }).join('')+'</div>';

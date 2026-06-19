@@ -395,7 +395,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.74';
+const APP_VER='v23.75';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1179,7 +1179,7 @@ let S={
   pads:[],padTabs:[],activePadId:null,_padMode:'text',_padDrawColor:'#ffffff',_padDrawWidth:3,_padEraser:false,
   _aeroSearch:'',_aeroSel:null,
   // UI state
-  tab:'manifest',section:'operations',_drawerOpen:false,
+  tab:'bookings',section:'operations',_drawerOpen:false,
   savedSearch:'',savedSort:'newest',savedTab:'loadsheets',savedSel:{},
   // Charter
   charter:{legs:[{from:'NZQN',to:'NZMF',acId:'',pax:1,note:''}],showQuote:false},
@@ -1530,7 +1530,7 @@ function initRealtime(){
             var _clAcCode=_clTab&&_clTab.acId?_clTab.acId.replace('ZK-',''):null;
             S.lsTabs=(S.lsTabs||[]).filter(function(t){return t.id!==_closeId;});
             if(S.activeTabId===_closeId){
-              S.activeTabId=null;S.editId=null;S.section='operations';S.tab='manifest';
+              S.activeTabId=null;S.editId=null;S.section='operations';S.tab='rseatmap';
               S.form=bF();
               if(_clAcCode)S.lsForms[_clAcCode]=bF_ac('ZK-'+_clAcCode);
             } else if(_clAcCode&&!((S.lsTabs||[]).find(function(t){return t.acId&&t.acId.replace('ZK-','')===_clAcCode;}))){
@@ -1588,7 +1588,7 @@ function initRealtime(){
             lsSet('ts_loadsheets_cache',S.saved);
             S.lsTabs=(S.lsTabs||[]).filter(function(t){return t.id!==_dlpl.id;});
             if(S.activeTabId===_dlpl.id){
-              S.activeTabId=null;S.editId=null;S.section='operations';S.tab='manifest';
+              S.activeTabId=null;S.editId=null;S.section='operations';S.tab='rseatmap';
               S.form=bF();
               if(_delAcCode)S.lsForms[_delAcCode]=bF_ac('ZK-'+_delAcCode);
             } else if(_delAcCode&&!((S.lsTabs||[]).find(function(t){return t.acId&&t.acId.replace('ZK-','')===_delAcCode;}))){
@@ -2375,10 +2375,13 @@ function _restoreLastView(){
       S.section='operations';
       if(v.activeTabId&&(S.lsTabs||[]).find(function(t){return t.id===v.activeTabId;})){
         var t=S.lsTabs.find(function(x){return x.id===v.activeTabId;});
-        S.activeTabId=t.id;S.form=t.form;S.lsAc=(t.acId||'').replace('ZK-','');S.editId=t.id;S.tab='loadsheet';S._newLsTab=false;
+        // Restore into the unified Operations ▸ Loadsheets inline editor (not the legacy route).
+        S.activeTabId=t.id;S.form=t.form;S.lsAc=(t.acId||'').replace('ZK-','');S.editId=t.id;S.tab='rloadsheets';S._rzLsActiveId=t.id;S._newLsTab=false;
         return;
       }
-      S.tab=v.tab||'manifest';
+      S.tab=v.tab||'bookings';
+      // Legacy tab ids retired → map to the new Operations flow.
+      if(S.tab==='manifest'||S.tab==='loadsheet')S.tab='bookings';else if(S.tab==='seatmap')S.tab='rseatmap';
       if(v.savedTab)S.savedTab=v.savedTab;
       if((v.tab==='manifest'||v.tab==='seatmap')&&v.activeManifestTabId&&S._manifestDispatches&&S._manifestDispatches[v.activeManifestTabId]&&(S.manifestTabs||[]).find(function(t){return t.id===v.activeManifestTabId;})){
         if(S.activeManifestTabId&&S._manifestDispatches[S.activeManifestTabId])S._manifestDispatches[S.activeManifestTabId]=JSON.parse(JSON.stringify(S.dispatch));
