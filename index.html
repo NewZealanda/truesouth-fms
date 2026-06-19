@@ -31,13 +31,16 @@
 /* ── Light theme ── flips the core palette; subtle white overlays used inline stay faint but
    readable. Toggled by setting data-theme="light" on <html>. */
 html[data-theme="light"]{
-  --bg:#eef2f7;--card:#ffffff;--card2:#f1f5f9;--border:#dbe2ea;--border2:#c2ccd8;
-  --text:#0f172a;--text2:#334155;--text3:#64748b;
-  --accent:#3f6390;--acc:#3f6390;--appbg:#eef2f7;
-  --ok-bg:#dcfce7;--ok-border:#86efac;--ok-text:#166534;
-  --warn-bg:#fef9c3;--warn-border:#fde047;--warn-text:#854d0e;
-  --err-bg:#fee2e2;--err-border:#fca5a5;--err-text:#991b1b;
+  --bg:#e7edf4;--card:#ffffff;--card2:#eef2f8;--border:#d3dce7;--border2:#b4c1d2;
+  --text:#0f172a;--text2:#3a4860;--text3:#5b6a80;
+  --accent:#345b8a;--acc:#345b8a;--appbg:#e7edf4;
+  --ok-bg:#dcfce7;--ok-border:#4ade80;--ok-text:#15643a;
+  --warn-bg:#fdf6c8;--warn-border:#facc15;--warn-text:#7c5306;
+  --err-bg:#fde8e8;--err-border:#f87171;--err-text:#9b1c1c;
 }
+/* Light: give the white "boarding-pass" passenger bubbles a hairline edge so they separate from
+   the white cards they sit on (in dark mode the white-on-dark contrast already does this). */
+html[data-theme="light"] .card,html[data-theme="light"] .pax-chip{box-shadow:0 1px 2px rgba(15,23,42,.05);}
 html[data-theme="light"] .sub-tab{background:#e2e8f0;color:#475569;border-color:#cbd5e1;}
 html[data-theme="light"] .sub-tab:hover{background:#d4dde8;color:#1e293b;}
 html[data-theme="light"] .sub-tab.on{background:#3f6390;border-color:#3f6390;color:#fff;}
@@ -691,11 +694,15 @@ window.setLsRouteField=function(field,val){
   else{S['_lsOther_'+field]=false;S.form[field]=val;}
   // Departure-driven fuel default: a Milford departure uses the reduced Milford fuel; changing
   // the departure back to anywhere else (e.g. Queenstown) restores the aircraft's standard fuel.
+  var _fuelChanged=false;
   if(field==='dep'&&S.form.ac){
-    if(_isMilford(S.form[field])){var _mf=_milfordFuelKg(S.form.ac);if(_mf!=null)S.form.fuel=String(_mf);}
-    else{var _a=S.aircraft[S.form.ac];if(_a&&_a.fuelKg!=null)S.form.fuel=String(_a.fuelKg);}
+    if(_isMilford(S.form[field])){var _mf=_milfordFuelKg(S.form.ac);if(_mf!=null){S.form.fuel=String(_mf);_fuelChanged=true;}}
+    else{var _a=S.aircraft[S.form.ac];if(_a&&_a.fuelKg!=null){S.form.fuel=String(_a.fuelKg);_fuelChanged=true;}}
   }
-  S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();safeRender();
+  S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();
+  // Route changes are discrete (no in-flight typing to clobber). When the fuel default just
+  // changed, render immediately so the Fuel box updates on the FIRST click, not after several.
+  if(_fuelChanged)render();else safeRender();
 };
 function aptOpts(sel, isOther){
   _rebuildAptData();
@@ -713,7 +720,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.77';
+const APP_VER='v23.78';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -768,7 +775,10 @@ function fuelKgForSetup(acId){const a=_acSpec(acId);if(!a)return 0;const s=(curD
 // less fuel: 115 L for an airvan (GA8) / 613 lb for a caravan (C208). Returns kg.
 function _isMilford(code){return code==='NZMF'||/milford/i.test(String(code||''));}
 function _milfordFuelKg(acId){const a=_acSpec(acId);if(!a)return null;return a.layout==='ga8'?toKg(115,acId):toKg(613,acId);}
-window._isMilford=_isMilford;window._milfordFuelKg=_milfordFuelKg;
+// VFR final reserve = 30 min at the cruise burn rate the loadsheet uses (58 L/hr airvan, 136.1 kg/hr
+// caravan). Returned in kg so it compares directly against fuel-remaining-at-destination.
+function _finalReserveKg(acId){const a=_acSpec(acId);if(!a)return 0;return a.layout==='ga8'?toKg(29,acId):68.05;}
+window._isMilford=_isMilford;window._milfordFuelKg=_milfordFuelKg;window._finalReserveKg=_finalReserveKg;
 function burnToKg(v,acId){const a=_acSpec(acId);if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.layout==='ga8'||a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*AVGAS;if(a.burnDefUnit==='kg') return val;return val*LB;}
 function seat1IsCoPilot(acId){return !!((curDisp().acSetup||[]).find(s=>(s._seatmapKey||s.acId)===acId||s.acId===acId)?.coPilot);}
 // coSeat1 (optional) forces seat 1 to be reserved for a co-pilot regardless of the legacy dispatch
@@ -835,7 +845,10 @@ function calcFormWB(form){
   const tow=wt,towCog=wt?mom/wt:0;
   const burnKg=form.burnOff?burnToKg(parseFloat(form.burnOff)||0,form.ac):burnToKg(a.burnDef,form.ac);
   wt-=burnKg;mom-=burnKg*a.fuelArm;
+  // Fuel remaining at destination must stay at/above the 30-min final reserve.
+  const fuelRemKg=fW-gndBurn-burnKg;const finalReserveKg=_finalReserveKg(form.ac);const reserveOk=fuelRemKg>=finalReserveKg;
   return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn,tow,towCog,burnKg,lw:wt,lwCog:wt?mom/wt:0,
+    fuelRemKg,finalReserveKg,reserveOk,
     towOk:tow<=a.mtow,lwOk:wt<=a.mlw,cogOk:towCog>=a.cogMin&&towCog<=a.cogMax,
     mtow:a.mtow,mlw:a.mlw,cogMin:a.cogMin,cogMax:a.cogMax};
 }
@@ -1667,6 +1680,8 @@ async function loadAll(){
     }
     if(_initPads&&_initPads.length){S.pads=_initPads.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});}
 
+    // Custom departure-heading names (Bookings) — seed from cache for instant first paint.
+    try{var _dnC=lsGet('ts_rz_depnames');if(_dnC&&typeof _dnC==='object')S._rzDepNames=_dnC;}catch(e){}
     // ── Role Permissions ──
     try{
       const _rpCached=lsGet('ts_role_perms');
@@ -2137,11 +2152,12 @@ async function reloadTable(table){
     if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,(r.rates&&parseFloat(r.rates.perHour)>0)?r.rates:dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
-      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured)&select=key,value',{headers:SH});
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames)&select=key,value',{headers:SH});
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
           if(row.key==='role_perms'&&row.value&&!_editingPerms()&&Date.now()-(S._permsEditTs||0)>5000){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
+          if(row.key==='rz_depnames'&&row.value){try{var _dn=JSON.parse(row.value);if(_dn&&typeof _dn==='object'){S._rzDepNames=_dn;lsSet('ts_rz_depnames',_dn);changed=true;}}catch(e){}}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
           if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
           if(row.key==='maintenance'&&row.value){
@@ -2846,10 +2862,21 @@ document.addEventListener('focusin',function(e){var t=e.target;if(t&&t.tagName==
 // Cmd+Z / Ctrl+Z global undo for loadsheet
 document.addEventListener('keydown',function(e){
   if((e.metaKey||e.ctrlKey)&&e.key==='z'&&!e.shiftKey){
-    if((S.tab==='loadsheet'||S.tab.startsWith('ls_'))&&S._lsFormUndoStack&&S._lsFormUndoStack.length){
+    if((S.tab==='loadsheet'||(S.tab||'').startsWith('ls_'))&&S._lsFormUndoStack&&S._lsFormUndoStack.length){
       e.preventDefault();
       window.lsUndo();
     }
+  }
+  // ⌘/Ctrl + ← / → cycle the DATE one day at a time on the Rezdy-data pages (Bookings / Seatmap /
+  // Loadsheets), mirroring the ◁ ▷ buttons. Skip while typing in a field or a modal is open.
+  if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&(e.metaKey||e.ctrlKey)&&!e.altKey&&!e.shiftKey){
+    var _da=document.activeElement,_dt=_da&&_da.tagName;
+    if(_dt==='INPUT'||_dt==='SELECT'||_dt==='TEXTAREA'||(_da&&_da.isContentEditable))return;
+    if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
+    if(S.section==='operations'&&(S.tab==='bookings'||S.tab==='rseatmap'||S.tab==='rloadsheets')&&typeof window.rezdyShiftDate==='function'){
+      e.preventDefault();window.rezdyShiftDate(e.key==='ArrowRight'?1:-1);
+    }
+    return;
   }
   // ← / → cycle the Operations sub-tabs (Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved ↔ Charter),
   // unless focus is in a field or a modal/account panel is open.
@@ -2864,6 +2891,40 @@ document.addEventListener('keydown',function(e){
     e.preventDefault();if(typeof window.switchOpsTab==='function')window.switchOpsTab(_tabs[_next]);
   }
 });
+// Cycle the tier-2 sub-tabs of the current section (shared by arrow keys and mobile swipe).
+window._cycleTier2=function(dir){
+  if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
+  if(S.section==='operations'){
+    var tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');
+    var cur=tabs.indexOf(S.tab);if(cur<0)cur=0;var nx=(cur+dir+tabs.length)%tabs.length;
+    if(typeof window.switchOpsTab==='function')window.switchOpsTab(tabs[nx]);
+  } else if(S.section==='rezdy'){
+    var rt=['schedule','pickups','mypickups'];var c=rt.indexOf(S.rezdyTab);if(c<0)c=0;var n=(c+dir+rt.length)%rt.length;
+    S.rezdyTab=rt[n];render();
+  }
+};
+// Mobile: a clear horizontal swipe cycles the tier-2 tabs. Guards so it never hijacks a
+// horizontally-scrollable element (e.g. the seatmap fleet row) or ordinary vertical scrolling.
+(function(){
+  var x0=null,y0=null,t0=0,scrollGuard=false;
+  document.addEventListener('touchstart',function(e){
+    if(!e.touches||e.touches.length!==1){x0=null;return;}
+    var t=e.touches[0];x0=t.clientX;y0=t.clientY;t0=Date.now();scrollGuard=false;
+    var el=e.target;
+    while(el&&el!==document.body&&el.nodeType===1){
+      if(el.scrollWidth-el.clientWidth>8){var cs=getComputedStyle(el);if(/(auto|scroll)/.test(cs.overflowX)){scrollGuard=true;break;}}
+      el=el.parentElement;
+    }
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(x0==null)return;var ch=e.changedTouches&&e.changedTouches[0];if(!ch){x0=null;return;}
+    var dx=ch.clientX-x0,dy=ch.clientY-y0,dt=Date.now()-t0;var guard=scrollGuard;x0=null;
+    if(guard)return;
+    if(dt>600)return;                                   // too slow to be a swipe
+    if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.8)return; // must be a decisive horizontal swipe
+    window._cycleTier2(dx<0?1:-1);                      // swipe left → next, right → previous
+  },{passive:true});
+})();
 // Fire deferred render when focus fully leaves all inputs
 document.addEventListener('focusout',function(e){
   if(!_rtRenderPending)return;
@@ -3872,6 +3933,10 @@ function renderLoadsheet(){
     const gndBurnDisplay=String(Math.round(fromKg(gndBurnKg,f.ac)));
     const fuelRemKg=fuelKgVal-gndBurnKg-burnKgVal;
     const flightMin=a?.layout==='ga8'?(parseFloat(burnVal||a?.burnDef||35)/58*60).toFixed(0):(burnKgVal/136.1*60).toFixed(0);
+    // Final-reserve check: fuel remaining at destination must be ≥ 30 min at cruise burn.
+    const _resKg=(typeof _finalReserveKg==='function')?_finalReserveKg(f.ac):0;
+    const _belowRes=_resKg>0&&fuelRemKg<_resKg;
+    const _resMin=a?.layout==='ga8'?((fuelRemKg/AVGAS)/58*60):(fuelRemKg/136.1*60); // min of fuel at dest (airvan rate is L/hr → kg→L first)
     // -- Build cargo section
     let cargoSection='';
     if(isPod){
@@ -3883,12 +3948,12 @@ function renderLoadsheet(){
                <text x="${x+w/2}%" y="53%" text-anchor="middle" font-size="9" fill="${podTextColors[zi%4]}" font-weight="700">${zn.lbl.replace('Pod Zone ','Zone ')}</text>`;
       }).join('');
       const fusSVG=`<svg viewBox="0 0 300 60" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:50px;margin-bottom:8px">
-        <rect x="2%" y="28%" width="96%" height="44%" rx="10" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
-        <ellipse cx="2.5%" cy="50%" rx="2.5%" ry="22%" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
-        <polygon points="97%,17% 100%,17% 100%,50%" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="1"/>
+        <rect x="2%" y="28%" width="96%" height="44%" rx="10" fill="var(--card2)" stroke="var(--border2)" stroke-width="1.5"/>
+        <ellipse cx="2.5%" cy="50%" rx="2.5%" ry="22%" fill="var(--card2)" stroke="var(--border2)" stroke-width="1.5"/>
+        <polygon points="97%,17% 100%,17% 100%,50%" fill="var(--card2)" stroke="var(--border2)" stroke-width="1"/>
         ${zoneSVG}
-        <text x="4%" y="18%" font-size="8" fill="rgba(255,255,255,.3)">FRONT</text>
-        <text x="84%" y="18%" font-size="8" fill="rgba(255,255,255,.3)">REAR</text>
+        <text x="4%" y="18%" font-size="8" fill="var(--text3)">FRONT</text>
+        <text x="84%" y="18%" font-size="8" fill="var(--text3)">REAR</text>
       </svg>`;
       const zoneBoxes=a.cargo.map((zn,zi)=>{
         const w=(f.cargo&&f.cargo[zi])||'';
@@ -3949,11 +4014,13 @@ function renderLoadsheet(){
         </div>
         <div style="font-size:10px;color:#f87171;margin-top:2px">&#x2248; ${flightMin} min</div>
       </div>
-      <div style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:8px;padding:8px 10px">
-        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:4px">Fuel at Dest</div>
-        <div style="font-size:16px;font-weight:800;color:var(--text)">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
-        <div style="font-size:10px;color:#4ade80;margin-top:2px">${a?.layout==='ga8'?'litres':'lbs'}</div>
+      <div style="position:relative;background:${_belowRes?'rgba(239,68,68,.14)':'rgba(34,197,94,.10)'};border:1px solid ${_belowRes?'rgba(239,68,68,.55)':'rgba(34,197,94,.30)'};border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:${_belowRes?'#f87171':'#4ade80'};text-transform:uppercase;margin-bottom:4px">Fuel at Dest</div>
+        <div style="font-size:16px;font-weight:800;color:${_belowRes?'#f87171':'var(--text)'}">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
+        <div style="font-size:10px;color:${_belowRes?'#f87171':'#4ade80'};margin-top:2px">${a?.layout==='ga8'?'litres':'lbs'}${_belowRes?' · '+Math.max(0,Math.round(_resMin))+' min':''}</div>
+        ${_belowRes?`<div onclick="event.stopPropagation();window.lsReserveNote()" title="Below final reserve — tap for detail" style="position:absolute;top:6px;right:8px;font-size:18px;line-height:1;cursor:pointer;filter:drop-shadow(0 0 2px rgba(0,0,0,.4))">⚠️</div>`:''}
       </div>
+      ${_belowRes?`<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:7px 10px;font-size:11px;font-weight:700;color:#f87171;display:flex;align-items:center;gap:6px">🛑 Below 30-min final reserve — cannot sign until fixed.</div>`:''}
       ${_lwDisplay!==null?`<div style="background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.30);border-radius:8px;padding:8px 10px">
         <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#c084fc;text-transform:uppercase;margin-bottom:4px">Landing Weight</div>
         <div style="font-size:16px;font-weight:800;color:${r.lwOk?'var(--text)':'#f87171'}">${_lwDisplay}</div>
@@ -3996,7 +4063,7 @@ function renderLoadsheet(){
           const _bg=row.ok?'rgba(34,197,94,.12)':'rgba(239,68,68,.12)';
           const _bd=row.ok?'rgba(34,197,94,.4)':'rgba(239,68,68,.4)';
           const _c=row.ok?'#4ade80':'#f87171';
-          return`<div style="padding:6px 8px;margin:4px 0;border-radius:8px;background:${_bg};border:1px solid ${_bd}"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:700;color:${_c}">${row.l}</span><span style="font-size:13px;font-weight:800;color:${_c}">${row.v.toFixed(1)} <span style="font-size:10px;opacity:.7">/ ${row.lim} kg</span></span></div><div style="height:4px;border-radius:2px;background:rgba(255,255,255,.1)"><div style="height:100%;width:${_p}%;background:${_c};border-radius:2px"></div></div></div>`;
+          return`<div style="padding:6px 8px;margin:4px 0;border-radius:8px;background:${_bg};border:1px solid ${_bd}"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:700;color:${_c}">${row.l}</span><span style="font-size:13px;font-weight:800;color:${_c}">${row.v.toFixed(1)} <span style="font-size:10px;opacity:.7">/ ${row.lim} kg</span></span></div><div style="height:4px;border-radius:2px;background:var(--card2)"><div style="height:100%;width:${_p}%;background:${_c};border-radius:2px"></div></div></div>`;
         }
         return`<div style="display:flex;justify-content:space-between;padding:3px 8px;border-radius:4px"><span style="font-size:12px;color:var(--text3)">${row.l}</span><span style="font-size:12px;font-weight:600">${row.v.toFixed(1)} kg</span></div>`;
       }).join('');
@@ -4737,10 +4804,10 @@ function renderSaved(){
 
   const _selCount=Object.keys(S.savedSel).length;
   const _selSignedCount=Object.keys(S.savedSel).filter(id=>{const s=S.saved.find(x=>x.id===id);return s&&s.status==='complete';}).length;
-  const _bulkBar=_selCount>0&&tab!=='bin'?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
-    <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_selCount} item(s) selected</span>
+  const _bulkBar=_selCount>0&&tab!=='bin'?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;margin-bottom:10px">
+    <span style="font-size:13px;font-weight:600;color:var(--warn-text);flex:1">${_selCount} item(s) selected</span>
     <button onclick="window.openSelectedSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📂 Open (${_selCount})</button>
-    <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
+    <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid var(--warn-border);background:transparent;color:var(--warn-text);font-size:12px;cursor:pointer">Clear</button>
     <button onclick="window.printMultiSheet(Object.keys(S.savedSel))" style="padding:5px 12px;border-radius:6px;border:none;background:#374151;color:#fff;font-size:16px;font-weight:700;cursor:pointer" title="Print selected">&#x1F5A8;</button>
     ${_selSignedCount>0?`<button onclick="window.bulkUploadSaved()" style="padding:5px 14px;border-radius:6px;border:none;background:#1a73e8;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;box-shadow:0 1px 4px rgba(26,115,232,.4)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>Upload to Drive (${_selSignedCount})</button>`:''}
     <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_selCount})</button>
@@ -4910,10 +4977,10 @@ function renderSaved(){
   // ── Active tab (unsigned) ──
   if(tab==='active'){
     var _aSelCnt=Object.keys(S.savedSel).filter(function(id){return activeItems.find(function(s){return s.id===id;});}).length;
-    var _aBulk=_aSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
-      <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_aSelCnt} selected</span>
+    var _aBulk=_aSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;color:var(--warn-text);flex:1">${_aSelCnt} selected</span>
       <button onclick="window.openSelectedSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📂 Open (${_aSelCnt})</button>
-      <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
+      <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid var(--warn-border);background:transparent;color:var(--warn-text);font-size:12px;cursor:pointer">Clear</button>
       <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_aSelCnt})</button>
     </div>`:'';
     return tabBar+`
@@ -4929,10 +4996,10 @@ function renderSaved(){
   // ── Signed tab (complete, not yet uploaded) ──
   if(tab==='signed'){
     var _sSelCnt=Object.keys(S.savedSel).filter(function(id){return signedItems.find(function(s){return s.id===id;});}).length;
-    var _sBulk=_sSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
-      <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_sSelCnt} selected</span>
+    var _sBulk=_sSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;color:var(--warn-text);flex:1">${_sSelCnt} selected</span>
       <button onclick="window.openSelectedSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📂 Open (${_sSelCnt})</button>
-      <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
+      <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid var(--warn-border);background:transparent;color:var(--warn-text);font-size:12px;cursor:pointer">Clear</button>
       ${_sSelCnt>0?`<button onclick="window.bulkUploadSaved()" style="padding:5px 14px;border-radius:6px;border:none;background:#1a73e8;color:#fff;font-size:12px;font-weight:700;cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg> Upload All (${_sSelCnt})</button>`:''}
       <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_sSelCnt})</button>
     </div>`:'';
@@ -6859,6 +6926,13 @@ window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));autoSaveLS();setTimeou
 window.lsBurn=(v,acId)=>{if(!v||v===''){const _a=S.aircraft[acId];S.form.burnOff=(_a&&_a.layout==='ga8')?'35':(_a&&_a.burnDef?String(_a.burnDef):'');}else{S.form.burnOff=v;}autoSaveLS();setTimeout(_lsSafeRender,150);};
 window.lsGndBurn=(v,acId)=>{const n=parseFloat(v);S.form.gndBurn=isNaN(n)?null:String(toKg(n,acId));autoSaveLS();setTimeout(_lsSafeRender,150);};
 window.clearSig=()=>{S.form.sig=null;S.sigTypedName='';autoSaveLS();render();};
+window.lsReserveNote=function(){
+  var f=S.form,r=f?calcFormWB(f):null;
+  var unit=(f&&typeof fuelUnit==='function')?fuelUnit(f.ac):'';
+  var have=r?(unit==='L'?Math.round(r.fuelRemKg/AVGAS):Math.round(r.fuelRemKg/LB)):0;
+  var need=r?(unit==='L'?Math.round(r.finalReserveKg/AVGAS):Math.round(r.finalReserveKg/LB)):0;
+  alert('⚠ BELOW FINAL RESERVE\n\nFuel remaining at destination ('+have+' '+unit+') is less than the 30-minute final reserve minimum ('+need+' '+unit+').\n\nThis loadsheet cannot be signed until the fuel at destination is at or above the final reserve. Add fuel, or reduce ground/flight burn (shorter trip), then re-check.');
+};
 
 // Apply typed name as a signature
 window.applyTypedSig=()=>{
@@ -6924,6 +6998,7 @@ window.submitLsInPlace=async function(){
   if(!f||!f.sig){toast('Please sign the loadsheet first.','warn');return;}
   if(!f.pic){toast('Select a PIC before submitting.','warn');return;}
   const r=calcFormWB(f);if(!r||!r.towOk||!r.lwOk||!r.cogOk){toast('Fix weight and balance limits before submitting.','warn');return;}
+  if(r.reserveOk===false){toast('Fuel at destination is below the 30-minute final reserve — add fuel or reduce the trip before signing.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
   f.sigBy=(S.user&&S.user.name)||'';f.sigTs=f.sigTs||new Date().toISOString();
   f.savedBy=(S.user&&S.user.name)||'';
@@ -6957,6 +7032,7 @@ window.handleSubmit=async()=>{
   if(!f.sig){toast('Please sign the loadsheet before submitting.','warn');return;}
   if(!f.pic){toast('Select a PIC before submitting.','warn');return;}
   const r=calcFormWB(f);if(!r||!r.towOk||!r.lwOk||!r.cogOk){toast('Fix weight and balance limits before submitting.','warn');return;}
+  if(r.reserveOk===false){toast('Fuel at destination is below the 30-minute final reserve — add fuel or reduce the trip before signing.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
   f.sigBy=(S.user&&S.user.name)||'';f.sigTs=new Date().toISOString();
   f.savedBy=(S.user&&S.user.name)||'';
@@ -11474,6 +11550,20 @@ function _rzProductDuration(p){var s=String(p||'').toUpperCase();if(/FCF|MILFORD
 function _rzProductCodeDuration(t){var s=String(t||'').toUpperCase();if(/\bFCF\b/.test(s))return 270;if(/\b(FJHH|MCEXP|THH)\b/.test(s))return 300;return 0;}
 // A booking's primary departure time (first item), e.g. "0930"; "—" if none.
 function _rzBookingDep(b){if(_rzBookingIsFlyback(b))return RZ_FLYBACK_DEP;var it=((b&&b.items)||[])[0]||{};return _rzDepTime(it.startTimeLocal||'')||'—';}
+// Display name for a departure heading/pill: a user rename override, else 'FLB' for the flyback
+// group, else the raw dep label. The product suffix is only appended for un-renamed time departures.
+function _rzDepDisplay(dep){var o=(S._rzDepNames||{})[dep];if(o)return o;return dep===RZ_FLYBACK_DEP?'FLB':dep;}
+function _rzDepShowProduct(dep){return !((S._rzDepNames||{})[dep])&&dep!==RZ_FLYBACK_DEP;}
+window.rezdyRenameDep=function(dep){
+  if(!dep)return;var _def=(dep===RZ_FLYBACK_DEP?'FLB':dep);
+  var v=prompt('Rename this departure heading (blank = reset to default):',(S._rzDepNames||{})[dep]||_def);
+  if(v==null)return;v=String(v).trim();
+  S._rzDepNames=S._rzDepNames||{};
+  if(!v||v===_def)delete S._rzDepNames[dep];else S._rzDepNames[dep]=v;
+  try{if(typeof lsSet==='function')lsSet('ts_rz_depnames',S._rzDepNames);}catch(e){}
+  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_depnames',value:JSON.stringify(S._rzDepNames)}]).catch(function(){});
+  render();
+};
 // Which fleet aircraft a booking is allocated to — read from the comments / custom fields
 // (the operator writes e.g. "SLA" or "ZK-SLB" in Rezdy the day before). Returns an ac id or null.
 function _rzAircraftFromComments(b){
@@ -11628,7 +11718,7 @@ function _rzDateRow(sub){
     (noRefresh?'':'<button class="btn btn-ghost" style="font-size:12px;margin-left:auto'+(S._rzSyncing?';opacity:.6':'')+'" onclick="window.rezdyRefresh()">'+(S._rzSyncing?'⟳ Syncing…':'⟳ Refresh from Rezdy')+'</button>')+
     '</div>';
 }
-function _rzModals(){return (S._rzCheckinDraft?_rzCheckinModal():'')+(S._rzNewBkDraft?_rzNewBookingModal():'');}
+function _rzModals(){return (S._rzCheckinDraft?_rzCheckinModal():'')+(S._rzNewBkDraft?_rzNewBookingModal():'')+(S._rzCloseLs?_rzCloseLsModal():'');}
 // Operations-hosted views — Bookings / Seatmap / Loadsheets now live under Operations. These are
 // rendered by renderOperations; they share the Rezdy date row + modals.
 window.rezdyOpsBookings=function(){_rzEnsureDay();return _rzDateRow('bookings')+_rzRenderBookings()+_rzModals();};
@@ -12249,7 +12339,7 @@ function _rzRenderBookings(){
       var prod='';depB.some(function(b){var c=_rzProduct((((b.items||[])[0]||{}).product)||'');if(c){prod=c;return true;}return false;});
       var on=!searching&&depFilter===d;
       depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:800">'+
-        '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">'+_rzEsc(d)+(prod?' '+_rzEsc(prod):'')+'</span>'+
+        '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">'+_rzEsc(_rzDepDisplay(d))+((_rzDepShowProduct(d)&&prod)?' '+_rzEsc(prod):'')+'</span>'+
         '<span style="font-size:10px;font-weight:700;opacity:'+(on?'.9':'.6')+'">'+cnt+' bkg'+(cnt===1?'':'s')+'</span>'+
       '</button>';
     });
@@ -12279,7 +12369,7 @@ function _rzRenderBookings(){
     var grp=active.filter(function(b){return _rzBookingDep(b)===depFilter;}).sort(function(a,b){var ca=(S._rzBookingCheckedIn||{})[String(a.orderNumber||'')]?1:0,cb=(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')]?1:0;return ca-cb;}); // checked-in to the bottom
     var gbd={a:0,c:0,i:0};grp.forEach(function(x){var e=_rzEffBreakdown(x);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
     var prod=_rzProduct((((grp[0]||{}).items||[])[0]||{}).product||'');
-    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(depFilter)+(prod?' '+_rzEsc(prod):'')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+'</span></div>';
+    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 <span onclick="window.rezdyRenameDep(\''+_rzEsc(depFilter).replace(/\'/g,"\\'")+'\')" title="Click to rename this heading" style="cursor:pointer;border-bottom:1px dashed var(--border2)">'+_rzEsc(_rzDepDisplay(depFilter))+'</span>'+((_rzDepShowProduct(depFilter)&&prod)?' '+_rzEsc(prod):'')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+'</span></div>';
     grp.forEach(function(b){body+=_rzBookingCard(b);});
     // Cancelled bookings for THIS departure (collapsed).
     var depCancelled=cancelledRows.filter(function(b){return _rzBookingDep(b)===depFilter;});
@@ -12311,7 +12401,7 @@ function _rzBookingDetail(b){
   var bubsH='';var _bub=_rzPaxBubbles(b);
   var _rst=(b._manual
     ?'<button onclick="window.rezdyDeleteManualBooking(\''+_bdOE+'\')" title="Delete this manual booking" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#f87171;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.4);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">🗑 Delete booking</button>'
-    :'<button onclick="window.rezdyResetBooking(\''+_bdOE+'\')" title="Reset this booking to its original Rezdy info — clears check-in, weights, child/infant tags and aircraft" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:rgba(255,255,255,.05);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">↺ Reset to Rezdy</button>');
+    :'<button onclick="window.rezdyResetBooking(\''+_bdOE+'\')" title="Reset this booking to its original Rezdy info — clears check-in, weights, child/infant tags and aircraft" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:var(--card2);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">↺ Reset to Rezdy</button>');
   bubsH='<div style="display:flex;align-items:stretch;margin-bottom:12px">'+(_bub||'<span style="flex:1"></span>')+_rst+'</div>';
   // Passengers — flatten participants across items.
   const parts=[];
@@ -13037,7 +13127,7 @@ function _rzRenderManifest(){
         '<span style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800">CO-PILOT</span>'+
         (_coCode
           ?'<span style="font-size:12px;font-weight:800;color:#818cf8">✈ '+_rzEsc(_coCode)+'</span><button onclick="window.rezdyManClearCoPic(\''+idE+'\')" title="Clear co-pilot" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:auto;padding:0 2px">✕</button>'
-          :(function(){var _cp=_rzPilotsForAc(id).filter(function(p){return p.code!==picCode;});return _cp.length
+          :(function(){var _cp=_rzAvailablePilots().filter(function(p){return p.code!==picCode;});return _cp.length
               ?'<select onclick="event.stopPropagation()" onchange="window.rezdyManSetCoPic(\''+idE+'\',this.value)" style="margin-left:auto;max-width:140px;font-size:12px;font-weight:700;padding:3px 5px;background:var(--card2);color:var(--text1);border:1px solid var(--border2);border-radius:6px;cursor:pointer"><option value="">drag or pick…</option>'+_cp.map(function(p){return '<option value="'+_rzEsc(p.code)+'">'+_rzEsc(p.code)+' · '+_rzEsc(String(p.name).split(/\s+/)[0])+(p.rostered?'':' (off)')+'</option>';}).join('')+'</select>'
               :'<span style="font-size:11px;color:var(--text3);margin-left:auto">optional</span>';})())+
       '</div>';
@@ -13344,6 +13434,13 @@ window.rezdyManReseat=function(dep,acId){
   var _coPic=!!(S._rzManCoPic||{})[acId];
   var sm={};try{sm=assignSeats(acId,paxList,{coSeat1:_coPic})||{};}catch(e){sm={};}
   if(_coPic)_rzReserveCoSeat(sm,acId); // safety: ensure seat 1 stays clear for the co-pilot
+  // Any passenger who couldn't get a seat (cabin full — e.g. a co-pilot just took seat 1) is
+  // bumped back to the UNALLOCATED pool rather than left allocated-but-seatless (which carries no
+  // W&B contribution and confuses the count). Clearing .ac returns them to the pool.
+  var _seated={};Object.keys(sm).forEach(function(k){_seated[sm[k]]=1;});
+  var _bumped=0;
+  list.forEach(function(p){if(!_seated[p.id]){p.ac=null;_bumped++;(S._rzManPax||[]).forEach(function(x){if(x.infantOf===p.id)x.ac=null;});}});
+  if(_bumped&&typeof toast==='function')toast(_bumped+' passenger'+(_bumped>1?'s':'')+' bumped to the pool (cabin full).','warn');
   S._rzManSeats=S._rzManSeats||{};S._rzManSeats[_rzSeatKey(dep,acId)]=sm;
   return sm;
 };
@@ -13513,7 +13610,7 @@ window.rezdyManDropPilot=function(acId,e){
   // pushing the passengers back). The first pilot is the PIC.
   if(curPic&&curPic!==code){
     if(((S._rzManCoPic||{})[acId])===code)return; // already the co-pilot
-    if(pil&&!pil.picAuth){if(typeof toast==='function')toast(code+' is not a pilot (no aircraft approvals).','warn');return;}
+    // Co-pilot need NOT be rated on this aircraft type (only the PIC must be) — allow any pilot.
     S._rzManCoPic=S._rzManCoPic||{};S._rzManCoPic[acId]=code;
     _rzManReseatDepForAc(acId); // re-seat so seat 1 is freed for the co-pilot
     _rzManSave();render();
@@ -13673,13 +13770,52 @@ function _rzLsTabAdd(id,ac,label){
   S._rzLsTabs.push({id:id,ac:ac||'',label:label||'',by:(S.user&&S.user.name)||'',at:new Date().toISOString()});
   _rzLsTabsSave();
 }
+// The actual close — drops the open tab everywhere (the saved loadsheet stays unless deleted).
 window.rezdyCloseLsTab=function(id){
-  if(!confirm('Close this loadsheet? (It stays saved and can be re-opened from Saved this day.)'))return;
+  S._rzCloseLs=null;
   S._rzLsTabs=(S._rzLsTabs||[]).filter(function(t){return t.id!==id;});
   S.lsTabs=(S.lsTabs||[]).filter(function(t){return t.id!==id;}); // drop the editor tab too
   if(S._rzLsActiveId===id){S._rzLsActiveId=null;S.activeTabId=null;S.editId=null;S.form=null;} // closing the open one returns to the list
   _rzLsTabsSave();render();
 };
+// Closing a loadsheet opens a choice: Save & close, Close (keep as saved), or Delete (to Bin).
+window.rezdyLsClosePrompt=function(id){S._rzCloseLs=id;render();};
+window.rezdyLsCloseCancel=function(){S._rzCloseLs=null;render();};
+window.rezdyLsCloseSave=function(id){
+  var s=(S.saved||[]).find(function(x){return x.id===id;});
+  if(S._rzLsActiveId===id&&S.form&&s){s.form=S.form;s.savedAt=new Date().toISOString();} // capture live edits
+  if(s){
+    if(typeof lsSet==='function')lsSet('ts_loadsheets_cache',S.saved);
+    if(typeof sbU==='function')sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt||new Date().toISOString(),status:s.status||'unsigned'}]).catch(function(){});
+  }
+  if(typeof toast==='function')toast('Loadsheet saved','ok');
+  window.rezdyCloseLsTab(id);
+};
+window.rezdyLsCloseDelete=function(id){
+  var s=(S.saved||[]).find(function(x){return x.id===id;});
+  if(s){ // soft-delete to the Bin (recoverable), matching the app's delete model
+    s.form=s.form||{};s.form._prevStatus=s.status;s.status='deleted';
+    if(typeof lsSet==='function')lsSet('ts_loadsheets_cache',S.saved);
+    if(typeof sbU==='function')sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted'}]).catch(function(){});
+  }
+  if(typeof toast==='function')toast('Loadsheet moved to Bin','warn');
+  window.rezdyCloseLsTab(id);
+};
+function _rzCloseLsModal(){
+  var id=S._rzCloseLs;var s=(S.saved||[]).find(function(x){return x.id===id;});
+  var ac=s&&s.form&&s.form.ac?s.form.ac.replace('ZK-',''):'';var idE=_rzEsc(id);
+  return '<div onclick="window.rezdyLsCloseCancel()" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:18px">'+
+    '<div onclick="event.stopPropagation()" style="background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:380px;width:100%;padding:18px 18px 14px;box-shadow:0 20px 60px rgba(0,0,0,.5)">'+
+      '<div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px">Close loadsheet'+(ac?' · '+_rzEsc(ac):'')+'?</div>'+
+      '<div style="font-size:12px;color:var(--text3);margin-bottom:14px">Save your changes, just close the tab (it stays in Saved), or delete the loadsheet.</div>'+
+      '<div style="display:flex;flex-direction:column;gap:8px">'+
+        '<button onclick="window.rezdyLsCloseSave(\''+idE+'\')" style="padding:11px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:800;cursor:pointer">💾 Save &amp; close</button>'+
+        '<button onclick="window.rezdyCloseLsTab(\''+idE+'\')" style="padding:11px;border-radius:9px;border:1px solid var(--border2);background:var(--card2);color:var(--text);font-size:13px;font-weight:700;cursor:pointer">Close (keep saved)</button>'+
+        '<button onclick="if(confirm(\'Delete this loadsheet? It moves to the Bin and can be restored.\'))window.rezdyLsCloseDelete(\''+idE+'\')" style="padding:11px;border-radius:9px;border:1px solid var(--err-border);background:transparent;color:var(--err-text);font-size:13px;font-weight:700;cursor:pointer">🗑 Delete loadsheet</button>'+
+        '<button onclick="window.rezdyLsCloseCancel()" style="padding:9px;border-radius:9px;border:none;background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">Cancel</button>'+
+      '</div>'+
+    '</div></div>';
+}
 // Point S.form/S.lsTabs at a loadsheet id WITHOUT touching S.tab (so we stay on the Operations
 // Loadsheets tab, not the legacy loadsheet route). The decoupled post-render hook still wires the
 // signature pad because S._rzLsActiveId is set.
@@ -13732,7 +13868,7 @@ function _rzRenderLoadsheets(){
     var on=activeId===t.id;var idE=String(t.id).replace(/'/g,"\\'");
     h+='<div style="display:inline-flex;align-items:stretch;border-radius:13px;overflow:hidden;border:1.5px solid '+(on?col:col+'55')+';flex-shrink:0">'+
       '<button onclick="window.rezdyOpenLsTab(\''+idE+'\')" style="padding:4px 10px;font-size:11px;font-weight:800;background:'+(on?col+'55':col+'18')+';border:none;cursor:pointer;color:'+(on?'#fff':col)+';white-space:nowrap">'+(signed?'✅ ':'')+_rzEsc(String(ac).replace('ZK-',''))+(etd?' '+_rzEsc(etd):'')+'</button>'+
-      '<button onclick="window.rezdyCloseLsTab(\''+idE+'\')" title="Close (keeps the saved loadsheet)" style="padding:4px 7px;font-size:12px;line-height:1;background:'+(on?col+'33':col+'0f')+';border:none;border-left:1px solid '+(on?col:col+'44')+';cursor:pointer;color:'+(on?'#fff':col+'cc')+'">✕</button>'+
+      '<button onclick="window.rezdyLsClosePrompt(\''+idE+'\')" title="Close…" style="padding:4px 7px;font-size:12px;line-height:1;background:'+(on?col+'33':col+'0f')+';border:none;border-left:1px solid '+(on?col:col+'44')+';cursor:pointer;color:'+(on?'#fff':col+'cc')+'">✕</button>'+
     '</div>';
   });
   h+='</div></div>';
@@ -13757,7 +13893,7 @@ function _rzRenderLoadsheets(){
           '<div style="font-size:10px;color:var(--text3)">'+(signed?'Signed':'Unsigned')+(t.by?' · started by '+_rzEsc(String(t.by).split(/\s+/)[0]):'')+'</div>'+
         '</div>'+
         '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="window.rezdyOpenLsTab(\''+idE+'\')">Open</button>'+
-        '<button onclick="window.rezdyCloseLsTab(\''+idE+'\')" title="Remove from open tabs (keeps the saved loadsheet)" style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:0 2px">✕</button>'+
+        '<button onclick="window.rezdyLsClosePrompt(\''+idE+'\')" title="Close…" style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:0 2px">✕</button>'+
       '</div>';
     });
     h+='</div>';

@@ -38,10 +38,21 @@ document.addEventListener('focusin',function(e){var t=e.target;if(t&&t.tagName==
 // Cmd+Z / Ctrl+Z global undo for loadsheet
 document.addEventListener('keydown',function(e){
   if((e.metaKey||e.ctrlKey)&&e.key==='z'&&!e.shiftKey){
-    if((S.tab==='loadsheet'||S.tab.startsWith('ls_'))&&S._lsFormUndoStack&&S._lsFormUndoStack.length){
+    if((S.tab==='loadsheet'||(S.tab||'').startsWith('ls_'))&&S._lsFormUndoStack&&S._lsFormUndoStack.length){
       e.preventDefault();
       window.lsUndo();
     }
+  }
+  // ⌘/Ctrl + ← / → cycle the DATE one day at a time on the Rezdy-data pages (Bookings / Seatmap /
+  // Loadsheets), mirroring the ◁ ▷ buttons. Skip while typing in a field or a modal is open.
+  if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&(e.metaKey||e.ctrlKey)&&!e.altKey&&!e.shiftKey){
+    var _da=document.activeElement,_dt=_da&&_da.tagName;
+    if(_dt==='INPUT'||_dt==='SELECT'||_dt==='TEXTAREA'||(_da&&_da.isContentEditable))return;
+    if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
+    if(S.section==='operations'&&(S.tab==='bookings'||S.tab==='rseatmap'||S.tab==='rloadsheets')&&typeof window.rezdyShiftDate==='function'){
+      e.preventDefault();window.rezdyShiftDate(e.key==='ArrowRight'?1:-1);
+    }
+    return;
   }
   // ← / → cycle the Operations sub-tabs (Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved ↔ Charter),
   // unless focus is in a field or a modal/account panel is open.
@@ -56,6 +67,40 @@ document.addEventListener('keydown',function(e){
     e.preventDefault();if(typeof window.switchOpsTab==='function')window.switchOpsTab(_tabs[_next]);
   }
 });
+// Cycle the tier-2 sub-tabs of the current section (shared by arrow keys and mobile swipe).
+window._cycleTier2=function(dir){
+  if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
+  if(S.section==='operations'){
+    var tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');
+    var cur=tabs.indexOf(S.tab);if(cur<0)cur=0;var nx=(cur+dir+tabs.length)%tabs.length;
+    if(typeof window.switchOpsTab==='function')window.switchOpsTab(tabs[nx]);
+  } else if(S.section==='rezdy'){
+    var rt=['schedule','pickups','mypickups'];var c=rt.indexOf(S.rezdyTab);if(c<0)c=0;var n=(c+dir+rt.length)%rt.length;
+    S.rezdyTab=rt[n];render();
+  }
+};
+// Mobile: a clear horizontal swipe cycles the tier-2 tabs. Guards so it never hijacks a
+// horizontally-scrollable element (e.g. the seatmap fleet row) or ordinary vertical scrolling.
+(function(){
+  var x0=null,y0=null,t0=0,scrollGuard=false;
+  document.addEventListener('touchstart',function(e){
+    if(!e.touches||e.touches.length!==1){x0=null;return;}
+    var t=e.touches[0];x0=t.clientX;y0=t.clientY;t0=Date.now();scrollGuard=false;
+    var el=e.target;
+    while(el&&el!==document.body&&el.nodeType===1){
+      if(el.scrollWidth-el.clientWidth>8){var cs=getComputedStyle(el);if(/(auto|scroll)/.test(cs.overflowX)){scrollGuard=true;break;}}
+      el=el.parentElement;
+    }
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(x0==null)return;var ch=e.changedTouches&&e.changedTouches[0];if(!ch){x0=null;return;}
+    var dx=ch.clientX-x0,dy=ch.clientY-y0,dt=Date.now()-t0;var guard=scrollGuard;x0=null;
+    if(guard)return;
+    if(dt>600)return;                                   // too slow to be a swipe
+    if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.8)return; // must be a decisive horizontal swipe
+    window._cycleTier2(dx<0?1:-1);                      // swipe left → next, right → previous
+  },{passive:true});
+})();
 // Fire deferred render when focus fully leaves all inputs
 document.addEventListener('focusout',function(e){
   if(!_rtRenderPending)return;

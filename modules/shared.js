@@ -373,11 +373,15 @@ window.setLsRouteField=function(field,val){
   else{S['_lsOther_'+field]=false;S.form[field]=val;}
   // Departure-driven fuel default: a Milford departure uses the reduced Milford fuel; changing
   // the departure back to anywhere else (e.g. Queenstown) restores the aircraft's standard fuel.
+  var _fuelChanged=false;
   if(field==='dep'&&S.form.ac){
-    if(_isMilford(S.form[field])){var _mf=_milfordFuelKg(S.form.ac);if(_mf!=null)S.form.fuel=String(_mf);}
-    else{var _a=S.aircraft[S.form.ac];if(_a&&_a.fuelKg!=null)S.form.fuel=String(_a.fuelKg);}
+    if(_isMilford(S.form[field])){var _mf=_milfordFuelKg(S.form.ac);if(_mf!=null){S.form.fuel=String(_mf);_fuelChanged=true;}}
+    else{var _a=S.aircraft[S.form.ac];if(_a&&_a.fuelKg!=null){S.form.fuel=String(_a.fuelKg);_fuelChanged=true;}}
   }
-  S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();safeRender();
+  S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();
+  // Route changes are discrete (no in-flight typing to clobber). When the fuel default just
+  // changed, render immediately so the Fuel box updates on the FIRST click, not after several.
+  if(_fuelChanged)render();else safeRender();
 };
 function aptOpts(sel, isOther){
   _rebuildAptData();
@@ -395,7 +399,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.77';
+const APP_VER='v23.78';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -450,7 +454,10 @@ function fuelKgForSetup(acId){const a=_acSpec(acId);if(!a)return 0;const s=(curD
 // less fuel: 115 L for an airvan (GA8) / 613 lb for a caravan (C208). Returns kg.
 function _isMilford(code){return code==='NZMF'||/milford/i.test(String(code||''));}
 function _milfordFuelKg(acId){const a=_acSpec(acId);if(!a)return null;return a.layout==='ga8'?toKg(115,acId):toKg(613,acId);}
-window._isMilford=_isMilford;window._milfordFuelKg=_milfordFuelKg;
+// VFR final reserve = 30 min at the cruise burn rate the loadsheet uses (58 L/hr airvan, 136.1 kg/hr
+// caravan). Returned in kg so it compares directly against fuel-remaining-at-destination.
+function _finalReserveKg(acId){const a=_acSpec(acId);if(!a)return 0;return a.layout==='ga8'?toKg(29,acId):68.05;}
+window._isMilford=_isMilford;window._milfordFuelKg=_milfordFuelKg;window._finalReserveKg=_finalReserveKg;
 function burnToKg(v,acId){const a=_acSpec(acId);if(!a)return parseFloat(v)||0;const val=parseFloat(v)||0;if(a.burnDefUnit==='lbs') return val*LB;if(a.layout==='ga8'||a.burnDefUnit==='l'||a.burnDefUnit==='litres') return val*AVGAS;if(a.burnDefUnit==='kg') return val;return val*LB;}
 function seat1IsCoPilot(acId){return !!((curDisp().acSetup||[]).find(s=>(s._seatmapKey||s.acId)===acId||s.acId===acId)?.coPilot);}
 // coSeat1 (optional) forces seat 1 to be reserved for a co-pilot regardless of the legacy dispatch
@@ -517,7 +524,10 @@ function calcFormWB(form){
   const tow=wt,towCog=wt?mom/wt:0;
   const burnKg=form.burnOff?burnToKg(parseFloat(form.burnOff)||0,form.ac):burnToKg(a.burnDef,form.ac);
   wt-=burnKg;mom-=burnKg*a.fuelArm;
+  // Fuel remaining at destination must stay at/above the 30-min final reserve.
+  const fuelRemKg=fW-gndBurn-burnKg;const finalReserveKg=_finalReserveKg(form.ac);const reserveOk=fuelRemKg>=finalReserveKg;
   return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn,tow,towCog,burnKg,lw:wt,lwCog:wt?mom/wt:0,
+    fuelRemKg,finalReserveKg,reserveOk,
     towOk:tow<=a.mtow,lwOk:wt<=a.mlw,cogOk:towCog>=a.cogMin&&towCog<=a.cogMax,
     mtow:a.mtow,mlw:a.mlw,cogMin:a.cogMin,cogMax:a.cogMax};
 }
@@ -1349,6 +1359,8 @@ async function loadAll(){
     }
     if(_initPads&&_initPads.length){S.pads=_initPads.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});}
 
+    // Custom departure-heading names (Bookings) — seed from cache for instant first paint.
+    try{var _dnC=lsGet('ts_rz_depnames');if(_dnC&&typeof _dnC==='object')S._rzDepNames=_dnC;}catch(e){}
     // ── Role Permissions ──
     try{
       const _rpCached=lsGet('ts_role_perms');
@@ -1819,11 +1831,12 @@ async function reloadTable(table){
     if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,(r.rates&&parseFloat(r.rates.perHour)>0)?r.rates:dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
-      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured)&select=key,value',{headers:SH});
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames)&select=key,value',{headers:SH});
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
           if(row.key==='role_perms'&&row.value&&!_editingPerms()&&Date.now()-(S._permsEditTs||0)>5000){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
+          if(row.key==='rz_depnames'&&row.value){try{var _dn=JSON.parse(row.value);if(_dn&&typeof _dn==='object'){S._rzDepNames=_dn;lsSet('ts_rz_depnames',_dn);changed=true;}}catch(e){}}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
           if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
           if(row.key==='maintenance'&&row.value){

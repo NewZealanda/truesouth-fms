@@ -117,6 +117,20 @@ function _rzProductDuration(p){var s=String(p||'').toUpperCase();if(/FCF|MILFORD
 function _rzProductCodeDuration(t){var s=String(t||'').toUpperCase();if(/\bFCF\b/.test(s))return 270;if(/\b(FJHH|MCEXP|THH)\b/.test(s))return 300;return 0;}
 // A booking's primary departure time (first item), e.g. "0930"; "—" if none.
 function _rzBookingDep(b){if(_rzBookingIsFlyback(b))return RZ_FLYBACK_DEP;var it=((b&&b.items)||[])[0]||{};return _rzDepTime(it.startTimeLocal||'')||'—';}
+// Display name for a departure heading/pill: a user rename override, else 'FLB' for the flyback
+// group, else the raw dep label. The product suffix is only appended for un-renamed time departures.
+function _rzDepDisplay(dep){var o=(S._rzDepNames||{})[dep];if(o)return o;return dep===RZ_FLYBACK_DEP?'FLB':dep;}
+function _rzDepShowProduct(dep){return !((S._rzDepNames||{})[dep])&&dep!==RZ_FLYBACK_DEP;}
+window.rezdyRenameDep=function(dep){
+  if(!dep)return;var _def=(dep===RZ_FLYBACK_DEP?'FLB':dep);
+  var v=prompt('Rename this departure heading (blank = reset to default):',(S._rzDepNames||{})[dep]||_def);
+  if(v==null)return;v=String(v).trim();
+  S._rzDepNames=S._rzDepNames||{};
+  if(!v||v===_def)delete S._rzDepNames[dep];else S._rzDepNames[dep]=v;
+  try{if(typeof lsSet==='function')lsSet('ts_rz_depnames',S._rzDepNames);}catch(e){}
+  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_depnames',value:JSON.stringify(S._rzDepNames)}]).catch(function(){});
+  render();
+};
 // Which fleet aircraft a booking is allocated to — read from the comments / custom fields
 // (the operator writes e.g. "SLA" or "ZK-SLB" in Rezdy the day before). Returns an ac id or null.
 function _rzAircraftFromComments(b){
@@ -271,7 +285,7 @@ function _rzDateRow(sub){
     (noRefresh?'':'<button class="btn btn-ghost" style="font-size:12px;margin-left:auto'+(S._rzSyncing?';opacity:.6':'')+'" onclick="window.rezdyRefresh()">'+(S._rzSyncing?'⟳ Syncing…':'⟳ Refresh from Rezdy')+'</button>')+
     '</div>';
 }
-function _rzModals(){return (S._rzCheckinDraft?_rzCheckinModal():'')+(S._rzNewBkDraft?_rzNewBookingModal():'');}
+function _rzModals(){return (S._rzCheckinDraft?_rzCheckinModal():'')+(S._rzNewBkDraft?_rzNewBookingModal():'')+(S._rzCloseLs?_rzCloseLsModal():'');}
 // Operations-hosted views — Bookings / Seatmap / Loadsheets now live under Operations. These are
 // rendered by renderOperations; they share the Rezdy date row + modals.
 window.rezdyOpsBookings=function(){_rzEnsureDay();return _rzDateRow('bookings')+_rzRenderBookings()+_rzModals();};
@@ -892,7 +906,7 @@ function _rzRenderBookings(){
       var prod='';depB.some(function(b){var c=_rzProduct((((b.items||[])[0]||{}).product)||'');if(c){prod=c;return true;}return false;});
       var on=!searching&&depFilter===d;
       depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:800">'+
-        '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">'+_rzEsc(d)+(prod?' '+_rzEsc(prod):'')+'</span>'+
+        '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">'+_rzEsc(_rzDepDisplay(d))+((_rzDepShowProduct(d)&&prod)?' '+_rzEsc(prod):'')+'</span>'+
         '<span style="font-size:10px;font-weight:700;opacity:'+(on?'.9':'.6')+'">'+cnt+' bkg'+(cnt===1?'':'s')+'</span>'+
       '</button>';
     });
@@ -922,7 +936,7 @@ function _rzRenderBookings(){
     var grp=active.filter(function(b){return _rzBookingDep(b)===depFilter;}).sort(function(a,b){var ca=(S._rzBookingCheckedIn||{})[String(a.orderNumber||'')]?1:0,cb=(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')]?1:0;return ca-cb;}); // checked-in to the bottom
     var gbd={a:0,c:0,i:0};grp.forEach(function(x){var e=_rzEffBreakdown(x);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
     var prod=_rzProduct((((grp[0]||{}).items||[])[0]||{}).product||'');
-    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(depFilter)+(prod?' '+_rzEsc(prod):'')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+'</span></div>';
+    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 <span onclick="window.rezdyRenameDep(\''+_rzEsc(depFilter).replace(/\'/g,"\\'")+'\')" title="Click to rename this heading" style="cursor:pointer;border-bottom:1px dashed var(--border2)">'+_rzEsc(_rzDepDisplay(depFilter))+'</span>'+((_rzDepShowProduct(depFilter)&&prod)?' '+_rzEsc(prod):'')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+'</span></div>';
     grp.forEach(function(b){body+=_rzBookingCard(b);});
     // Cancelled bookings for THIS departure (collapsed).
     var depCancelled=cancelledRows.filter(function(b){return _rzBookingDep(b)===depFilter;});
@@ -954,7 +968,7 @@ function _rzBookingDetail(b){
   var bubsH='';var _bub=_rzPaxBubbles(b);
   var _rst=(b._manual
     ?'<button onclick="window.rezdyDeleteManualBooking(\''+_bdOE+'\')" title="Delete this manual booking" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#f87171;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.4);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">🗑 Delete booking</button>'
-    :'<button onclick="window.rezdyResetBooking(\''+_bdOE+'\')" title="Reset this booking to its original Rezdy info — clears check-in, weights, child/infant tags and aircraft" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:rgba(255,255,255,.05);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">↺ Reset to Rezdy</button>');
+    :'<button onclick="window.rezdyResetBooking(\''+_bdOE+'\')" title="Reset this booking to its original Rezdy info — clears check-in, weights, child/infant tags and aircraft" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:var(--card2);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">↺ Reset to Rezdy</button>');
   bubsH='<div style="display:flex;align-items:stretch;margin-bottom:12px">'+(_bub||'<span style="flex:1"></span>')+_rst+'</div>';
   // Passengers — flatten participants across items.
   const parts=[];
@@ -1680,7 +1694,7 @@ function _rzRenderManifest(){
         '<span style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800">CO-PILOT</span>'+
         (_coCode
           ?'<span style="font-size:12px;font-weight:800;color:#818cf8">✈ '+_rzEsc(_coCode)+'</span><button onclick="window.rezdyManClearCoPic(\''+idE+'\')" title="Clear co-pilot" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:auto;padding:0 2px">✕</button>'
-          :(function(){var _cp=_rzPilotsForAc(id).filter(function(p){return p.code!==picCode;});return _cp.length
+          :(function(){var _cp=_rzAvailablePilots().filter(function(p){return p.code!==picCode;});return _cp.length
               ?'<select onclick="event.stopPropagation()" onchange="window.rezdyManSetCoPic(\''+idE+'\',this.value)" style="margin-left:auto;max-width:140px;font-size:12px;font-weight:700;padding:3px 5px;background:var(--card2);color:var(--text1);border:1px solid var(--border2);border-radius:6px;cursor:pointer"><option value="">drag or pick…</option>'+_cp.map(function(p){return '<option value="'+_rzEsc(p.code)+'">'+_rzEsc(p.code)+' · '+_rzEsc(String(p.name).split(/\s+/)[0])+(p.rostered?'':' (off)')+'</option>';}).join('')+'</select>'
               :'<span style="font-size:11px;color:var(--text3);margin-left:auto">optional</span>';})())+
       '</div>';
@@ -1987,6 +2001,13 @@ window.rezdyManReseat=function(dep,acId){
   var _coPic=!!(S._rzManCoPic||{})[acId];
   var sm={};try{sm=assignSeats(acId,paxList,{coSeat1:_coPic})||{};}catch(e){sm={};}
   if(_coPic)_rzReserveCoSeat(sm,acId); // safety: ensure seat 1 stays clear for the co-pilot
+  // Any passenger who couldn't get a seat (cabin full — e.g. a co-pilot just took seat 1) is
+  // bumped back to the UNALLOCATED pool rather than left allocated-but-seatless (which carries no
+  // W&B contribution and confuses the count). Clearing .ac returns them to the pool.
+  var _seated={};Object.keys(sm).forEach(function(k){_seated[sm[k]]=1;});
+  var _bumped=0;
+  list.forEach(function(p){if(!_seated[p.id]){p.ac=null;_bumped++;(S._rzManPax||[]).forEach(function(x){if(x.infantOf===p.id)x.ac=null;});}});
+  if(_bumped&&typeof toast==='function')toast(_bumped+' passenger'+(_bumped>1?'s':'')+' bumped to the pool (cabin full).','warn');
   S._rzManSeats=S._rzManSeats||{};S._rzManSeats[_rzSeatKey(dep,acId)]=sm;
   return sm;
 };
@@ -2156,7 +2177,7 @@ window.rezdyManDropPilot=function(acId,e){
   // pushing the passengers back). The first pilot is the PIC.
   if(curPic&&curPic!==code){
     if(((S._rzManCoPic||{})[acId])===code)return; // already the co-pilot
-    if(pil&&!pil.picAuth){if(typeof toast==='function')toast(code+' is not a pilot (no aircraft approvals).','warn');return;}
+    // Co-pilot need NOT be rated on this aircraft type (only the PIC must be) — allow any pilot.
     S._rzManCoPic=S._rzManCoPic||{};S._rzManCoPic[acId]=code;
     _rzManReseatDepForAc(acId); // re-seat so seat 1 is freed for the co-pilot
     _rzManSave();render();
@@ -2316,13 +2337,52 @@ function _rzLsTabAdd(id,ac,label){
   S._rzLsTabs.push({id:id,ac:ac||'',label:label||'',by:(S.user&&S.user.name)||'',at:new Date().toISOString()});
   _rzLsTabsSave();
 }
+// The actual close — drops the open tab everywhere (the saved loadsheet stays unless deleted).
 window.rezdyCloseLsTab=function(id){
-  if(!confirm('Close this loadsheet? (It stays saved and can be re-opened from Saved this day.)'))return;
+  S._rzCloseLs=null;
   S._rzLsTabs=(S._rzLsTabs||[]).filter(function(t){return t.id!==id;});
   S.lsTabs=(S.lsTabs||[]).filter(function(t){return t.id!==id;}); // drop the editor tab too
   if(S._rzLsActiveId===id){S._rzLsActiveId=null;S.activeTabId=null;S.editId=null;S.form=null;} // closing the open one returns to the list
   _rzLsTabsSave();render();
 };
+// Closing a loadsheet opens a choice: Save & close, Close (keep as saved), or Delete (to Bin).
+window.rezdyLsClosePrompt=function(id){S._rzCloseLs=id;render();};
+window.rezdyLsCloseCancel=function(){S._rzCloseLs=null;render();};
+window.rezdyLsCloseSave=function(id){
+  var s=(S.saved||[]).find(function(x){return x.id===id;});
+  if(S._rzLsActiveId===id&&S.form&&s){s.form=S.form;s.savedAt=new Date().toISOString();} // capture live edits
+  if(s){
+    if(typeof lsSet==='function')lsSet('ts_loadsheets_cache',S.saved);
+    if(typeof sbU==='function')sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt||new Date().toISOString(),status:s.status||'unsigned'}]).catch(function(){});
+  }
+  if(typeof toast==='function')toast('Loadsheet saved','ok');
+  window.rezdyCloseLsTab(id);
+};
+window.rezdyLsCloseDelete=function(id){
+  var s=(S.saved||[]).find(function(x){return x.id===id;});
+  if(s){ // soft-delete to the Bin (recoverable), matching the app's delete model
+    s.form=s.form||{};s.form._prevStatus=s.status;s.status='deleted';
+    if(typeof lsSet==='function')lsSet('ts_loadsheets_cache',S.saved);
+    if(typeof sbU==='function')sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted'}]).catch(function(){});
+  }
+  if(typeof toast==='function')toast('Loadsheet moved to Bin','warn');
+  window.rezdyCloseLsTab(id);
+};
+function _rzCloseLsModal(){
+  var id=S._rzCloseLs;var s=(S.saved||[]).find(function(x){return x.id===id;});
+  var ac=s&&s.form&&s.form.ac?s.form.ac.replace('ZK-',''):'';var idE=_rzEsc(id);
+  return '<div onclick="window.rezdyLsCloseCancel()" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:18px">'+
+    '<div onclick="event.stopPropagation()" style="background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:380px;width:100%;padding:18px 18px 14px;box-shadow:0 20px 60px rgba(0,0,0,.5)">'+
+      '<div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px">Close loadsheet'+(ac?' · '+_rzEsc(ac):'')+'?</div>'+
+      '<div style="font-size:12px;color:var(--text3);margin-bottom:14px">Save your changes, just close the tab (it stays in Saved), or delete the loadsheet.</div>'+
+      '<div style="display:flex;flex-direction:column;gap:8px">'+
+        '<button onclick="window.rezdyLsCloseSave(\''+idE+'\')" style="padding:11px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:800;cursor:pointer">💾 Save &amp; close</button>'+
+        '<button onclick="window.rezdyCloseLsTab(\''+idE+'\')" style="padding:11px;border-radius:9px;border:1px solid var(--border2);background:var(--card2);color:var(--text);font-size:13px;font-weight:700;cursor:pointer">Close (keep saved)</button>'+
+        '<button onclick="if(confirm(\'Delete this loadsheet? It moves to the Bin and can be restored.\'))window.rezdyLsCloseDelete(\''+idE+'\')" style="padding:11px;border-radius:9px;border:1px solid var(--err-border);background:transparent;color:var(--err-text);font-size:13px;font-weight:700;cursor:pointer">🗑 Delete loadsheet</button>'+
+        '<button onclick="window.rezdyLsCloseCancel()" style="padding:9px;border-radius:9px;border:none;background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">Cancel</button>'+
+      '</div>'+
+    '</div></div>';
+}
 // Point S.form/S.lsTabs at a loadsheet id WITHOUT touching S.tab (so we stay on the Operations
 // Loadsheets tab, not the legacy loadsheet route). The decoupled post-render hook still wires the
 // signature pad because S._rzLsActiveId is set.
@@ -2375,7 +2435,7 @@ function _rzRenderLoadsheets(){
     var on=activeId===t.id;var idE=String(t.id).replace(/'/g,"\\'");
     h+='<div style="display:inline-flex;align-items:stretch;border-radius:13px;overflow:hidden;border:1.5px solid '+(on?col:col+'55')+';flex-shrink:0">'+
       '<button onclick="window.rezdyOpenLsTab(\''+idE+'\')" style="padding:4px 10px;font-size:11px;font-weight:800;background:'+(on?col+'55':col+'18')+';border:none;cursor:pointer;color:'+(on?'#fff':col)+';white-space:nowrap">'+(signed?'✅ ':'')+_rzEsc(String(ac).replace('ZK-',''))+(etd?' '+_rzEsc(etd):'')+'</button>'+
-      '<button onclick="window.rezdyCloseLsTab(\''+idE+'\')" title="Close (keeps the saved loadsheet)" style="padding:4px 7px;font-size:12px;line-height:1;background:'+(on?col+'33':col+'0f')+';border:none;border-left:1px solid '+(on?col:col+'44')+';cursor:pointer;color:'+(on?'#fff':col+'cc')+'">✕</button>'+
+      '<button onclick="window.rezdyLsClosePrompt(\''+idE+'\')" title="Close…" style="padding:4px 7px;font-size:12px;line-height:1;background:'+(on?col+'33':col+'0f')+';border:none;border-left:1px solid '+(on?col:col+'44')+';cursor:pointer;color:'+(on?'#fff':col+'cc')+'">✕</button>'+
     '</div>';
   });
   h+='</div></div>';
@@ -2400,7 +2460,7 @@ function _rzRenderLoadsheets(){
           '<div style="font-size:10px;color:var(--text3)">'+(signed?'Signed':'Unsigned')+(t.by?' · started by '+_rzEsc(String(t.by).split(/\s+/)[0]):'')+'</div>'+
         '</div>'+
         '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="window.rezdyOpenLsTab(\''+idE+'\')">Open</button>'+
-        '<button onclick="window.rezdyCloseLsTab(\''+idE+'\')" title="Remove from open tabs (keeps the saved loadsheet)" style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:0 2px">✕</button>'+
+        '<button onclick="window.rezdyLsClosePrompt(\''+idE+'\')" title="Close…" style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:0 2px">✕</button>'+
       '</div>';
     });
     h+='</div>';

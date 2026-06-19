@@ -387,6 +387,10 @@ function renderLoadsheet(){
     const gndBurnDisplay=String(Math.round(fromKg(gndBurnKg,f.ac)));
     const fuelRemKg=fuelKgVal-gndBurnKg-burnKgVal;
     const flightMin=a?.layout==='ga8'?(parseFloat(burnVal||a?.burnDef||35)/58*60).toFixed(0):(burnKgVal/136.1*60).toFixed(0);
+    // Final-reserve check: fuel remaining at destination must be ≥ 30 min at cruise burn.
+    const _resKg=(typeof _finalReserveKg==='function')?_finalReserveKg(f.ac):0;
+    const _belowRes=_resKg>0&&fuelRemKg<_resKg;
+    const _resMin=a?.layout==='ga8'?((fuelRemKg/AVGAS)/58*60):(fuelRemKg/136.1*60); // min of fuel at dest (airvan rate is L/hr → kg→L first)
     // -- Build cargo section
     let cargoSection='';
     if(isPod){
@@ -398,12 +402,12 @@ function renderLoadsheet(){
                <text x="${x+w/2}%" y="53%" text-anchor="middle" font-size="9" fill="${podTextColors[zi%4]}" font-weight="700">${zn.lbl.replace('Pod Zone ','Zone ')}</text>`;
       }).join('');
       const fusSVG=`<svg viewBox="0 0 300 60" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:50px;margin-bottom:8px">
-        <rect x="2%" y="28%" width="96%" height="44%" rx="10" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
-        <ellipse cx="2.5%" cy="50%" rx="2.5%" ry="22%" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
-        <polygon points="97%,17% 100%,17% 100%,50%" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.15)" stroke-width="1"/>
+        <rect x="2%" y="28%" width="96%" height="44%" rx="10" fill="var(--card2)" stroke="var(--border2)" stroke-width="1.5"/>
+        <ellipse cx="2.5%" cy="50%" rx="2.5%" ry="22%" fill="var(--card2)" stroke="var(--border2)" stroke-width="1.5"/>
+        <polygon points="97%,17% 100%,17% 100%,50%" fill="var(--card2)" stroke="var(--border2)" stroke-width="1"/>
         ${zoneSVG}
-        <text x="4%" y="18%" font-size="8" fill="rgba(255,255,255,.3)">FRONT</text>
-        <text x="84%" y="18%" font-size="8" fill="rgba(255,255,255,.3)">REAR</text>
+        <text x="4%" y="18%" font-size="8" fill="var(--text3)">FRONT</text>
+        <text x="84%" y="18%" font-size="8" fill="var(--text3)">REAR</text>
       </svg>`;
       const zoneBoxes=a.cargo.map((zn,zi)=>{
         const w=(f.cargo&&f.cargo[zi])||'';
@@ -464,11 +468,13 @@ function renderLoadsheet(){
         </div>
         <div style="font-size:10px;color:#f87171;margin-top:2px">&#x2248; ${flightMin} min</div>
       </div>
-      <div style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);border-radius:8px;padding:8px 10px">
-        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#4ade80;text-transform:uppercase;margin-bottom:4px">Fuel at Dest</div>
-        <div style="font-size:16px;font-weight:800;color:var(--text)">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
-        <div style="font-size:10px;color:#4ade80;margin-top:2px">${a?.layout==='ga8'?'litres':'lbs'}</div>
+      <div style="position:relative;background:${_belowRes?'rgba(239,68,68,.14)':'rgba(34,197,94,.10)'};border:1px solid ${_belowRes?'rgba(239,68,68,.55)':'rgba(34,197,94,.30)'};border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:${_belowRes?'#f87171':'#4ade80'};text-transform:uppercase;margin-bottom:4px">Fuel at Dest</div>
+        <div style="font-size:16px;font-weight:800;color:${_belowRes?'#f87171':'var(--text)'}">${a?.layout==='ga8'?(fuelRemKg/AVGAS).toFixed(0):(fuelRemKg/LB).toFixed(0)}</div>
+        <div style="font-size:10px;color:${_belowRes?'#f87171':'#4ade80'};margin-top:2px">${a?.layout==='ga8'?'litres':'lbs'}${_belowRes?' · '+Math.max(0,Math.round(_resMin))+' min':''}</div>
+        ${_belowRes?`<div onclick="event.stopPropagation();window.lsReserveNote()" title="Below final reserve — tap for detail" style="position:absolute;top:6px;right:8px;font-size:18px;line-height:1;cursor:pointer;filter:drop-shadow(0 0 2px rgba(0,0,0,.4))">⚠️</div>`:''}
       </div>
+      ${_belowRes?`<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:7px 10px;font-size:11px;font-weight:700;color:#f87171;display:flex;align-items:center;gap:6px">🛑 Below 30-min final reserve — cannot sign until fixed.</div>`:''}
       ${_lwDisplay!==null?`<div style="background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.30);border-radius:8px;padding:8px 10px">
         <div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:#c084fc;text-transform:uppercase;margin-bottom:4px">Landing Weight</div>
         <div style="font-size:16px;font-weight:800;color:${r.lwOk?'var(--text)':'#f87171'}">${_lwDisplay}</div>
@@ -511,7 +517,7 @@ function renderLoadsheet(){
           const _bg=row.ok?'rgba(34,197,94,.12)':'rgba(239,68,68,.12)';
           const _bd=row.ok?'rgba(34,197,94,.4)':'rgba(239,68,68,.4)';
           const _c=row.ok?'#4ade80':'#f87171';
-          return`<div style="padding:6px 8px;margin:4px 0;border-radius:8px;background:${_bg};border:1px solid ${_bd}"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:700;color:${_c}">${row.l}</span><span style="font-size:13px;font-weight:800;color:${_c}">${row.v.toFixed(1)} <span style="font-size:10px;opacity:.7">/ ${row.lim} kg</span></span></div><div style="height:4px;border-radius:2px;background:rgba(255,255,255,.1)"><div style="height:100%;width:${_p}%;background:${_c};border-radius:2px"></div></div></div>`;
+          return`<div style="padding:6px 8px;margin:4px 0;border-radius:8px;background:${_bg};border:1px solid ${_bd}"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:700;color:${_c}">${row.l}</span><span style="font-size:13px;font-weight:800;color:${_c}">${row.v.toFixed(1)} <span style="font-size:10px;opacity:.7">/ ${row.lim} kg</span></span></div><div style="height:4px;border-radius:2px;background:var(--card2)"><div style="height:100%;width:${_p}%;background:${_c};border-radius:2px"></div></div></div>`;
         }
         return`<div style="display:flex;justify-content:space-between;padding:3px 8px;border-radius:4px"><span style="font-size:12px;color:var(--text3)">${row.l}</span><span style="font-size:12px;font-weight:600">${row.v.toFixed(1)} kg</span></div>`;
       }).join('');

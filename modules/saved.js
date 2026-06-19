@@ -44,10 +44,10 @@ function renderSaved(){
 
   const _selCount=Object.keys(S.savedSel).length;
   const _selSignedCount=Object.keys(S.savedSel).filter(id=>{const s=S.saved.find(x=>x.id===id);return s&&s.status==='complete';}).length;
-  const _bulkBar=_selCount>0&&tab!=='bin'?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
-    <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_selCount} item(s) selected</span>
+  const _bulkBar=_selCount>0&&tab!=='bin'?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;margin-bottom:10px">
+    <span style="font-size:13px;font-weight:600;color:var(--warn-text);flex:1">${_selCount} item(s) selected</span>
     <button onclick="window.openSelectedSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📂 Open (${_selCount})</button>
-    <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
+    <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid var(--warn-border);background:transparent;color:var(--warn-text);font-size:12px;cursor:pointer">Clear</button>
     <button onclick="window.printMultiSheet(Object.keys(S.savedSel))" style="padding:5px 12px;border-radius:6px;border:none;background:#374151;color:#fff;font-size:16px;font-weight:700;cursor:pointer" title="Print selected">&#x1F5A8;</button>
     ${_selSignedCount>0?`<button onclick="window.bulkUploadSaved()" style="padding:5px 14px;border-radius:6px;border:none;background:#1a73e8;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;box-shadow:0 1px 4px rgba(26,115,232,.4)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>Upload to Drive (${_selSignedCount})</button>`:''}
     <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_selCount})</button>
@@ -217,10 +217,10 @@ function renderSaved(){
   // ── Active tab (unsigned) ──
   if(tab==='active'){
     var _aSelCnt=Object.keys(S.savedSel).filter(function(id){return activeItems.find(function(s){return s.id===id;});}).length;
-    var _aBulk=_aSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
-      <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_aSelCnt} selected</span>
+    var _aBulk=_aSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;color:var(--warn-text);flex:1">${_aSelCnt} selected</span>
       <button onclick="window.openSelectedSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📂 Open (${_aSelCnt})</button>
-      <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
+      <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid var(--warn-border);background:transparent;color:var(--warn-text);font-size:12px;cursor:pointer">Clear</button>
       <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_aSelCnt})</button>
     </div>`:'';
     return tabBar+`
@@ -236,10 +236,10 @@ function renderSaved(){
   // ── Signed tab (complete, not yet uploaded) ──
   if(tab==='signed'){
     var _sSelCnt=Object.keys(S.savedSel).filter(function(id){return signedItems.find(function(s){return s.id===id;});}).length;
-    var _sBulk=_sSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1e1a00;border:1px solid #ca8a04;border-radius:8px;margin-bottom:10px">
-      <span style="font-size:13px;font-weight:600;color:#fde68a;flex:1">${_sSelCnt} selected</span>
+    var _sBulk=_sSelCnt>0?`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;color:var(--warn-text);flex:1">${_sSelCnt} selected</span>
       <button onclick="window.openSelectedSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📂 Open (${_sSelCnt})</button>
-      <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid #ca8a04;background:transparent;color:#fde68a;font-size:12px;cursor:pointer">Clear</button>
+      <button onclick="window.clearSavedSel()" style="padding:5px 12px;border-radius:6px;border:1px solid var(--warn-border);background:transparent;color:var(--warn-text);font-size:12px;cursor:pointer">Clear</button>
       ${_sSelCnt>0?`<button onclick="window.bulkUploadSaved()" style="padding:5px 14px;border-radius:6px;border:none;background:#1a73e8;color:#fff;font-size:12px;font-weight:700;cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg> Upload All (${_sSelCnt})</button>`:''}
       <button onclick="window.bulkDeleteSaved()" style="padding:5px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Move to Bin (${_sSelCnt})</button>
     </div>`:'';

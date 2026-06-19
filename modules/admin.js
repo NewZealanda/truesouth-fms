@@ -1648,6 +1648,13 @@ window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));autoSaveLS();setTimeou
 window.lsBurn=(v,acId)=>{if(!v||v===''){const _a=S.aircraft[acId];S.form.burnOff=(_a&&_a.layout==='ga8')?'35':(_a&&_a.burnDef?String(_a.burnDef):'');}else{S.form.burnOff=v;}autoSaveLS();setTimeout(_lsSafeRender,150);};
 window.lsGndBurn=(v,acId)=>{const n=parseFloat(v);S.form.gndBurn=isNaN(n)?null:String(toKg(n,acId));autoSaveLS();setTimeout(_lsSafeRender,150);};
 window.clearSig=()=>{S.form.sig=null;S.sigTypedName='';autoSaveLS();render();};
+window.lsReserveNote=function(){
+  var f=S.form,r=f?calcFormWB(f):null;
+  var unit=(f&&typeof fuelUnit==='function')?fuelUnit(f.ac):'';
+  var have=r?(unit==='L'?Math.round(r.fuelRemKg/AVGAS):Math.round(r.fuelRemKg/LB)):0;
+  var need=r?(unit==='L'?Math.round(r.finalReserveKg/AVGAS):Math.round(r.finalReserveKg/LB)):0;
+  alert('⚠ BELOW FINAL RESERVE\n\nFuel remaining at destination ('+have+' '+unit+') is less than the 30-minute final reserve minimum ('+need+' '+unit+').\n\nThis loadsheet cannot be signed until the fuel at destination is at or above the final reserve. Add fuel, or reduce ground/flight burn (shorter trip), then re-check.');
+};
 
 // Apply typed name as a signature
 window.applyTypedSig=()=>{
@@ -1713,6 +1720,7 @@ window.submitLsInPlace=async function(){
   if(!f||!f.sig){toast('Please sign the loadsheet first.','warn');return;}
   if(!f.pic){toast('Select a PIC before submitting.','warn');return;}
   const r=calcFormWB(f);if(!r||!r.towOk||!r.lwOk||!r.cogOk){toast('Fix weight and balance limits before submitting.','warn');return;}
+  if(r.reserveOk===false){toast('Fuel at destination is below the 30-minute final reserve — add fuel or reduce the trip before signing.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
   f.sigBy=(S.user&&S.user.name)||'';f.sigTs=f.sigTs||new Date().toISOString();
   f.savedBy=(S.user&&S.user.name)||'';
@@ -1746,6 +1754,7 @@ window.handleSubmit=async()=>{
   if(!f.sig){toast('Please sign the loadsheet before submitting.','warn');return;}
   if(!f.pic){toast('Select a PIC before submitting.','warn');return;}
   const r=calcFormWB(f);if(!r||!r.towOk||!r.lwOk||!r.cogOk){toast('Fix weight and balance limits before submitting.','warn');return;}
+  if(r.reserveOk===false){toast('Fuel at destination is below the 30-minute final reserve — add fuel or reduce the trip before signing.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
   f.sigBy=(S.user&&S.user.name)||'';f.sigTs=new Date().toISOString();
   f.savedBy=(S.user&&S.user.name)||'';

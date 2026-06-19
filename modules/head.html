@@ -31,13 +31,16 @@
 /* ── Light theme ── flips the core palette; subtle white overlays used inline stay faint but
    readable. Toggled by setting data-theme="light" on <html>. */
 html[data-theme="light"]{
-  --bg:#eef2f7;--card:#ffffff;--card2:#f1f5f9;--border:#dbe2ea;--border2:#c2ccd8;
-  --text:#0f172a;--text2:#334155;--text3:#64748b;
-  --accent:#3f6390;--acc:#3f6390;--appbg:#eef2f7;
-  --ok-bg:#dcfce7;--ok-border:#86efac;--ok-text:#166534;
-  --warn-bg:#fef9c3;--warn-border:#fde047;--warn-text:#854d0e;
-  --err-bg:#fee2e2;--err-border:#fca5a5;--err-text:#991b1b;
+  --bg:#e7edf4;--card:#ffffff;--card2:#eef2f8;--border:#d3dce7;--border2:#b4c1d2;
+  --text:#0f172a;--text2:#3a4860;--text3:#5b6a80;
+  --accent:#345b8a;--acc:#345b8a;--appbg:#e7edf4;
+  --ok-bg:#dcfce7;--ok-border:#4ade80;--ok-text:#15643a;
+  --warn-bg:#fdf6c8;--warn-border:#facc15;--warn-text:#7c5306;
+  --err-bg:#fde8e8;--err-border:#f87171;--err-text:#9b1c1c;
 }
+/* Light: give the white "boarding-pass" passenger bubbles a hairline edge so they separate from
+   the white cards they sit on (in dark mode the white-on-dark contrast already does this). */
+html[data-theme="light"] .card,html[data-theme="light"] .pax-chip{box-shadow:0 1px 2px rgba(15,23,42,.05);}
 html[data-theme="light"] .sub-tab{background:#e2e8f0;color:#475569;border-color:#cbd5e1;}
 html[data-theme="light"] .sub-tab:hover{background:#d4dde8;color:#1e293b;}
 html[data-theme="light"] .sub-tab.on{background:#3f6390;border-color:#3f6390;color:#fff;}
