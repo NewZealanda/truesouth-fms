@@ -252,25 +252,15 @@ function _rzEnsureVans(){
 // ─────────────────────────────────────────────────────────────────────────────
 //  ENTRY
 // ─────────────────────────────────────────────────────────────────────────────
-function renderRezdy(){
-  // Gated on the 'rezdy' permission (superadmin only by default; the menu item is also gated).
-  if(typeof hasRolePerm==='function'&&!hasRolePerm('rezdy'))return '<div class="page"><div class="card" style="text-align:center;padding:40px">Not available.</div></div>';
+// Ensure the Rezdy day is set and quietly kept in lock-step with Rezdy (used by the Rezdy
+// section AND by the Operations Bookings/Seatmap/Loadsheets tabs which render the same views).
+function _rzEnsureDay(){if(!S.rezdyDate)S.rezdyDate=_rzToday();if(typeof setTimeout==='function')setTimeout(function(){if(typeof _rzBgSync==='function')_rzBgSync();},0);}
+// Shared date-picker row (prev / next / today / refresh). `sub` hides Refresh on the loadsheets view.
+function _rzDateRow(sub){
   if(!S.rezdyDate)S.rezdyDate=_rzToday();
-  const sub=S.rezdyTab||'bookings';
-  // Keep the viewed day in lock-step with Rezdy. Throttled + off the render stack so it
-  // never blocks or loops; the cache shows instantly and the view updates when Rezdy returns.
-  if(typeof setTimeout==='function')setTimeout(function(){if(typeof _rzBgSync==='function')_rzBgSync();},0);
-  // Opening the Calendar reloads it (so it reflects the latest synced bookings). No auto-poll.
-  if(sub==='schedule'&&S._rzPrevSub!=='schedule'){S._schedBlocks=null;S._rezdyBookings=null;}
-  S._rzPrevSub=sub;
-  const tabBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    [{id:'bookings',lbl:'Bookings'},{id:'manifest',lbl:'Seatmap'},{id:'loadsheets',lbl:'Loadsheets'},{id:'schedule',lbl:'Calendar'},{id:'pickups',lbl:'Pickups'},{id:'mypickups',lbl:'My Pickups'}].map(function(t){
-      return '<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.rezdyTab=\''+t.id+'\';render()">'+t.lbl+'</button>';
-    }).join('')+'</div>';
-
-  // shared date picker row — prev / next / today date-cycle controls on every tab
-  const _isToday=S.rezdyDate===_rzToday();
-  const dateRow='<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+  var _isToday=S.rezdyDate===_rzToday();
+  var noRefresh=(sub==='loadsheets'||sub==='rloadsheets');
+  return '<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
     '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1" title="Previous day" onclick="window.rezdyShiftDate(-1)">◁</button>'+
     '<div style="position:relative;display:inline-block">'+
       '<span style="display:inline-block;font-size:14px;font-weight:700;color:var(--text1);padding:7px 12px;border-radius:8px;background:var(--card2);border:1px solid var(--border2);white-space:nowrap">📅 '+_rzDowLabel(S.rezdyDate)+'</span>'+
@@ -278,16 +268,33 @@ function renderRezdy(){
     '</div>'+
     '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1" title="Next day" onclick="window.rezdyShiftDate(1)">▷</button>'+
     '<button class="btn btn-ghost" style="font-size:12px;padding:6px 12px'+(_isToday?';opacity:.45':'')+'" title="Jump to today" onclick="window.rezdySetDate(\''+_rzToday()+'\')">Today</button>'+
-    (sub==='loadsheets'?'':'<button class="btn btn-ghost" style="font-size:12px;margin-left:auto'+(S._rzSyncing?';opacity:.6':'')+'" onclick="window.rezdyRefresh()">'+(S._rzSyncing?'⟳ Syncing…':'⟳ Refresh from Rezdy')+'</button>')+
+    (noRefresh?'':'<button class="btn btn-ghost" style="font-size:12px;margin-left:auto'+(S._rzSyncing?';opacity:.6':'')+'" onclick="window.rezdyRefresh()">'+(S._rzSyncing?'⟳ Syncing…':'⟳ Refresh from Rezdy')+'</button>')+
     '</div>';
-
-  var _modal=(S._rzCheckinDraft?_rzCheckinModal():'')+(S._rzNewBkDraft?_rzNewBookingModal():'');
+}
+function _rzModals(){return (S._rzCheckinDraft?_rzCheckinModal():'')+(S._rzNewBkDraft?_rzNewBookingModal():'');}
+// Operations-hosted views — Bookings / Seatmap / Loadsheets now live under Operations. These are
+// rendered by renderOperations; they share the Rezdy date row + modals.
+window.rezdyOpsBookings=function(){_rzEnsureDay();return _rzDateRow('bookings')+_rzRenderBookings()+_rzModals();};
+window.rezdyOpsSeatmap=function(){_rzEnsureDay();return _rzDateRow('rseatmap')+_rzRenderManifest()+_rzModals();};
+window.rezdyOpsLoadsheets=function(){_rzEnsureDay();return _rzDateRow('rloadsheets')+_rzRenderLoadsheets()+_rzModals();};
+// The Rezdy section now hosts only Calendar / Pickups / My Pickups (Bookings/Seatmap/Loadsheets
+// moved to Operations).
+function renderRezdy(){
+  if(typeof hasRolePerm==='function'&&!hasRolePerm('rezdy'))return '<div class="page"><div class="card" style="text-align:center;padding:40px">Not available.</div></div>';
+  _rzEnsureDay();
+  var rzTabs=['schedule','pickups','mypickups'];
+  var sub=(rzTabs.indexOf(S.rezdyTab)>=0)?S.rezdyTab:'schedule';S.rezdyTab=sub;
+  if(sub==='schedule'&&S._rzPrevSub!=='schedule'){S._schedBlocks=null;S._rezdyBookings=null;}
+  S._rzPrevSub=sub;
+  const tabBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
+    [{id:'schedule',lbl:'Calendar'},{id:'pickups',lbl:'Pickups'},{id:'mypickups',lbl:'My Pickups'}].map(function(t){
+      return '<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.rezdyTab=\''+t.id+'\';render()">'+t.lbl+'</button>';
+    }).join('')+'</div>';
+  const dateRow=_rzDateRow(sub);
+  var _modal=_rzModals();
   if(sub==='pickups')return tabBar+dateRow+_rzRenderPickups()+_modal;
   if(sub==='mypickups')return tabBar+dateRow+_rzRenderMyPickups()+_modal;
-  if(sub==='manifest')return tabBar+dateRow+_rzRenderManifest()+_modal;
-  if(sub==='loadsheets')return tabBar+dateRow+_rzRenderLoadsheets()+_modal;
-  if(sub==='schedule')return tabBar+dateRow+_rzRenderSchedule()+_modal;
-  return tabBar+dateRow+_rzRenderBookings()+_modal;
+  return tabBar+dateRow+_rzRenderSchedule()+_modal;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2252,8 +2259,8 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   var acCode=phys.replace('ZK-','');
   S.lsForms=S.lsForms||{};S.lsForms[acCode]=form;S.lsAc=acCode;S.form=form;S.editId=newId;S.formDirty=false;
   S.lsTabs=S.lsTabs||[];S.lsTabs.push({id:newId,acId:phys,form:form,status:'unsigned',savedAt:savedAt,isNew:true});
-  // Open INLINE in the Rezdy Loadsheets sub-tab (no jump to the legacy Operations editor).
-  S.activeTabId=newId;S.tab='loadsheet';S.rezdyTab='loadsheets';S._rzLsActiveId=newId;
+  // Open INLINE in Operations ▸ Loadsheets (shared strip + editor; no legacy loadsheet route).
+  S.activeTabId=newId;S.section='operations';S.tab='rloadsheets';S._rzLsActiveId=newId;
   if(typeof sbU==='function')sbU('ts_loadsheets',[{id:newId,form:form,saved_at:savedAt,status:'unsigned'}]).catch(function(){});
   _rzLsTabAdd(newId,phys,_rzLsTabLabel(phys,form)); // share this open tab with everyone on the date
   try{window.scrollTo(0,0);}catch(_){}
@@ -2269,8 +2276,8 @@ window.rezdyNewBlankLoadsheet=function(acId){
   var acCode=acId.replace('ZK-','');
   S.lsForms=S.lsForms||{};S.lsForms[acCode]=form;S.lsAc=acCode;S.form=form;S.editId=newId;S.formDirty=false;
   S.lsTabs=S.lsTabs||[];S.lsTabs.push({id:newId,acId:acId,form:form,status:'unsigned',savedAt:savedAt,isNew:true});
-  // Open INLINE in the Rezdy Loadsheets sub-tab (no jump to the legacy Operations editor).
-  S.activeTabId=newId;S.tab='loadsheet';S.rezdyTab='loadsheets';S._rzLsActiveId=newId;
+  // Open INLINE in Operations ▸ Loadsheets (shared strip + editor; no legacy loadsheet route).
+  S.activeTabId=newId;S.section='operations';S.tab='rloadsheets';S._rzLsActiveId=newId;
   if(typeof sbU==='function')sbU('ts_loadsheets',[{id:newId,form:form,saved_at:savedAt,status:'unsigned'}]).catch(function(){});
   _rzLsTabAdd(newId,acId,_rzLsTabLabel(acId,form)); // share this open tab with everyone on the date
   try{window.scrollTo(0,0);}catch(_){}render();
@@ -2309,18 +2316,26 @@ window.rezdyCloseLsTab=function(id){
   S._rzLsTabs=(S._rzLsTabs||[]).filter(function(t){return t.id!==id;});
   _rzLsTabsSave();render();
 };
-// Open a loadsheet by id into the editor — fetching it from the cloud first if this device
-// hasn't cached it yet (e.g. it was created by another user).
+// Point S.form/S.lsTabs at a loadsheet id WITHOUT touching S.tab (so we stay on the Operations
+// Loadsheets tab, not the legacy loadsheet route). The decoupled post-render hook still wires the
+// signature pad because S._rzLsActiveId is set.
+function _rzActivateLs(id){
+  var existing=(S.lsTabs||[]).find(function(t){return t.id===id;});
+  if(!existing){
+    var s=(S.saved||[]).find(function(x){return x.id===id;});
+    if(s){var f=(typeof dc==='function')?dc(s.form):JSON.parse(JSON.stringify(s.form));if(!f.cargo)f.cargo={};S.lsTabs=S.lsTabs||[];S.lsTabs.push({id:s.id,acId:f.ac||'ZK-SLA',form:f,status:s.status||'unsigned',savedAt:s.savedAt,isNew:false});existing=S.lsTabs[S.lsTabs.length-1];}
+  }
+  if(existing){S.activeTabId=id;S.form=existing.form;S.lsAc=(existing.acId||'').replace('ZK-','');S.editId=id;S._newLsTab=false;}
+}
+// Open a loadsheet by id into the inline editor (Operations ▸ Loadsheets), fetching it from the
+// cloud first if this device hasn't cached it yet (e.g. another user created it).
 window.rezdyOpenLsTab=function(id){
-  // Open INLINE inside the Rezdy Loadsheets sub-tab — viewSaved/switchLsTab set up the form and
-  // S.tab='loadsheet' (which the post-render hook uses for the signature pad) WITHOUT changing
-  // S.section, so we stay in the Rezdy flow.
-  S._rzLsActiveId=id;S.rezdyTab='loadsheets';
+  S._rzLsActiveId=id;S.section='operations';S.tab='rloadsheets';
   var s=(S.saved||[]).find(function(x){return x.id===id;});
-  if(s){_rzLsTabAdd(id,(s.form&&s.form.ac)||'',_rzLsTabLabel((s.form&&s.form.ac)||'',s.form));if(typeof window.viewSaved==='function')window.viewSaved(id);else render();return;}
+  if(s){_rzLsTabAdd(id,(s.form&&s.form.ac)||'',_rzLsTabLabel((s.form&&s.form.ac)||'',s.form));_rzActivateLs(id);render();return;}
   try{fetch(SB+'/rest/v1/ts_loadsheets?id=eq.'+encodeURIComponent(id)+'&select=*',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
     var row=rows&&rows[0];
-    if(row&&row.form){S.saved=S.saved||[];S.saved.push({id:row.id,form:row.form,status:row.status||'unsigned',savedAt:row.saved_at});_rzLsTabAdd(id,row.form.ac||'',_rzLsTabLabel(row.form.ac||'',row.form));if(typeof window.viewSaved==='function')window.viewSaved(id);else render();}
+    if(row&&row.form){S.saved=S.saved||[];S.saved.push({id:row.id,form:row.form,status:row.status||'unsigned',savedAt:row.saved_at});_rzLsTabAdd(id,row.form.ac||'',_rzLsTabLabel(row.form.ac||'',row.form));_rzActivateLs(id);render();}
     else if(typeof toast==='function')toast('Loadsheet not found','warn');
   }).catch(function(){if(typeof toast==='function')toast('Could not open loadsheet','err');});}catch(e){}
 };

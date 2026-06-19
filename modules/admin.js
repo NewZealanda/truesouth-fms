@@ -635,8 +635,8 @@ window.setTab=function(t){
   if(S.section==='roster'&&typeof _rosterUnsaved==='function'&&_rosterUnsaved()){window._navAway(function(){window.setTab(t);});return;}
   if(t==='operations'){
     S.section='operations';
-    if(S._newLsTab&&!S.activeTabId){S._newLsTab=false;S.tab='manifest';}
-    else if(!['manifest','seatmap','saved','charter'].includes(S.tab)&&!S.activeTabId&&!S._newLsTab)S.tab='manifest';
+    if(S._newLsTab&&!S.activeTabId){S._newLsTab=false;S.tab='bookings';}
+    else if(!['bookings','rseatmap','rloadsheets','manifest','seatmap','saved','charter'].includes(S.tab)&&!S.activeTabId&&!S._newLsTab)S.tab='bookings';
   } else if(t==='charter'){
     S.section='operations';S.tab='charter';
   } else if(t==='maintenance'){

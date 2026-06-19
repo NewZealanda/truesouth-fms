@@ -77,7 +77,7 @@ function _firstAllowedSection(){
   return 'leave';
 }
 function _defaultTabFor(sec){
-  return sec==='maintenance'?'maintenance':sec==='operations'?'manifest':sec==='settings'?'admin':sec;
+  return sec==='maintenance'?'maintenance':sec==='operations'?'bookings':sec==='settings'?'admin':sec;
 }
 function render(){
   const r=document.getElementById('root');
@@ -135,7 +135,7 @@ function render(){
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
-  if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest&&S._lsMapOpen)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
+  if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')||(S._rzLsActiveId&&S.activeTabId&&S.tab==='rloadsheets')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest&&S._lsMapOpen)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
   // ── Restore focus after re-render ──
   // Force-focus (set by Tab handler) takes priority over activeElement detection
   if(_ffRow!==null){
@@ -401,7 +401,7 @@ function renderDrawer(){
   // Drawer sections expand/collapse independently; default all closed (shut on login). Kept in memory so reopening the burger shows the same state.
   S._drawerExp=S._drawerExp||{};
   const _isExp=function(k){return !!S._drawerExp[k];};
-  const t=S.tab||'manifest';
+  const t=S.tab||'bookings';
   const isLs=!!(S.activeTabId||S._newLsTab);
   function _secBtn(label,section,icon){
     var isOn=sec===section;
@@ -423,11 +423,14 @@ function renderDrawer(){
   if(_canOps){
     h+=_secBtn('Operations','operations','✈️');
     if(_isExp('operations')){
-      h+=_subBtn('Manifest',t==='manifest'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('manifest')");
-      h+=_subBtn('Seatmap',t==='seatmap'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('seatmap')");
-      h+=_subBtn('Loadsheets',isLs&&sec==='operations',"S._drawerOpen=false;window.switchToLoadsheets()");
-      h+=_subBtn('Saved',t==='saved'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('saved')");
-      if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!isLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
+      var _isLegacyLs=isLs&&t!=='rloadsheets';
+      h+=_subBtn('Bookings',t==='bookings'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('bookings')");
+      h+=_subBtn('Seatmap',t==='rseatmap'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('rseatmap')");
+      h+=_subBtn('Loadsheets',t==='rloadsheets'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('rloadsheets')");
+      h+=_subBtn('Saved',t==='saved'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('saved')");
+      if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
+      h+=_subBtn('Manifest (legacy)',t==='manifest'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('manifest')");
+      h+=_subBtn('Seatmap (legacy)',t==='seatmap'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('seatmap')");
     }
   }
   // Roster & Leave combined — show the group only if the user can reach at least one item.
@@ -479,7 +482,9 @@ function renderDrawer(){
   if(hasRolePerm('rezdy')){
     h+=_secBtn('Rezdy','rezdy','🔗');
     if(_isExp('rezdy')){
-      h+=_subBtn('Integration',sec==='rezdy',"S._drawerOpen=false;S.section='rezdy';render()");
+      h+=_subBtn('Calendar',sec==='rezdy'&&S.rezdyTab==='schedule',"S._drawerOpen=false;S.section='rezdy';S.rezdyTab='schedule';render()");
+      h+=_subBtn('Pickups',sec==='rezdy'&&S.rezdyTab==='pickups',"S._drawerOpen=false;S.section='rezdy';S.rezdyTab='pickups';render()");
+      h+=_subBtn('My Pickups',sec==='rezdy'&&S.rezdyTab==='mypickups',"S._drawerOpen=false;S.section='rezdy';S.rezdyTab='mypickups';render()");
     }
   }
   h+='</nav>';
@@ -493,15 +498,19 @@ function renderOpsSubTabs(){
   const role=S.user?.role||'desk';
   const _opsNavPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
   const _isOpsAdminPlus=role==='superadmin'||role==='admin';
-  const opsTab=S.tab||'manifest';
+  const opsTab=S.tab||'bookings';
   const isLsView=!!(S.activeTabId||S._newLsTab);
+  const isLegacyLs=isLsView&&opsTab!=='rloadsheets'; // the legacy loadsheet editor (S.tab='loadsheet')
   const savedCount=(S.saved||[]).filter(function(s){return s.status!=='deleted';}).length;
   var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
-  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='manifest'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'manifest\')" style="flex-shrink:0">Manifest</button>';
-  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" style="flex-shrink:0">Seatmap</button>';
-  h+='<button tabindex="-1" class="sub-tab '+(isLsView?'on':'')+'" onclick="window.switchToLoadsheets()" style="flex-shrink:0">Loadsheets</button>';
-  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="flex-shrink:0">Saved ('+savedCount+')</button>';
-  if(hasRolePerm('charter'))h+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLsView?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="flex-shrink:0">Charter</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='bookings'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'bookings\')" style="flex-shrink:0">Bookings</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='rseatmap'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'rseatmap\')" style="flex-shrink:0">Seatmap</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='rloadsheets'?'on':'')+'" onclick="window.switchOpsTab(\'rloadsheets\')" style="flex-shrink:0">Loadsheets</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="flex-shrink:0">Saved ('+savedCount+')</button>';
+  if(hasRolePerm('charter'))h+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="flex-shrink:0">Charter</button>';
+  h+='<span style="flex-shrink:0;color:var(--border2);padding:0 2px">|</span>';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='manifest'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'manifest\')" title="Legacy manifest" style="flex-shrink:0;opacity:.7">Manifest∗</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='seatmap'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'seatmap\')" title="Legacy seatmap" style="flex-shrink:0;opacity:.7">Seatmap∗</button>';
   h+='</div>';
   return h;
 }
@@ -650,7 +659,7 @@ function _applyLsFlash(){
 }
 function renderOperations(){
   const role=S.user?.role||'desk';
-  const opsTab=S.tab||'manifest';
+  const opsTab=S.tab||'bookings';
   const isLsView=!!(S.activeTabId||S._newLsTab);
 
 
@@ -678,6 +687,11 @@ function renderOperations(){
   }
 
   // Content routing
+  // New Operations flow (Rezdy-powered): Bookings / Seatmap / Loadsheets. Checked first so the
+  // inline loadsheet editor (which sets S.activeTabId) doesn't fall into the legacy LS view.
+  if(opsTab==='bookings'){try{return window.rezdyOpsBookings();}catch(e){return '<div class="card" style="color:var(--err-text)">Bookings error: '+e.message+'</div>';}}
+  if(opsTab==='rseatmap'){try{return window.rezdyOpsSeatmap();}catch(e){return '<div class="card" style="color:var(--err-text)">Seatmap error: '+e.message+'</div>';}}
+  if(opsTab==='rloadsheets'){try{return window.rezdyOpsLoadsheets();}catch(e){return '<div class="card" style="color:var(--err-text)">Loadsheets error: '+e.message+'</div>';}}
   if(isLsView&&!S._newLsTab){startPresenceBroadcast('loadsheet');try{return _l3+presBarH('loadsheet')+'<div id="flash-loadsheet">'+renderLoadsheet()+'</div>';}catch(e){return _l3+'<div class="card" style="color:var(--err-text)">Loadsheet error: '+e.message+'</div>';}}
   if(S._newLsTab&&opsTab!=='saved'&&opsTab!=='seatmap'&&opsTab!=='charter'){return _l3+renderNewLsPanel();}
   if(opsTab==='seatmap'){startPresenceBroadcast('seatmap');return presBarH('seatmap')+'<div id="flash-seatmap">'+renderSeatmap()+'</div>';}
