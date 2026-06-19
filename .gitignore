@@ -2,3 +2,4 @@ versions/
 index_backup.html
 *.backup.html
 .DS_Store
+auth_settings_maint_perm_fix.sql
