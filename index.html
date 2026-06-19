@@ -703,7 +703,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.63';
+const APP_VER='v23.65';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2008,6 +2008,13 @@ function initRealtime(){
           var _rsp=msg.payload.payload;
           if(_rsp&&_rsp.sessionId!==_sessionId&&_rsp.date===S.rezdyDate&&S.rezdyTab==='schedule'&&typeof window.rezdyReloadScheduleLive==='function'){
             window.rezdyReloadScheduleLive();
+          }
+        }
+        // Live shared loadsheet-tabs list: another device opened/created/closed a loadsheet tab.
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='rz_lstabs_update'){
+          var _ltp=msg.payload.payload;
+          if(_ltp&&_ltp.sessionId!==_sessionId&&_ltp.date===S.rezdyDate&&typeof window.rezdyReloadLsTabsLive==='function'){
+            window.rezdyReloadLsTabsLive();
           }
         }
       }catch(err){}
@@ -12443,6 +12450,11 @@ window.rezdyCheckinSave=function(){
   if(bd&&(bd.a!==ca||bd.c!==cc||bd.i!==ci)){
     if(!confirm('Heads up — you entered '+ca+'A '+cc+'C '+ci+'i, but the booking shows '+bd.a+'A '+bd.c+'C '+bd.i+'i.\n\nCheck in anyway?'))return;
   }
+  // Outstanding-balance warning — flag a TO PAY booking before it's checked in.
+  var _bal=b?parseFloat(b.balanceDue):0;
+  if(isFinite(_bal)&&_bal>0){
+    if(!confirm('⚠ This booking has an OUTSTANDING BALANCE of '+_rzMoney(_bal,b.currency)+'.\n\nCollect payment before checking them in. Check in anyway?'))return;
+  }
   S._rzCheckin=S._rzCheckin||{};
   S._rzCheckin[d.order]={pax:d.rows.map(function(r){
     var o={name:String(r.name).trim(),type:r.type==='child'?'child':r.type==='infant'?'infant':'adult'};
@@ -12465,6 +12477,10 @@ function _rzCheckinModal(){
     '<div onclick="event.stopPropagation()" class="rzci-dialog">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px"><div class="st" style="margin-bottom:0">'+(already?'Edit check-in':'Check in')+' — '+_rzEsc(cust)+'</div><button onclick="window.rezdyCheckinCancel()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>'+
     '<p style="font-size:12px;color:var(--text3);margin:0 0 12px">Enter every passenger’s name. <b>Actual weight</b> is optional — leave it blank to fall back to the declared weight (shown red with a “(d)”). The toggle cycles <b>A</b>dult → <b>C</b>hild → <b>i</b>nfant; an infant is a lap pax and you pick who they sit with.</p>';
+  var _ciBal=b?parseFloat(b.balanceDue):0;
+  if(isFinite(_ciBal)&&_ciBal>0){
+    h+='<div style="display:flex;align-items:center;gap:8px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.5);border-radius:9px;padding:9px 12px;margin:0 0 12px"><span style="font-size:16px">💲</span><span style="font-size:12px;font-weight:700;color:#f87171">Outstanding balance of '+_rzEsc(_rzMoney(_ciBal,b.currency))+' — collect payment before checking in.</span></div>';
+  }
   d.rows.forEach(function(r,i){
     var isInf=r.type==='infant';
     var tl=r.type==='child'?'C':isInf?'i':'A';
@@ -12996,7 +13012,7 @@ window.rezdyShiftDate=function(delta){
 window.rezdySetDate=function(v){
   S.rezdyDate=v||_rzToday();
   // clear date-scoped caches so each tab reloads for the new date
-  S._rezdyBookings=null;S._rezdyOpen={};S._pickupVans=null;S._pickupCollected=null;S._schedBlocks=null;S._schedGroupKey=null;S._schedEdit=null;S._rzManLoaded=false;S._rzManPax=null;
+  S._rezdyBookings=null;S._rezdyOpen={};S._pickupVans=null;S._pickupCollected=null;S._schedBlocks=null;S._schedGroupKey=null;S._schedEdit=null;S._rzManLoaded=false;S._rzManPax=null;S._rzLsTabsLoaded=false;S._rzLsTabs=null;
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -14149,6 +14165,7 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   var sm=_rzManSeatsFor(dep,phys);if(!sm||!Object.keys(sm).length)sm=(typeof window.rezdyManReseat==='function')?window.rezdyManReseat(dep,phys):{};
   var seatOf={};Object.keys(sm).forEach(function(idx){seatOf[sm[idx]]=parseInt(idx);});
   var cap=(a.seats?a.seats.length:0)-1,nextFree=(_hasCo?2:1),overflow=0;
+  var declMode=_rzManDeclMode(dep,phys); // all-actual or all-declared for this aircraft
   var byId={};(S._rzManPax||[]).forEach(function(x){byId[x.id]=x;});
   list.forEach(function(p){
     var idx=seatOf[p.id];
@@ -14156,7 +14173,8 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
     if(idx==null){while(nextFree<=cap&&(form.names[nextFree]||seatOf['__'+nextFree]))nextFree++;idx=nextFree;}
     if(idx>cap){overflow++;return;}
     form.names[idx]=p.name||'';
-    form.seats[idx]=(p.weight!=null&&p.weight!=='')?String(p.weight):'';
+    var _wv=_rzPaxWeight(p,declMode);
+    form.seats[idx]=(_wv!=null&&_wv!=='')?String(_wv):'';
     form.bags[idx]='';
     if(p.group)form.paxGroups[idx]=p.group;
     if(p.type==='child')form.paxType[idx]='C';
@@ -14177,6 +14195,7 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   S.lsTabs=S.lsTabs||[];S.lsTabs.push({id:newId,acId:phys,form:form,status:'unsigned',savedAt:savedAt,isNew:true});
   S.activeTabId=newId;S.section='operations';S.tab='loadsheet';
   if(typeof sbU==='function')sbU('ts_loadsheets',[{id:newId,form:form,saved_at:savedAt,status:'unsigned'}]).catch(function(){});
+  _rzLsTabAdd(newId,phys,_rzLsTabLabel(phys,form)); // share this open tab with everyone on the date
   try{window.scrollTo(0,0);}catch(_){}
   render();
   if(typeof toast==='function')toast('Loadsheet created for '+acCode+' — review & sign','ok');
@@ -14192,49 +14211,102 @@ window.rezdyNewBlankLoadsheet=function(acId){
   S.lsTabs=S.lsTabs||[];S.lsTabs.push({id:newId,acId:acId,form:form,status:'unsigned',savedAt:savedAt,isNew:true});
   S.activeTabId=newId;S.section='operations';S.tab='loadsheet';
   if(typeof sbU==='function')sbU('ts_loadsheets',[{id:newId,form:form,saved_at:savedAt,status:'unsigned'}]).catch(function(){});
+  _rzLsTabAdd(newId,acId,_rzLsTabLabel(acId,form)); // share this open tab with everyone on the date
   try{window.scrollTo(0,0);}catch(_){}render();
   if(typeof toast==='function')toast('Blank loadsheet started for '+acCode,'ok');
 };
-// ── Rezdy Loadsheets sub-tab — per-aircraft launcher that reuses the real loadsheet engine ──
+// ── Shared "open loadsheet tabs" registry (per date) ──
+// All users viewing the same date see the same list of open loadsheet tabs. Stored in
+// ts_settings under rz_lstabs_<date>; changes broadcast live (rz_lstabs_update). Whether a tab
+// was created from the seatmap, started blank, or opened from Saved, it lands in this list.
+function _rzLsTabsKey(){return 'rz_lstabs_'+S.rezdyDate;}
+window.rezdyLoadLsTabs=function(){
+  S._rzLsTabsLoaded=true;
+  try{fetch(SB+'/rest/v1/ts_settings?key=eq.'+encodeURIComponent(_rzLsTabsKey())+'&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
+    var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}
+    S._rzLsTabs=Array.isArray(v)?v:[];if(typeof safeRender==='function')safeRender();
+  }).catch(function(){S._rzLsTabs=S._rzLsTabs||[];});}catch(e){S._rzLsTabs=S._rzLsTabs||[];}
+};
+function _rzLsTabsBroadcast(){
+  try{if(typeof _rtWs==='undefined'||!_rtWs||_rtWs.readyState!==1)return;if(typeof _rtRef!=='undefined')_rtRef++;
+    _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'rz_lstabs_update',payload:{date:S.rezdyDate,sessionId:(typeof _sessionId!=='undefined'?_sessionId:'')}},ref:String(typeof _rtRef!=='undefined'?_rtRef:1)}));
+  }catch(e){}
+}
+function _rzLsTabsSave(){
+  if(typeof sbU==='function')sbU('ts_settings',[{key:_rzLsTabsKey(),value:JSON.stringify(S._rzLsTabs||[])}]).catch(function(){});
+  _rzLsTabsBroadcast();
+}
+window.rezdyReloadLsTabsLive=function(){if(S.rezdyDate)window.rezdyLoadLsTabs();};
+function _rzLsTabAdd(id,ac,label){
+  S._rzLsTabs=S._rzLsTabs||[];
+  if(S._rzLsTabs.some(function(t){return t.id===id;}))return;
+  S._rzLsTabs.push({id:id,ac:ac||'',label:label||'',by:(S.user&&S.user.name)||'',at:new Date().toISOString()});
+  _rzLsTabsSave();
+}
+window.rezdyCloseLsTab=function(id){
+  if(!confirm('Remove this loadsheet from the open tabs? (The saved loadsheet itself is kept.)'))return;
+  S._rzLsTabs=(S._rzLsTabs||[]).filter(function(t){return t.id!==id;});
+  _rzLsTabsSave();render();
+};
+// Open a loadsheet by id into the editor — fetching it from the cloud first if this device
+// hasn't cached it yet (e.g. it was created by another user).
+window.rezdyOpenLsTab=function(id){
+  var s=(S.saved||[]).find(function(x){return x.id===id;});
+  if(s){_rzLsTabAdd(id,(s.form&&s.form.ac)||'',_rzLsTabLabel((s.form&&s.form.ac)||'',s.form));if(typeof window.viewSaved==='function')window.viewSaved(id);return;}
+  try{fetch(SB+'/rest/v1/ts_loadsheets?id=eq.'+encodeURIComponent(id)+'&select=*',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
+    var row=rows&&rows[0];
+    if(row&&row.form){S.saved=S.saved||[];S.saved.push({id:row.id,form:row.form,status:row.status||'unsigned',savedAt:row.saved_at});_rzLsTabAdd(id,row.form.ac||'',_rzLsTabLabel(row.form.ac||'',row.form));if(typeof window.viewSaved==='function')window.viewSaved(id);}
+    else if(typeof toast==='function')toast('Loadsheet not found','warn');
+  }).catch(function(){if(typeof toast==='function')toast('Could not open loadsheet','err');});}catch(e){}
+};
+// Build a friendly label for a loadsheet tab.
+function _rzLsTabLabel(ac,form){var et=(form&&form.etd)?(' · '+_rzEsc(form.etd)):'';return String(ac||'').replace('ZK-','')+et;}
+// ── Rezdy Loadsheets sub-tab — a shared, live list of open loadsheet tabs for this date ──
 function _rzRenderLoadsheets(){
   if(!S._rzManLoaded){if(window.rezdyLoadManifest)window.rezdyLoadManifest();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading…</div>';}
-  var pax=S._rzManPax||[];
+  if(!S._rzLsTabsLoaded&&window.rezdyLoadLsTabs)window.rezdyLoadLsTabs(); // shared open-tabs registry
   var fleet=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
-  pax.forEach(function(p){if(p.ac&&fleet.indexOf(p.ac)<0)fleet.push(p.ac);});
-  var withPax=fleet.filter(function(id){return pax.some(function(p){return p.ac===id&&!p.infantOf;});});
+  var tabs=(S._rzLsTabs||[]).slice().sort(function(a,b){return String(a.label||'').localeCompare(String(b.label||''));});
   var h='<div class="card"><div class="st" style="margin-bottom:4px">Loadsheets</div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:0 0 8px">'+_rzDowLabel(S.rezdyDate)+' · build from the manifest, or start a fresh blank loadsheet for any aircraft. Both open in the loadsheet editor and appear in Saved.</p>'+
+    '<p style="font-size:12px;color:var(--text3);margin:0 0 8px">'+_rzDowLabel(S.rezdyDate)+' · everyone viewing this date shares the same open loadsheet tabs. Create from the <b>Seatmap</b>, start a blank below, or re-open one from Saved.</p>'+
     '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:11px;color:var(--text3);font-weight:700">New blank:</span>';
   fleet.forEach(function(id){var c=_rzAcCol(id);h+='<button onclick="window.rezdyNewBlankLoadsheet(\''+id.replace(/'/g,"\\'")+'\')" style="font-size:12px;font-weight:700;padding:4px 11px;border-radius:16px;border:1px solid '+c+';background:transparent;color:'+c+';cursor:pointer">+ '+id.replace('ZK-','')+'</button>';});
   h+='</div></div>';
-  if(!withPax.length){
-    h+='<div class="card" style="text-align:center;padding:24px;color:var(--text3)">No aircraft have passengers allocated yet — allocate in the <b>Manifest</b> tab, or start a blank loadsheet above.</div>';
-    return h;
+  // The shared list of open loadsheet tabs.
+  h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:8px">Open tabs ('+tabs.length+')</div>';
+  if(!tabs.length){
+    h+='<div style="font-size:13px;color:var(--text3);padding:8px 0">No open loadsheets for this day yet. Create one from the Seatmap, start a blank above, or open a saved one below.</div>';
+  }else{
+    tabs.forEach(function(t){
+      var s=(S.saved||[]).find(function(x){return x.id===t.id;});
+      var signed=s&&(s.status==='complete'||s.status==='signed'||(s.form&&s.form.sig));
+      var ac=(s&&s.form&&s.form.ac)||t.ac||'';var col=_rzAcCol(ac);
+      var etd=(s&&s.form&&s.form.etd)||'';
+      var idE=String(t.id).replace(/'/g,"\\'");
+      h+='<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:9px;margin-bottom:7px">'+
+        '<span style="font-size:14px">'+(signed?'✅':'📋')+'</span>'+
+        '<div style="flex:1;min-width:0;cursor:pointer" onclick="window.rezdyOpenLsTab(\''+idE+'\')">'+
+          '<div style="font-size:14px;font-weight:800;color:'+col+'">'+_rzEsc(String(ac).replace('ZK-',''))+(etd?' <span style="font-size:11px;color:var(--text3);font-weight:600">· ETD '+_rzEsc(etd)+'</span>':'')+'</div>'+
+          '<div style="font-size:10px;color:var(--text3)">'+(signed?'Signed':'Unsigned')+(t.by?' · started by '+_rzEsc(String(t.by).split(/\s+/)[0]):'')+'</div>'+
+        '</div>'+
+        '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="window.rezdyOpenLsTab(\''+idE+'\')">Open</button>'+
+        '<button onclick="window.rezdyCloseLsTab(\''+idE+'\')" title="Remove from open tabs (keeps the saved loadsheet)" style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:0 2px">✕</button>'+
+      '</div>';
+    });
   }
-  h+='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">';
-  withPax.forEach(function(id){
-    var col=_rzAcCol(id);var a=S.aircraft[id];
-    var list=pax.filter(function(p){return p.ac===id&&!p.infantOf;});
-    var nA=0,nC=0,nI=0;list.forEach(function(p){if(p.type==='child')nC++;else nA++;if(p.infantName)nI++;});
-    nI+=pax.filter(function(p){return p.ac===id&&p.infantOf;}).length;
-    var picCode=(S._rzManPic||{})[id]||'';
-    var unit=(a&&a.layout==='ga8')?'L':'lbs';
-    var std=a?Math.round(fromKg(a.fuelKg,id)):0;
-    var fuelVal=(S._rzManFuel&&S._rzManFuel[id]!=null&&S._rzManFuel[id]!=='')?S._rzManFuel[id]:std;
-    var existing=(S.saved||[]).filter(function(s){return s.id&&String(s.id).indexOf('ls_rz_'+id.replace('ZK-',''))===0&&s.form&&s.form.date===S.rezdyDate;});
-    var idE=id.replace(/'/g,"\\'");
-    h+='<div style="flex:1 1 240px;min-width:230px;background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-weight:800;font-size:15px;color:'+col+'">'+id.replace('ZK-','')+'</div><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span></div>'+
-      '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">PIC '+(picCode?'<b style="color:#60a5fa">'+_rzEsc(picCode)+'</b>':'<span style="color:var(--text3)">—</span>')+' · Fuel '+_rzEsc(String(fuelVal))+' '+unit+(fuelVal!=std?' <span style="color:var(--text3)">(std '+std+')</span>':'')+'</div>'+
-      '<button class="btn btn-primary" style="width:100%;padding:8px;font-size:12px" onclick="window.rezdyManCreateLoadsheet(\''+idE+'\')">📋 Create loadsheet</button>';
-    if(existing.length){
-      h+='<div style="margin-top:8px;border-top:1px solid var(--border2);padding-top:6px">';
-      existing.forEach(function(s){var signed=s.status==='complete'||s.status==='signed'||(s.form&&s.form.sig);h+='<button class="btn btn-ghost" style="width:100%;font-size:11px;margin-top:4px;text-align:left" onclick="window.viewSaved(\''+String(s.id).replace(/'/g,"\\'")+'\')">'+(signed?'✓ ':'○ ')+'Open loadsheet</button>';});
-      h+='</div>';
-    }
-    h+='</div>';
-  });
   h+='</div>';
+  // Saved loadsheets for this date that aren't currently in the open-tabs list (re-open to share).
+  var openIds={};(S._rzLsTabs||[]).forEach(function(t){openIds[t.id]=1;});
+  var savedToday=(S.saved||[]).filter(function(s){return s.form&&s.form.date===S.rezdyDate&&s.status!=='deleted'&&!openIds[s.id];});
+  if(savedToday.length){
+    h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:8px">Saved this day — tap to open into the shared tabs</div>';
+    savedToday.forEach(function(s){
+      var signed=s.status==='complete'||s.status==='signed'||(s.form&&s.form.sig);
+      var ac=(s.form&&s.form.ac)||'';var col=_rzAcCol(ac);var etd=(s.form&&s.form.etd)||'';var idE=String(s.id).replace(/'/g,"\\'");
+      h+='<button class="btn btn-ghost" style="width:100%;text-align:left;font-size:12px;margin-bottom:5px;border-left:3px solid '+col+'" onclick="window.rezdyOpenLsTab(\''+idE+'\')">'+(signed?'✅ ':'○ ')+_rzEsc(String(ac).replace('ZK-',''))+(etd?' · ETD '+_rzEsc(etd):'')+'</button>';
+    });
+    h+='</div>';
+  }
   return h;
 }
 
