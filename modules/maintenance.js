@@ -517,7 +517,7 @@ function renderMaintLog(){
 
   return entryForm+`<div class="card" style="overflow-x:auto">
     <div class="st" style="color:${col2}">${ac} <span style="font-size:11px;font-weight:400;color:var(--text3)">— last ${logDays} days · tap any cell to edit</span></div>
-    <table style="width:100%;border-collapse:collapse;min-width:480px">
+    <table class="maint-log-tbl" style="width:100%;border-collapse:collapse;min-width:480px">
       <thead><tr style="border-bottom:2px solid var(--border)">
         <th style="padding:6px 6px;text-align:left;font-size:11px;color:var(--text3)">Date</th>
         <th style="padding:6px 6px;text-align:right;font-size:11px;color:var(--text3)">TTIS</th>

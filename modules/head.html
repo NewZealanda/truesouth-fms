@@ -27,6 +27,15 @@
   --err-bg:#2d0a0a;--err-border:#7f1d1d;--err-text:#fca5a5;
 }
 html,body{height:100%;min-height:100dvh;min-height:-webkit-fill-available;background:#0f172a;color:var(--text);font-family:'Barlow',sans-serif;}
+/* ── Width safety: the page itself must NEVER scroll sideways on a phone. ──
+   overflow-x:clip (not hidden) avoids creating a scroll container, so it won't
+   break position:sticky or vertical scrolling. Long words/emails wrap instead of
+   pushing the layout wide. Wide DATA tables still scroll inside their own .card. */
+html,body{max-width:100%;overflow-x:clip;}
+#root{max-width:100%;overflow-x:clip;}
+body{overflow-wrap:break-word;}
+img{max-width:100%;}
+canvas,video,svg{max-width:100%;}
 input,select,textarea{font-family:inherit;font-size:14px;outline:none;}
 input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.7);}
 
@@ -193,6 +202,16 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
 
   /* W&B grid */
   .wb-grid{grid-template-columns:1fr 1fr!important;}
+
+  /* Maintenance log table — fit the full row (incl. CW/ADAS) on a phone instead of
+     scrolling sideways. Drop the desktop min-width, tighten cell padding, and compact
+     the numeric inputs (TTIS keeps a little more room for 5-digit hours). Notes flexes
+     into whatever space is left and scrolls its own text. */
+  .maint-log-tbl{min-width:0!important;}
+  .maint-log-tbl th,.maint-log-tbl td{padding-left:2px!important;padding-right:2px!important;}
+  .maint-log-tbl input[step="0.1"]{width:52px!important;}
+  .maint-log-tbl input[step="1"]{width:30px!important;}
+  .maint-log-tbl input[type=text]{min-width:0!important;width:100%!important;}
 
   /* Buttons */
   .btn-full{padding:14px;font-size:14px;}

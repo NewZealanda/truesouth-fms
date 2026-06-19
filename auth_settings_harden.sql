@@ -16,7 +16,7 @@ create or replace function public._settings_write_ok(k text) returns boolean lan
   select public.app_role()='superadmin'
     or (k='role_perms' and public.has_perm('admin_users'))
     or (k='roster' and (public.has_perm('roster_edit') or public.has_perm('leave_approve')))
-    or (k in ('maintenance','aircraft_obs') and public.has_perm('maint_bookings'))
+    or (k in ('maintenance','aircraft_obs') and public.has_perm('maintenance'))
     or (k in ('charter_wait_rate','charter_quotes') and public.has_perm('charter'))
     or (k='workspace_shared')
     or (k not in ('role_perms','roster','maintenance','aircraft_obs','charter_wait_rate','charter_quotes'));

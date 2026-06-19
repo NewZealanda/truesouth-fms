@@ -56,6 +56,11 @@ function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'
 // Throttled "your session expired" warning (only when the refresh token is also gone).
 let _sbExpWarnTs=0;
 function _sbWarnExpired(){
+  // The access token (and its refresh token) are dead: REST writes will 401 even though the
+  // realtime websocket — opened earlier with the old JWT — can still show a green "Live" dot.
+  // Flag it so the top status indicator stops contradicting the "session expired" message.
+  S._sessionExpired=true;
+  if(typeof safeRender==='function')safeRender();
   var now=Date.now();
   if(now-_sbExpWarnTs<60000)return;
   _sbExpWarnTs=now;
@@ -216,6 +221,7 @@ function _jwtClaims(tok){try{var p=(tok||'').split('.')[1];if(!p)return {};p=p.r
 function _applySession(sess){
   _sbSession=sess||null;
   SH['Authorization']='Bearer '+((sess&&sess.access_token)||SK);
+  if(sess&&sess.access_token)S._sessionExpired=false;   // fresh token — clear the expiry flag
   _scheduleRefresh();
 }
 function _scheduleRefresh(){
@@ -365,7 +371,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.36';
+const APP_VER='v23.40';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

@@ -27,6 +27,15 @@
   --err-bg:#2d0a0a;--err-border:#7f1d1d;--err-text:#fca5a5;
 }
 html,body{height:100%;min-height:100dvh;min-height:-webkit-fill-available;background:#0f172a;color:var(--text);font-family:'Barlow',sans-serif;}
+/* ── Width safety: the page itself must NEVER scroll sideways on a phone. ──
+   overflow-x:clip (not hidden) avoids creating a scroll container, so it won't
+   break position:sticky or vertical scrolling. Long words/emails wrap instead of
+   pushing the layout wide. Wide DATA tables still scroll inside their own .card. */
+html,body{max-width:100%;overflow-x:clip;}
+#root{max-width:100%;overflow-x:clip;}
+body{overflow-wrap:break-word;}
+img{max-width:100%;}
+canvas,video,svg{max-width:100%;}
 input,select,textarea{font-family:inherit;font-size:14px;outline:none;}
 input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.7);}
 
@@ -194,6 +203,16 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
   /* W&B grid */
   .wb-grid{grid-template-columns:1fr 1fr!important;}
 
+  /* Maintenance log table — fit the full row (incl. CW/ADAS) on a phone instead of
+     scrolling sideways. Drop the desktop min-width, tighten cell padding, and compact
+     the numeric inputs (TTIS keeps a little more room for 5-digit hours). Notes flexes
+     into whatever space is left and scrolls its own text. */
+  .maint-log-tbl{min-width:0!important;}
+  .maint-log-tbl th,.maint-log-tbl td{padding-left:2px!important;padding-right:2px!important;}
+  .maint-log-tbl input[step="0.1"]{width:52px!important;}
+  .maint-log-tbl input[step="1"]{width:30px!important;}
+  .maint-log-tbl input[type=text]{min-width:0!important;width:100%!important;}
+
   /* Buttons */
   .btn-full{padding:14px;font-size:14px;}
   button{min-height:36px;}
@@ -316,6 +335,11 @@ function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'
 // Throttled "your session expired" warning (only when the refresh token is also gone).
 let _sbExpWarnTs=0;
 function _sbWarnExpired(){
+  // The access token (and its refresh token) are dead: REST writes will 401 even though the
+  // realtime websocket — opened earlier with the old JWT — can still show a green "Live" dot.
+  // Flag it so the top status indicator stops contradicting the "session expired" message.
+  S._sessionExpired=true;
+  if(typeof safeRender==='function')safeRender();
   var now=Date.now();
   if(now-_sbExpWarnTs<60000)return;
   _sbExpWarnTs=now;
@@ -476,6 +500,7 @@ function _jwtClaims(tok){try{var p=(tok||'').split('.')[1];if(!p)return {};p=p.r
 function _applySession(sess){
   _sbSession=sess||null;
   SH['Authorization']='Bearer '+((sess&&sess.access_token)||SK);
+  if(sess&&sess.access_token)S._sessionExpired=false;   // fresh token — clear the expiry flag
   _scheduleRefresh();
 }
 function _scheduleRefresh(){
@@ -625,7 +650,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.36';
+const APP_VER='v23.40';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3227,8 +3252,8 @@ function renderApp(){
           <img src="${_TS_LOGO}" alt="True South Flights" style="height:38px;width:auto;display:block;object-fit:contain">
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-          <div style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)" title="${S.rtStatus==='live'?'Live — synced':S.rtStatus==='connecting'?'Connecting...':'Offline'}">
-            <span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'}"></span>
+          <div style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)" title="${S._sessionExpired?'Session expired — sign out and back in to keep saving':S.rtStatus==='live'?'Live — synced':S.rtStatus==='connecting'?'Connecting...':'Offline'}">
+            <span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${S._sessionExpired?'#ef4444':S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'}"></span>
             <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.04em">${APP_VER}</span>
           </div>
           ${(function(){var _unc=(S._notifications||[]).filter(function(n){return !n.read;}).length;return '<div style="position:relative;display:inline-block">'+'<button tabindex="-1" onclick="event.stopPropagation();S._notifOpen=!S._notifOpen;if(S._notifOpen)window.loadNotifications();render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:14px;color:rgba(255,255,255,.5);cursor:pointer;position:relative" title="Notifications">\u{1F514}</button>'+(_unc>0?'<span style="position:absolute;top:-3px;right:-3px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;pointer-events:none;min-width:14px;text-align:center">'+_unc+'</span>':'')+(S._notifOpen?('<div onclick="S._notifOpen=false;render()" style="position:fixed;inset:0;z-index:2050"></div>'+renderNotificationPanel()):'')+'</div>';})()}
@@ -9580,7 +9605,7 @@ function renderMaintLog(){
 
   return entryForm+`<div class="card" style="overflow-x:auto">
     <div class="st" style="color:${col2}">${ac} <span style="font-size:11px;font-weight:400;color:var(--text3)">— last ${logDays} days · tap any cell to edit</span></div>
-    <table style="width:100%;border-collapse:collapse;min-width:480px">
+    <table class="maint-log-tbl" style="width:100%;border-collapse:collapse;min-width:480px">
       <thead><tr style="border-bottom:2px solid var(--border)">
         <th style="padding:6px 6px;text-align:left;font-size:11px;color:var(--text3)">Date</th>
         <th style="padding:6px 6px;text-align:right;font-size:11px;color:var(--text3)">TTIS</th>
@@ -12077,6 +12102,10 @@ function renderRezdy(){
 function _rzGroupColor(s){s=String(s||'');var h=0;for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffffff;var pal=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];return pal[Math.abs(h)%pal.length];}
 function _rzPaxMeta(order){S._rezdyPaxMeta=S._rezdyPaxMeta||{};order=String(order);return S._rezdyPaxMeta[order]||(S._rezdyPaxMeta[order]={});}
 function _rzSavePaxMeta(){if(window.pickupSave)window.pickupSave(true);}
+// True if this booking has any manual child/infant overrides away from the Rezdy standard.
+function _rzHasPaxOverrides(order){var m=(S._rezdyPaxMeta||{})[String(order)];if(!m)return false;return (m.types&&Object.keys(m.types).length>0)||(m.infantOf&&Object.keys(m.infantOf).length>0);}
+// Revert ONE booking's passengers to the Rezdy standard (clears manual child/infant edits).
+window.rezdyResetPax=function(order){order=String(order);if(S._rezdyPaxMeta)delete S._rezdyPaxMeta[order];_rzSavePaxMeta();render();};
 // Authoritative A/C/i counts from Rezdy's price-option quantities (Adult / Child / Infant …).
 function _rzBreakdown(b){var a=0,c=0,i=0,has=false;((b&&b.items)||[]).forEach(function(it){((it&&it.quantities)||[]).forEach(function(q){has=true;var l=String((q&&q.label)||'').toLowerCase();var v=parseInt(q&&q.value,10)||0;if(/infant/.test(l))i+=v;else if(/child/.test(l))c+=v;else a+=v;});});return has?{a:a,c:c,i:i}:null;}
 // Per-participant type from Rezdy's captured age field (when present).
@@ -12257,7 +12286,11 @@ function _rzRenderBookings(){
       body+='</tr>';
     });
     var _bub=_rzPaxBubbles(b,{drag:true});
-    if(_bub)body+='<tr><td colspan="'+NCOL+'" style="padding:0;border-top:1px dashed var(--border2);background:var(--card2)">'+_bub+'</td></tr>';
+    if(_bub){
+      var _ovr=_rzHasPaxOverrides(ono);
+      var _rst=_ovr?'<button onclick="window.rezdyResetPax(\''+_rzEsc(ono).replace(/'/g,"\\'")+'\')" title="Reset this booking to the Rezdy standard" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:rgba(255,255,255,.05);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">↺ Reset</button>':'';
+      body+='<tr><td colspan="'+NCOL+'" style="padding:0;border-top:1px dashed var(--border2);background:var(--card2)"><div style="display:flex;align-items:stretch">'+_bub+_rst+'</div></td></tr>';
+    }
     if(open){
       body+='<tr><td colspan="'+NCOL+'" style="padding:0;border-top:1px solid var(--border)"><div style="background:var(--card2);padding:12px 14px">'+_rzBookingDetail(b)+'</div></td></tr>';
     }
@@ -12682,32 +12715,44 @@ function _rzRenderMyPickups(){
   if(!myVans.length){
     return '<div style="max-width:560px;margin:0 auto"><div class="card" style="text-align:center;padding:40px 20px;color:var(--text3)"><div style="font-size:30px;margin-bottom:8px">🚐</div><div style="font-size:15px;font-weight:700;color:var(--text2);margin-bottom:4px">No pickups assigned to you</div><div style="font-size:13px">You\'re not on a van for '+_rzDowLabel(S.rezdyDate)+'. Use the arrows above to check another day.</div></div></div>';
   }
-  var h='';
+  // Departures across all of my vans — show ONE at a time via a selector (bookings-style).
+  var allStops=[];
+  myVans.forEach(function(v){v.ids.forEach(function(id){var p=_rzPickupById(pickups,id);if(p)allStops.push({vi:v.vi,p:p});});});
+  var deps=[];allStops.forEach(function(s){var d=s.p.depart||'—';if(deps.indexOf(d)<0)deps.push(d);});
+  deps.sort();
+  var selDep=(S._myPkDep&&deps.indexOf(S._myPkDep)>=0)?S._myPkDep:(deps[0]||null);
+  var tabs='';
+  if(deps.length){
+    tabs='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px;-webkit-overflow-scrolling:touch;scrollbar-width:none">';
+    deps.forEach(function(d){
+      var cnt=allStops.filter(function(s){return (s.p.depart||'—')===d;}).reduce(function(a,s){return a+(s.p.pax||0);},0);
+      tabs+='<button onclick="S._myPkDep=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" class="sub-tab '+(selDep===d?'on':'')+'" style="white-space:nowrap;flex-shrink:0">🛫 '+_rzEsc(d)+' <span style="opacity:.6">('+cnt+')</span></button>';
+    });
+    tabs+='</div>';
+  }
+  var h=tabs;
   myVans.forEach(function(v){
     var col=['#4a99d2','#48925f','#e3683e'][v.vi]||'#64748b';
-    var byDep={};v.ids.forEach(function(id){var p=_rzPickupById(pickups,id);if(p)(byDep[p.depart||'—']=byDep[p.depart||'—']||[]).push(p);});
-    var deps=Object.keys(byDep).sort();
-    var totalPax=v.ids.reduce(function(s,id){var p=_rzPickupById(pickups,id);return s+(p?p.pax:0);},0);
+    var grp=v.ids.map(function(id){return _rzPickupById(pickups,id);})
+                 .filter(function(p){return p&&(p.depart||'—')===selDep;})
+                 .sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
+    if(!grp.length)return; // this van has nothing for the selected departure
+    var depPax=grp.reduce(function(s,p){return s+(p.pax||0);},0);
     h+='<div class="card" style="border-top:4px solid '+col+';padding:14px;margin-bottom:14px">';
     h+='<div style="font-weight:800;font-size:18px;color:'+col+'">Van '+(v.vi+1)+'</div>';
-    h+='<div style="font-size:12px;color:var(--text3);margin-bottom:6px">'+v.ids.length+' stop'+(v.ids.length===1?'':'s')+' · '+totalPax+' pax</div>';
-    deps.forEach(function(dep){
-      var grp=byDep[dep].slice().sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
-      var depPax=grp.reduce(function(s,p){return s+p.pax;},0);
-      h+='<div style="display:flex;align-items:center;gap:8px;margin:14px 0 8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 Departs '+_rzEsc(dep)+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' stop'+(grp.length===1?'':'s')+' · '+depPax+' pax</span></div>';
-      grp.forEach(function(p){
-        var collected=!!(S._pickupCollected||{})[p.id];
-        h+='<div style="background:var(--card2);border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:10px;padding:13px;margin-bottom:10px;'+(collected?'opacity:.55':'')+'">'+
-          '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">'+
-            '<div style="font-weight:800;font-size:16px;color:var(--text1);'+(collected?'text-decoration:line-through':'')+'">'+_rzEsc(p.customer||p.order)+'</div>'+
-            '<span style="flex-shrink:0;font-size:13px;font-weight:800;color:'+col+'">'+p.pax+' pax</span>'+
-          '</div>'+
-          (p.pickupTime?'<div style="font-size:15px;font-weight:700;color:var(--text1);margin-bottom:3px">🕑 Pickup '+_rzEsc(p.pickupTime)+'</div>':'')+
-          '<div style="font-size:14px;color:var(--text2);margin-bottom:'+(p.phone?'8px':'10px')+'">📍 '+_rzEsc(p.location||'—')+'</div>'+
-          (p.phone?'<div style="margin-bottom:10px"><a href="tel:'+_rzEsc(p.phone)+'" style="font-size:15px;font-weight:700;color:'+col+';text-decoration:none">📞 '+_rzEsc(p.phone)+'</a></div>':'')+
-          '<button onclick="window.pickupToggleCollected(\''+_rzEsc(p.id).replace(/'/g,"\\'")+'\')" style="width:100%;padding:14px;border-radius:9px;border:1px solid '+(collected?'#166534':'var(--border2)')+';background:'+(collected?'var(--ok-bg)':'transparent')+';color:'+(collected?'var(--ok-text)':'var(--text2)')+';font-size:15px;font-weight:800;cursor:pointer">'+(collected?'✓ Collected':'Mark collected')+'</button>'+
-        '</div>';
-      });
+    h+='<div style="font-size:12px;color:var(--text3);margin-bottom:10px">'+grp.length+' stop'+(grp.length===1?'':'s')+' · '+depPax+' pax</div>';
+    grp.forEach(function(p){
+      var collected=!!(S._pickupCollected||{})[p.id];
+      h+='<div style="background:var(--card2);border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:10px;padding:13px;margin-bottom:10px;'+(collected?'opacity:.55':'')+'">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">'+
+          '<div style="font-weight:800;font-size:16px;color:var(--text1);'+(collected?'text-decoration:line-through':'')+'">'+_rzEsc(p.customer||p.order)+'</div>'+
+          '<span style="flex-shrink:0;font-size:13px;font-weight:800;color:'+col+'">'+p.pax+' pax</span>'+
+        '</div>'+
+        (p.pickupTime?'<div style="font-size:15px;font-weight:700;color:var(--text1);margin-bottom:3px">🕑 Pickup '+_rzEsc(p.pickupTime)+'</div>':'')+
+        '<div style="font-size:14px;color:var(--text2);margin-bottom:'+(p.phone?'8px':'10px')+'">📍 '+_rzEsc(p.location||'—')+'</div>'+
+        (p.phone?'<div style="margin-bottom:10px"><a href="tel:'+_rzEsc(p.phone)+'" style="font-size:15px;font-weight:700;color:'+col+';text-decoration:none">📞 '+_rzEsc(p.phone)+'</a></div>':'')+
+        '<button onclick="window.pickupToggleCollected(\''+_rzEsc(p.id).replace(/'/g,"\\'")+'\')" style="width:100%;padding:14px;border-radius:9px;border:1px solid '+(collected?'#166534':'var(--border2)')+';background:'+(collected?'var(--ok-bg)':'transparent')+';color:'+(collected?'var(--ok-text)':'var(--text2)')+';font-size:15px;font-weight:800;cursor:pointer">'+(collected?'✓ Collected':'Mark collected')+'</button>'+
+      '</div>';
     });
     h+='</div>';
   });
@@ -12717,26 +12762,34 @@ function _rzRenderMyPickups(){
 // ─────────────────────────────────────────────────────────────────────────────
 //  (2c) MANIFEST — unallocated pool + drag passengers onto aircraft
 // ─────────────────────────────────────────────────────────────────────────────
-function _rzManBubble(p){
+// Interactive manifest bubble — tap to toggle child, drag onto another bubble (same booking
+// group) to fold it in as a lap infant, drag onto an aircraft card to allocate. Mirrors the
+// bookings/loadsheet bubble behaviour.
+function _rzManBubble(p,allPax){
+  allPax=allPax||S._rzManPax||[];
   var gcol=_rzGroupColor(p.group||'');
   var nm=p.name?_rzEsc(String(p.name).split(/\s+/)[0]):'?';
   var tbc=!p.weight;var w=tbc?'TBC':_rzEsc(String(p.weight))+'kg';
-  var isChild=p.type==='child';var inf=p.infantName;
-  return '<div draggable="true" ondragstart="window.rezdyManDragStart(\''+_rzEsc(p.id).replace(/'/g,"\\'")+'\',event)" title="'+_rzEsc(p.name||'')+(inf?' (+ infant '+_rzEsc(inf)+')':'')+'" style="position:relative;overflow:hidden;background:rgba(255,255,255,.93);border-radius:8px;'+(p.paymentReq?'border:2px solid #ef4444':'border-left:4px solid '+gcol)+';min-width:62px;flex-shrink:0;cursor:grab">'+
+  var isChild=p.type==='child';
+  var infant=allPax.find(function(x){return x.infantOf===p.id;});
+  var infName=p.infantName||(infant?String(infant.name||'').split(/\s+/)[0]:null);
+  var idEsc=_rzEsc(p.id).replace(/'/g,"\\'");
+  var infRemove=infant?(' onclick="event.stopPropagation();window.rezdyManRemoveInfant(\''+_rzEsc(infant.id).replace(/'/g,"\\'")+'\')" title="Infant: '+_rzEsc(infName||'')+' (tap to remove)" style="cursor:pointer;'):' title="Infant'+(infName?': '+_rzEsc(infName):'')+'" style="';
+  return '<div draggable="true" ondragstart="window.rezdyManDragStart(\''+idEsc+'\',event)" ondragover="event.preventDefault()" ondrop="window.rezdyManDropInfant(\''+idEsc+'\',event)" onclick="window.rezdyManToggleChild(\''+idEsc+'\')" title="'+_rzEsc(p.name||'')+(infName?' (+ infant '+_rzEsc(infName)+')':'')+'" style="position:relative;overflow:hidden;background:rgba(255,255,255,.93);border-radius:8px;'+(p.paymentReq?'border:2px solid #ef4444':'border-left:4px solid '+gcol)+';min-width:62px;flex-shrink:0;cursor:grab">'+
     (p.paymentReq?'<div style="background:#ef4444;color:#fff;font-size:8px;font-weight:900;text-align:center;line-height:1.7">$ TO PAY</div>':'')+
     (isChild?'<div style="position:absolute;bottom:3px;left:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')+
-    (inf?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')+
+    (infName?'<div'+infRemove+'position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')+
     '<div style="padding:'+(p.paymentReq?'2px 7px 4px':'4px 7px')+'">'+
       '<div style="font-size:11px;font-weight:700;color:#1e293b;white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'+
       '<div style="font-size:10px;font-weight:'+(tbc?'700':'400')+';color:'+(tbc?'#b45309':'#334155')+'">'+w+'</div>'+
     '</div>'+
-    '<div onclick="event.stopPropagation();window.rezdyManRemove(\''+_rzEsc(p.id).replace(/'/g,"\\'")+'\')" title="Remove from manifest" style="position:absolute;top:0;right:1px;font-size:10px;color:#94a3b8;cursor:pointer;padding:0 2px">✕</div>'+
+    '<div onclick="event.stopPropagation();window.rezdyManRemove(\''+idEsc+'\')" title="Remove from manifest" style="position:absolute;top:0;right:1px;font-size:10px;color:#94a3b8;cursor:pointer;padding:0 2px">✕</div>'+
   '</div>';
 }
 function _rzRenderManifest(){
   if(!S._rzManLoaded){if(window.rezdyLoadManifest)window.rezdyLoadManifest();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading manifest…</div>';}
   var pax=S._rzManPax||[];
-  var pool=pax.filter(function(p){return !p.ac;});
+  var pool=pax.filter(function(p){return !p.ac&&!p.infantOf;});
   var fleet=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
   pax.forEach(function(p){if(p.ac&&fleet.indexOf(p.ac)<0)fleet.push(p.ac);});
   var h='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
@@ -12748,21 +12801,44 @@ function _rzRenderManifest(){
       (pax.length?'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.rezdyManClear()">🗑 Clear</button>':'')+
     '</div></div>';
   h+='<div class="card" ondragover="event.preventDefault();this.style.outline=\'2px solid var(--acc)\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.rezdyManDrop(\'__pool__\',event)" style="padding:10px 12px">'+
-    '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:8px">Unallocated ('+pool.length+')</div>'+
-    '<div style="display:flex;flex-wrap:wrap;gap:6px;min-height:46px;align-items:flex-start">';
-  if(!pool.length)h+='<div style="font-size:12px;color:var(--text3)">All allocated. Pull from bookings or add a passenger.</div>';
-  pool.forEach(function(p){h+=_rzManBubble(p);});
-  h+='</div></div>';
+    '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:8px">Unallocated ('+pool.length+')</div>';
+  if(!pool.length)h+='<div style="font-size:12px;color:var(--text3);min-height:46px">All allocated. Pull from bookings or add a passenger.</div>';
+  else{
+    // Group the pool by the aircraft noted on the booking, then by booking group.
+    var byAc={};pool.forEach(function(p){var k=p.acHint||'__none__';(byAc[k]=byAc[k]||[]).push(p);});
+    var acKeys=Object.keys(byAc).sort(function(a,b){if(a==='__none__')return 1;if(b==='__none__')return -1;return a<b?-1:1;});
+    acKeys.forEach(function(ak){
+      var none=ak==='__none__';
+      var acCol=none?'#64748b':_rzAcCol(ak);
+      var acLbl=none?'No aircraft noted':ak.replace('ZK-','');
+      var sub=byAc[ak];var subPax=sub.length;
+      h+='<div style="margin-bottom:10px">'+
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px"><span style="width:9px;height:9px;border-radius:50%;background:'+acCol+';flex-shrink:0"></span>'+
+        '<span style="font-size:12px;font-weight:800;color:'+acCol+'">'+_rzEsc(acLbl)+'</span>'+
+        '<span style="font-size:10px;color:var(--text3);font-weight:600">'+subPax+' pax</span></div>';
+      // further split by booking group
+      var byGrp={};sub.forEach(function(p){var g=p.group||'?';(byGrp[g]=byGrp[g]||[]).push(p);});
+      Object.keys(byGrp).forEach(function(gk){
+        var gcol=_rzGroupColor(gk);
+        h+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;padding:4px 0 4px 8px;border-left:2px solid '+gcol+';margin:3px 0 3px 2px">';
+        byGrp[gk].forEach(function(p){h+=_rzManBubble(p,pax);});
+        h+='</div>';
+      });
+      h+='</div>';
+    });
+  }
+  h+='</div>';
   if(!fleet.length)return h+'<div class="card" style="text-align:center;padding:30px;color:var(--text3)">No aircraft configured.</div>';
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">';
   fleet.forEach(function(id){
     var col=(typeof AC_COL!=='undefined'&&AC_COL[id])||'#64748b';
-    var list=pax.filter(function(p){return p.ac===id;});
+    var list=pax.filter(function(p){return p.ac===id&&!p.infantOf;});
     var nA=0,nC=0,nI=0;list.forEach(function(p){if(p.type==='child')nC++;else nA++;if(p.infantName)nI++;});
+    nI+=pax.filter(function(p){return p.ac===id&&p.infantOf;}).length; // manually-folded lap infants
     h+='<div ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.rezdyManDrop(\''+id+'\',event)" style="flex:1 1 240px;min-width:230px;background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+'</div><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span></div>';
     if(!list.length)h+='<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px;border:1px dashed var(--border2);border-radius:8px">Drop passengers here</div>';
-    else{h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';list.forEach(function(p){h+=_rzManBubble(p);});h+='</div>';}
+    else{h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';list.forEach(function(p){h+=_rzManBubble(p,pax);});h+='</div>';}
     h+='</div>';
   });
   h+='</div>';
@@ -12794,7 +12870,7 @@ window.rezdyManPull=function(){
       var infName=null;Object.keys(infantOf).forEach(function(ii){if(String(infantOf[ii])===String(idx)){var ip=parts[ii];if(ip&&ip.name)infName=String(ip.name).trim();}});
       var wRaw=(p&&p.weight!=null&&p.weight!=='')?String(p.weight).replace(/\s*kg$/i,''):'';
       var ex=existing[id];
-      out.push({id:id,name:(p&&p.name)?String(p.name).trim():'',weight:wRaw,type:(t==='child'?'child':'adult'),infantName:infName,group:order,paymentReq:owing,ac:ex?ex.ac:null});
+      out.push({id:id,name:(p&&p.name)?String(p.name).trim():'',weight:wRaw,type:(ex&&ex.type)?ex.type:(t==='child'?'child':'adult'),infantName:infName,group:order,paymentReq:owing,ac:ex?ex.ac:null,acHint:_rzAircraftFromComments(b),infantOf:ex?ex.infantOf:undefined});
     });
   });
   (S._rzManPax||[]).forEach(function(p){if(String(p.id).indexOf('m_')===0)out.push(p);}); // keep manually-added
@@ -12814,9 +12890,39 @@ window.rezdyManDrop=function(ac,e){
   try{if(!id&&e.dataTransfer)id=e.dataTransfer.getData('text/plain');}catch(_){}
   if(!id)return;
   var p=(S._rzManPax||[]).find(function(x){return x.id===id;});if(!p)return;
-  p.ac=(ac==='__pool__')?null:ac;_rzManSave();render();
+  if(p.infantOf)return; // a lap infant moves with its host, not on its own
+  var dest=(ac==='__pool__')?null:ac;
+  p.ac=dest;
+  (S._rzManPax||[]).forEach(function(x){if(x.infantOf===p.id)x.ac=dest;}); // infants follow the host
+  _rzManSave();render();
 };
-window.rezdyManRemove=function(id){S._rzManPax=(S._rzManPax||[]).filter(function(x){return x.id!==id;});_rzManSave();render();};
+// Tap a bubble to cycle adult → child → adult.
+window.rezdyManToggleChild=function(id){
+  var p=(S._rzManPax||[]).find(function(x){return x.id===id;});if(!p||p.infantOf)return;
+  p.type=(p.type==='child')?'adult':'child';_rzManSave();render();
+};
+// Drop one bubble onto another in the SAME booking group to fold it in as a lap infant.
+window.rezdyManDropInfant=function(hostId,e){
+  if(e&&e.preventDefault)e.preventDefault();if(e&&e.stopPropagation)e.stopPropagation();
+  var id=S._rzManDrag;S._rzManDrag=null;
+  try{if(!id&&e.dataTransfer)id=e.dataTransfer.getData('text/plain');}catch(_){}
+  if(!id||id===hostId)return;
+  var pax=S._rzManPax||[];
+  var inf=pax.find(function(x){return x.id===id;});var host=pax.find(function(x){return x.id===hostId;});
+  if(!inf||!host||host.infantOf)return;
+  if((inf.group||'')!==(host.group||''))return; // same booking only
+  if(pax.some(function(x){return x.infantOf===inf.id;}))return; // can't fold a host that has its own infant
+  inf.infantOf=host.id;inf.type='infant';inf.ac=host.ac;_rzManSave();render();
+};
+window.rezdyManRemoveInfant=function(infId){
+  var inf=(S._rzManPax||[]).find(function(x){return x.id===infId;});if(!inf)return;
+  delete inf.infantOf;inf.type='adult';_rzManSave();render();
+};
+window.rezdyManRemove=function(id){
+  // Removing a host also unfolds its infants back into the pool.
+  (S._rzManPax||[]).forEach(function(x){if(x.infantOf===id){delete x.infantOf;x.type='adult';}});
+  S._rzManPax=(S._rzManPax||[]).filter(function(x){return x.id!==id;});_rzManSave();render();
+};
 window.rezdyManClear=function(){if(!confirm('Clear the whole manifest for this day?'))return;S._rzManPax=[];_rzManSave();render();};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12892,7 +12998,7 @@ function _rzRenderSchedule(){
             '<div style="font-weight:700;font-size:13px;color:var(--text1)">'+_rzEsc(b.customerName||b.orderNumber)+(owing?' <span style="color:#ef4444;font-weight:800">$ TO PAY</span>':'')+'</div>'+
             '<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px" onclick="window.rezdyGotoBooking(\''+_rzEsc(String(b.orderNumber||'')).replace(/'/g,"\\'")+'\')">View booking →</button>'+
           '</div>'+
-          _rzPaxBubbles(b)+
+          _rzPaxBubbles(b,{drag:true})+
         '</div>';
       });
       detailH+='</div>';
