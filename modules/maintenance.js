@@ -29,7 +29,7 @@ function renderMaintAircraftData(){
 function _obsEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function renderMaintObservations(){
   var acs=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(a){return S.aircraft[a];});
-  var canEdit=hasRolePerm('maint_bookings');
+  var canEdit=hasRolePerm('maintenance');
   if(!S._maintObsLoaded){S._maintObsLoaded=true;window.loadMaintObs();}
   if(!S.maintObs)S.maintObs={};
   var sel=S._obsAc&&acs.indexOf(S._obsAc)>=0?S._obsAc:(acs[0]||'ZK-SLA');
@@ -117,12 +117,13 @@ function _saveMaintObs(){
   lsSet('ts_aircraft_obs',S.maintObs||{});
   sbU('ts_settings',[{key:'aircraft_obs',value:JSON.stringify(S.maintObs||{})}]).catch(function(){});
 }
-// Defense-in-depth: gate every maintenance write on the maint_bookings permission
-// (the UI hides the controls; this stops console/edge-case writes too).
-function _maintGuard(){if(typeof hasRolePerm==='function'&&!hasRolePerm('maint_bookings')){toast('Not authorised to edit maintenance.','warn');return false;}return true;}
-// Daily ADAS-download / comp-wash ticks are an operational task pilots do — allow anyone with
-// maintenance VIEW (e.g. pilots), not only maint_bookings editors.
-function _maintTickGuard(){if(typeof hasRolePerm==='function'&&!hasRolePerm('maintenance')&&!hasRolePerm('maint_bookings')){toast('Not authorised.','warn');return false;}return true;}
+// Defense-in-depth: gate maintenance writes (the UI hides the controls; this stops
+// console/edge-case writes too).
+// General maintenance editing (logs, oil, observations, ADAS/comp-wash ticks, priority) is
+// allowed for anyone with the 'maintenance' permission. Only BOOKINGS need 'maint_bookings'.
+function _maintGuard(){if(typeof hasRolePerm==='function'&&!hasRolePerm('maintenance')){toast('Not authorised to edit maintenance.','warn');return false;}return true;}
+function _maintBookGuard(){if(typeof hasRolePerm==='function'&&!hasRolePerm('maint_bookings')){toast('Not authorised to manage maintenance bookings.','warn');return false;}return true;}
+var _maintTickGuard=_maintGuard;
 window.maintObsAdd=function(){
   if(!_maintGuard())return;
   var el=document.getElementById('obs-new-text');var txt=el?el.value.trim():(S._obsNewText||'').trim();
@@ -202,7 +203,8 @@ function _lastUpdatedLabel(ac){
 function renderMaintOverview(){
   const m=S.maintenance||{};
   const acs=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'];
-  const isAdmin=hasRolePerm('maint_bookings');
+  const isAdmin=hasRolePerm('maint_bookings');   // bookings-only (Edit Check / Bookings button)
+  const canEditM=hasRolePerm('maintenance');     // general maintenance edit (priority etc.)
 
   const cards=acs.map(ac=>{
     const latest=maintGetLatest(ac);
@@ -223,9 +225,9 @@ function renderMaintOverview(){
     const _priBg=isPriority?'#f59e0b':'rgba(255,255,255,.08)';
     const _priCol=isPriority?'#000':'rgba(255,255,255,.4)';
     const _priLbl=isPriority?'★ PRIORITY':'☆';
-    const _priOc=isAdmin?('event.stopPropagation();window.toggleMaintPriority(\'' + ac + '\')'):'event.stopPropagation()';
-    const _priCursor=isAdmin?'pointer':'default';
-    const priorityBtn=(isPriority||isAdmin)?('<button onclick="'+_priOc+'" style="position:absolute;top:8px;right:8px;background:'+_priBg+';color:'+_priCol+';font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;border:none;cursor:'+_priCursor+';letter-spacing:.05em">'+_priLbl+'</button>'):'';
+    const _priOc=canEditM?('event.stopPropagation();window.toggleMaintPriority(\'' + ac + '\')'):'event.stopPropagation()';
+    const _priCursor=canEditM?'pointer':'default';
+    const priorityBtn=(isPriority||canEditM)?('<button onclick="'+_priOc+'" style="position:absolute;top:8px;right:8px;background:'+_priBg+';color:'+_priCol+';font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;border:none;cursor:'+_priCursor+';letter-spacing:.05em">'+_priLbl+'</button>'):'';
 
     // Colour: green>30hrs, amber 10-30, red <10
     const col=ac==='ZK-SLA'?'#a75aba':ac==='ZK-SLB'?'#7c7c7c':ac==='ZK-SLD'?'#48925f':ac==='ZK-SLQ'?'#4a99d2':'#e3683e';
@@ -982,7 +984,7 @@ window.saveMaintCheck=function(ac,field,val){
 };
 
 window.addBooking=function(ac){
-  if(!_maintGuard())return;
+  if(!_maintBookGuard())return;
   initMaintenance();
   S.maintenance.bookings=S.maintenance.bookings||{};
   S.maintenance.bookings[ac]=S.maintenance.bookings[ac]||[];
@@ -991,7 +993,7 @@ window.addBooking=function(ac){
 };
 
 window.editBooking=function(ac,idx,field,val){
-  if(!_maintGuard())return;
+  if(!_maintBookGuard())return;
   initMaintenance();
   if(!S.maintenance.bookings?.[ac]?.[idx]) return;
   S.maintenance.bookings[ac][idx][field]=val;
@@ -999,7 +1001,7 @@ window.editBooking=function(ac,idx,field,val){
 };
 
 window.deleteBooking=function(ac,idx){
-  if(!_maintGuard())return;
+  if(!_maintBookGuard())return;
   initMaintenance();
   S.maintenance.bookings[ac].splice(idx,1);
   saveMaintenance();render();
