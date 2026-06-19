@@ -304,26 +304,48 @@ window.rezdyCheckinOpen=function(order){
   var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===order;});
   if(!b){if(typeof toast==='function')toast('Booking not found','warn');return;}
   var existing=_rzCheckinPax(order),rows;
-  if(existing){rows=existing.map(function(r){return {name:r.name||'',actual:r.actual!=null?String(r.actual):'',type:r.type||'adult'};});}
+  if(existing){rows=existing.map(function(r){return {name:r.name||'',actual:r.actual!=null?String(r.actual):'',type:r.type||'adult',attach:(r.attach!=null?r.attach:null)};});}
   else{
-    var pr=_rzPaxRows(b);var bd=_rzEffBreakdown(b);var seatCount=Math.max((bd.a||0)+(bd.c||0),pr.length,1);
-    rows=[];for(var i=0;i<seatCount;i++){var r=pr[i]||{};rows.push({name:r.name||'',actual:'',type:r.type||'adult'});}
+    var parts=[];(b.items||[]).forEach(function(it){(it.participants||[]).forEach(function(p){parts.push(p);});});
+    var m=(S._rezdyPaxMeta||{})[order]||{};var types=m.types||{};var infantOf=m.infantOf||{};
+    var bd=_rzBreakdown(b)||_rzEffBreakdown(b)||{a:0,c:0,i:0};
+    var total=Math.max((bd.a||0)+(bd.c||0)+(bd.i||0),parts.length,1);
+    rows=[];
+    for(var i=0;i<total;i++){var p=parts[i];var t=p?((infantOf[i]!=null)?'infant':(types[i]||_rzAgeType(p))):'adult';rows.push({name:p&&p.name?String(p.name).trim():'',actual:'',type:(t==='infant'?'infant':t==='child'?'child':'adult'),attach:(infantOf[i]!=null&&infantOf[i]<total?infantOf[i]:null)});}
   }
+  // Every infant needs a host (default to the first non-infant passenger).
+  var firstNon=null;for(var k=0;k<rows.length;k++){if(rows[k].type!=='infant'){firstNon=k;break;}}
+  rows.forEach(function(r){if(r.type==='infant'&&(r.attach==null||!rows[r.attach]||rows[r.attach].type==='infant'))r.attach=firstNon;});
   S._rzCheckinDraft={order:order,rows:rows};render();
 };
 window.rezdyCheckinField=function(i,field,val){var d=S._rzCheckinDraft;if(!d||!d.rows[i])return;d.rows[i][field]=val;}; // no render (keep input focus)
-window.rezdyCheckinType=function(i){var d=S._rzCheckinDraft;if(!d||!d.rows[i])return;d.rows[i].type=(d.rows[i].type==='child')?'adult':'child';render();};
-window.rezdyCheckinAddRow=function(){var d=S._rzCheckinDraft;if(!d)return;d.rows.push({name:'',actual:'',type:'adult'});render();};
+window.rezdyCheckinAttach=function(i,val){var d=S._rzCheckinDraft;if(!d||!d.rows[i])return;d.rows[i].attach=(val===''?null:parseInt(val,10));};
+window.rezdyCheckinType=function(i){
+  var d=S._rzCheckinDraft;if(!d||!d.rows[i])return;
+  var cur=d.rows[i].type;d.rows[i].type=(cur==='adult')?'child':(cur==='child')?'infant':'adult';
+  if(d.rows[i].type==='infant'){var fn=null;for(var k=0;k<d.rows.length;k++){if(k!==i&&d.rows[k].type!=='infant'){fn=k;break;}}d.rows[i].attach=fn;}
+  else d.rows[i].attach=null;
+  render();
+};
+window.rezdyCheckinAddRow=function(){var d=S._rzCheckinDraft;if(!d)return;d.rows.push({name:'',actual:'',type:'adult',attach:null});render();};
 window.rezdyCheckinRemoveRow=function(i){var d=S._rzCheckinDraft;if(!d||d.rows.length<=1)return;d.rows.splice(i,1);render();};
 window.rezdyCheckinCancel=function(){S._rzCheckinDraft=null;render();};
 window.rezdyCheckinSave=function(){
   var d=S._rzCheckinDraft;if(!d)return;
+  var ca=0,cc=0,ci=0;
   for(var i=0;i<d.rows.length;i++){var r=d.rows[i];
     if(!r.name||!String(r.name).trim()){if(typeof toast==='function')toast('Enter a name for passenger '+(i+1),'warn');return;}
-    var a=parseFloat(r.actual);if(isNaN(a)||a<=0){if(typeof toast==='function')toast('Enter an actual weight for '+(String(r.name).trim()||('passenger '+(i+1))),'warn');return;}
+    if(r.type==='infant'){ci++;if(r.attach==null){if(typeof toast==='function')toast('Choose who '+(String(r.name).trim()||'the infant')+' sits with','warn');return;}}
+    else{if(r.type==='child')cc++;else ca++;var a=parseFloat(r.actual);if(isNaN(a)||a<=0){if(typeof toast==='function')toast('Enter an actual weight for '+(String(r.name).trim()||('passenger '+(i+1))),'warn');return;}}
+  }
+  // Warn if the entered A/C/i don't match the booking's breakdown.
+  var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===d.order;});
+  var bd=(b&&(_rzBreakdown(b)||_rzEffBreakdown(b)))||null;
+  if(bd&&(bd.a!==ca||bd.c!==cc||bd.i!==ci)){
+    if(!confirm('Heads up — you entered '+ca+'A '+cc+'C '+ci+'i, but the booking shows '+bd.a+'A '+bd.c+'C '+bd.i+'i.\n\nCheck in anyway?'))return;
   }
   S._rzCheckin=S._rzCheckin||{};
-  S._rzCheckin[d.order]={pax:d.rows.map(function(r){return {name:String(r.name).trim(),actual:parseFloat(r.actual),type:r.type==='child'?'child':'adult'};})};
+  S._rzCheckin[d.order]={pax:d.rows.map(function(r){var o={name:String(r.name).trim(),type:r.type==='child'?'child':r.type==='infant'?'infant':'adult'};if(r.type!=='infant')o.actual=parseFloat(r.actual);else o.attach=(r.attach!=null?r.attach:null);return o;})};
   S._rzBookingCheckedIn=S._rzBookingCheckedIn||{};S._rzBookingCheckedIn[d.order]=true;
   S._rzCheckinDraft=null;
   if(window.pickupSave)window.pickupSave(true);
@@ -337,14 +359,19 @@ function _rzCheckinModal(){
   var h='<div onclick="window.rezdyCheckinCancel()" style="position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 12px">'+
     '<div onclick="event.stopPropagation()" style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:18px;max-width:480px;width:100%;box-shadow:0 16px 50px rgba(0,0,0,.5)">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px"><div class="st" style="margin-bottom:0">Check in — '+_rzEsc(cust)+'</div><button onclick="window.rezdyCheckinCancel()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:0 0 12px">Enter every passenger’s name and <b>actual weight</b>. All fields required (A/C toggles adult/child).</p>';
+    '<p style="font-size:12px;color:var(--text3);margin:0 0 12px">Enter every passenger’s name and <b>actual weight</b>. The toggle cycles <b>A</b>dult → <b>C</b>hild → <b>i</b>nfant; an infant is a lap pax and you pick who they sit with.</p>';
   d.rows.forEach(function(r,i){
-    h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'+
+    var isInf=r.type==='infant';
+    var tl=r.type==='child'?'C':isInf?'i':'A';
+    var tc=r.type==='child'?'#fb923c':isInf?'#ec4899':'var(--text3)';
+    var tbg=r.type==='child'?'rgba(251,146,60,.18)':isInf?'rgba(236,72,153,.18)':'transparent';
+    h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">'+
       '<span style="font-size:11px;color:var(--text3);width:16px;flex-shrink:0">'+(i+1)+'</span>'+
       '<input type="text" value="'+_rzEsc(r.name||'')+'" oninput="window.rezdyCheckinField('+i+',\'name\',this.value)" placeholder="Full name" style="flex:1 1 110px;min-width:0;font-size:16px;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px">'+
-      '<input type="number" inputmode="decimal" value="'+_rzEsc(r.actual||'')+'" oninput="window.rezdyCheckinField('+i+',\'actual\',this.value)" placeholder="kg" style="width:62px;flex-shrink:0;font-size:16px;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px;text-align:right">'+
-      '<button onclick="window.rezdyCheckinType('+i+')" title="Adult / Child" style="flex-shrink:0;width:30px;font-size:12px;font-weight:800;padding:8px 0;border-radius:7px;border:1px solid '+(r.type==='child'?'#fb923c':'var(--border2)')+';background:'+(r.type==='child'?'rgba(251,146,60,.18)':'transparent')+';color:'+(r.type==='child'?'#fb923c':'var(--text3)')+';cursor:pointer">'+(r.type==='child'?'C':'A')+'</button>'+
+      (isInf?'<span style="width:62px;flex-shrink:0;font-size:11px;color:var(--text3);text-align:center">lap</span>':'<input type="number" inputmode="decimal" value="'+_rzEsc(r.actual||'')+'" oninput="window.rezdyCheckinField('+i+',\'actual\',this.value)" placeholder="kg" style="width:62px;flex-shrink:0;font-size:16px;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px;text-align:right">')+
+      '<button onclick="window.rezdyCheckinType('+i+')" title="Adult / Child / Infant" style="flex-shrink:0;width:30px;font-size:12px;font-weight:800;padding:8px 0;border-radius:7px;border:1px solid '+(r.type==='adult'?'var(--border2)':tc)+';background:'+tbg+';color:'+tc+';cursor:pointer">'+tl+'</button>'+
       (d.rows.length>1?'<button onclick="window.rezdyCheckinRemoveRow('+i+')" title="Remove" style="flex-shrink:0;background:none;border:none;color:#ef444488;font-size:14px;cursor:pointer">✕</button>':'')+
+      (isInf?'<div style="flex-basis:100%;display:flex;align-items:center;gap:6px;padding:0 0 0 22px"><span style="font-size:11px;color:#ec4899;font-weight:700">sits with</span><select onchange="window.rezdyCheckinAttach('+i+',this.value)" style="flex:1;font-size:14px;padding:6px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:6px"><option value="">— choose —</option>'+d.rows.map(function(rr,j){if(j===i||rr.type==='infant')return '';return '<option value="'+j+'"'+(String(r.attach)===String(j)?' selected':'')+'>'+_rzEsc(rr.name||('Passenger '+(j+1)))+'</option>';}).join('')+'</select></div>':'')+
     '</div>';
   });
   h+='<button onclick="window.rezdyCheckinAddRow()" style="font-size:12px;font-weight:700;padding:5px 12px;border-radius:8px;border:1px dashed var(--border2);background:transparent;color:var(--text2);cursor:pointer;margin-bottom:14px">+ Add passenger</button>';
@@ -467,17 +494,24 @@ function _rzPaxRows(b){
   var order=String(b.orderNumber||'');
   var ci=_rzCheckinPax(order);
   if((S._rzBookingCheckedIn||{})[order]&&ci){
-    return ci.map(function(r,i){var a=parseFloat(r.actual);return {idx:'c'+i,name:r.name||'',declared:null,actual:isNaN(a)?null:a,type:r.type==='child'?'child':'adult',infName:r.infName||null};});
+    // Infants captured at check-in are lap pax attached to another row (ci[].attach).
+    var byI={};ci.forEach(function(r,i){if(r.type==='infant'&&r.attach!=null){(byI[r.attach]=byI[r.attach]||[]).push(r.name||'');}});
+    return ci.filter(function(r){return r.type!=='infant';}).map(function(r,i){
+      var a=parseFloat(r.actual);var origIdx=ci.indexOf(r);
+      var infN=(byI[origIdx]&&byI[origIdx][0])?String(byI[origIdx][0]).split(/\s+/)[0]:null;
+      return {idx:'c'+origIdx,name:r.name||'',declared:null,actual:isNaN(a)?null:a,type:r.type==='child'?'child':'adult',infName:infN};
+    });
   }
   var parts=[];(b.items||[]).forEach(function(it){(it.participants||[]).forEach(function(p){parts.push(p);});});
   var m=(S._rezdyPaxMeta||{})[order]||{};var infantOf=m.infantOf||{};var types=m.types||{};
   var rows=[];
   parts.forEach(function(p,idx){
-    if(infantOf[idx]!=null)return;
-    var declared=_rzDeclared(p&&p.weight);
+    if(infantOf[idx]!=null)return; // legacy-folded infant — shown on its host
     var t=types[idx]||_rzAgeType(p);
-    var infName=null;Object.keys(infantOf).forEach(function(ii){if(String(infantOf[ii])===String(idx)){var ip=parts[ii];if(ip&&ip.name)infName=String(ip.name).trim().split(/\s+/)[0];}});
-    rows.push({idx:idx,name:(p&&p.name)?String(p.name).trim():'',declared:declared,actual:null,type:t==='child'?'child':'adult',infName:infName});
+    var declared=(t==='infant')?null:_rzDeclared(p&&p.weight);
+    var infName=null;
+    Object.keys(infantOf).forEach(function(ii){if(String(infantOf[ii])===String(idx)){var ip=parts[ii];if(ip&&ip.name)infName=String(ip.name).trim().split(/\s+/)[0];}});
+    rows.push({idx:idx,name:(p&&p.name)?String(p.name).trim():'',declared:declared,actual:null,type:t==='infant'?'infant':t==='child'?'child':'adult',infName:infName});
   });
   return rows;
 }
@@ -492,16 +526,16 @@ function _rzPaxBubbles(b,opts){
   var bubs='';
   rows.forEach(function(r){
     var nm=r.name?_rzEsc(String(r.name).split(/\s+/)[0]):'?';
+    var isInf=r.type==='infant';
     var hasA=r.actual!=null;
-    var wTxt=hasA?(r.actual+'kg'):(r.declared!=null?(r.declared+'kg'):'TBC');
-    var wCol=hasA?'#15803d':(r.declared!=null?'#1e293b':'#b45309'); // green actual / black declared / amber TBC
-    var wTitle=hasA?'Actual weight':(r.declared!=null?'Declared weight (incl +4kg)':'Weight not declared');
+    var wTxt=isInf?'lap':(hasA?(r.actual+'kg'):(r.declared!=null?(r.declared+'kg'):'TBC'));
+    var wCol=isInf?'#9d1768':(hasA?'#15803d':(r.declared!=null?'#1e293b':'#b45309')); // pink lap / green actual / black declared / amber TBC
+    var wTitle=isInf?'Infant — lap':(hasA?'Actual weight':(r.declared!=null?'Declared weight (incl +4kg)':'Weight not declared'));
     var isChild=r.type==='child';var infName=r.infName;
-    var interactive=opts.drag&&!checkedIn&&typeof r.idx==='number';
-    var dd=interactive?(' draggable="true" ondragstart="window.rezdyPaxDragStart(\''+order.replace(/'/g,"\\'")+'\','+r.idx+',event)" ondragover="event.preventDefault()" ondrop="window.rezdyPaxDropInfant(\''+order.replace(/'/g,"\\'")+'\','+r.idx+',event)" onclick="window.rezdyPaxToggleChild(\''+order.replace(/'/g,"\\'")+'\','+r.idx+')"'):'';
-    bubs+='<div title="'+_rzEsc((r.name||'')+(infName?' (+ infant '+infName+')':''))+'"'+dd+' style="position:relative;overflow:hidden;background:rgba(255,255,255,.93);border-radius:8px;'+(owing?'border:2px solid #ef4444':'border-left:4px solid '+gcol)+';min-width:60px;flex-shrink:0;'+(interactive?'cursor:grab;':'')+'">'+
+    bubs+='<div title="'+_rzEsc((r.name||'')+(infName?' (+ infant '+infName+')':''))+'" style="position:relative;overflow:hidden;background:rgba(255,255,255,.93);border-radius:8px;'+(owing?'border:2px solid #ef4444':'border-left:4px solid '+gcol)+';min-width:60px;flex-shrink:0;'+(isInf?'opacity:.85;':'')+'">'+
       (owing?'<div style="background:#ef4444;color:#fff;font-size:8px;font-weight:900;letter-spacing:.04em;text-align:center;line-height:1.7">$ TO PAY</div>':'')+
       (isChild?'<div style="position:absolute;bottom:3px;left:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')+
+      (isInf?'<div title="Infant" style="position:absolute;bottom:3px;left:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')+
       (infName?'<div title="Infant: '+_rzEsc(infName)+'" style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')+
       '<div style="padding:'+(owing?'2px 7px 4px':'4px 7px')+'">'+
         '<div style="font-size:11px;font-weight:700;color:#1e293b;white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'+
@@ -530,6 +564,15 @@ window.rezdyPaxToggleChild=function(order,idx){
   _rzSavePaxMeta();render();
 };
 window.rezdyPaxRemoveInfant=function(order,infIdx){var m=_rzPaxMeta(order);if(m.infantOf)delete m.infantOf[infIdx];_rzSavePaxMeta();render();};
+// Preset a passenger's type from the booking's detail dropdown: cycle Adult → Child → Infant.
+window.rezdyPaxCycleType=function(order,idx,cur){
+  var m=_rzPaxMeta(order);m.types=m.types||{};m.infantOf=m.infantOf||{};
+  cur=cur||'adult';
+  var next=(cur==='adult')?'child':(cur==='child')?'infant':'adult';
+  if(m.infantOf[idx]!=null)delete m.infantOf[idx]; // move from legacy fold to type-based
+  if(next==='adult')delete m.types[idx];else m.types[idx]=next;
+  _rzSavePaxMeta();render();
+};
 // A small pill toggle (Wx / Checked-in) for a booking card.
 function _rzCheckBtn(label,on,onclick,title){
   return '<button onclick="'+onclick+'" title="'+_rzEsc(title)+'" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid '+(on?'#22c55e':'var(--border2)')+';background:'+(on?'rgba(34,197,94,.15)':'transparent')+';color:'+(on?'#4ade80':'var(--text3)')+'">'+(on?'✓':'○')+' '+_rzEsc(label)+'</button>';
@@ -566,8 +609,8 @@ function _rzBookingCard(b){
   h+='</div></div>';
   // aircraft pills
   if(!cancelled)h+=_rzBookingAcPills(b,ono);
-  // pax bubbles + reset
-  var _bub=_rzPaxBubbles(b,{drag:true});
+  // pax bubbles (read-only — child/infant is set in the booking's detail dropdown or at check-in)
+  var _bub=_rzPaxBubbles(b);
   if(_bub){
     var _rst=_rzHasPaxOverrides(ono)?'<button onclick="window.rezdyResetPax(\''+oE+'\')" title="Reset this booking to the Rezdy standard" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:rgba(255,255,255,.05);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">↺ Reset</button>':'';
     h+='<div style="display:flex;align-items:stretch;border-top:1px dashed var(--border2);margin-top:6px">'+_bub+_rst+'</div>';
@@ -632,17 +675,24 @@ function _rzBookingDetail(b){
   // Passengers — flatten participants across items.
   const parts=[];
   (b.items||[]).forEach(function(it){(it.participants||[]).forEach(function(p){parts.push(p);});});
-  let paxH='<div style="margin-bottom:10px"><div style="'+sec+'">Passengers ('+parts.length+')</div>';
+  var _dOrder=String(b.orderNumber||'');var _dm=(S._rezdyPaxMeta||{})[_dOrder]||{};var _dTypes=_dm.types||{},_dInf=_dm.infantOf||{};
+  var oDE=_rzEsc(_dOrder).replace(/'/g,"\\'");
+  let paxH='<div style="margin-bottom:10px"><div style="'+sec+'">Passengers ('+parts.length+') <span style="font-weight:400;text-transform:none;letter-spacing:0">— tap A/C/i to preset</span></div>';
   if(!parts.length){
     paxH+='<div style="font-size:12px;color:var(--text3)">—</div>';
   }else{
-    paxH+='<div style="display:flex;flex-direction:column;gap:3px">';
-    parts.forEach(function(p){
+    paxH+='<div style="display:flex;flex-direction:column;gap:4px">';
+    parts.forEach(function(p,idx){
       const nm=(p&&p.name)?_rzEsc(p.name):'—';
       const wRaw=(p&&p.weight!=null&&p.weight!=='')?p.weight:null;
       const w=(wRaw==null)?'':(/^tbc$/i.test(String(wRaw))?'TBC':_rzEsc(String(wRaw)));
-      paxH+='<div style="font-size:12.5px;color:var(--text);display:flex;justify-content:space-between;gap:10px;max-width:340px">'+
-        '<span>'+nm+'</span><span style="color:'+(/^tbc$/i.test(String(wRaw||''))?'#f59e0b':'var(--text2)')+';font-weight:700">'+w+'</span></div>';
+      var t=_dTypes[idx]||(_dInf[idx]!=null?'infant':_rzAgeType(p));
+      var tl=t==='child'?'C':t==='infant'?'i':'A';
+      var tc=t==='child'?'#fb923c':t==='infant'?'#ec4899':'var(--text3)';
+      var tbg=t==='child'?'rgba(251,146,60,.18)':t==='infant'?'rgba(236,72,153,.18)':'transparent';
+      paxH+='<div style="font-size:12.5px;color:var(--text);display:flex;align-items:center;gap:8px;max-width:360px">'+
+        '<button onclick="window.rezdyPaxCycleType(\''+oDE+'\','+idx+',\''+t+'\')" title="Adult / Child / Infant" style="flex-shrink:0;width:24px;font-size:11px;font-weight:800;padding:3px 0;border-radius:6px;border:1px solid '+(t==='adult'?'var(--border2)':tc)+';background:'+tbg+';color:'+tc+';cursor:pointer">'+tl+'</button>'+
+        '<span style="flex:1">'+nm+'</span><span style="color:'+(/^tbc$/i.test(String(wRaw||''))?'#f59e0b':'var(--text2)')+';font-weight:700">'+w+'</span></div>';
     });
     paxH+='</div>';
   }
@@ -1320,10 +1370,12 @@ window.rezdyManPull=function(){
     var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
     var acHint=_rzBookingAc(b,order);
     ci.forEach(function(r,i){
-      var id=order+'|c'+i;var ex=existing[id];
-      out.push({id:id,name:r.name||'',weight:(r.actual!=null?String(r.actual):''),type:r.type==='child'?'child':'adult',infantName:null,group:order,paymentReq:owing,ac:ex?ex.ac:null,acHint:acHint,infantOf:ex?ex.infantOf:undefined});
+      var id=order+'|c'+i;var ex=existing[id];var isInf=r.type==='infant';
+      out.push({id:id,name:r.name||'',weight:(isInf?'':(r.actual!=null?String(r.actual):'')),type:isInf?'adult':(r.type==='child'?'child':'adult'),infantName:null,group:order,paymentReq:owing,ac:ex?ex.ac:null,acHint:acHint,infantOf:isInf?(r.attach!=null?order+'|c'+r.attach:undefined):(ex?ex.infantOf:undefined)});
     });
   });
+  // Lap infants follow their host's aircraft (they aren't seated).
+  out.forEach(function(p){if(p.infantOf){var host=out.find(function(x){return x.id===p.infantOf;});if(host)p.ac=host.ac;}});
   (S._rzManPax||[]).forEach(function(p){if(String(p.id).indexOf('m_')===0)out.push(p);}); // keep manually-added
   S._rzManPax=out;_rzManSave();
   toast(out.length+' checked-in pax loaded'+(skipped?' · '+skipped+' booking'+(skipped===1?'':'s')+' not checked in':''),skipped?'warn':'ok');
