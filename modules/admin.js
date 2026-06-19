@@ -389,6 +389,13 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'background:'+(d.isPilot?'rgba(59,130,246,.3)':'rgba(255,255,255,.06)')+';'
         +'color:'+(d.isPilot?'#60a5fa':'var(--text3)')+'">✈ '+(d.isPilot?'Yes — PIC':'No')+'</button>'
         +'</div>':'')
+        +(isAdmin?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0">'
+        +'<label style="font-size:11px;color:var(--text3)">AUTHORITY TO ACT AS PIC</label>'
+        +'<button onclick="S.admin.personModal.draft.picAuthority=!S.admin.personModal.draft.picAuthority;render()" '
+        +'style="padding:4px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;'
+        +'background:'+(d.picAuthority?'rgba(34,197,94,.25)':'rgba(255,255,255,.06)')+';'
+        +'color:'+(d.picAuthority?'#4ade80':'var(--text3)')+'">'+(d.picAuthority?'✓ Authorised':'No')+'</button>'
+        +'</div>':'')
         +(isAdmin&&m.userId?'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border2)">'
         +'<label style="font-size:11px;color:var(--text3);flex:1">MARK AS INACTIVE (hides from roster &amp; dropdowns from chosen date)</label>'
         +'<button onclick="S.admin.personModal.draft.inactive=!S.admin.personModal.draft.inactive;render()" '
@@ -2680,6 +2687,7 @@ window.openPersonModal=async function(crewId,userId){
       email:u?u.email||'':'',
       role:u?u.role||'desk':'desk',
       isPilot:u?!!u.isPilot:false,
+      picAuthority:(cr&&((S._picAuth||{})[cr.id]!=null?!!(S._picAuth||{})[cr.id]:!!cr.picAuthority))||false,
       inactive:u?!!u.inactive:false,
       password:'',
     }
@@ -2743,7 +2751,7 @@ window.savePerson=async function(){
   if(crewId||finalName){
     crewId=crewId||('c_'+Date.now());
     const crewRec={id:crewId,n:finalName,w:parseFloat(d.w)||0,endorse:d.endorse||[],
-      code:d.code||'',dlNum:d.dlNum||'',caaNum:d.caaNum||'',
+      code:d.code||'',dlNum:d.dlNum||'',caaNum:d.caaNum||'',picAuthority:!!d.picAuthority,
       medExpiry:d.medExpiry||'',ocaDue:d.ocaDue||'',firstAid:d.firstAid||'',
       avsecExpiry:d.avsecExpiry||'',photo:d.photo||''};
     const existIdx=S.crew.findIndex(function(cr){return cr.id===crewId;});
@@ -2763,6 +2771,11 @@ window.savePerson=async function(){
         if(!minR) toast('Warning: profile may not have saved to server — check connection','warn');
       }
     }
+    // Authority to act as PIC — stored in a settings key (no crew-table column needed) so it
+    // persists across devices and is read by the Rezdy manifest's PIC checks.
+    S._picAuth=S._picAuth||{};S._picAuth[crewId]=!!d.picAuthority;
+    try{lsSet('ts_pic_auth',S._picAuth);}catch(e){}
+    if(typeof sbU==='function')sbU('ts_settings',[{key:'pic_authority',value:JSON.stringify(S._picAuth)}]).catch(function(){});
   }
 
   // ── Save user record (only if email present OR already has userId) ──
