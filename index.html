@@ -703,7 +703,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.67';
+const APP_VER='v23.68';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -14204,7 +14204,8 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   var acCode=phys.replace('ZK-','');
   S.lsForms=S.lsForms||{};S.lsForms[acCode]=form;S.lsAc=acCode;S.form=form;S.editId=newId;S.formDirty=false;
   S.lsTabs=S.lsTabs||[];S.lsTabs.push({id:newId,acId:phys,form:form,status:'unsigned',savedAt:savedAt,isNew:true});
-  S.activeTabId=newId;S.section='operations';S.tab='loadsheet';
+  // Open INLINE in the Rezdy Loadsheets sub-tab (no jump to the legacy Operations editor).
+  S.activeTabId=newId;S.tab='loadsheet';S.rezdyTab='loadsheets';S._rzLsActiveId=newId;
   if(typeof sbU==='function')sbU('ts_loadsheets',[{id:newId,form:form,saved_at:savedAt,status:'unsigned'}]).catch(function(){});
   _rzLsTabAdd(newId,phys,_rzLsTabLabel(phys,form)); // share this open tab with everyone on the date
   try{window.scrollTo(0,0);}catch(_){}
@@ -14220,7 +14221,8 @@ window.rezdyNewBlankLoadsheet=function(acId){
   var acCode=acId.replace('ZK-','');
   S.lsForms=S.lsForms||{};S.lsForms[acCode]=form;S.lsAc=acCode;S.form=form;S.editId=newId;S.formDirty=false;
   S.lsTabs=S.lsTabs||[];S.lsTabs.push({id:newId,acId:acId,form:form,status:'unsigned',savedAt:savedAt,isNew:true});
-  S.activeTabId=newId;S.section='operations';S.tab='loadsheet';
+  // Open INLINE in the Rezdy Loadsheets sub-tab (no jump to the legacy Operations editor).
+  S.activeTabId=newId;S.tab='loadsheet';S.rezdyTab='loadsheets';S._rzLsActiveId=newId;
   if(typeof sbU==='function')sbU('ts_loadsheets',[{id:newId,form:form,saved_at:savedAt,status:'unsigned'}]).catch(function(){});
   _rzLsTabAdd(newId,acId,_rzLsTabLabel(acId,form)); // share this open tab with everyone on the date
   try{window.scrollTo(0,0);}catch(_){}render();
@@ -14262,38 +14264,65 @@ window.rezdyCloseLsTab=function(id){
 // Open a loadsheet by id into the editor — fetching it from the cloud first if this device
 // hasn't cached it yet (e.g. it was created by another user).
 window.rezdyOpenLsTab=function(id){
+  // Open INLINE inside the Rezdy Loadsheets sub-tab — viewSaved/switchLsTab set up the form and
+  // S.tab='loadsheet' (which the post-render hook uses for the signature pad) WITHOUT changing
+  // S.section, so we stay in the Rezdy flow.
+  S._rzLsActiveId=id;S.rezdyTab='loadsheets';
   var s=(S.saved||[]).find(function(x){return x.id===id;});
-  if(s){_rzLsTabAdd(id,(s.form&&s.form.ac)||'',_rzLsTabLabel((s.form&&s.form.ac)||'',s.form));if(typeof window.viewSaved==='function')window.viewSaved(id);return;}
+  if(s){_rzLsTabAdd(id,(s.form&&s.form.ac)||'',_rzLsTabLabel((s.form&&s.form.ac)||'',s.form));if(typeof window.viewSaved==='function')window.viewSaved(id);else render();return;}
   try{fetch(SB+'/rest/v1/ts_loadsheets?id=eq.'+encodeURIComponent(id)+'&select=*',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
     var row=rows&&rows[0];
-    if(row&&row.form){S.saved=S.saved||[];S.saved.push({id:row.id,form:row.form,status:row.status||'unsigned',savedAt:row.saved_at});_rzLsTabAdd(id,row.form.ac||'',_rzLsTabLabel(row.form.ac||'',row.form));if(typeof window.viewSaved==='function')window.viewSaved(id);}
+    if(row&&row.form){S.saved=S.saved||[];S.saved.push({id:row.id,form:row.form,status:row.status||'unsigned',savedAt:row.saved_at});_rzLsTabAdd(id,row.form.ac||'',_rzLsTabLabel(row.form.ac||'',row.form));if(typeof window.viewSaved==='function')window.viewSaved(id);else render();}
     else if(typeof toast==='function')toast('Loadsheet not found','warn');
   }).catch(function(){if(typeof toast==='function')toast('Could not open loadsheet','err');});}catch(e){}
 };
 // Build a friendly label for a loadsheet tab.
 function _rzLsTabLabel(ac,form){var et=(form&&form.etd)?(' · '+_rzEsc(form.etd)):'';return String(ac||'').replace('ZK-','')+et;}
-// ── Rezdy Loadsheets sub-tab — a shared, live list of open loadsheet tabs for this date ──
+// ── Rezdy Loadsheets sub-tab — ONE shared per-date tab strip; the editor renders inline below ──
+// No second tab bar, no jump to the legacy Operations editor. The list of open tabs is shared
+// across everyone on the date; which tab you have open is your own.
 function _rzRenderLoadsheets(){
   if(!S._rzManLoaded){if(window.rezdyLoadManifest)window.rezdyLoadManifest();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading…</div>';}
   if(!S._rzLsTabsLoaded&&window.rezdyLoadLsTabs)window.rezdyLoadLsTabs(); // shared open-tabs registry
   var fleet=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
   var tabs=(S._rzLsTabs||[]).slice().sort(function(a,b){return String(a.label||'').localeCompare(String(b.label||''));});
-  var h='<div class="card"><div class="st" style="margin-bottom:4px">Loadsheets</div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:0 0 8px">'+_rzDowLabel(S.rezdyDate)+' · everyone viewing this date shares the same open loadsheet tabs. Create from the <b>Seatmap</b>, start a blank below, or re-open one from Saved.</p>'+
-    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:11px;color:var(--text3);font-weight:700">New blank:</span>';
-  fleet.forEach(function(id){var c=_rzAcCol(id);h+='<button onclick="window.rezdyNewBlankLoadsheet(\''+id.replace(/'/g,"\\'")+'\')" style="font-size:12px;font-weight:700;padding:4px 11px;border-radius:16px;border:1px solid '+c+';background:transparent;color:'+c+';cursor:pointer">+ '+id.replace('ZK-','')+'</button>';});
+  var activeId=S._rzLsActiveId;
+  var activeOpen=!!(activeId&&S.form&&S.activeTabId===activeId&&(S.lsTabs||[]).some(function(t){return t.id===activeId;}));
+  // ── Shared tab strip (chips) — always on top ──
+  var h='<div class="card" style="padding:9px 11px">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
+      '<div style="font-size:13px;font-weight:800;color:var(--text1)">Loadsheets · '+_rzEsc(_rzDowLabel(S.rezdyDate))+'</div>'+
+      '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="font-size:10px;color:var(--text3);font-weight:700">+ blank:</span>'+
+        fleet.map(function(id){var c=_rzAcCol(id);return '<button onclick="window.rezdyNewBlankLoadsheet(\''+id.replace(/'/g,"\\'")+'\')" style="font-size:11px;font-weight:800;padding:3px 9px;border-radius:13px;border:1px solid '+c+';background:transparent;color:'+c+';cursor:pointer">'+id.replace('ZK-','')+'</button>';}).join('')+
+      '</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:6px;overflow-x:auto;align-items:center;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">'+
+      '<button onclick="S._rzLsActiveId=null;render()" class="sub-tab '+(!activeId?'on':'')+'" style="white-space:nowrap;flex-shrink:0">📋 List ('+tabs.length+')</button>';
+  tabs.forEach(function(t){
+    var s=(S.saved||[]).find(function(x){return x.id===t.id;});
+    var signed=s&&(s.status==='complete'||s.status==='signed'||(s.form&&s.form.sig));
+    var ac=(s&&s.form&&s.form.ac)||t.ac||'';var col=_rzAcCol(ac);var etd=(s&&s.form&&s.form.etd)||'';
+    var on=activeId===t.id;var idE=String(t.id).replace(/'/g,"\\'");
+    h+='<div style="display:inline-flex;align-items:stretch;border-radius:13px;overflow:hidden;border:1.5px solid '+(on?col:col+'55')+';flex-shrink:0">'+
+      '<button onclick="window.rezdyOpenLsTab(\''+idE+'\')" style="padding:4px 10px;font-size:11px;font-weight:800;background:'+(on?col+'55':col+'18')+';border:none;cursor:pointer;color:'+(on?'#fff':col)+';white-space:nowrap">'+(signed?'✅ ':'')+_rzEsc(String(ac).replace('ZK-',''))+(etd?' '+_rzEsc(etd):'')+'</button>'+
+      '<button onclick="window.rezdyCloseLsTab(\''+idE+'\')" title="Close (keeps the saved loadsheet)" style="padding:4px 7px;font-size:12px;line-height:1;background:'+(on?col+'33':col+'0f')+';border:none;border-left:1px solid '+(on?col:col+'44')+';cursor:pointer;color:'+(on?'#fff':col+'cc')+'">✕</button>'+
+    '</div>';
+  });
   h+='</div></div>';
-  // The shared list of open loadsheet tabs.
-  h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:8px">Open tabs ('+tabs.length+')</div>';
+  // ── Active loadsheet → render the real editor inline ──
+  if(activeOpen){
+    var _ed='';try{_ed=renderLoadsheet();}catch(e){_ed='<div class="card" style="color:var(--err-text)">Loadsheet error: '+_rzEsc(e.message)+'</div>';}
+    return h+'<div id="flash-loadsheet">'+_ed+'</div>';
+  }
+  // ── List mode (no active tab) ──
   if(!tabs.length){
-    h+='<div style="font-size:13px;color:var(--text3);padding:8px 0">No open loadsheets for this day yet. Create one from the Seatmap, start a blank above, or open a saved one below.</div>';
+    h+='<div class="card" style="text-align:center;padding:22px;color:var(--text3);font-size:13px">No open loadsheets for this day yet.<br>Create one from the <b>Seatmap</b>, start a blank above, or open a saved one below.</div>';
   }else{
+    h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:8px">Open tabs ('+tabs.length+')</div>';
     tabs.forEach(function(t){
       var s=(S.saved||[]).find(function(x){return x.id===t.id;});
       var signed=s&&(s.status==='complete'||s.status==='signed'||(s.form&&s.form.sig));
-      var ac=(s&&s.form&&s.form.ac)||t.ac||'';var col=_rzAcCol(ac);
-      var etd=(s&&s.form&&s.form.etd)||'';
-      var idE=String(t.id).replace(/'/g,"\\'");
+      var ac=(s&&s.form&&s.form.ac)||t.ac||'';var col=_rzAcCol(ac);var etd=(s&&s.form&&s.form.etd)||'';var idE=String(t.id).replace(/'/g,"\\'");
       h+='<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:9px;margin-bottom:7px">'+
         '<span style="font-size:14px">'+(signed?'✅':'📋')+'</span>'+
         '<div style="flex:1;min-width:0;cursor:pointer" onclick="window.rezdyOpenLsTab(\''+idE+'\')">'+
@@ -14304,9 +14333,9 @@ function _rzRenderLoadsheets(){
         '<button onclick="window.rezdyCloseLsTab(\''+idE+'\')" title="Remove from open tabs (keeps the saved loadsheet)" style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:0 2px">✕</button>'+
       '</div>';
     });
+    h+='</div>';
   }
-  h+='</div>';
-  // Saved loadsheets for this date that aren't currently in the open-tabs list (re-open to share).
+  // Saved loadsheets for this date that aren't currently open.
   var openIds={};(S._rzLsTabs||[]).forEach(function(t){openIds[t.id]=1;});
   var savedToday=(S.saved||[]).filter(function(s){return s.form&&s.form.date===S.rezdyDate&&s.status!=='deleted'&&!openIds[s.id];});
   if(savedToday.length){
