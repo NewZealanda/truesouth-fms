@@ -96,8 +96,11 @@ serve(async (req) => {
     const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + days)
     return t.toISOString().slice(0, 10)
   }
-  const minT = `${shiftDay(date, -1)}T00:00:00Z`
-  const maxT = `${shiftDay(date, 1)}T23:59:59Z`
+  // The NZ day [00:00–24:00 local] in UTC is roughly [date-1 11:00Z .. date 12:00Z]
+  // (NZST +12) or one hour earlier (NZDT +13). Query date-1 10:00Z .. date 14:00Z — a
+  // ~28h window that fully contains the NZ day with margin, much tighter than ±1 full day.
+  const minT = `${shiftDay(date, -1)}T10:00:00Z`
+  const maxT = `${date}T14:00:00Z`
 
   const all: any[] = []
   let offset = 0
@@ -129,15 +132,13 @@ serve(async (req) => {
 
   if (body.store !== false) {
     // This sync is authoritative for the date: clear the date's existing rows first so any
-    // previously mis-dated bookings (the off-by-one) are removed, then write the fresh set.
+    // previously mis-dated bookings (the off-by-one) are removed, then write the fresh set
+    // in a SINGLE batched upsert (one round-trip) instead of one request per booking.
     try { await admin.from("ts_rezdy_bookings").delete().eq("tour_date", date) } catch (_) { /* keep going */ }
-    for (const n of norm) {
-      try {
-        await admin.from("ts_rezdy_bookings").upsert(
-          { id: n.id, order_number: n.orderNumber, tour_date: date, data: n, updated_at: new Date().toISOString() },
-          { onConflict: "id" },
-        )
-      } catch (_) { /* keep going */ }
+    if (norm.length) {
+      const now = new Date().toISOString()
+      const rows = norm.map((n) => ({ id: n.id, order_number: n.orderNumber, tour_date: date, data: n, updated_at: now }))
+      try { await admin.from("ts_rezdy_bookings").upsert(rows, { onConflict: "id" }) } catch (_) { /* keep going */ }
     }
   }
 

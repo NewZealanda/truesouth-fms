@@ -164,6 +164,9 @@ function renderRezdy(){
   if(typeof hasRolePerm==='function'&&!hasRolePerm('rezdy'))return '<div class="page"><div class="card" style="text-align:center;padding:40px">Not available.</div></div>';
   if(!S.rezdyDate)S.rezdyDate=_rzToday();
   const sub=S.rezdyTab||'bookings';
+  // Keep the viewed day in lock-step with Rezdy. Throttled + off the render stack so it
+  // never blocks or loops; the cache shows instantly and the view updates when Rezdy returns.
+  if(typeof setTimeout==='function')setTimeout(function(){if(typeof _rzBgSync==='function')_rzBgSync();},0);
   // Opening the Calendar reloads it (so it reflects the latest synced bookings). No auto-poll.
   if(sub==='schedule'&&S._rzPrevSub!=='schedule'){S._schedBlocks=null;S._rezdyBookings=null;}
   S._rzPrevSub=sub;
@@ -182,7 +185,7 @@ function renderRezdy(){
     '</div>'+
     '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1" title="Next day" onclick="window.rezdyShiftDate(1)">▷</button>'+
     '<button class="btn btn-ghost" style="font-size:12px;padding:6px 12px'+(_isToday?';opacity:.45':'')+'" title="Jump to today" onclick="window.rezdySetDate(\''+_rzToday()+'\')">Today</button>'+
-    ((sub==='bookings'||sub==='schedule')?'<button class="btn btn-ghost" style="font-size:12px;margin-left:auto" onclick="window.rezdyRefresh()">⟳ Refresh from Rezdy</button>':'')+
+    '<button class="btn btn-ghost" style="font-size:12px;margin-left:auto'+(S._rzSyncing?';opacity:.6':'')+'" onclick="window.rezdyRefresh()">'+(S._rzSyncing?'⟳ Syncing…':'⟳ Refresh from Rezdy')+'</button>'+
     '</div>';
 
   if(sub==='pickups')return tabBar+dateRow+_rzRenderPickups();
@@ -532,8 +535,10 @@ window.rezdySetDate=function(v){
   else window.rezdyLoadBookings();
 };
 
-// Load cached bookings for the current date (no Rezdy call).
-window.rezdyLoadBookings=async function(){
+// Load cached bookings for the current date, then quietly refresh from Rezdy in the
+// background (stale-while-revalidate) so the day always matches Rezdy without a blocking wait.
+window.rezdyLoadBookings=async function(opts){
+  opts=opts||{};
   S._rezdyLoading=true;safeRender();
   const rows=await sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(S.rezdyDate));
   S._rezdyBookings=(rows||[]).map(_rzRow).filter(Boolean);
@@ -542,11 +547,37 @@ window.rezdyLoadBookings=async function(){
   render();
   // pull saved pickup arrangement for this date (overrides auto layout if present)
   window.rezdyLoadPickups();
+  if(opts.noSync!==true)_rzBgSync();
 };
 
-// Pull from Rezdy via Edge Function, then reload the cache.
+// Background sync: keep the viewed date in lock-step with Rezdy. Throttled per-date so
+// flipping tabs/dates doesn't hammer the API; runs off the render stack (no re-entrancy).
+function _rzBgSync(force){
+  var date=S.rezdyDate;if(!date)return;
+  if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
+  S._rzSyncedAt=S._rzSyncedAt||{};
+  if(!force&&(Date.now()-(S._rzSyncedAt[date]||0)<45000))return; // throttle ~45s/date
+  if(S._rzBgSyncing===date)return;                               // already in flight
+  S._rzBgSyncing=date;S._rzSyncedAt[date]=Date.now();
+  S._rzSyncing=true;safeRender();
+  callFn('rezdy-sync',{date:date}).then(function(res){
+    S._rzBgSyncing=null;S._rzSyncing=false;
+    if(date!==S.rezdyDate){safeRender();return;}                 // user moved on
+    if(res&&res.ok){
+      sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(date)).then(function(rows){
+        if(date!==S.rezdyDate)return;
+        S._rezdyBookings=(rows||[]).map(_rzRow).filter(Boolean);
+        S._pickupVans=null;S._schedBlocks=null;render(); // re-derive vans + calendar blocks
+      });
+    } else {safeRender();}
+  }).catch(function(){S._rzBgSyncing=null;S._rzSyncing=false;safeRender();});
+}
+window._rzBgSync=_rzBgSync;
+
+// Manual force-refresh (the ⟳ button): sync now, show a confirmation toast.
 window.rezdyRefresh=async function(){
   S._rezdyLoading=true;safeRender();
+  S._rzSyncedAt=S._rzSyncedAt||{};S._rzSyncedAt[S.rezdyDate]=Date.now();
   const res=await callFn('rezdy-sync',{date:S.rezdyDate});
   if(!res||!res.ok){
     S._rezdyLoading=false;
@@ -556,7 +587,7 @@ window.rezdyRefresh=async function(){
   }
   const n=(res.data&&(res.data.count!=null?res.data.count:(Array.isArray(res.data.bookings)?res.data.bookings.length:null)));
   toast('Synced '+(n!=null?n:'')+' booking'+(n===1?'':'s')+' from Rezdy','ok');
-  await window.rezdyLoadBookings();
+  await window.rezdyLoadBookings({noSync:true});
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
