@@ -1010,6 +1010,19 @@ function _rzMoney(n,cur){
   return sym+v.toFixed(2);
 }
 
+// Friendly booking-source label (Viator / GYG / Direct …) from the raw source/agent string.
+function _rzSourceLabel(b){
+  var s=String((b&&b.source)||'').trim();
+  if(!s)return 'Direct';
+  if(/get\s*your\s*guide|\bgyg\b/i.test(s))return 'GYG';
+  if(/viator/i.test(s))return 'Viator';
+  if(/expedia/i.test(s))return 'Expedia';
+  if(/klook/i.test(s))return 'Klook';
+  if(/manual/i.test(s))return 'Manual';
+  if(/marketplace_pref_rate/i.test(s))return 'Marketplace';
+  if(/website|^rezdy$|direct/i.test(s))return 'Direct';
+  return s; // already a readable agent/company name
+}
 // Build the expanded detail panel for one booking (passengers, extras, requests, balance).
 function _rzBookingDetail(b){
   const sec='font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:4px';
@@ -1098,7 +1111,8 @@ function _rzBookingDetail(b){
     var pid=String(b.orderNumber||'')+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;
     var ov2=(S._pickupLocOverride||{});
     var cur=(ov2[pid]!=null&&ov2[pid]!=='')?ov2[pid]:(it.pickup||'');
-    _pkRows.push('<div style="display:flex;align-items:center;gap:6px">'+_rzLocSelect(pid,cur)+'</div>');
+    var pt=_rzDepTime(it.pickupTime||''); // pickup time (HHMM) shown alongside the location
+    _pkRows.push('<div style="display:flex;align-items:center;gap:6px">'+(pt?'<span style="font-size:11px;font-weight:800;color:var(--text2);white-space:nowrap;flex-shrink:0">🕑 '+_rzEsc(pt)+'</span>':'')+_rzLocSelect(pid,cur)+'</div>');
   });
   if(_pkRows.length){
     pkH='<div style="margin-bottom:10px"><div style="'+sec+'">Pickup'+(_pkRows.length>1?'s':'')+'</div><div style="display:flex;flex-direction:column;gap:4px">'+_pkRows.join('')+'</div></div>';
@@ -1110,8 +1124,8 @@ function _rzBookingDetail(b){
   balH+='<div style="font-size:14px;font-weight:800;color:'+(owing?'#f59e0b':'#4ade80')+'">'+(owing?'⚠ '+_rzEsc(_rzMoney(bal,b.currency))+' owing':'Paid in full')+'</div>';
   balH+='<div style="font-size:11px;color:var(--text3);margin-top:2px">Total '+_rzEsc(_rzMoney(b.totalAmount,b.currency)||'—')+' · Paid '+_rzEsc(_rzMoney(b.totalPaid,b.currency)||'—')+'</div>';
   balH+='</div>';
-  // Source / marketplace (kept out of the collapsed card to reduce clutter).
-  var srcH=b.source?('<div style="margin-bottom:10px"><div style="'+sec+'">Source</div><div style="font-size:12px;color:var(--text2)">'+_rzEsc(b.source)+'</div></div>'):'';
+  // Booking source / marketplace — always shown (e.g. Viator, GYG, Direct).
+  var srcH='<div style="margin-bottom:10px"><div style="'+sec+'">Source</div><span class="pill" style="background:var(--card2);border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px">'+_rzEsc(_rzSourceLabel(b))+'</span></div>';
   return bubsH+'<div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">'+
     '<div style="flex:1 1 300px;min-width:240px">'+paxH+exH+'</div>'+
     '<div style="flex:1 1 260px;min-width:220px">'+contactH+pkH+reqH+srcH+balH+'</div>'+
