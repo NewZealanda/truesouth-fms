@@ -1615,6 +1615,18 @@ function _rzRenderManifest(){
   // Aircraft with pax allocated THIS departure come first (flying); idle aircraft sort last.
   var _depLoad={};fleet.forEach(function(id){_depLoad[id]=pax.filter(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===selDep;}).length;});
   fleet=fleet.slice().sort(function(a,b){return (_depLoad[b]>0?1:0)-(_depLoad[a]>0?1:0);}); // stable: flying first
+  // "3 boxes that grow": show the flying aircraft + spare empty drop-boxes (min 3 total; one more
+  // empty appears each time the visible empties fill up). Aircraft beyond that stay available in
+  // the "Add aircraft" row.
+  var _flyingIds=fleet.filter(function(id){return _depLoad[id]>0;});
+  var _emptyIds=fleet.filter(function(id){return _depLoad[id]===0;});
+  var _forced=(S._rzManShow||[]).filter(function(id){return _emptyIds.indexOf(id)>=0;});
+  var _forcedSet={};_forced.forEach(function(id){_forcedSet[id]=1;});
+  var _needSpares=Math.max(0,Math.max(3,_flyingIds.length+1)-_flyingIds.length-_forced.length);
+  var _visEmpty=_forced.concat(_emptyIds.filter(function(id){return !_forcedSet[id];}).slice(0,_needSpares));
+  var _spareOpen={};_visEmpty.forEach(function(id){_spareOpen[id]=1;});
+  var _hiddenByGrow=fleet.filter(function(id){return _flyingIds.indexOf(id)<0&&_visEmpty.indexOf(id)<0;}); // capped-out (not removed)
+  fleet=_flyingIds.concat(_visEmpty);
   h+='<div class="rzman-fleet">';
   fleet.forEach(function(id){
     var col=(typeof AC_COL!=='undefined'&&AC_COL[id])||'#64748b';
@@ -1630,7 +1642,7 @@ function _rzRenderManifest(){
     // Collapsible: open by default only when this aircraft has pax this departure; a manual
     // toggle (keyed by departure+aircraft) overrides the auto state.
     var _ckey=selDep+'|'+id;var _ov=(S._rzManCardOpen||{})[_ckey];
-    var open=(_ov!=null)?_ov:(list.length>0);
+    var open=(_ov!=null)?_ov:(list.length>0||!!_spareOpen[id]); // spare drop-boxes open by default
     h+='<div class="rzman-card" ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.rezdyManDrop(\''+id+'\',event)" style="background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px'+(open?'':';opacity:.92')+'">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px'+(open?';margin-bottom:8px':'')+'">'+
         '<div onclick="window.rezdyManToggleCard(\''+idE+'\')" style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0">'+
@@ -1685,11 +1697,12 @@ function _rzRenderManifest(){
     h+='</div>';
   });
   h+='</div>';
-  // Re-add a removed aircraft
+  // Add aircraft — removed aircraft (re-add) + any capped-out by the grow limit (reveal as a box).
   var hiddenAvail=fleetAll.filter(function(id){return hidden.indexOf(id)>=0;});
-  if(hiddenAvail.length){
+  if(hiddenAvail.length||_hiddenByGrow.length){
     h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px">'+
       '<span style="font-size:11px;color:var(--text3);font-weight:700">Add aircraft:</span>';
+    _hiddenByGrow.forEach(function(id){var col=_rzAcCol(id);h+='<button onclick="window.rezdyManShowAc(\''+id.replace(/'/g,"\\'")+'\')" style="font-size:12px;font-weight:700;padding:4px 11px;border-radius:16px;border:1px solid '+col+';background:transparent;color:'+col+';cursor:pointer">+ '+id.replace('ZK-','')+'</button>';});
     hiddenAvail.forEach(function(id){var col=_rzAcCol(id);h+='<button onclick="window.rezdyManAddAc(\''+id.replace(/'/g,"\\'")+'\')" style="font-size:12px;font-weight:700;padding:4px 11px;border-radius:16px;border:1px solid '+col+';background:transparent;color:'+col+';cursor:pointer">+ '+id.replace('ZK-','')+'</button>';});
     h+='</div>';
   }
@@ -2173,6 +2186,8 @@ window.rezdyManDeleteAc=function(acId){
   _rzManSave();render();
 };
 window.rezdyManAddAc=function(acId){if(!acId)return;S._rzManHidden=(S._rzManHidden||[]).filter(function(x){return x!==acId;});_rzManSave();render();};
+// Reveal an aircraft that the "3 boxes that grow" limit had hidden (a manual drop-box).
+window.rezdyManShowAc=function(acId){if(!acId)return;S._rzManShow=S._rzManShow||[];if(S._rzManShow.indexOf(acId)<0)S._rzManShow.push(acId);render();};
 // Build a real loadsheet for this aircraft from the manifest allocation, reusing the
 // existing W&B engine, and open it (saved into the shared ts_loadsheets / Saved list).
 window.rezdyManCreateLoadsheet=function(acId,dep){
