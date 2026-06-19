@@ -720,7 +720,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.84';
+const APP_VER='v23.85';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -12454,6 +12454,7 @@ function _rzSourceLabel(b){
   if(/viator/i.test(s))return 'Viator';
   if(/expedia/i.test(s))return 'Expedia';
   if(/klook/i.test(s))return 'Klook';
+  if(/book\s*me/i.test(s))return 'BookMe';
   if(/manual/i.test(s))return 'Manual';
   if(/marketplace_pref_rate/i.test(s))return 'Marketplace';
   if(/website|^rezdy$|direct/i.test(s))return 'Direct';
@@ -12561,12 +12562,7 @@ function _rzBookingDetail(b){
   balH+='<div style="font-size:11px;color:var(--text3);margin-top:2px">Total '+_rzEsc(_rzMoney(b.totalAmount,b.currency)||'—')+' · Paid '+_rzEsc(_rzMoney(b.totalPaid,b.currency)||'—')+'</div>';
   balH+='</div>';
   // Booking source / marketplace — always shown (e.g. Viator, GYG, Direct).
-  var srcH='<div style="margin-bottom:10px"><div style="'+sec+'">Source</div><span class="pill" style="background:var(--card2);border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px">'+_rzEsc(_rzSourceLabel(b))+'</span>';
-  // Diagnostic (superadmin only): show the raw source-related fields so we can find the agent name.
-  if(b._srcDbg&&S.user&&S.user.role==='superadmin'){
-    srcH+='<div style="font-size:9px;color:var(--text3);word-break:break-all;margin-top:4px;font-family:monospace">DBG '+_rzEsc(JSON.stringify(b._srcDbg))+'</div>';
-  }
-  srcH+='</div>';
+  var srcH='<div style="margin-bottom:10px"><div style="'+sec+'">Source</div><span class="pill" style="background:var(--card2);border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px">'+_rzEsc(_rzSourceLabel(b))+'</span></div>';
   return bubsH+'<div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">'+
     '<div style="flex:1 1 300px;min-width:240px">'+paxH+exH+'</div>'+
     '<div style="flex:1 1 260px;min-width:220px">'+contactH+pkH+reqH+srcH+balH+'</div>'+
