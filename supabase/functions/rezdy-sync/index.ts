@@ -68,7 +68,14 @@ function normalize(b: any) {
     email: c.email || "",
     comments: b.comments || "",
     fields: fieldsToObj(b.fields), // booking-level custom fields (e.g. Special Requirements)
-    source: b.source || (b.agent && b.agent.companyName) || "",
+    // Prefer the marketplace/agent NAME (Viator, GetYourGuide, …) over Rezdy's source code
+    // ("MARKETPLACE_PREF_RATE"). The reseller can appear as a string or an object with companyName,
+    // under a few different field names depending on the channel.
+    source: ((typeof b.agent === "string" ? b.agent : (b.agent && b.agent.companyName))
+          || (typeof b.reseller === "string" ? b.reseller : (b.reseller && b.reseller.companyName))
+          || b.resellerName || b.marketplaceName || b.agentName
+          || (b.source && b.source !== "MARKETPLACE_PREF_RATE" ? b.source : "")
+          || b.source || ""),
     totalPax: items.reduce((s: number, i: any) => s + (i.quantity || 0), 0),
     totalAmount, totalPaid,
     balanceDue: Math.max(0, totalAmount - totalPaid),
