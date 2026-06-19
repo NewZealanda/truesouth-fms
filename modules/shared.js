@@ -371,7 +371,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.45';
+const APP_VER='v23.46';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1669,6 +1669,13 @@ function initRealtime(){
           var _rmp=msg.payload.payload;
           if(_rmp&&_rmp.sessionId!==_sessionId&&_rmp.date===S.rezdyDate&&typeof window.rezdyReloadManifestLive==='function'){
             window.rezdyReloadManifestLive();
+          }
+        }
+        // Live Rezdy calendar: another device changed the schedule for a date we're viewing.
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='rz_sched_update'){
+          var _rsp=msg.payload.payload;
+          if(_rsp&&_rsp.sessionId!==_sessionId&&_rsp.date===S.rezdyDate&&S.rezdyTab==='schedule'&&typeof window.rezdyReloadScheduleLive==='function'){
+            window.rezdyReloadScheduleLive();
           }
         }
       }catch(err){}

@@ -321,8 +321,29 @@ function _rzPilotEndorse(code){
   var cr=(S.crew||[]).find(function(c){return c.n===u.name||c.n===u.linkedCrew;});
   return cr?(cr.endorse||[]):[];
 }
+// Find the booking order numbers that make up a booking-block key (aircraft|start|product).
+function _rzOrdersForBlockKey(key){
+  var out=[];
+  (S._rezdyBookings||[]).forEach(function(b){
+    if(/cancel/i.test(b.status||''))return;
+    var ac=_rzBookingAc(b,String(b.orderNumber||''))||'__unalloc__';
+    ((b.items)||[]).forEach(function(it){var t=_rzDepTime(it.startTimeLocal||'');if(!t)return;var start=_rzHHMMcolon(t);var prod=_rzProduct(it.product);if(ac+'|'+start+'|'+prod===key)out.push(String(b.orderNumber||''));});
+  });
+  return out;
+}
+window.rezdySchedBlockDragStart=function(key,e){S._rzSchedBlockDrag=key;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','block');}catch(_){}};
 window.rezdySchedDropPilot=function(key,e){
   if(e&&e.preventDefault)e.preventDefault();if(e&&e.stopPropagation)e.stopPropagation();
+  // A block (e.g. unallocated FLB/CCF) dragged onto a flight → combine into that flight.
+  if(S._rzSchedBlockDrag){
+    var src=S._rzSchedBlockDrag;S._rzSchedBlockDrag=null;
+    if(src===key)return;
+    var tgtAc=String(key).indexOf('|')>=0?String(key).split('|')[0]:null;
+    var orders=_rzOrdersForBlockKey(src);
+    S._rzSchedAttach=S._rzSchedAttach||{};
+    orders.forEach(function(o){S._rzSchedAttach[o]=key;if(tgtAc&&tgtAc!=='__unalloc__'){S._rzBookingAc=S._rzBookingAc||{};S._rzBookingAc[o]=tgtAc;}});
+    if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();return;
+  }
   var code=S._schedPilotDrag;S._schedPilotDrag=null;if(!code||!key)return;
   // Only a type-rated pilot may be put on a given aircraft.
   var ac=null;
@@ -333,9 +354,11 @@ window.rezdySchedDropPilot=function(key,e){
     if(en&&en.length&&en.indexOf(ac)<0){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}
   }
   S._schedPilots=S._schedPilots||{};S._schedPilots[String(key)]=code;
-  if(window.pickupSave)window.pickupSave(true);render();
+  if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
 };
-window.rezdySchedClearPilot=function(key){if(S._schedPilots)delete S._schedPilots[String(key)];if(window.pickupSave)window.pickupSave(true);render();};
+window.rezdySchedClearPilot=function(key){if(S._schedPilots)delete S._schedPilots[String(key)];if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();};
+// Detach a flyback booking from a flight (revert the combine).
+window.rezdySchedDetach=function(order){order=String(order);if(S._rzSchedAttach)delete S._rzSchedAttach[order];if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();};
 // Passenger "bubbles" for a booking — loadsheet style: white card, group-colour left border,
 // C (child) / i (infant) corner badges, TO PAY banner. opts.drag enables in-booking dragging:
 // drop one bubble on another to make it that passenger's lap infant; tap toggles child.
@@ -833,8 +856,9 @@ window.rezdyLoadPickups=async function(){
     S._rzBookingAc=(row.bookingAc&&typeof row.bookingAc==='object')?row.bookingAc:{};
     S._rzBookingWx=(row.bookingWx&&typeof row.bookingWx==='object')?row.bookingWx:{};
     S._rzBookingCheckedIn=(row.bookingCheckedIn&&typeof row.bookingCheckedIn==='object')?row.bookingCheckedIn:{};
+    S._rzSchedAttach=(row.schedAttach&&typeof row.schedAttach==='object')?row.schedAttach:{};
   }else{
-    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];S._pickupExtraDrivers=[];S._rezdyPaxMeta={};S._schedPilots={};S._rzBookingAc={};S._rzBookingWx={};S._rzBookingCheckedIn={};
+    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];S._pickupExtraDrivers=[];S._rezdyPaxMeta={};S._schedPilots={};S._rzBookingAc={};S._rzBookingWx={};S._rzBookingCheckedIn={};S._rzSchedAttach={};
   }
   S._pickupLoading=false;
   render();
@@ -881,7 +905,7 @@ window.pickupSave=async function(silent){
   const payload={
     id:'pl_'+S.rezdyDate,
     list_date:S.rezdyDate,
-    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{}}
+    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{}}
   };
   const r=await sbU('ts_pickup_lists',[payload]);
   if(!silent)toast(r?'Pickup list saved ✓':'Save failed',r?'ok':'err');
@@ -1410,6 +1434,20 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   render();
   if(typeof toast==='function')toast('Loadsheet created for '+acCode+' — review & sign','ok');
 };
+// Start a fresh BLANK loadsheet for any aircraft (no manifest data) — opens in the editor.
+window.rezdyNewBlankLoadsheet=function(acId){
+  if(!S.aircraft||!S.aircraft[acId]){if(typeof toast==='function')toast('Aircraft not configured.','warn');return;}
+  var form=bF_ac(acId);form.date=S.rezdyDate||form.date;form.status='unsigned';
+  var newId='ls_rz_blank_'+acId.replace('ZK-','')+'_'+Date.now();var savedAt=new Date().toISOString();
+  S.saved=S.saved||[];S.saved.push({id:newId,form:form,status:'unsigned',savedAt:savedAt});
+  var acCode=acId.replace('ZK-','');
+  S.lsForms=S.lsForms||{};S.lsForms[acCode]=form;S.lsAc=acCode;S.form=form;S.editId=newId;S.formDirty=false;
+  S.lsTabs=S.lsTabs||[];S.lsTabs.push({id:newId,acId:acId,form:form,status:'unsigned',savedAt:savedAt,isNew:true});
+  S.activeTabId=newId;S.section='operations';S.tab='loadsheet';
+  if(typeof sbU==='function')sbU('ts_loadsheets',[{id:newId,form:form,saved_at:savedAt,status:'unsigned'}]).catch(function(){});
+  try{window.scrollTo(0,0);}catch(_){}render();
+  if(typeof toast==='function')toast('Blank loadsheet started for '+acCode,'ok');
+};
 // ── Rezdy Loadsheets sub-tab — per-aircraft launcher that reuses the real loadsheet engine ──
 function _rzRenderLoadsheets(){
   if(!S._rzManLoaded){if(window.rezdyLoadManifest)window.rezdyLoadManifest();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading…</div>';}
@@ -1418,9 +1456,12 @@ function _rzRenderLoadsheets(){
   pax.forEach(function(p){if(p.ac&&fleet.indexOf(p.ac)<0)fleet.push(p.ac);});
   var withPax=fleet.filter(function(id){return pax.some(function(p){return p.ac===id&&!p.infantOf;});});
   var h='<div class="card"><div class="st" style="margin-bottom:4px">Loadsheets</div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:0">'+_rzDowLabel(S.rezdyDate)+' · build a loadsheet per aircraft from the manifest allocation. Created loadsheets open in the loadsheet editor and appear in Saved.</p></div>';
+    '<p style="font-size:12px;color:var(--text3);margin:0 0 8px">'+_rzDowLabel(S.rezdyDate)+' · build from the manifest, or start a fresh blank loadsheet for any aircraft. Both open in the loadsheet editor and appear in Saved.</p>'+
+    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:11px;color:var(--text3);font-weight:700">New blank:</span>';
+  fleet.forEach(function(id){var c=_rzAcCol(id);h+='<button onclick="window.rezdyNewBlankLoadsheet(\''+id.replace(/'/g,"\\'")+'\')" style="font-size:12px;font-weight:700;padding:4px 11px;border-radius:16px;border:1px solid '+c+';background:transparent;color:'+c+';cursor:pointer">+ '+id.replace('ZK-','')+'</button>';});
+  h+='</div></div>';
   if(!withPax.length){
-    h+='<div class="card" style="text-align:center;padding:30px;color:var(--text3)">No aircraft have passengers allocated yet. Allocate passengers in the <b>Manifest</b> tab first.</div>';
+    h+='<div class="card" style="text-align:center;padding:24px;color:var(--text3)">No aircraft have passengers allocated yet — allocate in the <b>Manifest</b> tab, or start a blank loadsheet above.</div>';
     return h;
   }
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">';
@@ -1476,17 +1517,26 @@ function _rzRenderSchedule(){
   const bkGroups={};
   (S._rezdyBookings||[]).forEach(function(b){
     if(/cancel/i.test(b.status||''))return;
-    var ac=_rzAircraftFromComments(b)||'__unalloc__';
+    var ac=_rzBookingAc(b,String(b.orderNumber||''))||'__unalloc__';
     var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
     ((b.items)||[]).forEach(function(it){
       var t=_rzDepTime(it.startTimeLocal||'');if(!t)return;
       var start=_rzHHMMcolon(t);if(_rzMinsFromHHMM(start)==null)return;
       var prod=_rzProduct(it.product);
       var key=ac+'|'+start+'|'+prod;
-      var g=bkGroups[key]||(bkGroups[key]={aircraft:ac,start:start,product:prod,pax:0,bookings:[],owing:false,key:key,_fromBooking:true});
+      var g=bkGroups[key]||(bkGroups[key]={aircraft:ac,start:start,product:prod,pax:0,bookings:[],owing:false,key:key,_fromBooking:true,_fb:[]});
       g.pax+=parseInt(it.quantity,10)||0;g.bookings.push({b:b,it:it});if(owing)g.owing=true;
     });
   });
+  // Fold attached flyback/CCF bookings (dragged onto a flight) into their target block.
+  var _attach=S._rzSchedAttach||{};
+  Object.keys(bkGroups).forEach(function(k){var g=bkGroups[k];
+    for(var i=g.bookings.length-1;i>=0;i--){
+      var bk=g.bookings[i];var ord=String(bk.b.orderNumber||'');var tgt=_attach[ord];
+      if(tgt&&tgt!==k&&bkGroups[tgt]){bkGroups[tgt]._fb.push(bk);g.bookings.splice(i,1);g.pax-=parseInt(bk.it.quantity,10)||0;if(bk.b._owing){}}
+    }
+  });
+  Object.keys(bkGroups).forEach(function(k){if(!bkGroups[k].bookings.length)delete bkGroups[k];});
   const bkBlocks=Object.keys(bkGroups).map(function(k){
     var g=bkGroups[k];var sm=_rzMinsFromHHMM(g.start)||0;var em=sm+_rzProductDuration(g.product);
     g.end=String(Math.floor(em/60)).padStart(2,'0')+':'+String(em%60).padStart(2,'0');
@@ -1494,7 +1544,8 @@ function _rzRenderSchedule(){
     var gbd={a:0,c:0,i:0};g.bookings.forEach(function(bk){var e=_rzEffBreakdown(bk.b);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
     var pilot=(S._schedPilots||{})[g.key]||null;
     g.bd=gbd;g.pilot=pilot;
-    g.label=(pilot?pilot+'/':'')+acLbl+' '+_rzBdCompact(gbd)+' '+g.product;g.order=g.key;g._owing=g.owing;
+    var fbStr='';(g._fb||[]).forEach(function(bk){var e=_rzEffBreakdown(bk.b);var code=_rzProduct((bk.it&&bk.it.product)||'');fbStr+=' + '+_rzBdCompact(e)+' '+code;});
+    g.label=(pilot?pilot+'/':'')+acLbl+' '+_rzBdCompact(gbd)+' '+g.product+fbStr;g.order=g.key;g._owing=g.owing;
     return g;
   });
   const _totBk=bkBlocks.reduce(function(s,g){return s+g.bookings.length;},0);
@@ -1514,6 +1565,7 @@ function _rzRenderSchedule(){
           '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">'+
             '<span class="pill" style="background:'+_gcol+'22;border:1px solid '+_gcol+';color:'+_gcol+';font-size:12px;font-weight:800;padding:2px 10px;border-radius:12px">'+_rzEsc(_gac||'Unallocated')+'</span>'+
             '<span style="font-size:14px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(_grp.start)+' · '+_grp.pax+'A · '+_rzEsc(_grp.product)+'</span>'+
+            (_grp.pilot?'<span class="pill" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.5);color:#60a5fa;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">✈ '+_rzEsc(_grp.pilot)+' <span onclick="event.stopPropagation();window.rezdySchedClearPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
       _grp.bookings.forEach(function(bk){
@@ -1615,7 +1667,9 @@ function _rzRenderSchedule(){
       const _pos='left:'+(2+idx*OFF)+'px;width:calc(100% - '+((n-1)*OFF+4)+'px);z-index:'+(sel?50:idx+1)+';'+(n>1?'box-shadow:-3px 1px 7px rgba(0,0,0,.3);':'');
       const _click=isBk?('window.rezdySchedShowGroup(\''+_rzEsc(b.order).replace(/'/g,"\\'")+'\')'):('window.schedEditBlock(\''+_rzEsc(b.id).replace(/'/g,"\\'")+'\')');
       const _dropKey=(isBk?b.order:b.id);
-      blocksH+='<div onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
+      // Unallocated booking blocks can be dragged onto a flight to combine (flyback/CCF).
+      const _drag=(isBk&&ac==='__unalloc__')?(' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(String(b.order)).replace(/'/g,"\\'")+'\',event)"'):'';
+      blocksH+='<div'+_drag+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
         '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(b.label||b.aircraft)+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+(isBk?'':'–'+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
@@ -1635,9 +1689,19 @@ function _rzRenderSchedule(){
   });
   headH+='</div>';
 
+  // Red "now" line — slides down the grid as the day passes (today only).
+  var nowLine='';
+  if(S.rezdyDate===_rzToday()){
+    var _n=new Date();var _nm=_n.getHours()*60+_n.getMinutes();
+    if(_nm>=_RZ_SCH_START*60&&_nm<=_RZ_SCH_END*60){
+      var _ny=(_nm-_RZ_SCH_START*60)*_RZ_PX_PER_MIN;
+      nowLine='<div style="position:absolute;left:0;right:0;top:'+_ny+'px;height:2px;background:#ef4444;z-index:60;pointer-events:none"><div style="position:absolute;left:2px;top:-4px;width:8px;height:8px;border-radius:50%;background:#ef4444"></div><div style="position:absolute;right:4px;top:-9px;font-size:9px;font-weight:800;color:#ef4444">'+String(_n.getHours()).padStart(2,'0')+':'+String(_n.getMinutes()).padStart(2,'0')+'</div></div>';
+    }
+    if(!S._rzNowTimer)S._rzNowTimer=setInterval(function(){if(S.rezdyTab==='schedule'&&typeof safeRender==='function')safeRender();},60000);
+  }
   const grid='<div class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+
     headH+
-    '<div style="display:flex">'+axis+colsH+'</div>'+
+    '<div style="display:flex;position:relative">'+axis+colsH+nowLine+'</div>'+
     '</div></div>';
   // Available pilots — drag a code bubble onto a flight block to allocate.
   var _pilots=_rzAvailablePilots();
@@ -1671,6 +1735,15 @@ window.rezdyLoadSchedule=async function(){
   render();
 };
 
+// Live calendar: tell other devices the schedule for this date changed.
+function _rzSchedBroadcast(){
+  try{
+    if(typeof _rtWs==='undefined'||!_rtWs||_rtWs.readyState!==1)return;
+    if(typeof _rtRef!=='undefined')_rtRef++;
+    _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'rz_sched_update',payload:{date:S.rezdyDate,sessionId:(typeof _sessionId!=='undefined'?_sessionId:'')}},ref:String(typeof _rtRef!=='undefined'?_rtRef:1)}));
+  }catch(e){}
+}
+window.rezdyReloadScheduleLive=function(){if(S.rezdyDate&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();};
 window.schedNewBlock=function(){
   const acIds=Object.keys((S&&S.aircraft)||{});
   const ac=acIds[0]||'';
@@ -1706,12 +1779,13 @@ window.schedSaveBlock=async function(){
   S._schedEdit=null;
   toast('Block saved ✓','ok');
   await window.rezdyLoadSchedule();
+  _rzSchedBroadcast();
 };
 window.schedDeleteBlock=async function(){
   const ed=S._schedEdit;if(!ed||!ed.id)return;
   if(!confirm('Delete this schedule block?'))return;
   const ok=await sbDel('ts_schedule',ed.id);
   S._schedEdit=null;
-  if(ok){toast('Block deleted','ok');await window.rezdyLoadSchedule();}
+  if(ok){toast('Block deleted','ok');await window.rezdyLoadSchedule();_rzSchedBroadcast();}
   else{toast('Delete failed','err');render();}
 };
