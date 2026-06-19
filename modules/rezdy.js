@@ -101,6 +101,16 @@ var _RZ_PROD_MAP=[
 function _rzProduct(p){var s=String(p||'');for(var i=0;i<_RZ_PROD_MAP.length;i++){if(_RZ_PROD_MAP[i][0].test(s))return _RZ_PROD_MAP[i][1];}return _rzEsc(s);}
 // Flyback products ride the return leg, so they combine onto an aircraft's flight block.
 function _rzIsFlyback(code){return code==='FLB'||code==='CCF';}
+// Turn-around destination for a product: Mount Cook (MC/NZMC), Milford (MF/NZMF), or a Queenstown
+// return for flybacks (QN/NZQN). Returns null if unknown. Used for the seatmap "SLA → MC" label
+// and to pre-fill the loadsheet destination.
+function _rzProductDest(code){
+  var c=String(code||'').toUpperCase();
+  if(c==='FLB'||c==='CCF'||/flyback|coach.*cruise.*fly/i.test(c))return {short:'QN',apt:'NZQN'};
+  if(c==='FCF'||/fly.*cruise.*fly/i.test(c))return {short:'MF',apt:'NZMF'};
+  if(c==='MCEXP'||c==='MCGL'||c==='THH'||/mount.*cook|aoraki|tasman.*glacier/i.test(c))return {short:'MC',apt:'NZMC'};
+  return null;
+}
 // FLB/CCF bookings are parked in the Rezdy slot for their OUTBOUND tour time only to hold seats
 // — they're actually the RETURN leg. We pull them out of that departure into their own
 // "Flybacks" group (a single 1530 return for now; summer's multiple flyback runs come later).
@@ -1766,7 +1776,7 @@ function _rzRenderManifest(){
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px'+(open?';margin-bottom:8px':'')+'">'+
         '<div onclick="window.rezdyManToggleCard(\''+idE+'\')" style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0">'+
           '<span style="display:inline-block;transition:transform .12s;color:var(--text3);font-size:11px;'+(open?'transform:rotate(90deg)':'')+'">▸</span>'+
-          '<span style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+'</span>'+
+          '<span style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+(function(){var _d=_rzManAcDest(selDep,id);return _d?'<span style="color:var(--text3);font-weight:800"> → </span><span style="color:var(--text2);font-weight:800">'+_d.short+'</span>':'';})()+'</span>'+
           (list.length?'':'<span style="font-size:10px;color:var(--text3);font-weight:600">idle</span>')+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span>'+
@@ -2064,6 +2074,15 @@ function _rzManDepLabel(dep){
   // "0800 FCF" — find the product flown at this departure.
   var prod='';(S._rzManPax||[]).some(function(p){if(_rzPaxDep(p)===dep){var i=_rzManDepInfo(p.group);if(i&&i.prod){prod=i.prod;return true;}}return false;});
   return _rzEsc(dep)+(prod?' '+_rzEsc(prod):'');
+}
+// Destination for one aircraft's pax on a departure (for the "SLA → MC" seatmap label / loadsheet
+// dest). Derives the product from the seated pax; a Flybacks departure always returns to Queenstown.
+function _rzManAcDest(dep,acId){
+  var prod='';
+  (S._rzManPax||[]).some(function(p){if(p.ac===acId&&!p.infantOf&&_rzPaxDep(p)===dep){var i=_rzManDepInfo(p.group);if(i&&i.prod){prod=i.prod;return true;}}return false;});
+  var d=_rzProductDest(prod);
+  if(!d&&dep===RZ_FLYBACK_DEP)d={short:'QN',apt:'NZQN'};
+  return d;
 }
 function _rzSeatKey(dep,acId){return String(dep||'—')+'|'+acId;}
 function _rzManSeatsFor(dep,acId){S._rzManSeats=S._rzManSeats||{};return S._rzManSeats[_rzSeatKey(dep,acId)]||{};}
@@ -2365,6 +2384,12 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   // Flybacks fly the RETURN leg Milford → Queenstown with reduced fuel.
   var _isFb=(dep===RZ_FLYBACK_DEP)||(String(dep||'').split('+').indexOf(RZ_FLYBACK_DEP)>=0);
   if(_isFb){form.dep='NZMF';form.dest='NZQN';}
+  else{
+    // Auto-pick the destination from the product flown (THH/MCEXP/MCGL → Mt Cook, FCF → Milford),
+    // departing Queenstown. Saves the user setting it by hand.
+    var _acDest=_rzManAcDest(dep,phys);
+    if(_acDest){form.dep='NZQN';form.dest=_acDest.apt;}
+  }
   // PIC (manifest stores the 2-letter code → resolve to the crew name the loadsheet expects)
   var picCode=(S._rzManPic||{})[phys];
   if(picCode){
