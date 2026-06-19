@@ -1089,6 +1089,20 @@ function _rzBookingDetail(b){
     if(b.email)contactH+='<div style="font-size:12.5px;word-break:break-all"><a href="mailto:'+_rzEsc(b.email)+'" style="color:var(--acc);text-decoration:none">✉ '+_rzEsc(b.email)+'</a></div>';
     contactH+='</div>';
   }
+  // Pickup location(s) — editable; options are the day's known pickup locations (shared with the
+  // Pickups tab). Lets the desk set/change a booking's pickup straight from here.
+  let pkH='';
+  var _pkRows=[];
+  (b.items||[]).forEach(function(it,ii){
+    if(!it.pickup)return; // only items that are part of a van run carry a pickup
+    var pid=String(b.orderNumber||'')+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;
+    var ov2=(S._pickupLocOverride||{});
+    var cur=(ov2[pid]!=null&&ov2[pid]!=='')?ov2[pid]:(it.pickup||'');
+    _pkRows.push('<div style="display:flex;align-items:center;gap:6px">'+_rzLocSelect(pid,cur)+'</div>');
+  });
+  if(_pkRows.length){
+    pkH='<div style="margin-bottom:10px"><div style="'+sec+'">Pickup'+(_pkRows.length>1?'s':'')+'</div><div style="display:flex;flex-direction:column;gap:4px">'+_pkRows.join('')+'</div></div>';
+  }
   // Balance.
   const bal=parseFloat(b.balanceDue);
   const owing=isFinite(bal)&&bal>0;
@@ -1100,7 +1114,7 @@ function _rzBookingDetail(b){
   var srcH=b.source?('<div style="margin-bottom:10px"><div style="'+sec+'">Source</div><div style="font-size:12px;color:var(--text2)">'+_rzEsc(b.source)+'</div></div>'):'';
   return bubsH+'<div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">'+
     '<div style="flex:1 1 300px;min-width:240px">'+paxH+exH+'</div>'+
-    '<div style="flex:1 1 260px;min-width:220px">'+contactH+reqH+srcH+balH+'</div>'+
+    '<div style="flex:1 1 260px;min-width:220px">'+contactH+pkH+reqH+srcH+balH+'</div>'+
     '</div>';
 }
 
@@ -2213,7 +2227,7 @@ function _rzManSeatGrid(dep,acId,col){
 // W&B readout chip for a departure's aircraft.
 function _rzManWBReadout(dep,acId){
   var wb=_rzManAcWB(dep,acId);if(!wb)return '';
-  var red='#ef4444',ok='var(--text2)';
+  var red='#ef4444',ok='var(--ok-text)'; // green when within limits, red when out
   return '<div style="font-size:10px;font-weight:700;margin-bottom:6px;display:flex;gap:10px;flex-wrap:wrap">'+
     '<span style="color:'+(wb.towOk?ok:red)+'">TOW '+Math.round(wb.tow)+'kg'+(wb.towOk?'':' ⚠')+'</span>'+
     '<span style="color:'+(wb.lwOk?ok:red)+'">LDW '+Math.round(wb.lw)+'kg'+(wb.lwOk?'':' ⚠')+'</span>'+

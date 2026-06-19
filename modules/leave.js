@@ -791,12 +791,14 @@ window._notifyPicLoadsheet=async function(f,lsId){
     if(S.user&&picUser.id===S.user.id&&window.loadNotifications)window.loadNotifications();
   }catch(e){}
 };
-// Open a loadsheet straight from its notification (jump to sign).
+// Open a loadsheet straight from its notification (jump to sign). Routes through the new
+// Operations ▸ Loadsheets inline editor (rezdyOpenLsTab), not the retired legacy loadsheet route.
 window.openLoadsheetFromNotif=function(id){
-  S._notifOpen=false;S.section='operations';S._newLsTab=false;
-  if((S.lsTabs||[]).find(function(t){return t.id===id;})){window.switchLsTab(id);return;}
-  if((S.saved||[]).find(function(s){return s.id===id&&s.status!=='deleted';})){window.editSaved(id);return;}
-  toast('That loadsheet is no longer available.','warn');render();
+  S._notifOpen=false;S._newLsTab=false;
+  if(!id){toast('This notification has no loadsheet link.','warn');render();return;}
+  if(typeof window.rezdyOpenLsTab==='function'){window.rezdyOpenLsTab(id);return;}
+  // Fallback if the Rezdy module somehow isn't loaded.
+  S.section='operations';S.tab='rloadsheets';S._rzLsActiveId=id;render();
 };
 
 window._triggerLeaveEmail=async function(requestId,action){
