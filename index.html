@@ -720,7 +720,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.78';
+const APP_VER='v23.81';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1308,7 +1308,7 @@ function cogForMap(acId, seatMap, paxListRef){
   return totalW>0?totalMom/totalW:0;
 }
 
-function assignSeatsHeavyFront(acId, paxList){
+function assignSeatsHeavyFront(acId, paxList, opts){
   // Rules (in priority order):
   // 1. MTOW: heaviest pax forward keeps TOW manageable & CoG fwd
   // 2. Groups together side-by-side in pair rows
@@ -1317,14 +1317,15 @@ function assignSeatsHeavyFront(acId, paxList){
 
   const a=_acSpec(acId);
   if(!a||!paxList.length) return{};
+  const _co=(opts&&opts.coSeat1!=null)?opts.coSeat1:undefined; // explicit co-pilot flag (Rezdy seatmap)
 
-  const paxIdxs=paxSeatIdxs(acId);
+  const paxIdxs=paxSeatIdxs(acId,_co);
   if(!paxIdxs.length) return{};
 
   // Seat layout: sorted front-to-back by arm
   const seatsByArm=[...paxIdxs].sort((x,y)=>(a.seats[x]?.arm||999)-(a.seats[y]?.arm||999));
   const seat1Idx=seatsByArm[0]; // frontmost pax seat
-  const hasSeat1=!seat1IsCoPilot(acId);
+  const hasSeat1=(_co!=null)?!_co:!seat1IsCoPilot(acId);
 
   // All pax heaviest first
   const byWeight=[...paxList].sort((a,b)=>
@@ -1372,7 +1373,7 @@ function assignSeatsHeavyFront(acId, paxList){
     (parseFloat(a.weight||0)+parseFloat(a.bag||0)));
 
   // Get pair rows (exclude seat1 slot)
-  const rows=rowPairsForAc(acId); // [[1],[2,3],[4,5]...]
+  const rows=rowPairsForAc(acId,_co); // [[1],[2,3],[4,5]...]
   const pairRows=rows.filter(r=>r.length===2); // only the 2-seat rows
   const seat1Row=rows.find(r=>r.length===1); // the single seat1 slot
 
@@ -11707,13 +11708,17 @@ function _rzDateRow(sub){
   if(!S.rezdyDate)S.rezdyDate=_rzToday();
   var _isToday=S.rezdyDate===_rzToday();
   var noRefresh=(sub==='loadsheets'||sub==='rloadsheets');
-  return '<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
-    '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1" title="Previous day" onclick="window.rezdyShiftDate(-1)">◁</button>'+
-    '<div style="position:relative;display:inline-block">'+
-      '<span style="display:inline-block;font-size:14px;font-weight:700;color:var(--text1);padding:7px 12px;border-radius:8px;background:var(--card2);border:1px solid var(--border2);white-space:nowrap">📅 '+_rzDowLabel(S.rezdyDate)+'</span>'+
+  // Sticky so the day arrows stay on screen while scrolling; the date label is a FIXED width and
+  // centred so ◁ / ▷ never shift between clicks — you can tap the same spot to keep paging days.
+  return '<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:50;box-shadow:0 3px 10px rgba(0,0,0,.18)">'+
+    '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'+ // ◁ / date / ▷ stay together as a fixed-width unit
+    '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1;flex-shrink:0" title="Previous day" onclick="window.rezdyShiftDate(-1)">◁</button>'+
+    '<div style="position:relative;display:inline-block;width:172px;flex-shrink:0">'+
+      '<span style="display:block;text-align:center;font-size:14px;font-weight:700;color:var(--text1);padding:7px 8px;border-radius:8px;background:var(--card2);border:1px solid var(--border2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📅 '+_rzDowLabel(S.rezdyDate)+'</span>'+
       '<input type="date" value="'+_rzEsc(S.rezdyDate)+'" onchange="window.rezdySetDate(this.value)" onclick="try{this.showPicker&&this.showPicker()}catch(e){}" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;border:none;cursor:pointer">'+
     '</div>'+
     '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1" title="Next day" onclick="window.rezdyShiftDate(1)">▷</button>'+
+    '</div>'+
     '<button class="btn btn-ghost" style="font-size:12px;padding:6px 12px'+(_isToday?';opacity:.45':'')+'" title="Jump to today" onclick="window.rezdySetDate(\''+_rzToday()+'\')">Today</button>'+
     (noRefresh?'':'<button class="btn btn-ghost" style="font-size:12px;margin-left:auto'+(S._rzSyncing?';opacity:.6':'')+'" onclick="window.rezdyRefresh()">'+(S._rzSyncing?'⟳ Syncing…':'⟳ Refresh from Rezdy')+'</button>')+
     '</div>';
@@ -11866,6 +11871,16 @@ function _rzBookingAcPills(b,order){
   var note=noneOn?'<span style="font-size:10px;color:var(--text3);margin-left:2px">unallocated</span>':(cur?'<span style="font-size:10px;color:var(--text3);margin-left:2px">'+(manual?'set':'from comments')+'</span>':'');
   return '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:7px 10px">'+
     '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Aircraft</span>'+pills+note+'</div>';
+}
+// Collapsed-card aircraft summary — just the selected aircraft (or "None"); the full pill selector
+// only appears once the booking dropdown is expanded.
+function _rzBookingAcBadge(b,order){
+  var manual=(S._rzBookingAc||{})[String(order)];
+  if(manual==='__none__')return '<div style="padding:4px 10px;display:flex;align-items:center;gap:5px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800">Aircraft</span><span class="pill" style="background:#475569;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">None</span></div>';
+  var cur=manual||_rzAircraftFromComments(b);
+  if(!cur)return '';
+  var col=_rzAcCol(cur);
+  return '<div style="padding:4px 10px;display:flex;align-items:center;gap:5px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800">Aircraft</span><span class="pill" style="background:'+col+';color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">'+_rzEsc(cur.replace('ZK-',''))+'</span></div>';
 }
 window.rezdyBookingSetAc=function(order,ac){
   order=String(order);S._rzBookingAc=S._rzBookingAc||{};
@@ -12201,6 +12216,16 @@ window.rezdyPaxCycleType=function(order,idx,cur){
   if(next==='adult')delete m.types[idx];else m.types[idx]=next;
   _rzSavePaxMeta();render();
 };
+// Toggle a CHECKED-IN passenger between adult and child (infants are set at check-in via the
+// lap-attach flow, so they're left alone here). Keeps the bubble + expanded list in sync.
+window.rezdyCheckinCycleType=function(order,n){
+  var c=(S._rzCheckin||{})[String(order)];n=parseInt(n,10);
+  if(!c||!Array.isArray(c.pax)||!c.pax[n])return;
+  if(c.pax[n].type==='infant')return;
+  c.pax[n].type=(c.pax[n].type==='child')?'adult':'child';
+  if(window.pickupSave)window.pickupSave(true);
+  render();
+};
 // A small pill toggle (Wx / Checked-in) for a booking card.
 function _rzCheckBtn(label,on,onclick,title){
   return '<button onclick="'+onclick+'" title="'+_rzEsc(title)+'" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid '+(on?'#22c55e':'var(--border2)')+';background:'+(on?'rgba(34,197,94,.15)':'transparent')+';color:'+(on?'#4ade80':'var(--text3)')+'">'+(on?'✓':'○')+' '+_rzEsc(label)+'</button>';
@@ -12235,10 +12260,10 @@ function _rzBookingCard(b){
   h+='<span style="font-size:11px;font-weight:700;color:'+stCol+'">'+_rzEsc(b.status)+'</span>';
   h+=owing?'<span class="pill pill-warn" style="font-size:10px">⚠ '+_rzEsc(_rzMoney(bal,b.currency))+'</span>':'<span style="font-size:11px;color:#4ade80;font-weight:700">Paid</span>';
   h+='</div></div>';
-  // aircraft pills
-  if(!cancelled)h+=_rzBookingAcPills(b,ono);
-  // Passenger bubbles now live inside the expanded detail (dropdown), not the collapsed card.
-  if(open)h+='<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:10px">'+_rzBookingDetail(b)+'</div>';
+  // Aircraft — collapsed shows only the selected one; the full pill selector moves into the dropdown.
+  if(!cancelled&&!open)h+=_rzBookingAcBadge(b,ono);
+  // Passenger bubbles + aircraft selector live inside the expanded detail (dropdown).
+  if(open)h+='<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:10px">'+(!cancelled?_rzBookingAcPills(b,ono):'')+_rzBookingDetail(b)+'</div>';
   h+='</div>';
   return h;
 }
@@ -12308,8 +12333,10 @@ function _rzRenderBookings(){
   deps.sort(_rzDepCmp);
   const q=String(S._bkSearch||'').trim();
   const searching=q.length>0;
+  // Dedicated "Cancelled" view (a pseudo-departure) showing the whole day's cancelled bookings.
+  const _showCancelled=!searching&&S._bkDepFilter==='__cancelled__'&&cancelledRows.length>0;
   // One departure at a time — default to the first departure when none is chosen. (No "All".)
-  const depFilter=searching?null:((S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:(deps[0]||null));
+  const depFilter=(searching||_showCancelled)?null:((S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:(deps[0]||null));
   if(depFilter)S._bkDepFilter=depFilter; // persist the resolved departure so Push knows which one
   // Checked-in count for the SELECTED departure (push is departure-scoped).
   var _ciCount=active.filter(function(b){return _rzBookingDep(b)===depFilter&&(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')];}).length;
@@ -12343,6 +12370,14 @@ function _rzRenderBookings(){
         '<span style="font-size:10px;font-weight:700;opacity:'+(on?'.9':'.6')+'">'+cnt+' bkg'+(cnt===1?'':'s')+'</span>'+
       '</button>';
     });
+    // "Cancelled" pseudo-departure — view the whole day's cancelled bookings in one place.
+    if(cancelledRows.length){
+      var conC=_showCancelled;
+      depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\'__cancelled__\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(conC?'#ef4444':'var(--border2)')+';background:'+(conC?'#ef4444':'transparent')+';color:'+(conC?'#fff':'var(--err-text)')+';font-weight:800">'+
+        '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">✕ Cancelled</span>'+
+        '<span style="font-size:10px;font-weight:700;opacity:'+(conC?'.9':'.7')+'">'+cancelledRows.length+'</span>'+
+      '</button>';
+    }
     depSel+='</div></div>';
   }
   const top=hdr+searchH+depSel;
@@ -12364,12 +12399,28 @@ function _rzRenderBookings(){
     else matches.forEach(function(b){body+=_rzBkSearchRow(b);});
     return top+body;
   }
+  // Whole-day Cancelled view.
+  if(_showCancelled){
+    var cg=cancelledRows.slice().sort(function(a,b){return _rzDepCmp(_rzBookingDep(a),_rzBookingDep(b));});
+    body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--err-text)">✕ Cancelled</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+cg.length+' booking'+(cg.length===1?'':'s')+' · '+_rzDowLabel(S.rezdyDate)+'</span></div>';
+    cg.forEach(function(b){body+=_rzBookingCard(b);});
+    return top+body;
+  }
   // Single departure view.
   if(depFilter){
-    var grp=active.filter(function(b){return _rzBookingDep(b)===depFilter;}).sort(function(a,b){var ca=(S._rzBookingCheckedIn||{})[String(a.orderNumber||'')]?1:0,cb=(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')]?1:0;return ca-cb;}); // checked-in to the bottom
+    var _bkSort=S._bkSort||'';
+    var grp=active.filter(function(b){return _rzBookingDep(b)===depFilter;});
+    grp.sort(function(a,b){
+      if(_bkSort==='az')return String(a.customerName||'').localeCompare(String(b.customerName||''),undefined,{sensitivity:'base'});
+      if(_bkSort==='booked')return (parseInt(String(a.orderNumber||'').replace(/\D/g,''),10)||0)-(parseInt(String(b.orderNumber||'').replace(/\D/g,''),10)||0);
+      var ca=(S._rzBookingCheckedIn||{})[String(a.orderNumber||'')]?1:0,cb=(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')]?1:0;return ca-cb; // default: checked-in to the bottom
+    });
     var gbd={a:0,c:0,i:0};grp.forEach(function(x){var e=_rzEffBreakdown(x);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
     var prod=_rzProduct((((grp[0]||{}).items||[])[0]||{}).product||'');
     body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 <span onclick="window.rezdyRenameDep(\''+_rzEsc(depFilter).replace(/\'/g,"\\'")+'\')" title="Click to rename this heading" style="cursor:pointer;border-bottom:1px dashed var(--border2)">'+_rzEsc(_rzDepDisplay(depFilter))+'</span>'+((_rzDepShowProduct(depFilter)&&prod)?' '+_rzEsc(prod):'')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+'</span></div>';
+    // Sort control: Default (checked-in last) · A–Z by name · Booked (booking order).
+    body+='<div style="display:flex;gap:6px;align-items:center;margin:0 0 10px;flex-wrap:wrap"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Sort</span>'+
+      [['','Default'],['az','A–Z'],['booked','Booked']].map(function(o){var act=_bkSort===o[0];return '<button onclick="S._bkSort=\''+o[0]+'\';render()" style="font-size:11px;font-weight:700;padding:4px 11px;border-radius:14px;cursor:pointer;border:1px solid '+(act?'var(--accent)':'var(--border2)')+';background:'+(act?'var(--accent)':'transparent')+';color:'+(act?'#fff':'var(--text2)')+'">'+o[1]+'</button>';}).join('')+'</div>';
     grp.forEach(function(b){body+=_rzBookingCard(b);});
     // Cancelled bookings for THIS departure (collapsed).
     var depCancelled=cancelledRows.filter(function(b){return _rzBookingDep(b)===depFilter;});
@@ -12403,27 +12454,34 @@ function _rzBookingDetail(b){
     ?'<button onclick="window.rezdyDeleteManualBooking(\''+_bdOE+'\')" title="Delete this manual booking" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#f87171;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.4);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">🗑 Delete booking</button>'
     :'<button onclick="window.rezdyResetBooking(\''+_bdOE+'\')" title="Reset this booking to its original Rezdy info — clears check-in, weights, child/infant tags and aircraft" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:var(--card2);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">↺ Reset to Rezdy</button>');
   bubsH='<div style="display:flex;align-items:stretch;margin-bottom:12px">'+(_bub||'<span style="flex:1"></span>')+_rst+'</div>';
-  // Passengers — flatten participants across items.
-  const parts=[];
-  (b.items||[]).forEach(function(it){(it.participants||[]).forEach(function(p){parts.push(p);});});
-  var _dOrder=String(b.orderNumber||'');var _dm=(S._rezdyPaxMeta||{})[_dOrder]||{};var _dTypes=_dm.types||{},_dInf=_dm.infantOf||{};
+  // Passengers — use the SAME canonical rows as the bubble strip so child/infant tags, names and
+  // weights stay in sync (after check-in these come from the captured check-in data, so a child
+  // tagged on the bubble shows here too).
+  var _dOrder=String(b.orderNumber||'');
   var oDE=_rzEsc(_dOrder).replace(/'/g,"\\'");
-  let paxH='<div style="margin-bottom:10px"><div style="'+sec+'">Passengers ('+parts.length+') <span style="font-weight:400;text-transform:none;letter-spacing:0">— tap A/C/i to preset</span></div>';
-  if(!parts.length){
+  var _pr=_rzPaxRows(b);
+  let paxH='<div style="margin-bottom:10px"><div style="'+sec+'">Passengers ('+_pr.length+') <span style="font-weight:400;text-transform:none;letter-spacing:0">— tap A/C/i to preset</span></div>';
+  if(!_pr.length){
     paxH+='<div style="font-size:12px;color:var(--text3)">—</div>';
   }else{
     paxH+='<div style="display:flex;flex-direction:column;gap:4px">';
-    parts.forEach(function(p,idx){
-      const nm=(p&&p.name)?_rzEsc(p.name):'—';
-      const wRaw=(p&&p.weight!=null&&p.weight!=='')?p.weight:null;
-      const w=(wRaw==null)?'':(/^tbc$/i.test(String(wRaw))?'TBC':_rzEsc(String(wRaw)));
-      var t=_dTypes[idx]||(_dInf[idx]!=null?'infant':_rzAgeType(p));
+    _pr.forEach(function(r){
+      var t=r.type;
       var tl=t==='child'?'C':t==='infant'?'i':'A';
       var tc=t==='child'?'#fb923c':t==='infant'?'#ec4899':'var(--text3)';
       var tbg=t==='child'?'rgba(251,146,60,.18)':t==='infant'?'rgba(236,72,153,.18)':'transparent';
+      var nm=r.name?_rzEsc(r.name):'—';
+      var wTxt=(t==='infant')?'lap':(r.actual!=null?(r.actual+'kg'):(r.declared!=null?(r.declared+'kg (d)'):'TBC'));
+      var wCol=(r.actual!=null||r.declared!=null)?'var(--text2)':'#f59e0b';
+      // Toggle targets the right store: pre-check-in → pax meta; checked-in rows ('c<n>') → check-in data.
+      var _isCi=(typeof r.idx!=='number');
+      var onc=_isCi
+        ?'window.rezdyCheckinCycleType(\''+oDE+'\','+String(r.idx).slice(1)+')'
+        :'window.rezdyPaxCycleType(\''+oDE+'\','+r.idx+',\''+t+'\')';
       paxH+='<div style="font-size:12.5px;color:var(--text);display:flex;align-items:center;gap:8px;max-width:360px">'+
-        '<button onclick="window.rezdyPaxCycleType(\''+oDE+'\','+idx+',\''+t+'\')" title="Adult / Child / Infant" style="flex-shrink:0;width:24px;font-size:11px;font-weight:800;padding:3px 0;border-radius:6px;border:1px solid '+(t==='adult'?'var(--border2)':tc)+';background:'+tbg+';color:'+tc+';cursor:pointer">'+tl+'</button>'+
-        '<span style="flex:1">'+nm+'</span><span style="color:'+(/^tbc$/i.test(String(wRaw||''))?'#f59e0b':'var(--text2)')+';font-weight:700">'+w+'</span></div>';
+        '<button onclick="'+onc+'" title="Adult / Child'+(_isCi?'':' / Infant')+'" style="flex-shrink:0;width:24px;font-size:11px;font-weight:800;padding:3px 0;border-radius:6px;border:1px solid '+(t==='adult'?'var(--border2)':tc)+';background:'+tbg+';color:'+tc+';cursor:pointer">'+tl+'</button>'+
+        '<span style="flex:1">'+nm+(r.infName?' <span style="color:#ec4899;font-weight:700">+ '+_rzEsc(r.infName)+' 👶</span>':'')+'</span>'+
+        '<span style="color:'+wCol+';font-weight:700">'+wTxt+'</span></div>';
     });
     paxH+='</div>';
   }
@@ -13123,13 +13181,22 @@ function _rzRenderManifest(){
     // Co-pilot slot (only once a PIC is set) — drag a 2nd pilot here or pick one. Seat 1, pax back.
     if(picCode){
       var _coCode=(S._rzManCoPic||{})[id]||'';
-      h+='<div ondragover="event.preventDefault();event.stopPropagation();this.style.outline=\'2px solid #818cf8\'" ondragleave="this.style.outline=\'\'" ondrop="event.stopPropagation();this.style.outline=\'\';window.rezdyManDropPilot(\''+idE+'\',event)" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:5px 8px;border-radius:7px;border:1px dashed '+(_coCode?'#818cf8':'var(--border2)')+';background:'+(_coCode?'rgba(129,140,248,.1)':'transparent')+'">'+
+      var _coPilots=_coCode?[]:_rzAvailablePilots().filter(function(p){return p.code!==picCode;});
+      var _coOpen=!_coCode&&_coPilots.length&&!!((S._rzCoPick||{})[id]); // picker only after a click
+      var _coClickable=!_coCode&&_coPilots.length&&!_coOpen;
+      var _coInner;
+      if(_coCode){
+        _coInner='<span style="font-size:12px;font-weight:800;color:#818cf8">✈ '+_rzEsc(_coCode)+'</span><button onclick="event.stopPropagation();window.rezdyManClearCoPic(\''+idE+'\')" title="Clear co-pilot" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:auto;padding:0 2px">✕</button>';
+      } else if(!_coPilots.length){
+        _coInner='<span style="font-size:11px;color:var(--text3);margin-left:auto">optional</span>';
+      } else if(_coOpen){
+        _coInner='<select onclick="event.stopPropagation()" onchange="window.rezdyManSetCoPic(\''+idE+'\',this.value)" style="margin-left:auto;max-width:140px;font-size:12px;font-weight:700;padding:3px 5px;background:var(--card2);color:var(--text1);border:1px solid var(--border2);border-radius:6px;cursor:pointer"><option value="">pick…</option>'+_coPilots.map(function(p){return '<option value="'+_rzEsc(p.code)+'">'+_rzEsc(p.code)+' · '+_rzEsc(String(p.name).split(/\s+/)[0])+(p.rostered?'':' (off)')+'</option>';}).join('')+'</select>';
+      } else {
+        _coInner='<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--text3)">drag to set</span>';
+      }
+      h+='<div '+(_coClickable?'onclick="window.rezdyManCoPickOpen(\''+idE+'\')" ':'')+'ondragover="event.preventDefault();event.stopPropagation();this.style.outline=\'2px solid #818cf8\'" ondragleave="this.style.outline=\'\'" ondrop="event.stopPropagation();this.style.outline=\'\';window.rezdyManDropPilot(\''+idE+'\',event)" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:5px 8px;border-radius:7px;border:1px dashed '+(_coCode?'#818cf8':'var(--border2)')+';background:'+(_coCode?'rgba(129,140,248,.1)':'transparent')+';cursor:'+(_coClickable?'pointer':'default')+'">'+
         '<span style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800">CO-PILOT</span>'+
-        (_coCode
-          ?'<span style="font-size:12px;font-weight:800;color:#818cf8">✈ '+_rzEsc(_coCode)+'</span><button onclick="window.rezdyManClearCoPic(\''+idE+'\')" title="Clear co-pilot" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:auto;padding:0 2px">✕</button>'
-          :(function(){var _cp=_rzAvailablePilots().filter(function(p){return p.code!==picCode;});return _cp.length
-              ?'<select onclick="event.stopPropagation()" onchange="window.rezdyManSetCoPic(\''+idE+'\',this.value)" style="margin-left:auto;max-width:140px;font-size:12px;font-weight:700;padding:3px 5px;background:var(--card2);color:var(--text1);border:1px solid var(--border2);border-radius:6px;cursor:pointer"><option value="">drag or pick…</option>'+_cp.map(function(p){return '<option value="'+_rzEsc(p.code)+'">'+_rzEsc(p.code)+' · '+_rzEsc(String(p.name).split(/\s+/)[0])+(p.rostered?'':' (off)')+'</option>';}).join('')+'</select>'
-              :'<span style="font-size:11px;color:var(--text3);margin-left:auto">optional</span>';})())+
+        _coInner+
       '</div>';
     }
     // Fuel
@@ -13430,9 +13497,18 @@ function _rzManAcWB(dep,acId){try{var f=_rzManAcForm(dep,acId);return f?calcForm
 // front-to-back). Returns the seat map.
 window.rezdyManReseat=function(dep,acId){
   var list=(S._rzManPax||[]).filter(function(p){return p.ac===acId&&!p.infantOf&&_rzPaxDep(p)===dep;});
-  var paxList=list.map(function(p){return {id:p.id,weight:parseFloat(p.weight)||0,bag:0,group:p.group||''};});
+  var _declMode=(typeof _rzManDeclMode==='function')?_rzManDeclMode(dep,acId):false;
+  // Use the EFFECTIVE weight (actual if captured, else declared) so the heavy-front solver can
+  // balance CoG even before actual weights are entered.
+  var paxList=list.map(function(p){
+    var w=parseFloat((typeof _rzPaxWeight==='function')?_rzPaxWeight(p,_declMode):p.weight);
+    if(isNaN(w)){var d=parseFloat(p.declared);w=isNaN(d)?0:d;}
+    return {id:p.id,weight:w,bag:0,group:p.group||''};
+  });
   var _coPic=!!(S._rzManCoPic||{})[acId];
-  var sm={};try{sm=assignSeats(acId,paxList,{coSeat1:_coPic})||{};}catch(e){sm={};}
+  // Heavier passengers/groups go FORWARD to keep the centre of gravity in balance (groups still sit
+  // together). Falls back to the order-preserving seater only if heavy-front throws.
+  var sm={};try{sm=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};}catch(e){try{sm=assignSeats(acId,paxList,{coSeat1:_coPic})||{};}catch(e2){sm={};}}
   if(_coPic)_rzReserveCoSeat(sm,acId); // safety: ensure seat 1 stays clear for the co-pilot
   // Any passenger who couldn't get a seat (cabin full — e.g. a co-pilot just took seat 1) is
   // bumped back to the UNALLOCATED pool rather than left allocated-but-seatless (which carries no
@@ -13528,8 +13604,8 @@ function _rzManSeatGrid(dep,acId,col){
     h+='<div style="display:flex;gap:5px;justify-content:center">';
     r.forEach(function(cell){
       var idx=cell.i;
-      if(idx===0){ // PIC seat — locked, can't be moved
-        h+='<div title="PIC'+(pic?' '+_rzEsc(pic.name):'')+'" style="width:'+SW+'px;height:'+SH+'px;border-radius:7px;border:1.5px solid #60a5fa;background:rgba(96,165,250,.12);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden">'+
+      if(idx===0){ // PIC seat — drop a pilot here to set/replace the PIC (pax can't sit here)
+        h+='<div ondragover="event.preventDefault();event.stopPropagation();this.style.outline=\'2px solid #60a5fa\'" ondragleave="this.style.outline=\'\'" ondrop="event.stopPropagation();this.style.outline=\'\';window.rezdyManDropPicSeat(\''+acE+'\',event)" title="PIC'+(pic?' '+_rzEsc(pic.name):'')+' — drop a pilot here to set" style="width:'+SW+'px;height:'+SH+'px;border-radius:7px;border:1.5px solid #60a5fa;background:rgba(96,165,250,.12);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden">'+
           '<div style="font-size:9px;font-weight:800;color:#60a5fa">PIC</div>'+(pic&&pic.weight?'<div style="font-size:9px;font-weight:700;color:#60a5fa">'+pic.weight+'kg</div>':'')+
         '</div>';
         return;
@@ -13623,12 +13699,26 @@ window.rezdyManDropPilot=function(acId,e){
   if(en&&en.length&&en.indexOf(acId)<0){if(typeof toast==='function')toast(code+' is not passed out (type-rated) on '+String(acId).replace('ZK-','')+'.','warn');return;}
   S._rzManPic=S._rzManPic||{};S._rzManPic[acId]=code;_rzManSave();render();
 };
+// Drop a pilot directly onto the PIC seat (seat 0) to set/replace the PIC. Validates the type
+// rating via rezdyManSetPic (the same check the PIC dropdown uses).
+window.rezdyManDropPicSeat=function(acId,e){
+  if(e&&e.preventDefault)e.preventDefault();if(e&&e.stopPropagation)e.stopPropagation();
+  var code=S._schedPilotDrag;S._schedPilotDrag=null;
+  if(!code){try{var dt=e&&e.dataTransfer&&e.dataTransfer.getData('text/plain');if(dt&&dt.indexOf('pilot:')===0)code=dt.slice(6);}catch(_){}}
+  if(!code||!acId)return;
+  if(((S._rzManCoPic||{})[acId])===code){if(typeof toast==='function')toast('That pilot is the co-pilot — clear them first.','warn');return;}
+  window.rezdyManSetPic(acId,code);
+};
+// Reveal the co-pilot picker dropdown for one aircraft (it's hidden behind a "drag to set" prompt
+// until the area is clicked).
+window.rezdyManCoPickOpen=function(acId){S._rzCoPick=S._rzCoPick||{};S._rzCoPick[acId]=true;render();};
 window.rezdyManSetCoPic=function(acId,code){
+  if(S._rzCoPick)delete S._rzCoPick[acId]; // collapse the picker back to the prompt
   if(!code){window.rezdyManClearCoPic(acId);return;}
   if((S._rzManPic||{})[acId]===code){if(typeof toast==='function')toast('That pilot is already the PIC.','warn');return;}
   S._rzManCoPic=S._rzManCoPic||{};S._rzManCoPic[acId]=code;_rzManReseatDepForAc(acId);_rzManSave();render();
 };
-window.rezdyManClearCoPic=function(acId){if(S._rzManCoPic)delete S._rzManCoPic[acId];_rzManReseatDepForAc(acId);_rzManSave();render();};
+window.rezdyManClearCoPic=function(acId){if(S._rzManCoPic)delete S._rzManCoPic[acId];if(S._rzCoPick)delete S._rzCoPick[acId];_rzManReseatDepForAc(acId);_rzManSave();render();};
 // Re-seat the aircraft for whatever departure(s) its pax belong to (used when crew seating changes).
 function _rzManReseatDepForAc(acId){
   var deps={};(S._rzManPax||[]).forEach(function(p){if(p.ac===acId&&!p.infantOf)deps[_rzPaxDep(p)]=1;});

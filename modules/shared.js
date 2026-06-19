@@ -399,7 +399,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.78';
+const APP_VER='v23.81';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -987,7 +987,7 @@ function cogForMap(acId, seatMap, paxListRef){
   return totalW>0?totalMom/totalW:0;
 }
 
-function assignSeatsHeavyFront(acId, paxList){
+function assignSeatsHeavyFront(acId, paxList, opts){
   // Rules (in priority order):
   // 1. MTOW: heaviest pax forward keeps TOW manageable & CoG fwd
   // 2. Groups together side-by-side in pair rows
@@ -996,14 +996,15 @@ function assignSeatsHeavyFront(acId, paxList){
 
   const a=_acSpec(acId);
   if(!a||!paxList.length) return{};
+  const _co=(opts&&opts.coSeat1!=null)?opts.coSeat1:undefined; // explicit co-pilot flag (Rezdy seatmap)
 
-  const paxIdxs=paxSeatIdxs(acId);
+  const paxIdxs=paxSeatIdxs(acId,_co);
   if(!paxIdxs.length) return{};
 
   // Seat layout: sorted front-to-back by arm
   const seatsByArm=[...paxIdxs].sort((x,y)=>(a.seats[x]?.arm||999)-(a.seats[y]?.arm||999));
   const seat1Idx=seatsByArm[0]; // frontmost pax seat
-  const hasSeat1=!seat1IsCoPilot(acId);
+  const hasSeat1=(_co!=null)?!_co:!seat1IsCoPilot(acId);
 
   // All pax heaviest first
   const byWeight=[...paxList].sort((a,b)=>
@@ -1051,7 +1052,7 @@ function assignSeatsHeavyFront(acId, paxList){
     (parseFloat(a.weight||0)+parseFloat(a.bag||0)));
 
   // Get pair rows (exclude seat1 slot)
-  const rows=rowPairsForAc(acId); // [[1],[2,3],[4,5]...]
+  const rows=rowPairsForAc(acId,_co); // [[1],[2,3],[4,5]...]
   const pairRows=rows.filter(r=>r.length===2); // only the 2-seat rows
   const seat1Row=rows.find(r=>r.length===1); // the single seat1 slot
 
