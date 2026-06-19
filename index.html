@@ -703,7 +703,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.58';
+const APP_VER='v23.60';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -4177,7 +4177,7 @@ function renderLsSeatGrid(f,a){
         seatsCol+='<div style="position:absolute;bottom:3px;right:3px;font-size:7px;font-weight:900;background:rgba(251,146,60,.7);color:#7c2d12;border-radius:3px;padding:0 3px;line-height:1.6">C</div>';
       }
       if(hasInfant){
-        seatsCol+='<div style="position:absolute;bottom:3px;right:3px;font-size:7px;font-weight:900;background:rgba(236,72,153,.7);color:#831843;border-radius:3px;padding:0 3px;line-height:1.6">i</div>';
+        seatsCol+='<div style="position:absolute;bottom:3px;'+((!isPIC&&!isCoPilot&&isOccupied&&paxType==='C')?'left:3px':'right:3px')+';font-size:7px;font-weight:900;background:rgba(236,72,153,.7);color:#831843;border-radius:3px;padding:0 3px;line-height:1.6">i</div>';
       } else if(!isPIC&&paxType==='C'){
         // C badge already rendered above; only show $ if no child badge
       }
@@ -4700,7 +4700,7 @@ function renderLoadsheet(){
           +(gc?'<div class="seat-dot" style="background:'+gc+'"></div>':'')
           +(p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':'')
           +(p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')
-          +((p.infant||p.infantName)?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')
+          +((p.infant||p.infantName)?'<div style="position:absolute;bottom:3px;'+(p.type==='child'?'left:3px':'right:3px')+';font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')
           +'<div class="seat-name" style="color:#1e293b;font-weight:700">'+(p.name?p.name.split(' ')[0]:'?')+'</div>'
           +'<div class="seat-wt" style="color:#334155">'+(wt>0?wt+'kg':'')+'</div>'
           +'</div>';
@@ -12066,6 +12066,14 @@ var _RZ_PROD_MAP=[
 function _rzProduct(p){var s=String(p||'');for(var i=0;i<_RZ_PROD_MAP.length;i++){if(_RZ_PROD_MAP[i][0].test(s))return _RZ_PROD_MAP[i][1];}return _rzEsc(s);}
 // Flyback products ride the return leg, so they combine onto an aircraft's flight block.
 function _rzIsFlyback(code){return code==='FLB'||code==='CCF';}
+// FLB/CCF bookings are parked in the Rezdy slot for their OUTBOUND tour time only to hold seats
+// — they're actually the RETURN leg. We pull them out of that departure into their own
+// "Flybacks" group (a single 1530 return for now; summer's multiple flyback runs come later).
+var RZ_FLYBACK_DEP='Flybacks';
+function _rzBookingIsFlyback(b){return ((b&&b.items)||[]).some(function(it){return _rzIsFlyback(_rzProduct(it&&it.product));});}
+// Sort key for a departure: real "HHMM" → minutes; the Flyback group sits at its 1530 slot.
+function _rzDepSortMin(dep){if(dep===RZ_FLYBACK_DEP)return 15*60+30;return _rzDepMin(dep);}
+function _rzDepCmp(a,b){var d=_rzDepSortMin(a)-_rzDepSortMin(b);return d!==0?d:String(a).localeCompare(String(b));}
 // "0930" → "09:30" for the schedule grid's HH:MM parser.
 function _rzHHMMcolon(s){var m=/^(\d{2})(\d{2})$/.exec(String(s||''));return m?m[1]+':'+m[2]:String(s||'');}
 // Flight block duration (minutes) by product: FCF = 4.5h; FJHH / MCEXP / THH = 5h; else 2h.
@@ -12073,7 +12081,7 @@ function _rzProductDuration(p){var s=String(p||'').toUpperCase();if(/FCF|MILFORD
 // Like above but returns 0 when the text names no known product (so we don't clobber a manual end).
 function _rzProductCodeDuration(t){var s=String(t||'').toUpperCase();if(/\bFCF\b/.test(s))return 270;if(/\b(FJHH|MCEXP|THH)\b/.test(s))return 300;return 0;}
 // A booking's primary departure time (first item), e.g. "0930"; "—" if none.
-function _rzBookingDep(b){var it=((b&&b.items)||[])[0]||{};return _rzDepTime(it.startTimeLocal||'')||'—';}
+function _rzBookingDep(b){if(_rzBookingIsFlyback(b))return RZ_FLYBACK_DEP;var it=((b&&b.items)||[])[0]||{};return _rzDepTime(it.startTimeLocal||'')||'—';}
 // Which fleet aircraft a booking is allocated to — read from the comments / custom fields
 // (the operator writes e.g. "SLA" or "ZK-SLB" in Rezdy the day before). Returns an ac id or null.
 function _rzAircraftFromComments(b){
@@ -12452,6 +12460,20 @@ function _rzPilotByCode(code){
   var auth=!!(cr&&cr.endorse&&cr.endorse.length);
   return {code:code,name:(u.name||'').trim(),weight:(cr&&cr.w)||u.weight||0,endorse:(cr&&cr.endorse)||[],picAuth:auth};
 }
+// Pilots who can be PIC of a SPECIFIC aircraft — single source of truth = the AIRCRAFT APPROVAL
+// pills in the crew profile (cr.endorse). Returns {code,name,weight,rostered}, rostered-on first.
+function _rzPilotsForAc(acId){
+  var avail={};_rzAvailablePilots().forEach(function(p){avail[p.code]=1;});
+  var out=[],seen={};
+  (S.crew||[]).forEach(function(cr){
+    if(!cr||!(cr.endorse||[]).some(function(e){return e===acId;}))return; // must hold THIS aircraft's pill
+    var u=(S.users||[]).find(function(x){return x&&!x.inactive&&(x.name===cr.n||x.linkedCrew===cr.n);});
+    var code=(typeof _rCode==='function'&&u)?_rCode(u):(cr.code?String(cr.code).toUpperCase():(cr.n||'').slice(0,2).toUpperCase());
+    if(!code||seen[code])return;seen[code]=1;
+    out.push({code:code,name:cr.n||code,weight:cr.w||(u&&u.weight)||0,rostered:!!avail[code]});
+  });
+  return out.sort(function(a,b){if(a.rostered!==b.rostered)return a.rostered?-1:1;return String(a.name).localeCompare(String(b.name));});
+}
 // All seat rows for an aircraft (incl. the PIC seat 0), grouped by arm, front-to-back.
 function _rzAcRows(acId){
   var a=(typeof _acSpec==='function'?_acSpec(acId):S.aircraft[acId]);if(!a||!a.seats)return [];
@@ -12695,7 +12717,7 @@ function _rzRenderBookings(){
   const active=allRows.filter(function(b){return !/cancel/i.test(b.status||'');});
   const cancelledRows=allRows.filter(function(b){return /cancel/i.test(b.status||'');});
   const deps=[];active.forEach(function(b){var d=_rzBookingDep(b);if(deps.indexOf(d)<0)deps.push(d);});
-  deps.sort();
+  deps.sort(_rzDepCmp);
   const q=String(S._bkSearch||'').trim();
   const searching=q.length>0;
   // One departure at a time — default to the first departure when none is chosen. (No "All".)
@@ -12742,7 +12764,7 @@ function _rzRenderBookings(){
     if((!haveAll||(Date.now()-(S._rzAllBkAt||0)>120000))&&!S._rzAllBkLoading)window.rezdyLoadAllBookings();
     var corpus=haveAll?S._rzAllBk:allRows;
     var matches=corpus.filter(function(b){return _rzBkMatch(b,q);})
-      .sort(function(a,b){var da=String(a._tourDate||S.rezdyDate),db=String(b._tourDate||S.rezdyDate);if(da!==db)return db.localeCompare(da);return _rzBookingDep(a).localeCompare(_rzBookingDep(b));});
+      .sort(function(a,b){var da=String(a._tourDate||S.rezdyDate),db=String(b._tourDate||S.rezdyDate);if(da!==db)return db.localeCompare(da);return _rzDepCmp(_rzBookingDep(a),_rzBookingDep(b));});
     var note=S._rzAllBkLoading?' · searching all days…':(haveAll?' · all days':' · this day');
     body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🔍 '+matches.length+' result'+(matches.length===1?'':'s')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">for “'+_rzEsc(q)+'”'+note+'</span></div>';
     if(!matches.length)body+='<div class="card" style="text-align:center;padding:30px;color:var(--text3);font-size:13px">'+(S._rzAllBkLoading?'Searching all days…':'No bookings match “'+_rzEsc(q)+'”.')+'</div>';
@@ -13351,8 +13373,8 @@ function _rzManBubble(p,allPax){
   var infRemove=infant?(' onclick="event.stopPropagation();window.rezdyManRemoveInfant(\''+_rzEsc(infant.id).replace(/'/g,"\\'")+'\')" title="Infant: '+_rzEsc(infName||'')+' (tap to remove)" style="cursor:pointer;'):' title="Infant'+(infName?': '+_rzEsc(infName):'')+'" style="';
   return '<div draggable="true" ondragstart="window.rezdyManDragStart(\''+idEsc+'\',event)" ondragover="event.preventDefault()" ondrop="window.rezdyManDropInfant(\''+idEsc+'\',event)" onclick="window.rezdyManToggleChild(\''+idEsc+'\')" title="'+_rzEsc(p.name||'')+(infName?' (+ infant '+_rzEsc(infName)+')':'')+'" style="position:relative;overflow:hidden;background:rgba(255,255,255,.93);border-radius:8px;'+(p.paymentReq?'border:2px solid #ef4444':'border-left:4px solid '+gcol)+';min-width:62px;flex-shrink:0;cursor:grab">'+
     (p.paymentReq?'<div style="background:#ef4444;color:#fff;font-size:8px;font-weight:900;text-align:center;line-height:1.7">$ TO PAY</div>':'')+
-    (isChild?'<div style="position:absolute;bottom:3px;left:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')+
-    (infName?'<div'+infRemove+'position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')+
+    (isChild?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')+
+    (infName?'<div'+infRemove+'position:absolute;bottom:3px;'+(isChild?'left:3px':'right:3px')+';font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')+
     '<div style="padding:'+(p.paymentReq?'2px 7px 4px':'4px 7px')+'">'+
       '<div style="font-size:11px;font-weight:700;color:#1e293b;white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'+
       '<div onclick="event.stopPropagation();window.rezdyManEditWeight(\''+idEsc+'\')" title="'+(decld?'Declared weight — tap to enter actual':'Tap to enter / edit actual weight')+'" style="font-size:10px;font-weight:700;color:'+wCol+';cursor:pointer">'+w+'</div>'+
@@ -13456,7 +13478,11 @@ function _rzRenderManifest(){
     // PIC slot (drop a pilot here)
     h+='<div ondragover="event.preventDefault();event.stopPropagation();this.style.outline=\'2px solid #60a5fa\'" ondragleave="this.style.outline=\'\'" ondrop="event.stopPropagation();this.style.outline=\'\';window.rezdyManDropPilot(\''+idE+'\',event)" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:5px 8px;border-radius:7px;border:1px dashed '+(picCode?'#60a5fa':'var(--border2)')+';background:'+(picCode?'rgba(96,165,250,.1)':'transparent')+'">'+
       '<span style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800">PIC</span>'+
-      (picCode?'<span style="font-size:12px;font-weight:800;color:#60a5fa">✈ '+_rzEsc(picCode)+'</span><button onclick="window.rezdyManClearPic(\''+idE+'\')" title="Clear PIC" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:auto;padding:0 2px">✕</button>':'<span style="font-size:11px;color:var(--text3)">drag a pilot here</span>')+
+      (picCode
+        ?'<span style="font-size:12px;font-weight:800;color:#60a5fa">✈ '+_rzEsc(picCode)+'</span><button onclick="window.rezdyManClearPic(\''+idE+'\')" title="Clear PIC" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:auto;padding:0 2px">✕</button>'
+        :(function(){var _pp=_rzPilotsForAc(id);return _pp.length
+            ?'<select onclick="event.stopPropagation()" onchange="window.rezdyManSetPic(\''+idE+'\',this.value)" style="margin-left:auto;max-width:140px;font-size:12px;font-weight:700;padding:3px 5px;background:var(--card2);color:var(--text1);border:1px solid var(--border2);border-radius:6px;cursor:pointer"><option value="">drag or pick…</option>'+_pp.map(function(p){return '<option value="'+_rzEsc(p.code)+'">'+_rzEsc(p.code)+' · '+_rzEsc(String(p.name).split(/\s+/)[0])+(p.rostered?'':' (off)')+'</option>';}).join('')+'</select>'
+            :'<span style="font-size:11px;color:var(--text3);margin-left:auto">No '+id.replace('ZK-','')+'-rated pilot</span>';})())+
     '</div>';
     // Fuel
     h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'+
@@ -13536,7 +13562,7 @@ window.rezdyLoadManifest=async function(){
 // The currently-selected Bookings departure (resolved the same way as _rzRenderBookings).
 function _rzCurBookingsDep(){
   var deps=[];(S._rezdyBookings||[]).forEach(function(b){if(/cancel/i.test(b.status||''))return;var d=_rzBookingDep(b);if(deps.indexOf(d)<0)deps.push(d);});
-  deps.sort();
+  deps.sort(_rzDepCmp);
   return (S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:(deps[0]||null);
 }
 // Push the SELECTED departure's checked-in bookings into the Seatmap (from the Bookings tab).
@@ -13670,7 +13696,7 @@ function _rzManSelDep(){var deps=_rzManDeps();return (S._rzManDepFilter&&deps.in
 // Distinct departures present in the manifest, sorted.
 function _rzManDeps(){
   var set={};(S._rzManPax||[]).forEach(function(p){if(!p.infantOf)set[_rzPaxDep(p)]=1;});
-  return Object.keys(set).sort();
+  return Object.keys(set).sort(_rzDepCmp);
 }
 function _rzManDepLabel(dep){
   // "0800 FCF" — find the product flown at this departure.
@@ -13796,8 +13822,8 @@ function _rzManSeatGrid(dep,acId,col){
         var isChild=p.type==='child';var inf=(S._rzManPax||[]).find(function(x){return x.infantOf===p.id;});var infN=p.infantName||(inf?String(inf.name||'').split(/\s+/)[0]:null);
         var idEsc=_rzEsc(p.id).replace(/'/g,"\\'");
         h+='<div draggable="true" ondragstart="window.rezdyManDragStart(\''+idEsc+'\',event)" ondragover="event.preventDefault()" ondrop="window.rezdyManDropSeat(\''+depE+'\',\''+acE+'\','+idx+',event)" title="'+_rzEsc(p.name||'')+'" style="position:relative;width:'+SW+'px;height:'+SH+'px;border-radius:7px;border:1.5px solid '+(p.paymentReq?'#ef4444':gcol)+';border-left:4px solid '+gcol+';background:rgba(255,255,255,.93);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;cursor:grab">'+
-          (isChild?'<div style="position:absolute;bottom:2px;left:2px;font-size:7px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:2px;padding:0 2px">C</div>':'')+
-          (infN?'<div title="Infant: '+_rzEsc(infN)+'" style="position:absolute;bottom:2px;right:2px;font-size:7px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:2px;padding:0 2px">i</div>':'')+
+          (isChild?'<div style="position:absolute;bottom:2px;right:2px;font-size:7px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:2px;padding:0 2px">C</div>':'')+
+          (infN?'<div title="Infant: '+_rzEsc(infN)+'" style="position:absolute;bottom:2px;'+(isChild?'left:2px':'right:2px')+';font-size:7px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:2px;padding:0 2px">i</div>':'')+
           '<div onclick="event.stopPropagation();window.rezdyManRemove(\''+idEsc+'\')" title="Remove" style="position:absolute;top:-1px;right:1px;font-size:9px;color:#94a3b8;cursor:pointer;padding:0 1px">✕</div>'+
           '<div style="font-size:9.5px;font-weight:700;color:#1e293b;white-space:nowrap;max-width:'+(SW-10)+'px;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'+
           '<div onclick="event.stopPropagation();window.rezdyManEditWeight(\''+idEsc+'\')" title="'+(decld?'Declared weight — tap to enter actual':'Tap to edit actual weight')+'" style="font-size:8.5px;font-weight:700;color:'+wCol+';cursor:pointer">'+wTxt+'</div>'+
@@ -13855,6 +13881,14 @@ window.rezdyManDropPilot=function(acId,e){
   if(en&&en.length&&en.indexOf(acId)<0){if(typeof toast==='function')toast(code+' is not passed out (type-rated) on '+String(acId).replace('ZK-','')+'.','warn');return;}
   S._rzManPic=S._rzManPic||{};S._rzManPic[acId]=code;_rzManSave();render();
 };
+// Pick a PIC from the dropdown — only pilots holding this aircraft's approval pill are listed,
+// so the aircraft pills remain the single source of truth.
+window.rezdyManSetPic=function(acId,code){
+  if(!code){window.rezdyManClearPic(acId);return;}
+  var en=_rzPilotEndorse(code);
+  if(en&&en.length&&en.indexOf(acId)<0){if(typeof toast==='function')toast(code+' is not approved on '+String(acId).replace('ZK-','')+'.','warn');return;}
+  S._rzManPic=S._rzManPic||{};S._rzManPic[acId]=code;_rzManSave();render();
+};
 window.rezdyManClearPic=function(acId){if(S._rzManPic)delete S._rzManPic[acId];_rzManSave();render();};
 window.rezdyManFuel=function(acId,v){S._rzManFuel=S._rzManFuel||{};var n=String(v).replace(/[^0-9.]/g,'');if(n==='')delete S._rzManFuel[acId];else S._rzManFuel[acId]=n;_rzManSave();};
 window.rezdyManDeleteAc=function(acId){
@@ -13874,6 +13908,10 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   if(!list.length){if(typeof toast==='function')toast('No passengers allocated to '+phys.replace('ZK-','')+' at '+dep+'.','warn');return;}
   var form=bF_ac(phys);
   form.date=S.rezdyDate||form.date;
+  // Carry the departure time through to the loadsheet ETD ("1200" → "12:00"; the Flyback group
+  // uses its 1530 return time).
+  var _etd=(dep===RZ_FLYBACK_DEP)?'15:30':_rzHHMMcolon(dep||'');
+  if(_etd&&/^\d{1,2}:\d{2}$/.test(_etd)){form.etd=_etd;form.etdCustom=true;}
   // PIC (manifest stores the 2-letter code → resolve to the crew name the loadsheet expects)
   var picCode=(S._rzManPic||{})[phys];
   if(picCode){

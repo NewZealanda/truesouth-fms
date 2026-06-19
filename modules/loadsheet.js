@@ -77,7 +77,7 @@ function renderLsSeatGrid(f,a){
         seatsCol+='<div style="position:absolute;bottom:3px;right:3px;font-size:7px;font-weight:900;background:rgba(251,146,60,.7);color:#7c2d12;border-radius:3px;padding:0 3px;line-height:1.6">C</div>';
       }
       if(hasInfant){
-        seatsCol+='<div style="position:absolute;bottom:3px;right:3px;font-size:7px;font-weight:900;background:rgba(236,72,153,.7);color:#831843;border-radius:3px;padding:0 3px;line-height:1.6">i</div>';
+        seatsCol+='<div style="position:absolute;bottom:3px;'+((!isPIC&&!isCoPilot&&isOccupied&&paxType==='C')?'left:3px':'right:3px')+';font-size:7px;font-weight:900;background:rgba(236,72,153,.7);color:#831843;border-radius:3px;padding:0 3px;line-height:1.6">i</div>';
       } else if(!isPIC&&paxType==='C'){
         // C badge already rendered above; only show $ if no child badge
       }
@@ -600,7 +600,7 @@ function renderLoadsheet(){
           +(gc?'<div class="seat-dot" style="background:'+gc+'"></div>':'')
           +(p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':'')
           +(p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')
-          +((p.infant||p.infantName)?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')
+          +((p.infant||p.infantName)?'<div style="position:absolute;bottom:3px;'+(p.type==='child'?'left:3px':'right:3px')+';font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')
           +'<div class="seat-name" style="color:#1e293b;font-weight:700">'+(p.name?p.name.split(' ')[0]:'?')+'</div>'
           +'<div class="seat-wt" style="color:#334155">'+(wt>0?wt+'kg':'')+'</div>'
           +'</div>';
