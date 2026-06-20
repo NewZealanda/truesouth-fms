@@ -90,7 +90,29 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v24.11**. See `HANDOFF.md` for the full session-by-session log + how-to-work.
+- Latest version: **v24.13**. See `HANDOFF.md` for the full session-by-session log + how-to-work.
+- Recent work (v24.12 → v24.13):
+  - **Pickup-location master list** (v24.12): new editable list under Operations ▸ Pickups ▸
+    **📍 Locations** (`_rzRenderPickupLocs`) — name · address · minutes-before-departure per row,
+    add/edit/delete. State `S._rzPickupLocs`, persisted to `ts_settings` key `rz_pickup_locs`
+    (localStorage cache `ts_rz_pickup_locs`), live-synced via the `ts_settings` realtime reload.
+    Seeded once from the 114-row Rezdy pickup list (`_RZ_PICKUP_LOC_SEED`); the first device to
+    open the editor writes the seed to the cloud. Editing gated by the `rezdy` perm (view-only
+    otherwise); min-prior validated; fields HTML-escaped (`_rzEsc`).
+  - **Realtime backlog A2/A3/A4 + R-A done** (v24.13):
+    - **A2** pickups/check-ins live-sync — `pickupSave` now fires `_rzPickupBroadcast()`
+      (`pickup_update`, date+sessionId), received in shared.js (date+echo guarded) →
+      `window.rezdyReloadPickupLive()` re-pulls the blob without the loading flash.
+    - **A3** roster/roster_colors live propagation — both keys added to the realtime
+      `ts_settings` reload `in.(…)` list + handlers; the `roster` apply is SKIPPED while a local
+      draft is open (`_rosterUnsaved()`) so in-progress edits aren't clobbered.
+    - **A4** reconnect backfill — on socket re-open also re-pulls `ts_settings` (covers
+      roster/roster_colors/rz_pickup_locs/fuels/perms) + the current-date Rezdy
+      manifest/pickups/lstabs/calendar (broadcast-only state), not just manifests/loadsheets.
+    - **R-A** `rezdyManCreateLoadsheet` seat-fill — replaced the dead `seatOf['__'+n]` guard with
+      a real occupancy set (`used{}`): reserves the co-pilot seat + every explicit manifest seat
+      up front and marks seats as filled, so a fallback pax can no longer overwrite a seat a later
+      pax owns.
 - Recent work (v24.05 → v24.11):
   - **Auto-PIC from the calendar** (v24.10): the seatmap auto-sets each aircraft's PIC from the
     calendar's pilot allocation for that aircraft+departure (`_rzSchedPilotFor`); one-time seed
