@@ -163,8 +163,18 @@ function render(){
       document.body.appendChild(lo);
     }
     lo.style.display='flex';
-    lo.style.backgroundImage=`linear-gradient(to bottom,rgba(0,0,0,.32),rgba(0,0,0,.58)),url('${BG_IMG}')`;
-    lo.innerHTML=renderLoginInner();
+    if(S._authRestoring){
+      // We have a saved session and are restoring it on refresh — show the loading spinner, NOT
+      // the login form, so the login screen doesn't flash before auth resolves.
+      lo.style.backgroundImage="linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,.68)),url('"+BG_IMG+"')";
+      lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
+        +'<img class="ts-logo-spin" src="'+_TS_LOGO+'" style="width:72px;height:72px" />'
+        +'<div class="ts-loading-text">Loading...</div>'
+        +'</div>';
+    } else {
+      lo.style.backgroundImage=`linear-gradient(to bottom,rgba(0,0,0,.32),rgba(0,0,0,.58)),url('${BG_IMG}')`;
+      lo.innerHTML=renderLoginInner();
+    }
     r.style.display='none';
     return;
   }

@@ -401,7 +401,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.05';
+const APP_VER='v24.06';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1449,14 +1449,18 @@ async function loadAll(){
     let _sess=null;try{_sess=JSON.parse(localStorage.getItem('ts_sb_session')||'null');}catch(e){}
     if(_sess&&_sess.refresh_token){
       _applySession(_sess);
+      S._authRestoring=true; // first render shows the loading spinner, not a login flash
+      // Safety net: if the refresh hangs (no network), fall back to the login form rather than
+      // spinning forever.
+      setTimeout(function(){if(S._authRestoring&&!S.user){S._authRestoring=false;render();}},8000);
       (async function(){
         const ok=await _sbRefresh();
         if(ok&&_sbSession&&_sbSession.access_token){
           S.user=_userFromClaims(_jwtClaims(_sbSession.access_token));
           auditLog('session_restore',{via:'supabase',user:S.user.email});
           await _reloadCoreTables();
-          initRealtime();render();setTimeout(function(){restoreWorkspace();},400);
-        } else { _applySession(null);try{localStorage.removeItem('ts_sb_session');}catch(e){} render(); }
+          S._authRestoring=false;initRealtime();render();setTimeout(function(){restoreWorkspace();},400);
+        } else { S._authRestoring=false;_applySession(null);try{localStorage.removeItem('ts_sb_session');}catch(e){} render(); }
       })();
     }
   } else {
