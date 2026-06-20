@@ -90,22 +90,37 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v24.04**.
-- Recent work: editable **Standard Fuels & Burns** table (Admin ▸ Settings ▸ Fuels,
-  per-destination airvan/caravan fuel+burn overrides via `S._rzFuelOv` / `rz_fuel_ov`);
-  bookings Print run-sheet; drag-pilot-onto-PIC replaces PIC; aerodrome edit override fix;
-  seatmap ETD carries to loadsheet; Saved View/Edit/Reopen route to the current Operations
-  loadsheet editor; signed loadsheets no longer falsely show "Unsigned"; dark-ink signatures
-  on a light pad (visible on light theme + print); plus the **v24.04 bug-sweep fixes** (W&B
-  co-pilot orphaned-bag + removed-seat submit gate; toast/seat-name XSS escaping; cancelled
-  bookings no longer create pickups; fuel/cargo edits refresh the W&B readout; maintenance
-  cancellation notice fires after confirm; crew-load hardened against a bad endorsements row;
-  build.py hardening).
+- Latest version: **v24.11**. See `HANDOFF.md` for the full session-by-session log + how-to-work.
+- Recent work (v24.05 → v24.11):
+  - **Auto-PIC from the calendar** (v24.10): the seatmap auto-sets each aircraft's PIC from the
+    calendar's pilot allocation for that aircraft+departure (`_rzSchedPilotFor`); one-time seed
+    per departure+aircraft (`S._rzManPicSeed`/`S._rzManPicAuto`), manual change/clear always wins.
+    The seatmap lazy-loads the pickup blob (`S._rzManPickupSynced`) so `S._schedPilots` is present.
+  - **Calendar** (v24.10–v24.11): arrow keys / swipe-outside-grid cycle the DAY; whole-day pax
+    breakdown at the top (matches Bookings header); "View booking →" now jumps to Operations ▸
+    Bookings (was a dead rezdy sub-tab); the red "now" line repositions in place via
+    `_rzTickNowLine` (no more per-minute flash); visible time window fits the day's blocks
+    (`_RZ_SCH_START`/`_RZ_SCH_END` are now `let`, recomputed each render: earliest−1h … latest+1h).
+  - **Refresh UX** (v24.06–v24.07): no login flash on refresh (`S._authRestoring` → spinner, 8s
+    fallback); the Operations day persists across a refresh (sessionStorage `ts_rezdy_date`,
+    `_rzInitDate`).
+  - **Arrow keys** (v24.07): roster ←/→ shifts the week (via `_navAway`); maintenance ←/→ cycles
+    tier-2 tabs (`_maintTabIds`). Maintenance estimator dates show a 3-letter month.
+  - **Totals/breakdowns** (v24.05): roster Totals row shows per-day staff-on-duty count + total
+    headcount; Bookings header shows `55A · 5C · 2i` + "N seats sold" (infants excluded).
+  - **v24.08**: pilots no longer all show "off" on the seatmap — `_rzAvailablePilots` lazy-loads
+    the roster (it used to read an empty `S.roster` unless the Roster page had been opened).
+  - **v24.04** full bug-sweep/audit fixes (W&B co-pilot orphaned-bag + removed-seat submit gate;
+    toast/seat-name XSS escaping; cancelled bookings no longer create pickups; maintenance cancel
+    notice; build.py hardening). Editable **Standard Fuels & Burns** table is v24.02
+    (`S._rzFuelOv`/`rz_fuel_ov`, overlaid via `_rzEffCfg`).
 - Operations is the Rezdy-powered flow (Bookings / Seatmap / Loadsheets); legacy manifest.js
   retired. Seatmap departures keyed by TIME+DESTINATION; `_RZ_PROD_CFG` in rezdy.js is the
-  built-in product→{dest,fuel,burn} config, now overlaid by the editable per-destination
-  overrides (`_rzEffCfg`). Manual fuel via `form._fuelUserSet` always wins.
-- Open decisions (see ARCHITECTURE_REVIEW_v24.04): confirm RLS migrations are applied live
-  (auth code is on); add pickup + roster live-sync and reconnect backfill (A2–A4); make
-  leave-day counts compute live (L-A/L-B); fix the Rezdy create-loadsheet seat-fill fallback
-  (R-A).
+  built-in product→{dest,fuel,burn} config, overlaid by editable per-destination overrides
+  (`_rzEffCfg`). Manual fuel via `form._fuelUserSet` always wins.
+- Open backlog (see `ARCHITECTURE_REVIEW_v24.04.md` §3): confirm RLS migrations applied live
+  (auth code is on); add pickup + roster live-sync + reconnect backfill (A2–A4); make leave-day
+  counts compute live (L-A/L-B); fix the Rezdy create-loadsheet seat-fill fallback (R-A).
+- Rezdy API options (see `REZDY_API_REFERENCE.md`): availability is readable; bookings can be
+  created/cancelled and have status/customer/participant edited — but **date/time/product moves
+  are NOT supported** by the API. Current edge fn is read-only.

@@ -401,7 +401,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.11';
+const APP_VER='v24.12';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1858,13 +1858,14 @@ async function reloadTable(table){
     if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,(r.rates&&parseFloat(r.rates.perHour)>0)?r.rates:dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
-      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames,rz_fuel_ov)&select=key,value',{headers:SH});
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames,rz_fuel_ov,rz_pickup_locs)&select=key,value',{headers:SH});
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
           if(row.key==='role_perms'&&row.value&&!_editingPerms()&&Date.now()-(S._permsEditTs||0)>5000){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
           if(row.key==='rz_depnames'&&row.value){try{var _dn=JSON.parse(row.value);if(_dn&&typeof _dn==='object'){S._rzDepNames=_dn;lsSet('ts_rz_depnames',_dn);changed=true;}}catch(e){}}
           if(row.key==='rz_fuel_ov'&&row.value){try{var _fo=JSON.parse(row.value);if(_fo&&typeof _fo==='object'){S._rzFuelOv=_fo;lsSet('ts_rz_fuel_ov',_fo);changed=true;}}catch(e){}}
+          if(row.key==='rz_pickup_locs'&&row.value&&!S._rzPickupLocEdit){try{var _pl=JSON.parse(row.value);if(Array.isArray(_pl)){S._rzPickupLocs=_pl;S._rzPickupLocsLoaded=true;lsSet('ts_rz_pickup_locs',_pl);changed=true;}}catch(e){}}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
           if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
           if(row.key==='maintenance'&&row.value){
