@@ -101,16 +101,43 @@ var _RZ_PROD_MAP=[
 function _rzProduct(p){var s=String(p||'');for(var i=0;i<_RZ_PROD_MAP.length;i++){if(_RZ_PROD_MAP[i][0].test(s))return _RZ_PROD_MAP[i][1];}return _rzEsc(s);}
 // Flyback products ride the return leg, so they combine onto an aircraft's flight block.
 function _rzIsFlyback(code){return code==='FLB'||code==='CCF';}
-// Turn-around destination for a product: Mount Cook (MC/NZMC), Milford (MF/NZMF), or a Queenstown
-// return for flybacks (QN/NZQN). Returns null if unknown. Used for the seatmap "SLA → MC" label
-// and to pre-fill the loadsheet destination.
-function _rzProductDest(code){
-  var c=String(code||'').toUpperCase();
-  if(c==='FLB'||c==='CCF'||/flyback|coach.*cruise.*fly/i.test(c))return {short:'QN',apt:'NZQN'};
-  if(c==='FCF'||/fly.*cruise.*fly/i.test(c))return {short:'MF',apt:'NZMF'};
-  if(c==='MCEXP'||c==='MCGL'||c==='THH'||/mount.*cook|aoraki|tasman.*glacier/i.test(c))return {short:'MC',apt:'NZMC'};
-  return null;
-}
+// ── Per-product flight config ─────────────────────────────────────────────────
+// Single source of truth for the seatmap "SLA → MC" label + loadsheet auto-fill (destination,
+// default fuel, flight burn). Fuel/burn are in DISPLAY units: airvan (ga8) = LITRES, caravan = LB.
+// Omitted fuel/burn → fall back to the aircraft's standard (fuelKg / burnDef).
+//   short = title destination · apt = loadsheet destination ICAO · av = airvan · cv = caravan.
+var _RZ_PROD_CFG={
+  // Mount Cook landing flights (QN → Mt Cook): more fuel for the longer leg.
+  THH:  {short:'MC',apt:'NZMC',av:{fuel:210},cv:{fuel:1000}},
+  MCEXP:{short:'MC',apt:'NZMC',av:{fuel:210},cv:{fuel:1000}},
+  MCGL: {short:'MC',apt:'NZMC',av:{fuel:210},cv:{fuel:1000}},
+  MCHS: {short:'MC',apt:'NZMC',av:{fuel:210},cv:{fuel:1000}},
+  STT:  {short:'MC',apt:'NZMC',av:{fuel:210},cv:{fuel:1000}},
+  // Mt Cook overhead scenic (QN → QN, no landing).  ⚠ airvan fuel assumed 210 L (unspecified).
+  MCOH: {short:'MC',apt:'NZQN',av:{fuel:210,burn:150},cv:{fuel:1000,burn:600}},
+  // Franz Josef landing flights (QN → Franz Josef).
+  FJHH: {short:'FJ',apt:'NZFJ',av:{fuel:210},cv:{fuel:1000}},
+  FJGL: {short:'FJ',apt:'NZFJ',av:{fuel:210},cv:{fuel:1000}},
+  // Franz Josef overhead scenic (QN → QN, no landing).
+  FJOH: {short:'FJ',apt:'NZQN',av:{fuel:210,burn:150},cv:{fuel:1000,burn:600}},
+  // Milford fly/explore-cruise-fly (QN → Milford). Standard aircraft fuel/burn.
+  FCF:  {short:'MF',apt:'NZMF'},
+  FEF:  {short:'MF',apt:'NZMF'},
+  // Milford overhead scenic (QN → QN, no landing).
+  MFOH: {short:'MF',apt:'NZQN',av:{fuel:150,burn:70},cv:{fuel:800,burn:300}},
+  // Branches Station scenic (no ICAO → loadsheet dest stays Queenstown). Standard fuel/burn.
+  BRA:  {short:'BRA',apt:'NZQN'},
+  // Flyback / coach-cruise-fly return (Milford → QN). Reduced fuel applied via the Milford departure.
+  FLB:  {short:'QN',apt:'NZQN'},
+  CCF:  {short:'QN',apt:'NZQN'}
+};
+function _rzProdCfg(code){return _RZ_PROD_CFG[String(code||'').toUpperCase()]||null;}
+// Destination {short, apt} for the seatmap label / loadsheet dest. null if unknown.
+function _rzProductDest(code){var c=_rzProdCfg(code);return c?{short:c.short,apt:c.apt}:null;}
+// Default loaded fuel (kg) for a product on an aircraft — product override else aircraft standard.
+function _rzProdFuelKg(code,acId){var a=_acSpec(acId);if(!a)return null;var c=_rzProdCfg(code);if(c){var u=(a.layout==='ga8')?c.av:c.cv;if(u&&u.fuel!=null)return toKg(u.fuel,acId);}return a.fuelKg;}
+// Flight burn in DISPLAY units (L airvan / lb caravan) for a product — null = use aircraft burnDef.
+function _rzProdBurnDisp(code,acId){var a=_acSpec(acId);if(!a)return null;var c=_rzProdCfg(code);if(c){var u=(a.layout==='ga8')?c.av:c.cv;if(u&&u.burn!=null)return u.burn;}return null;}
 // FLB/CCF bookings are parked in the Rezdy slot for their OUTBOUND tour time only to hold seats
 // — they're actually the RETURN leg. We pull them out of that departure into their own
 // "Flybacks" group (a single 1530 return for now; summer's multiple flyback runs come later).
@@ -1765,7 +1792,7 @@ function _rzRenderManifest(){
     nI+=pax.filter(function(p){return p.ac===id&&p.infantOf&&_rzPaxDep(p)===selDep;}).length; // manually-folded lap infants
     var picCode=(S._rzManPic||{})[id]||'';
     var unit=(a&&a.layout==='ga8')?'L':'lbs';
-    var std=a?Math.round(fromKg(a.fuelKg,id)):0;
+    var std=a?Math.round(fromKg(_rzManDefFuelKg(selDep,id),id)):0;
     var fuelVal=(S._rzManFuel&&S._rzManFuel[id]!=null&&S._rzManFuel[id]!=='')?S._rzManFuel[id]:std;
     var idE=id.replace(/'/g,"\\'");
     // Collapsible: open by default only when this aircraft has pax this departure; a manual
@@ -2075,14 +2102,25 @@ function _rzManDepLabel(dep){
   var prod='';(S._rzManPax||[]).some(function(p){if(_rzPaxDep(p)===dep){var i=_rzManDepInfo(p.group);if(i&&i.prod){prod=i.prod;return true;}}return false;});
   return _rzEsc(dep)+(prod?' '+_rzEsc(prod):'');
 }
+// The product flown by one aircraft's pax on a departure (from the seated pax' booking groups).
+function _rzManAcProd(dep,acId){
+  var prod='';
+  (S._rzManPax||[]).some(function(p){if(p.ac===acId&&!p.infantOf&&_rzPaxDep(p)===dep){var i=_rzManDepInfo(p.group);if(i&&i.prod){prod=i.prod;return true;}}return false;});
+  return prod;
+}
 // Destination for one aircraft's pax on a departure (for the "SLA → MC" seatmap label / loadsheet
 // dest). Derives the product from the seated pax; a Flybacks departure always returns to Queenstown.
 function _rzManAcDest(dep,acId){
-  var prod='';
-  (S._rzManPax||[]).some(function(p){if(p.ac===acId&&!p.infantOf&&_rzPaxDep(p)===dep){var i=_rzManDepInfo(p.group);if(i&&i.prod){prod=i.prod;return true;}}return false;});
-  var d=_rzProductDest(prod);
+  var d=_rzProductDest(_rzManAcProd(dep,acId));
   if(!d&&dep===RZ_FLYBACK_DEP)d={short:'QN',apt:'NZQN'};
   return d;
+}
+// Default LOADED fuel (kg) for an aircraft on a departure: a Flybacks departure uses the reduced
+// Milford load; otherwise the product default (else aircraft standard). Used for the seatmap fuel
+// readout and the W&B preview so they match the loadsheet that gets created.
+function _rzManDefFuelKg(dep,acId){
+  if(dep===RZ_FLYBACK_DEP){var m=_milfordFuelKg(acId);if(m!=null)return m;}
+  return _rzProdFuelKg(_rzManAcProd(dep,acId),acId);
 }
 function _rzSeatKey(dep,acId){return String(dep||'—')+'|'+acId;}
 function _rzManSeatsFor(dep,acId){S._rzManSeats=S._rzManSeats||{};return S._rzManSeats[_rzSeatKey(dep,acId)]||{};}
@@ -2106,8 +2144,11 @@ function _rzManAcForm(dep,acId){
   // Co-pilot occupies seat 1 as crew (counted as crew weight by calcFormWB).
   var coCode=(S._rzManCoPic||{})[acId];
   if(coCode){var copil=_rzPilotByCode(coCode);if(copil&&copil.name){form.coPilot=copil.name;form.names[1]=copil.name;if(copil.weight)form.seats[1]=String(copil.weight);}}
-  var fuelDisp=(S._rzManFuel&&S._rzManFuel[acId]!=null&&S._rzManFuel[acId]!=='')?S._rzManFuel[acId]:fromKg(a.fuelKg,acId);
+  // Fuel + burn default to the PRODUCT config (so the W&B preview matches the loadsheet that gets
+  // created); a manual seatmap fuel override still wins for fuel.
+  var fuelDisp=(S._rzManFuel&&S._rzManFuel[acId]!=null&&S._rzManFuel[acId]!=='')?S._rzManFuel[acId]:fromKg(_rzManDefFuelKg(dep,acId),acId);
   form.fuel=String(toKg(fuelDisp,acId));
+  var _pbd=_rzProdBurnDisp(_rzManAcProd(dep,acId),acId);if(_pbd!=null)form.burnOff=String(_pbd);
   var seats=_rzManSeatsFor(dep,acId);
   var declMode=_rzManDeclMode(dep,acId);
   Object.keys(seats).forEach(function(idx){if(coCode&&String(idx)==='1')return;var p=(S._rzManPax||[]).find(function(x){return x.id===seats[idx];});if(!p)return;form.names[idx]=p.name||'';var wv=_rzPaxWeight(p,declMode);form.seats[idx]=(wv!=null&&wv!=='')?String(wv):'';if(p.type==='child')form.paxType[idx]='C';});
@@ -2399,11 +2440,17 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   // Co-pilot → seat 1 (crew); passengers fill from seat 2.
   var coCode=(S._rzManCoPic||{})[phys];var _hasCo=false;
   if(coCode){var copil=_rzPilotByCode(coCode);if(copil&&copil.name){form.coPilot=copil.name;form.names[1]=copil.name;if(copil.weight)form.seats[1]=String(copil.weight);_hasCo=true;}}
-  // Fuel: manifest display value (else standard) → kg. A Milford departure (flyback) uses the
-  // reduced Milford default (115 L airvan / 613 lb caravan).
-  var fuelDisp=(S._rzManFuel&&S._rzManFuel[phys]!=null&&S._rzManFuel[phys]!=='')?S._rzManFuel[phys]:fromKg(a.fuelKg,phys);
-  form.fuel=String(toKg(fuelDisp,phys));
-  if(typeof _isMilford==='function'&&_isMilford(form.dep)){var _mfk=_milfordFuelKg(phys);if(_mfk!=null)form.fuel=String(_mfk);}
+  // Fuel + burn: a manual seatmap fuel override wins; otherwise the PRODUCT default — flyback
+  // (dep Milford) = reduced load, else the per-product fuel/burn (else aircraft standard).
+  var _prodCode=_rzManAcProd(dep,phys);
+  if(S._rzManFuel&&S._rzManFuel[phys]!=null&&S._rzManFuel[phys]!==''){
+    form.fuel=String(toKg(S._rzManFuel[phys],phys));
+  }else if(_isFb||(typeof _isMilford==='function'&&_isMilford(form.dep))){
+    var _mfk=_milfordFuelKg(phys);form.fuel=String(_mfk!=null?_mfk:a.fuelKg);
+  }else{
+    var _pfk=_rzProdFuelKg(_prodCode,phys);form.fuel=String(_pfk!=null?_pfk:a.fuelKg);
+  }
+  var _pbd2=_rzProdBurnDisp(_prodCode,phys);if(_pbd2!=null)form.burnOff=String(_pbd2);
   // Seat the passengers at their manifest seat positions (run/refresh the seat plan first).
   var sm=_rzManSeatsFor(dep,phys);if(!sm||!Object.keys(sm).length)sm=(typeof window.rezdyManReseat==='function')?window.rezdyManReseat(dep,phys):{};
   var seatOf={};Object.keys(sm).forEach(function(idx){seatOf[sm[idx]]=parseInt(idx);});

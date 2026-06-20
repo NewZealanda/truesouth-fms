@@ -374,9 +374,11 @@ window.setLsRouteField=function(field,val){
   // Departure-driven fuel default: a Milford departure uses the reduced Milford fuel; changing
   // the departure back to anywhere else (e.g. Queenstown) restores the aircraft's standard fuel.
   var _fuelChanged=false;
-  if(field==='dep'&&S.form.ac){
-    if(_isMilford(S.form[field])){var _mf=_milfordFuelKg(S.form.ac);if(_mf!=null){S.form.fuel=String(_mf);_fuelChanged=true;}}
-    else{var _a=S.aircraft[S.form.ac];if(_a&&_a.fuelKg!=null){S.form.fuel=String(_a.fuelKg);_fuelChanged=true;}}
+  // Recompute the default fuel whenever the route (departure OR destination) changes: flyback =
+  // reduced Milford load, Mt Cook / Franz Josef = the longer-leg load, else the aircraft standard.
+  if((field==='dep'||field==='dest')&&S.form.ac){
+    var _rf=_lsRouteFuelKg(S.form.ac,S.form.dep,S.form.dest);
+    if(_rf!=null){S.form.fuel=String(_rf);_fuelChanged=true;}
   }
   S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();
   // Route changes are discrete (no in-flight typing to clobber). When the fuel default just
@@ -399,7 +401,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.87';
+const APP_VER='v23.89';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -454,6 +456,17 @@ function fuelKgForSetup(acId){const a=_acSpec(acId);if(!a)return 0;const s=(curD
 // less fuel: 115 L for an airvan (GA8) / 613 lb for a caravan (C208). Returns kg.
 function _isMilford(code){return code==='NZMF'||/milford/i.test(String(code||''));}
 function _milfordFuelKg(acId){const a=_acSpec(acId);if(!a)return null;return a.layout==='ga8'?toKg(115,acId):toKg(613,acId);}
+// Route-based default fuel (kg). Departing Milford (the flyback) carries the reduced load; a Mount
+// Cook (NZMC) or Franz Josef (NZFJ) destination needs more (210 L airvan / 1000 lb caravan);
+// everything else uses the aircraft's standard fuel.
+function _lsRouteFuelKg(acId,dep,dest){
+  const a=_acSpec(acId);if(!a)return null;
+  if(_isMilford(dep))return a.layout==='ga8'?toKg(115,acId):toKg(613,acId);
+  const d=String(dest||'').toUpperCase();
+  if(d==='NZMC'||d==='NZFJ'||/mount.*cook|pukaki|franz/i.test(d))return a.layout==='ga8'?toKg(210,acId):toKg(1000,acId);
+  return a.fuelKg;
+}
+window._lsRouteFuelKg=_lsRouteFuelKg;
 // VFR final reserve = 30 min at the cruise burn rate the loadsheet uses (58 L/hr airvan, 136.1 kg/hr
 // caravan). Returned in kg so it compares directly against fuel-remaining-at-destination.
 function _finalReserveKg(acId){const a=_acSpec(acId);if(!a)return 0;return a.layout==='ga8'?toKg(29,acId):68.05;}
