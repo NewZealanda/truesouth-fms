@@ -268,7 +268,9 @@ function renderLoadsheet(){
   const _lsDepOther=!!S._lsOther_dep||(!!f.dep&&!_isKnownApt(f.dep));
   const _lsDestOther=!!S._lsOther_dest||(!!f.dest&&!_isKnownApt(f.dest));
   const _lsOtherInput=function(field,val){return '<input class="fi" type="text" value="'+(val||'').replace(/"/g,'&quot;')+'" placeholder="Type location" onclick="event.stopPropagation()" onchange="S.form.'+field+'=this.value;S.formDirty=true;autoSaveLS();safeRender()" style="margin-top:6px;width:100%;font-size:13px;font-weight:600;background:var(--card);border:1px solid var(--border2);border-radius:6px;padding:5px 7px;color:var(--text1)">';};
-  const draftBanner=f.status==='unsigned'?`<div class="pill-blue" style="display:block;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px;text-transform:none;letter-spacing:0">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
+  // Signature presence (f.sig) is the ground truth — don't show the "needs signing" banner on a
+  // loadsheet that already carries a signature even if its saved status is a stale 'unsigned'.
+  const draftBanner=(f.status==='unsigned'&&!f.sig)?`<div class="pill-blue" style="display:block;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px;text-transform:none;letter-spacing:0">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
   const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;render();}">Clear & Start Blank</button>`;
 
 
@@ -544,9 +546,9 @@ function renderLoadsheet(){
           <input id="sigTypeInput" class="fi" type="text" placeholder="Type your full name to sign" style="flex:1;font-size:15px" value="${S.sigTypedName||S.user?.name||''}">
           <button onclick="window.applyTypedSig()" style="padding:8px 14px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer;font-weight:600">Apply</button>
         </div>`:''}
-        <div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden;position:relative;background:var(--card2);cursor:crosshair">
+        <div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden;position:relative;background:#f1f5f9;cursor:crosshair">
           <canvas id="sigCanvas" width="600" height="130"></canvas>
-          ${!f.sig?`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:var(--border2);font-family:'Barlow Condensed',sans-serif;font-size:15px;letter-spacing:.12em">${(!S.sigMode||S.sigMode==='draw')?'DRAW SIGNATURE HERE':'APPLY NAME ABOVE'}</div>`:''}
+          ${!f.sig?`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:#94a3b8;font-family:'Barlow Condensed',sans-serif;font-size:15px;letter-spacing:.12em">${(!S.sigMode||S.sigMode==='draw')?'DRAW SIGNATURE HERE':'APPLY NAME ABOVE'}</div>`:''}
         </div>
         <button onclick="clearSig()" style="margin-top:6px;padding:5px 12px;border-radius:6px;border:1px solid var(--border2);background:transparent;font-size:12px;cursor:pointer;color:var(--text2)">Clear</button>`
         :`<div style="padding:10px;background:var(--card2);border-radius:8px;font-size:12px;color:var(--text3);margin-bottom:8px">${canSign?(r&&a&&r.towCog!=null&&r.towCog<a.cogMin?"⚠ Forward CoG — fix seating before signing.":!allOk?"⚠ Fix W&B before signing.":""):"Only pilots can sign loadsheets. Save as draft for a pilot to complete."}</div>`}

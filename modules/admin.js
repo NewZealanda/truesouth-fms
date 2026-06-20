@@ -1265,6 +1265,8 @@ window.duplicateSaved=function(id){
   toast('Loadsheet duplicated &mdash; edit and re-sign','ok');
 };
 window.viewSaved=function(id){
+  // Open in the current Operations ▸ Loadsheets editor (the legacy 'loadsheet' route is retired).
+  if(typeof window.rezdyOpenLsTab==='function'){window.rezdyOpenLsTab(id);window.saveWorkspace&&window.saveWorkspace();return;}
   var existing=S.lsTabs.find(function(t){return t.id===id;});
   if(existing){window.switchLsTab(id);return;}
   var s=S.saved.find(function(x){return x.id===id;});
@@ -1286,7 +1288,10 @@ window.reopenSaved=async function(id){
   await sbU('ts_loadsheets',[{id:s.id,form:form,saved_at:s.savedAt,status:'unsigned'}]);
   var acFull=form.ac||'ZK-SLA';
   var existing=S.lsTabs.find(function(t){return t.id===id;});
-  if(existing){existing.form=form;existing.status='unsigned';existing.acId=acFull;window.switchLsTab(id);}
+  if(existing){existing.form=form;existing.status='unsigned';existing.acId=acFull;}
+  // Open in the current Operations ▸ Loadsheets editor (the legacy 'loadsheet' route is retired).
+  if(typeof window.rezdyOpenLsTab==='function'){window.rezdyOpenLsTab(id);}
+  else if(existing){window.switchLsTab(id);}
   else{S.lsTabs.push({id:s.id,acId:acFull,form:form,status:'unsigned',savedAt:s.savedAt});window.switchLsTab(s.id);}
   toast('Loadsheet reopened - signature cleared','ok');
   window.saveWorkspace&&window.saveWorkspace();
@@ -1677,13 +1682,13 @@ window.applyTypedSig=()=>{
   ctx.fillStyle='rgba(255,255,255,0)';ctx.fillRect(0,0,c.width,c.height);
   // Render signature-style text
   ctx.font='italic 48px Georgia, serif';
-  ctx.fillStyle='#e2e8f0';
+  ctx.fillStyle='#1e293b';
   ctx.textBaseline='middle';
   const tw=ctx.measureText(name).width;
   const x=Math.max(20,(c.width-tw)/2);
   ctx.fillText(name,x,c.height/2);
   // Add underline
-  ctx.beginPath();ctx.strokeStyle='#94a3b8';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.strokeStyle='#475569';ctx.lineWidth=1.5;
   ctx.moveTo(x-5,c.height/2+32);ctx.lineTo(x+tw+5,c.height/2+32);ctx.stroke();
   S.form.sig=c.toDataURL();
   autoSaveLS();
@@ -2103,6 +2108,8 @@ window.changeLsAircraft=function(targetAcFull){
   autoSaveLS();
 };
 window.editSaved=function(id){
+  // Open in the current Operations ▸ Loadsheets editor (the legacy 'loadsheet' route is retired).
+  if(typeof window.rezdyOpenLsTab==='function'){window.rezdyOpenLsTab(id);window.saveWorkspace&&window.saveWorkspace();return;}
   var existing=S.lsTabs.find(function(t){return t.id===id;});
   if(existing){window.switchLsTab(id);return;}
   var s=S.saved.find(function(x){return x.id===id;});
@@ -2649,7 +2656,7 @@ function setupSig(){
   let drawing=false;
   const pos=e=>{const r=c.getBoundingClientRect(),s=e.touches?e.touches[0]:e,sx=c.width/r.width,sy=c.height/r.height;return{x:(s.clientX-r.left)*sx,y:(s.clientY-r.top)*sy};};
   c.onmousedown=c.ontouchstart=e=>{e.preventDefault();drawing=true;const p=pos(e);c.getContext('2d').beginPath();c.getContext('2d').moveTo(p.x,p.y);};
-  c.onmousemove=c.ontouchmove=e=>{if(!drawing)return;e.preventDefault();const ctx=c.getContext('2d'),p=pos(e);ctx.lineWidth=2.5;ctx.lineCap='round';ctx.strokeStyle='#e2e8f0';ctx.lineTo(p.x,p.y);ctx.stroke();ctx.beginPath();ctx.moveTo(p.x,p.y);};
+  c.onmousemove=c.ontouchmove=e=>{if(!drawing)return;e.preventDefault();const ctx=c.getContext('2d'),p=pos(e);ctx.lineWidth=2.5;ctx.lineCap='round';ctx.strokeStyle='#1e293b';ctx.lineTo(p.x,p.y);ctx.stroke();ctx.beginPath();ctx.moveTo(p.x,p.y);};
   c.onmouseup=c.onmouseleave=c.ontouchend=()=>{if(drawing){drawing=false;var _had=!!S.form.sig;S.form.sig=c.toDataURL();
     // First stroke → re-render so "Save Draft" swaps to "Submit" immediately (the drawn strokes are
     // preserved via S.form.sig and redrawn by setupSig). Later strokes don't re-render (no flicker).
