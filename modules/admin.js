@@ -13,7 +13,7 @@ function renderAdmin(){
   }
   const ad=S.admin;
   const ad_section=ad.section||'people';
-  return {people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad_section]?.()||renderAdminPeople();
+  return {people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,fuels:renderAdminFuels,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad_section]?.()||renderAdminPeople();
 }
 
 function renderAdminStatistics(){

@@ -135,10 +135,113 @@ var _RZ_PROD_CFG={
 function _rzProdCfg(code){return _RZ_PROD_CFG[String(code||'').toUpperCase()]||null;}
 // Destination {short, apt, scenic} for the seatmap label / loadsheet dest. null if unknown.
 function _rzProductDest(code){var c=_rzProdCfg(code);return c?{short:c.short,apt:c.apt,scenic:!!c.scenic}:null;}
-// Default loaded fuel (kg) for a product on an aircraft — product override else aircraft standard.
-function _rzProdFuelKg(code,acId){var a=_acSpec(acId);if(!a)return null;var c=_rzProdCfg(code);if(c){var u=(a.layout==='ga8')?c.av:c.cv;if(u&&u.fuel!=null)return toKg(u.fuel,acId);}return a.fuelKg;}
+
+// ── Editable standard fuels & burns (per destination) ────────────────────────
+// The hardcoded _RZ_PROD_CFG above gives the built-in defaults. S._rzFuelOv holds the
+// owner's per-destination overrides (Admin ▸ Settings ▸ Fuels), persisted to ts_settings
+// (key 'rz_fuel_ov') so every device shares them. A destination is keyed by short+apt+scenic
+// so a "landing" route and its "overhead scenic" sibling stay separate rows.
+var _RZ_DEST_NAMES={MC:'Mount Cook',FJ:'Franz Josef',MF:'Milford',BRA:'Branches Station',QN:'Flyback / Queenstown'};
+function _rzDestKey(short,apt,scenic){return String(short||'')+'|'+String(apt||'')+'|'+(scenic?'1':'0');}
+// Distinct destination profiles derived from _RZ_PROD_CFG (one editable row each).
+function _rzDestProfiles(){
+  var seen={},out=[];
+  Object.keys(_RZ_PROD_CFG).forEach(function(code){
+    var c=_RZ_PROD_CFG[code];var key=_rzDestKey(c.short,c.apt,!!c.scenic);
+    if(!seen[key]){seen[key]={key:key,short:c.short,apt:c.apt,scenic:!!c.scenic,codes:[],def:c};out.push(seen[key]);}
+    seen[key].codes.push(code);
+  });
+  return out;
+}
+function _rzDestLabel(p){
+  var nm=_RZ_DEST_NAMES[p.short]||p.short;
+  if(p.short==='BRA'||p.short==='QN')return nm;
+  return nm+(p.scenic?' — overhead scenic':' — landing');
+}
+// Effective {av,cv} fuel/burn for a product: owner override wins over the built-in default.
+function _rzEffCfg(code){
+  var c=_rzProdCfg(code)||{};
+  var key=_rzDestKey(c.short,c.apt,!!c.scenic);
+  var ov=(S._rzFuelOv||{})[key]||{};
+  function merge(t){
+    var b=c[t]||{},o=ov[t]||{};
+    var f=(o.fuel!=null&&o.fuel!=='')?o.fuel:(b.fuel!=null?b.fuel:null);
+    var br=(o.burn!=null&&o.burn!=='')?o.burn:(b.burn!=null?b.burn:null);
+    return {fuel:f,burn:br};
+  }
+  return {short:c.short,apt:c.apt,scenic:!!c.scenic,av:merge('av'),cv:merge('cv')};
+}
+// Default loaded fuel (kg) for a product on an aircraft — override/product default else aircraft standard.
+function _rzProdFuelKg(code,acId){var a=_acSpec(acId);if(!a)return null;var c=_rzEffCfg(code);var u=(a.layout==='ga8')?c.av:c.cv;if(u&&u.fuel!=null)return toKg(u.fuel,acId);return a.fuelKg;}
 // Flight burn in DISPLAY units (L airvan / lb caravan) for a product — null = use aircraft burnDef.
-function _rzProdBurnDisp(code,acId){var a=_acSpec(acId);if(!a)return null;var c=_rzProdCfg(code);if(c){var u=(a.layout==='ga8')?c.av:c.cv;if(u&&u.burn!=null)return u.burn;}return null;}
+function _rzProdBurnDisp(code,acId){var a=_acSpec(acId);if(!a)return null;var c=_rzEffCfg(code);var u=(a.layout==='ga8')?c.av:c.cv;if(u&&u.burn!=null)return u.burn;return null;}
+function _rzFuelOvSave(){
+  try{if(typeof lsSet==='function')lsSet('ts_rz_fuel_ov',S._rzFuelOv||{});}catch(e){}
+  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_fuel_ov',value:JSON.stringify(S._rzFuelOv||{})}]).then(function(r){if(r===null&&typeof toast==='function')toast('Fuel defaults did not save to the server — check connection.','warn');}).catch(function(){});
+}
+function _rzFuelOvLoad(){
+  try{var cch=lsGet('ts_rz_fuel_ov');if(cch&&typeof cch==='object')S._rzFuelOv=cch;}catch(e){}
+  try{fetch(SB+'/rest/v1/ts_settings?key=eq.rz_fuel_ov&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
+    var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}
+    if(v&&typeof v==='object'){S._rzFuelOv=v;try{lsSet('ts_rz_fuel_ov',v);}catch(e){}render();}
+  }).catch(function(){});}catch(e){}
+}
+// Set/clear one override field. Empty value reverts that field to its built-in default.
+window.rezdyFuelOvSet=function(key,type,field,val){
+  S._rzFuelOv=S._rzFuelOv||{};
+  var o=S._rzFuelOv[key]||(S._rzFuelOv[key]={});
+  var t=o[type]||(o[type]={});
+  var v=String(val==null?'':val).trim();
+  if(v===''){delete t[field];}
+  else{var n=parseFloat(v);if(isNaN(n)||n<0){if(typeof toast==='function')toast('Enter a number','warn');return;}t[field]=n;}
+  if(o.av&&!Object.keys(o.av).length)delete o.av;
+  if(o.cv&&!Object.keys(o.cv).length)delete o.cv;
+  if(!Object.keys(o).length)delete S._rzFuelOv[key];
+  _rzFuelOvSave();render();
+};
+window.rezdyFuelOvResetRow=function(key){if(S._rzFuelOv){delete S._rzFuelOv[key];_rzFuelOvSave();render();}};
+// Admin ▸ Settings ▸ Fuels — editable table of standard fuels & burns per destination.
+function renderAdminFuels(){
+  if(!S._rzFuelOvLoaded){S._rzFuelOvLoaded=true;_rzFuelOvLoad();}
+  var ov=S._rzFuelOv||{};
+  var fcell=function(p,type,field,unit){
+    var key=p.key,o=ov[key]||{},to=o[type]||{};
+    var def=p.def&&p.def[type]?p.def[type][field]:null;
+    var ph=(def!=null)?String(def):(field==='fuel'?'std':'pilot');
+    var cur=(to[field]!=null)?to[field]:'';
+    var edited=(to[field]!=null);
+    return '<input type="number" min="0" step="any" value="'+cur+'" placeholder="'+ph+'" '+
+      'onchange="window.rezdyFuelOvSet(\''+key+'\',\''+type+'\',\''+field+'\',this.value)" '+
+      'style="width:64px;font-size:13px;padding:5px 6px;background:var(--card2);color:var(--text);border:1px solid '+(edited?'var(--acc)':'var(--border2)')+';border-radius:6px;text-align:right">';
+  };
+  var h='<div class="card"><div class="st" style="margin-bottom:6px">Standard Fuels &amp; Burns</div>'+
+    '<div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.5">Default <strong>loaded fuel</strong> and <strong>flight burn</strong> applied when a loadsheet is created from the seatmap, per destination and aircraft type. Airvan values are <strong>litres</strong>; Caravan values are <strong>pounds</strong>. Leave a box blank to use the built-in default (shown greyed) — blank fuel = aircraft standard tank, blank burn = pilot sets it. A manually typed fuel on a loadsheet always overrides these.</div>';
+  h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:560px;font-size:13px">';
+  h+='<thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.05em">'+
+    '<th style="padding:6px 8px">Destination</th>'+
+    '<th style="padding:6px 8px;text-align:right" colspan="2">Airvan (L)</th>'+
+    '<th style="padding:6px 8px;text-align:right" colspan="2">Caravan (lb)</th>'+
+    '<th></th></tr>'+
+    '<tr style="color:var(--text3);font-size:10px"><th></th>'+
+    '<th style="padding:0 8px 6px;text-align:right">Fuel</th><th style="padding:0 8px 6px;text-align:right">Burn</th>'+
+    '<th style="padding:0 8px 6px;text-align:right">Fuel</th><th style="padding:0 8px 6px;text-align:right">Burn</th><th></th></tr></thead><tbody>';
+  _rzDestProfiles().forEach(function(p){
+    var rowEdited=!!ov[p.key];
+    h+='<tr style="border-top:1px solid var(--border2)">'+
+      '<td style="padding:8px"><div style="font-weight:700;color:var(--text1)">'+_rzEsc(_rzDestLabel(p))+'</div>'+
+        '<div style="font-size:10px;color:var(--text3)">'+_rzEsc(p.apt)+' · '+_rzEsc(p.codes.join(', '))+'</div></td>'+
+      '<td style="padding:8px;text-align:right">'+fcell(p,'av','fuel')+'</td>'+
+      '<td style="padding:8px;text-align:right">'+fcell(p,'av','burn')+'</td>'+
+      '<td style="padding:8px;text-align:right">'+fcell(p,'cv','fuel')+'</td>'+
+      '<td style="padding:8px;text-align:right">'+fcell(p,'cv','burn')+'</td>'+
+      '<td style="padding:8px;text-align:center">'+(rowEdited?'<button title="Reset this row to defaults" onclick="window.rezdyFuelOvResetRow(\''+p.key+'\')" style="background:none;border:none;color:var(--acc);cursor:pointer;font-size:11px;text-decoration:underline">reset</button>':'')+'</td>'+
+      '</tr>';
+  });
+  h+='</tbody></table></div>';
+  h+='<div style="font-size:11px;color:var(--text3);margin-top:10px">Boxes with a coloured border are custom overrides. Changes save to the cloud and apply on every device.</div>';
+  h+='</div>';
+  return h;
+}
 // FLB/CCF bookings are parked in the Rezdy slot for their OUTBOUND tour time only to hold seats
 // — they're actually the RETURN leg. We pull them out of that departure into their own
 // "Flybacks" group (a single 1530 return for now; summer's multiple flyback runs come later).
