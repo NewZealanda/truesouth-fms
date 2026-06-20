@@ -60,10 +60,21 @@ document.addEventListener('keydown',function(e){
     var _ae=document.activeElement,_t=_ae&&_ae.tagName;
     if(_t==='INPUT'||_t==='SELECT'||_t==='TEXTAREA'||(_ae&&_ae.isContentEditable))return;
     if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
+    var _dir=(e.key==='ArrowRight')?1:-1;
+    // Roster (calendar view): shift the displayed week.
+    if(S.section==='roster'&&(S.rosterTab||'view')==='view'&&typeof window.rosterShiftWeek==='function'){
+      e.preventDefault();window.rosterShiftWeek(_dir);return;
+    }
+    // Maintenance: cycle the tier-2 sub-tabs.
+    if(S.section==='maintenance'&&typeof _maintTabIds==='function'){
+      var _mt=_maintTabIds(),_mc=_mt.indexOf(S.maintTab||'overview');if(_mc<0)_mc=0;
+      var _mn=_mc+_dir;if(_mn<0)_mn=_mt.length-1;if(_mn>=_mt.length)_mn=0;
+      e.preventDefault();S.maintTab=_mt[_mn];render();return;
+    }
     if(S.section!=='operations')return;
     var _tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
     var _cur=_tabs.indexOf(S.tab);if(_cur<0)_cur=0;
-    var _next=_cur+(e.key==='ArrowRight'?1:-1);if(_next<0)_next=_tabs.length-1;if(_next>=_tabs.length)_next=0;
+    var _next=_cur+_dir;if(_next<0)_next=_tabs.length-1;if(_next>=_tabs.length)_next=0;
     e.preventDefault();if(typeof window.switchOpsTab==='function')window.switchOpsTab(_tabs[_next]);
   }
 });
@@ -598,16 +609,17 @@ function renderSettingsSubTabs(){
   h+='</div>';
   return h;
 }
+var _MAINT_TAB_LBL={overview:'Overview',log:'Logs',aircraft:'Aircraft',observations:'Observations',bookings:'Bookings',estimator:'Estimator',search:'Search'};
+// Ordered maintenance tier-2 tab ids (permission-aware). Single source of truth for the tab bar
+// AND the ←/→ arrow-key cycling.
+function _maintTabIds(){
+  return hasRolePerm('maint_bookings')
+    ?['overview','log','aircraft','observations','bookings','estimator','search']
+    :['overview','log','aircraft','observations','search'];
+}
 function renderMaintenanceSubTabs(){
-  const isAdmin=hasRolePerm('maint_bookings');
   const sub=S.maintTab||'overview';
-  const tabs=[
-    {id:'overview',  lbl:'Overview'},
-    {id:'log',       lbl:'Logs'},
-    {id:'aircraft',  lbl:'Aircraft'},
-    {id:'observations', lbl:'Observations'},
-    ...(isAdmin?[{id:'bookings',lbl:'Bookings'},{id:'estimator',lbl:'Estimator'},{id:'search',lbl:'Search'}]:[{id:'search',lbl:'Search'}])
-  ];
+  const tabs=_maintTabIds().map(function(id){return {id:id,lbl:_MAINT_TAB_LBL[id]||id};});
   var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
   tabs.forEach(function(t){
     h+='<button tabindex="-1" class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.maintTab=\''+t.id+'\';render()" style="flex-shrink:0">'+t.lbl+'</button>';

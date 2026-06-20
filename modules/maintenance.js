@@ -679,7 +679,9 @@ function renderMaintEstimator(){
     function fmtEst(date,days){
       if(!date) return'<span style="color:var(--text3)">—</span>';
       const yr=Math.round(days/365*10)/10;
-      return`<span style="font-weight:700">${date.slice(0,7)}</span><span style="font-size:10px;color:var(--text3);margin-left:4px">(${yr}yr)</span>`;
+      const _d=new Date(date+'T00:00:00');
+      const _lbl=isNaN(_d.getTime())?date.slice(0,7):_d.toLocaleDateString('en-NZ',{month:'short',year:'numeric'}); // 3-letter month, e.g. "Jun 2026"
+      return`<span style="font-weight:700">${_lbl}</span><span style="font-size:10px;color:var(--text3);margin-left:4px">(${yr}yr)</span>`;
     }
 
     const col=AC_COL[ac]||'#888';

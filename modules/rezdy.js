@@ -10,6 +10,9 @@
 // Local Y-M-D (NOT toISOString, which is UTC and lands a day off in NZ).
 function _rzYmd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function _rzToday(){return _rzYmd(new Date());}
+// Initial Operations day on (re)load: the day picked earlier this session (survives a refresh
+// on Bookings/Seatmap/Loadsheets) else today. Uses sessionStorage so a fresh visit starts on today.
+function _rzInitDate(){var _sd=null;try{_sd=sessionStorage.getItem('ts_rezdy_date');}catch(e){}return (_sd&&/^\d{4}-\d{2}-\d{2}$/.test(_sd))?_sd:_rzToday();}
 function _rzDowLabel(ds){
   if(!ds)return'';var d=new Date(ds+'T00:00:00');if(isNaN(d))return'';
   var t=new Date();t.setHours(0,0,0,0);var diff=Math.round((d-t)/86400000);
@@ -417,10 +420,10 @@ function _rzEnsureVans(){
 // ─────────────────────────────────────────────────────────────────────────────
 // Ensure the Rezdy day is set and quietly kept in lock-step with Rezdy (used by the Rezdy
 // section AND by the Operations Bookings/Seatmap/Loadsheets tabs which render the same views).
-function _rzEnsureDay(){if(!S.rezdyDate)S.rezdyDate=_rzToday();if(typeof setTimeout==='function')setTimeout(function(){if(typeof _rzBgSync==='function')_rzBgSync();},0);}
+function _rzEnsureDay(){if(!S.rezdyDate)S.rezdyDate=_rzInitDate();if(typeof setTimeout==='function')setTimeout(function(){if(typeof _rzBgSync==='function')_rzBgSync();},0);}
 // Shared date-picker row (prev / next / today / refresh). `sub` hides Refresh on the loadsheets view.
 function _rzDateRow(sub){
-  if(!S.rezdyDate)S.rezdyDate=_rzToday();
+  if(!S.rezdyDate)S.rezdyDate=_rzInitDate();
   var _isToday=S.rezdyDate===_rzToday();
   var noRefresh=(sub==='loadsheets'||sub==='rloadsheets');
   // Sticky so the day arrows stay on screen while scrolling; the date label is a FIXED width and
@@ -1306,6 +1309,7 @@ window.rezdyShiftDate=function(delta){
 };
 window.rezdySetDate=function(v){
   S.rezdyDate=v||_rzToday();
+  try{sessionStorage.setItem('ts_rezdy_date',S.rezdyDate);}catch(e){} // survive a refresh on Bookings/Seatmap/Loadsheets
   // clear date-scoped caches so each tab reloads for the new date
   S._rezdyBookings=null;S._rezdyOpen={};S._pickupVans=null;S._pickupCollected=null;S._schedBlocks=null;S._schedGroupKey=null;S._schedEdit=null;S._rzManLoaded=false;S._rzManPax=null;S._rzLsTabsLoaded=false;S._rzLsTabs=null;
   // clear seatmap view-state that's scoped to a specific day (stale labels would mis-target Allocate/Create)

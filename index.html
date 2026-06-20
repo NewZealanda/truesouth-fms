@@ -725,7 +725,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.06';
+const APP_VER='v24.07';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2915,10 +2915,21 @@ document.addEventListener('keydown',function(e){
     var _ae=document.activeElement,_t=_ae&&_ae.tagName;
     if(_t==='INPUT'||_t==='SELECT'||_t==='TEXTAREA'||(_ae&&_ae.isContentEditable))return;
     if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
+    var _dir=(e.key==='ArrowRight')?1:-1;
+    // Roster (calendar view): shift the displayed week.
+    if(S.section==='roster'&&(S.rosterTab||'view')==='view'&&typeof window.rosterShiftWeek==='function'){
+      e.preventDefault();window.rosterShiftWeek(_dir);return;
+    }
+    // Maintenance: cycle the tier-2 sub-tabs.
+    if(S.section==='maintenance'&&typeof _maintTabIds==='function'){
+      var _mt=_maintTabIds(),_mc=_mt.indexOf(S.maintTab||'overview');if(_mc<0)_mc=0;
+      var _mn=_mc+_dir;if(_mn<0)_mn=_mt.length-1;if(_mn>=_mt.length)_mn=0;
+      e.preventDefault();S.maintTab=_mt[_mn];render();return;
+    }
     if(S.section!=='operations')return;
     var _tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
     var _cur=_tabs.indexOf(S.tab);if(_cur<0)_cur=0;
-    var _next=_cur+(e.key==='ArrowRight'?1:-1);if(_next<0)_next=_tabs.length-1;if(_next>=_tabs.length)_next=0;
+    var _next=_cur+_dir;if(_next<0)_next=_tabs.length-1;if(_next>=_tabs.length)_next=0;
     e.preventDefault();if(typeof window.switchOpsTab==='function')window.switchOpsTab(_tabs[_next]);
   }
 });
@@ -3453,16 +3464,17 @@ function renderSettingsSubTabs(){
   h+='</div>';
   return h;
 }
+var _MAINT_TAB_LBL={overview:'Overview',log:'Logs',aircraft:'Aircraft',observations:'Observations',bookings:'Bookings',estimator:'Estimator',search:'Search'};
+// Ordered maintenance tier-2 tab ids (permission-aware). Single source of truth for the tab bar
+// AND the ←/→ arrow-key cycling.
+function _maintTabIds(){
+  return hasRolePerm('maint_bookings')
+    ?['overview','log','aircraft','observations','bookings','estimator','search']
+    :['overview','log','aircraft','observations','search'];
+}
 function renderMaintenanceSubTabs(){
-  const isAdmin=hasRolePerm('maint_bookings');
   const sub=S.maintTab||'overview';
-  const tabs=[
-    {id:'overview',  lbl:'Overview'},
-    {id:'log',       lbl:'Logs'},
-    {id:'aircraft',  lbl:'Aircraft'},
-    {id:'observations', lbl:'Observations'},
-    ...(isAdmin?[{id:'bookings',lbl:'Bookings'},{id:'estimator',lbl:'Estimator'},{id:'search',lbl:'Search'}]:[{id:'search',lbl:'Search'}])
-  ];
+  const tabs=_maintTabIds().map(function(id){return {id:id,lbl:_MAINT_TAB_LBL[id]||id};});
   var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
   tabs.forEach(function(t){
     h+='<button tabindex="-1" class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.maintTab=\''+t.id+'\';render()" style="flex-shrink:0">'+t.lbl+'</button>';
@@ -9356,7 +9368,9 @@ function renderMaintEstimator(){
     function fmtEst(date,days){
       if(!date) return'<span style="color:var(--text3)">—</span>';
       const yr=Math.round(days/365*10)/10;
-      return`<span style="font-weight:700">${date.slice(0,7)}</span><span style="font-size:10px;color:var(--text3);margin-left:4px">(${yr}yr)</span>`;
+      const _d=new Date(date+'T00:00:00');
+      const _lbl=isNaN(_d.getTime())?date.slice(0,7):_d.toLocaleDateString('en-NZ',{month:'short',year:'numeric'}); // 3-letter month, e.g. "Jun 2026"
+      return`<span style="font-weight:700">${_lbl}</span><span style="font-size:10px;color:var(--text3);margin-left:4px">(${yr}yr)</span>`;
     }
 
     const col=AC_COL[ac]||'#888';
@@ -10592,6 +10606,16 @@ window.loadRosterLeave=async function(){
 };
 
 
+// Shift the displayed roster week by ±1 (arrow keys), mirroring the ◁ ▷ buttons. Routes through
+// _navAway so an unsaved draft prompts to save first. S.rosterWeek is already mode-aligned.
+window.rosterShiftWeek=function(delta){
+  window._navAway(function(){
+    var base=S.rosterWeek?new Date(S.rosterWeek+'T00:00:00'):new Date();
+    if(isNaN(base.getTime()))base=new Date();
+    base.setDate(base.getDate()+(delta||0)*7);
+    S.rosterWeek=_rIso(base);S._rosterLeaveWeek=null;render();
+  });
+};
 window.rosterJump=function(v){
   if(!v)return;
   var d=new Date(v+'T00:00:00');
@@ -11544,6 +11568,9 @@ window.markNotifRead=async function(id){
 // Local Y-M-D (NOT toISOString, which is UTC and lands a day off in NZ).
 function _rzYmd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function _rzToday(){return _rzYmd(new Date());}
+// Initial Operations day on (re)load: the day picked earlier this session (survives a refresh
+// on Bookings/Seatmap/Loadsheets) else today. Uses sessionStorage so a fresh visit starts on today.
+function _rzInitDate(){var _sd=null;try{_sd=sessionStorage.getItem('ts_rezdy_date');}catch(e){}return (_sd&&/^\d{4}-\d{2}-\d{2}$/.test(_sd))?_sd:_rzToday();}
 function _rzDowLabel(ds){
   if(!ds)return'';var d=new Date(ds+'T00:00:00');if(isNaN(d))return'';
   var t=new Date();t.setHours(0,0,0,0);var diff=Math.round((d-t)/86400000);
@@ -11951,10 +11978,10 @@ function _rzEnsureVans(){
 // ─────────────────────────────────────────────────────────────────────────────
 // Ensure the Rezdy day is set and quietly kept in lock-step with Rezdy (used by the Rezdy
 // section AND by the Operations Bookings/Seatmap/Loadsheets tabs which render the same views).
-function _rzEnsureDay(){if(!S.rezdyDate)S.rezdyDate=_rzToday();if(typeof setTimeout==='function')setTimeout(function(){if(typeof _rzBgSync==='function')_rzBgSync();},0);}
+function _rzEnsureDay(){if(!S.rezdyDate)S.rezdyDate=_rzInitDate();if(typeof setTimeout==='function')setTimeout(function(){if(typeof _rzBgSync==='function')_rzBgSync();},0);}
 // Shared date-picker row (prev / next / today / refresh). `sub` hides Refresh on the loadsheets view.
 function _rzDateRow(sub){
-  if(!S.rezdyDate)S.rezdyDate=_rzToday();
+  if(!S.rezdyDate)S.rezdyDate=_rzInitDate();
   var _isToday=S.rezdyDate===_rzToday();
   var noRefresh=(sub==='loadsheets'||sub==='rloadsheets');
   // Sticky so the day arrows stay on screen while scrolling; the date label is a FIXED width and
@@ -12840,6 +12867,7 @@ window.rezdyShiftDate=function(delta){
 };
 window.rezdySetDate=function(v){
   S.rezdyDate=v||_rzToday();
+  try{sessionStorage.setItem('ts_rezdy_date',S.rezdyDate);}catch(e){} // survive a refresh on Bookings/Seatmap/Loadsheets
   // clear date-scoped caches so each tab reloads for the new date
   S._rezdyBookings=null;S._rezdyOpen={};S._pickupVans=null;S._pickupCollected=null;S._schedBlocks=null;S._schedGroupKey=null;S._schedEdit=null;S._rzManLoaded=false;S._rzManPax=null;S._rzLsTabsLoaded=false;S._rzLsTabs=null;
   // clear seatmap view-state that's scoped to a specific day (stale labels would mis-target Allocate/Create)

@@ -787,6 +787,16 @@ window.loadRosterLeave=async function(){
 };
 
 
+// Shift the displayed roster week by ±1 (arrow keys), mirroring the ◁ ▷ buttons. Routes through
+// _navAway so an unsaved draft prompts to save first. S.rosterWeek is already mode-aligned.
+window.rosterShiftWeek=function(delta){
+  window._navAway(function(){
+    var base=S.rosterWeek?new Date(S.rosterWeek+'T00:00:00'):new Date();
+    if(isNaN(base.getTime()))base=new Date();
+    base.setDate(base.getDate()+(delta||0)*7);
+    S.rosterWeek=_rIso(base);S._rosterLeaveWeek=null;render();
+  });
+};
 window.rosterJump=function(v){
   if(!v)return;
   var d=new Date(v+'T00:00:00');
