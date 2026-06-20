@@ -72,7 +72,7 @@ document.addEventListener('keydown',function(e){
       e.preventDefault();S.maintTab=_mt[_mn];render();return;
     }
     // Calendar: cycle the day.
-    if(S.section==='rezdy'&&S.rezdyTab==='schedule'&&typeof window.rezdyShiftDate==='function'){
+    if(S.section==='calendar'&&typeof window.rezdyShiftDate==='function'){
       e.preventDefault();window.rezdyShiftDate(_dir);return;
     }
     if(S.section!=='operations')return;
@@ -86,14 +86,12 @@ document.addEventListener('keydown',function(e){
 window._cycleTier2=function(dir){
   if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
   if(S.section==='operations'){
-    var tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');
+    var tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');tabs.push('ground');
     var cur=tabs.indexOf(S.tab);if(cur<0)cur=0;var nx=(cur+dir+tabs.length)%tabs.length;
     if(typeof window.switchOpsTab==='function')window.switchOpsTab(tabs[nx]);
-  } else if(S.section==='rezdy'){
-    // On the Calendar, cycle the DAY (swipe outside the grid / arrow keys) instead of the sub-tabs.
-    if(S.rezdyTab==='schedule'&&typeof window.rezdyShiftDate==='function'){window.rezdyShiftDate(dir);return;}
-    var rt=['schedule','pickups','mypickups'];var c=rt.indexOf(S.rezdyTab);if(c<0)c=0;var n=(c+dir+rt.length)%rt.length;
-    S.rezdyTab=rt[n];render();
+  } else if(S.section==='calendar'){
+    // Calendar: cycle the DAY (swipe outside the grid / arrow keys).
+    if(typeof window.rezdyShiftDate==='function'){window.rezdyShiftDate(dir);}
   }
 };
 // Mobile: a clear horizontal swipe cycles the tier-2 tabs. Guards so it never hijacks a
@@ -140,13 +138,14 @@ function _sectionAllowed(sec){
     case 'roster':      return hasRolePerm('roster');
     case 'leave':       return hasRolePerm('leave');
     case 'rezdy':       return hasRolePerm('rezdy');
+    case 'calendar':    return hasRolePerm('calendar');
     case 'settings':    return hasRolePerm('admin_users')||hasRolePerm('admin_crew');
     case 'operations':  return hasRolePerm('operations');
     default:            return true;
   }
 }
 function _firstAllowedSection(){
-  var order=['operations','maintenance','roster','rezdy','leave','settings'];
+  var order=['operations','calendar','maintenance','roster','leave','settings'];
   for(var i=0;i<order.length;i++){if(_sectionAllowed(order[i]))return order[i];}
   return 'leave';
 }
@@ -160,6 +159,14 @@ function render(){
   // Auto-detect mobile on first render
   if(typeof S._mobileInit==='undefined'){S._mobileInit=true;if(typeof S.mobileView==='undefined')S.mobileView=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)&&window.innerWidth<800;}
   document.body.classList.toggle('mobile-view',!!S.mobileView);
+  // ── Nav migration (v24.14): the old 'rezdy' section was split — Calendar is now its own
+  // tier-1 section, Pickups/My Pickups moved to Operations ▸ Ground. Remap any restored last-view
+  // or stale deep-link so old state still lands somewhere sensible.
+  if(S.section==='rezdy'){
+    if(S.rezdyTab==='pickups'){S.section='operations';S.tab='ground';S._groundTab='pickups';}
+    else if(S.rezdyTab==='mypickups'){S.section='operations';S.tab='ground';S._groundTab='mypickups';}
+    else{S.section='calendar';}
+  }
   // ── Remember the current view so a reload returns to the same page ──
   // Gated on S._viewRestored so the default-view renders during boot DON'T overwrite the
   // saved last view before _restoreLastView() has had a chance to read and apply it.
@@ -466,7 +473,8 @@ window.changeMyPassword=async function(){
 function renderRosterPlaceholder(){
   return '<div class="card" style="text-align:center;padding:48px 24px"><div style="font-size:32px;margin-bottom:12px">🗓️</div><div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:8px">Roster</div><div style="font-size:13px;color:var(--text3)">Coming soon — staff roster and scheduling.</div></div>';
 }
-/* renderRezdy() now lives in modules/rezdy.js (Bookings + Pickups + Schedule). */
+/* Calendar (renderCalendar), Ground pickups (renderGround) and Bookings/Seatmap/Loadsheets all
+   live in modules/rezdy.js. The old combined Rezdy section was split in v24.14. */
 function renderDrawer(){
   const role=S.user?.role||'desk';
   const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
@@ -513,6 +521,7 @@ function renderDrawer(){
       h+=_subBtn('Loadsheets',t==='rloadsheets'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('rloadsheets')");
       h+=_subBtn('Saved',t==='saved'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('saved')");
       if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
+      h+=_subBtn('Ground',t==='ground'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('ground')");
     }
   }
   // Roster & Leave combined — show the group only if the user can reach at least one item.
@@ -551,6 +560,7 @@ function renderDrawer(){
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
       h+=_sn('People','people');
       if(_canUsers)h+=_sn('Permissions','perms');
+      if(hasRolePerm('operations'))h+=_sn('Operations','operations');
       if(_isAdminPlus){
         h+=_sn('Drive','gdrive');
         h+=_sn('Aerodromes','aerodromes');
@@ -561,14 +571,10 @@ function renderDrawer(){
     }
    }
   }
-  // Rezdy integration — gated on the 'rezdy' permission (superadmin only by default)
-  if(hasRolePerm('rezdy')){
-    h+=_secBtn('Rezdy','rezdy','🔗');
-    if(_isExp('rezdy')){
-      h+=_subBtn('Calendar',sec==='rezdy'&&S.rezdyTab==='schedule',"S._drawerOpen=false;S.section='rezdy';S.rezdyTab='schedule';render()");
-      h+=_subBtn('Pickups',sec==='rezdy'&&S.rezdyTab==='pickups',"S._drawerOpen=false;S.section='rezdy';S.rezdyTab='pickups';render()");
-      h+=_subBtn('My Pickups',sec==='rezdy'&&S.rezdyTab==='mypickups',"S._drawerOpen=false;S.section='rezdy';S.rezdyTab='mypickups';render()");
-    }
+  // Calendar — its own tier-1 section (was Rezdy ▸ Calendar), gated on the 'calendar' permission.
+  if(hasRolePerm('calendar')){
+    var _calOn=sec==='calendar';
+    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'calendar\';S.rezdyTab=\'schedule\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_calOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_calOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_calOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📅</span><span style="flex:1">Calendar</span></button>';
   }
   h+='</nav>';
   h+='<div style="padding:10px 16px;font-size:10px;color:rgba(255,255,255,.18);font-family:monospace;border-top:1px solid rgba(255,255,255,.06)">'+APP_VER+'</div>';
@@ -591,6 +597,7 @@ function renderOpsSubTabs(){
   h+='<button tabindex="-1" class="sub-tab '+(opsTab==='rloadsheets'?'on':'')+'" onclick="window.switchOpsTab(\'rloadsheets\')" style="flex-shrink:0">Loadsheets</button>';
   h+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="flex-shrink:0">Saved ('+savedCount+')</button>';
   if(hasRolePerm('charter'))h+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="flex-shrink:0">Charter</button>';
+  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='ground'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'ground\')" style="flex-shrink:0">Ground</button>';
   h+='</div>';
   return h;
 }
@@ -606,6 +613,7 @@ function renderSettingsSubTabs(){
   const sections=[];
   if(_canUsers||_canCrew)sections.push({id:'people',lbl:'People'});
   if(_canUsers)sections.push({id:'perms',lbl:'Permissions'});
+  if(hasRolePerm('operations'))sections.push({id:'operations',lbl:'Operations'});
   if(_adminPlus)sections.push({id:'gdrive',lbl:'Drive'},{id:'aerodromes',lbl:'Aerodromes'},{id:'fuels',lbl:'Fuels'},{id:'statistics',lbl:'Statistics'});
   if(hasRolePerm('audit'))sections.push({id:'audit',lbl:'Audit'});
   var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
@@ -703,7 +711,7 @@ function renderApp(){
           return'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">You don\'t have access to the roster.</div>';
         }
         if(_sec==='leave')return'<div id="flash-leave">'+renderLeave()+'</div>';
-        if(_sec==='rezdy')return renderRezdy();
+        if(_sec==='calendar')return renderCalendar();
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
@@ -746,6 +754,7 @@ function renderOperations(){
   if(opsTab==='rloadsheets'){try{return window.rezdyOpsLoadsheets();}catch(e){return '<div class="card" style="color:var(--err-text)">Loadsheets error: '+e.message+'</div>';}}
   if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return renderSaved();}
   if(opsTab==='charter'){if(S._presSection)broadcastPresence(null);return '<div id="flash-charter">'+renderCharter()+'</div>';}
+  if(opsTab==='ground'){if(S._presSection)broadcastPresence(null);return renderGround();}
   // Default / fallback (including 'bookings' and any stale legacy tab id) → Bookings.
   try{return window.rezdyOpsBookings();}catch(e){return '<div class="card" style="color:var(--err-text)">Bookings error: '+e.message+'</div>';}
 }

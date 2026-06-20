@@ -1,6 +1,7 @@
 // === MODULE: rezdy === v1.0 ===
 // Rezdy bookings + pickup van management + aircraft day-schedule.
-// Self-contained. Entry point: renderRezdy(). All onclick handlers are window.*.
+// Self-contained. Entry points: renderCalendar(), renderGround(), renderAdminOperations(),
+// rezdyOpsBookings/Seatmap/Loadsheets(). All onclick handlers are window.*.
 // State keys used on S: rezdyTab, rezdyDate, _rezdyBookings, _rezdyLoading,
 //   _rezdyOpen (expanded booking rows, keyed by orderNumber),
 //   _pickupVans, _pickupCollected, _pickupLoading, _schedBlocks, _schedLoading,
@@ -270,7 +271,6 @@ function _rzPickupLocsSave(silent){
   try{if(typeof lsSet==='function')lsSet('ts_rz_pickup_locs',S._rzPickupLocs||[]);}catch(e){}
   if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_pickup_locs',value:JSON.stringify(S._rzPickupLocs||[])}]).then(function(r){if(r===null&&!silent&&typeof toast==='function')toast('Pickup locations did not save to the server — check connection.','warn');}).catch(function(){});
 }
-window.rezdyPickupLocEdit=function(on){S._rzPickupLocEdit=!!on;if(on)_rzPickupLocsLoad();render();};
 window.rezdyPickupLocSet=function(i,field,val){
   if(!Array.isArray(S._rzPickupLocs))return;var o=S._rzPickupLocs[i];if(!o)return;
   if(field==='min'){var v=String(val==null?'':val).trim();if(v===''){o.min='';}else{var n=parseInt(v,10);if(isNaN(n)||n<0){if(typeof toast==='function')toast('Enter minutes before departure (a whole number)','warn');return;}o.min=n;}}
@@ -282,14 +282,13 @@ window.rezdyPickupLocDel=function(i){if(!Array.isArray(S._rzPickupLocs))return;v
 function _rzRenderPickupLocs(){
   _rzPickupLocsLoad();
   var locs=Array.isArray(S._rzPickupLocs)?S._rzPickupLocs:[];
-  var can=(typeof hasRolePerm!=='function')||hasRolePerm('rezdy');
+  var can=(typeof hasRolePerm!=='function')||hasRolePerm('operations');
   var h='<div class="card">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px">'+
       '<div><div class="st" style="margin-bottom:0">Pickup Locations</div>'+
         '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+locs.length+' locations · master list, shared across devices</p></div>'+
       '<div style="display:flex;gap:6px;flex-shrink:0">'+
         (can?'<button class="btn btn-ghost" style="font-size:12px" onclick="window.rezdyPickupLocAdd()">＋ Add</button>':'')+
-        '<button class="btn btn-ghost" style="font-size:12px" onclick="window.rezdyPickupLocEdit(false)">← Pickups</button>'+
       '</div></div>'+
     '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.5">Pickup point name, address, and how many <strong>minutes before departure</strong> the pickup runs. Changes save to the cloud and apply on every device.'+(can?'':' <em>(view only — you don\'t have edit permission)</em>')+'</div>'+
     '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:640px;font-size:13px">'+
@@ -513,22 +512,35 @@ window.rezdyOpsSeatmap=function(){_rzEnsureDay();return _rzDateRow('rseatmap')+_
 window.rezdyOpsLoadsheets=function(){_rzEnsureDay();return _rzDateRow('rloadsheets')+_rzRenderLoadsheets()+_rzModals();};
 // The Rezdy section now hosts only Calendar / Pickups / My Pickups (Bookings/Seatmap/Loadsheets
 // moved to Operations).
-function renderRezdy(){
-  if(typeof hasRolePerm==='function'&&!hasRolePerm('rezdy'))return '<div class="page"><div class="card" style="text-align:center;padding:40px">Not available.</div></div>';
+// CALENDAR — its own tier-1 section (was Rezdy ▸ Calendar). Gated on the 'calendar' permission.
+function renderCalendar(){
+  if(typeof hasRolePerm==='function'&&!hasRolePerm('calendar'))return '<div class="page"><div class="card" style="text-align:center;padding:40px">Not available.</div></div>';
   _rzEnsureDay();
-  var rzTabs=['schedule','pickups','mypickups'];
-  var sub=(rzTabs.indexOf(S.rezdyTab)>=0)?S.rezdyTab:'schedule';S.rezdyTab=sub;
-  if(sub==='schedule'&&S._rzPrevSub!=='schedule'){S._schedBlocks=null;S._rezdyBookings=null;}
-  S._rzPrevSub=sub;
-  const tabBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    [{id:'schedule',lbl:'Calendar'},{id:'pickups',lbl:'Pickups'},{id:'mypickups',lbl:'My Pickups'}].map(function(t){
-      return '<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.rezdyTab=\''+t.id+'\';render()">'+t.lbl+'</button>';
+  if(S._rzPrevSub!=='schedule'){S._schedBlocks=null;S._rezdyBookings=null;}
+  S._rzPrevSub='schedule';S.rezdyTab='schedule'; // keep rezdyTab so schedule load/reload code still fires
+  return _rzDateRow('schedule')+_rzRenderSchedule()+_rzModals();
+}
+// GROUND — Operations ▸ Ground tier-2 tab hosting Pickups / My Pickups (tier-3). Operations perm.
+function renderGround(){
+  if(typeof hasRolePerm==='function'&&!hasRolePerm('operations'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+  _rzEnsureDay();
+  var gt=(S._groundTab==='mypickups')?'mypickups':'pickups';S._groundTab=gt;
+  S._rzPrevSub=gt;
+  var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
+    [{id:'pickups',lbl:'Pickups'},{id:'mypickups',lbl:'My Pickups'}].map(function(t){
+      return '<button class="sub-tab '+(gt===t.id?'on':'')+'" onclick="S._groundTab=\''+t.id+'\';render()">'+t.lbl+'</button>';
     }).join('')+'</div>';
-  const dateRow=_rzDateRow(sub);
-  var _modal=_rzModals();
-  if(sub==='pickups')return tabBar+dateRow+_rzRenderPickups()+_modal;
-  if(sub==='mypickups')return tabBar+dateRow+_rzRenderMyPickups()+_modal;
-  return tabBar+dateRow+_rzRenderSchedule()+_modal;
+  var body=(gt==='mypickups')?_rzRenderMyPickups():_rzRenderPickups();
+  return bar+_rzDateRow(gt)+body+_rzModals();
+}
+// SETTINGS ▸ OPERATIONS — tier-3 operations settings (Pickup Locations for now; more to come).
+function renderAdminOperations(){
+  var sub=S._opsSettingsTab||'pickuplocs';S._opsSettingsTab=sub;
+  var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
+    [{id:'pickuplocs',lbl:'📍 Pickup Locations'}].map(function(t){
+      return '<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S._opsSettingsTab=\''+t.id+'\';render()">'+t.lbl+'</button>';
+    }).join('')+'</div>';
+  return bar+_rzRenderPickupLocs();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1457,15 +1469,12 @@ window.rezdyRefresh=async function(){
 //  (2) PICKUPS — van allocation
 // ─────────────────────────────────────────────────────────────────────────────
 function _rzRenderPickups(){
-  if(S._rzPickupLocEdit)return _rzRenderPickupLocs(); // 📍 master pickup-location editor
   if(!S._rzVehLoaded){S._rzVehLoaded=true;_rzVehLoad();}
-  // Entry to the master pickup-location list — works regardless of bookings being loaded.
-  var locBtn='<button class="btn btn-ghost" style="font-size:12px" onclick="window.rezdyPickupLocEdit(true)" title="Edit the master pickup-location list">📍 Locations</button>';
   if(S._pickupLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading pickups…</div>';
-  if(!S._rezdyBookings)return '<div class="card" style="text-align:center;padding:30px;color:var(--text3);font-size:13px">No bookings loaded.<br><button class="btn btn-ghost" style="margin-top:12px;font-size:12px" onclick="window.rezdyLoadBookings()">Load bookings for '+_rzEsc(S.rezdyDate)+'</button><div style="margin-top:12px">'+locBtn+'</div></div>';
+  if(!S._rezdyBookings)return '<div class="card" style="text-align:center;padding:30px;color:var(--text3);font-size:13px">No bookings loaded.<br><button class="btn btn-ghost" style="margin-top:12px;font-size:12px" onclick="window.rezdyLoadBookings()">Load bookings for '+_rzEsc(S.rezdyDate)+'</button></div>';
 
   const pickups=_rzEnsureVans();
-  if(!pickups.length)return '<div class="card" style="text-align:center;padding:36px;color:var(--text3);font-size:13px">No pickups for this date.<div style="margin-top:12px">'+locBtn+'</div></div>';
+  if(!pickups.length)return '<div class="card" style="text-align:center;padding:36px;color:var(--text3);font-size:13px">No pickups for this date.</div>';
 
   const selfDrive=pickups.filter(function(p){return p.selfDrive;});
   const vanPickups=pickups.filter(function(p){return !p.selfDrive;});
@@ -1535,7 +1544,6 @@ function _rzRenderPickups(){
     '<div><div class="st" style="margin-bottom:0">Pickup Vans</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+vanPickups.length+' pickups · '+vanPickups.reduce(function(s,p){return s+p.pax;},0)+' pax · '+_rzVehicles().length+' vehicles'+(selfDrive.length?' · '+selfDrive.length+' self-drive':'')+'</p></div>'+
     '<div style="display:flex;gap:6px;flex-shrink:0">'+
-      locBtn+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.pickupToggleVehicles()" title="Manage vehicles">⚙ Vehicles</button>'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.pickupAutoAllocate()">↺ Auto-allocate</button>'+
       '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.pickupSave()">💾 Save</button>'+

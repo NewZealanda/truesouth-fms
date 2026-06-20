@@ -1,5 +1,10 @@
 function renderAdmin(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
+  // Settings ▸ Operations (operations-gated, separate from the admin_users/admin_crew tabs).
+  if(((S.admin||{}).section)==='operations'){
+    if(typeof hasRolePerm==='function'&&hasRolePerm('operations')&&typeof renderAdminOperations==='function')return renderAdminOperations();
+    if(!S.admin)S.admin={};S.admin.section='people';
+  }
   // Non-admin: the permission grid governs what they see. admin_users can reach the full
   // settings area; admin_crew alone gets People. Anything the section-router lands them on
   // that they lack permission for falls back to People (or a no-access note).
@@ -629,7 +634,7 @@ window.setTab=function(t){
   if(t==='operations'){
     S.section='operations';
     if(S._newLsTab&&!S.activeTabId){S._newLsTab=false;S.tab='bookings';}
-    else if(!['bookings','rseatmap','rloadsheets','manifest','seatmap','saved','charter'].includes(S.tab)&&!S.activeTabId&&!S._newLsTab)S.tab='bookings';
+    else if(!['bookings','rseatmap','rloadsheets','manifest','seatmap','saved','charter','ground'].includes(S.tab)&&!S.activeTabId&&!S._newLsTab)S.tab='bookings';
   } else if(t==='charter'){
     S.section='operations';S.tab='charter';
   } else if(t==='maintenance'){
@@ -3213,6 +3218,7 @@ function renderAdminPerms(){
     {k:'maint_bookings',lbl:'Bookings',       tip:'Manage maintenance bookings'},
     {k:'audit',         lbl:'Audit',          tip:'View the system audit log'},
     {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'},
+    {k:'calendar',      lbl:'Calendar',       tip:'Access the Calendar tab'},
     {k:'rezdy',         lbl:'Rezdy',          tip:'Access the Rezdy bookings/pickups/schedule tab'}
   ];
   var ROLE_ROWS=[
