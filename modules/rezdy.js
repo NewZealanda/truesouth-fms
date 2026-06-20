@@ -391,7 +391,7 @@ function _rzApplyManualBk(){
 
 // Derive the flat pickup list from the currently-loaded bookings.
 function _rzPickups(){
-  const out=[];const ov=S._pickupLocOverride||{};
+  const out=[];const ov=S._pickupLocOverride||{};const tov=S._pickupTimeOverride||{};
   (S._rezdyBookings||[]).forEach(function(b){
     if(/cancel/i.test(b.status||''))return; // don't send drivers to collect cancelled customers
     (b.items||[]).forEach(function(it,ii){
@@ -407,7 +407,7 @@ function _rzPickups(){
         location:loc,
         phone:b.phone||'',
         depart:_rzDepTime(it.startTimeLocal||''),
-        pickupTime:_rzDepTime(it.pickupTime||''),
+        pickupTime:(tov[id]!=null&&tov[id]!=='')?tov[id]:_rzDepTime(it.pickupTime||''),
         selfDrive:_rzIsSelfDrive(loc)
       });
     });
@@ -535,12 +535,17 @@ function renderGround(){
 }
 // SETTINGS ▸ OPERATIONS — tier-3 operations settings (Pickup Locations for now; more to come).
 function renderAdminOperations(){
-  var sub=S._opsSettingsTab||'pickuplocs';S._opsSettingsTab=sub;
+  var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'vehicles',lbl:'🚐 Vehicles'},{id:'aerodromes',lbl:'🛬 Aerodromes'},{id:'fuels',lbl:'⛽ Fuels'}];
+  var ids=tabs.map(function(t){return t.id;});
+  var sub=(ids.indexOf(S._opsSettingsTab)>=0)?S._opsSettingsTab:'pickuplocs';S._opsSettingsTab=sub;
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    [{id:'pickuplocs',lbl:'📍 Pickup Locations'}].map(function(t){
-      return '<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S._opsSettingsTab=\''+t.id+'\';render()">'+t.lbl+'</button>';
-    }).join('')+'</div>';
-  return bar+_rzRenderPickupLocs();
+    tabs.map(function(t){return '<button class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S._opsSettingsTab=\''+t.id+'\';render()">'+t.lbl+'</button>';}).join('')+'</div>';
+  var body;
+  if(sub==='vehicles')body='<div class="card" style="margin-bottom:0"><div class="st">Vehicles (pickup vans)</div><p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Name, colour and seat count for each pickup vehicle. These are the vans you allocate pickups to on Operations ▸ Ground ▸ Pickups.</p></div>'+((typeof _rzVehiclePanel==='function')?_rzVehiclePanel():'');
+  else if(sub==='aerodromes')body=(typeof renderAerodromes==='function')?renderAerodromes():'';
+  else if(sub==='fuels')body=(typeof renderAdminFuels==='function')?renderAdminFuels():'';
+  else body=_rzRenderPickupLocs();
+  return bar+body;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1233,7 +1238,7 @@ function _rzRenderBookings(){
     body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 <span onclick="window.rezdyRenameDep(\''+_rzEsc(depFilter).replace(/\'/g,"\\'")+'\')" title="Click to rename this heading" style="cursor:pointer;border-bottom:1px dashed var(--border2)">'+_rzEsc(_rzDepDisplay(depFilter))+'</span>'+((_rzDepShowProduct(depFilter)&&prod)?' '+_rzEsc(prod):'')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+'</span></div>';
     // Sort control: Default (checked-in last) · A–Z by name · Booked (booking order).
     body+='<div style="display:flex;gap:6px;align-items:center;margin:0 0 10px;flex-wrap:wrap"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Sort</span>'+
-      [['','Default'],['az','A–Z'],['booked','Booked']].map(function(o){var act=_bkSort===o[0];return '<button onclick="S._bkSort=\''+o[0]+'\';render()" style="font-size:11px;font-weight:700;padding:4px 11px;border-radius:14px;cursor:pointer;border:1px solid '+(act?'var(--accent)':'var(--border2)')+';background:'+(act?'var(--accent)':'transparent')+';color:'+(act?'#fff':'var(--text2)')+'">'+o[1]+'</button>';}).join('')+'</div>';
+      [['','Default','Default order — checked-in passengers shown last'],['az','A–Z','By customer name, A → Z'],['booked','Booked','Booking order: first booked (oldest order) first → most recently booked last']].map(function(o){var act=_bkSort===o[0];return '<button title="'+_rzEsc(o[2])+'" onclick="S._bkSort=\''+o[0]+'\';render()" style="font-size:11px;font-weight:700;padding:4px 11px;border-radius:14px;cursor:pointer;border:1px solid '+(act?'var(--accent)':'var(--border2)')+';background:'+(act?'var(--accent)':'transparent')+';color:'+(act?'#fff':'var(--text2)')+'">'+o[1]+'</button>';}).join('')+'</div>';
     grp.forEach(function(b){body+=_rzBookingCard(b);});
     // Cancelled bookings for THIS departure (collapsed).
     var depCancelled=cancelledRows.filter(function(b){return _rzBookingDep(b)===depFilter;});
@@ -1360,7 +1365,8 @@ function _rzBookingDetail(b){
     var pid=String(b.orderNumber||'')+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;
     var ov2=(S._pickupLocOverride||{});
     var cur=(ov2[pid]!=null&&ov2[pid]!=='')?ov2[pid]:(it.pickup||'');
-    var pt=_rzDepTime(it.pickupTime||''); // pickup time (HHMM) shown alongside the location
+    var _tov2=(S._pickupTimeOverride||{});
+    var pt=(_tov2[pid]!=null&&_tov2[pid]!=='')?_tov2[pid]:_rzDepTime(it.pickupTime||''); // pickup time (HHMM) — location-driven override wins
     _pkRows.push('<div style="display:flex;align-items:center;gap:6px">'+(pt?'<span style="font-size:11px;font-weight:800;color:var(--text2);white-space:nowrap;flex-shrink:0">🕑 '+_rzEsc(pt)+'</span>':'')+_rzLocSelect(pid,cur)+'</div>');
   });
   if(_pkRows.length){
@@ -1527,7 +1533,7 @@ function _rzRenderPickups(){
     '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
   if(!_spareV.length){driversBar+='<span style="font-size:12px;color:var(--text3)">None — all vehicles are in use.</span>';}
   else _spareV.forEach(function(o){var col=o.v.color||'#64748b';
-    driversBar+='<div draggable="true" ondragstart="window.pickupVehParkDragStart('+o.vi+',event)" onclick="window.pickupActivateVehicle('+o.vi+')" title="Tap or drag onto the run to add" style="display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:14px;border:1px dashed '+col+';background:'+col+'18;color:'+col+';cursor:grab;font-size:12px;font-weight:800">🚐 '+_rzEsc(o.v.name||('Van '+(o.vi+1)))+' <span style="opacity:.7;font-weight:600">'+(o.v.seats||11)+'p</span></div>';
+    driversBar+='<div draggable="true" ondragstart="window.pickupVehParkDragStart('+o.vi+',event)" onclick="window.pickupActivateVehicle('+o.vi+')" title="Parked — tap or drag onto the run to use" style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:14px;border:2px solid '+col+';background:'+col+'1f;color:'+col+';cursor:grab;font-size:13px;font-weight:800"><span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:#0057B8;color:#fff;font-weight:900;font-size:15px;border-radius:5px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.35)">P</span>'+_rzEsc(o.v.name||('Van '+(o.vi+1)))+' <span style="opacity:.7;font-weight:600">'+(o.v.seats||11)+'p</span></div>';
   });
   driversBar+='<button onclick="window.pickupVehAdd()" title="Create a new vehicle" style="padding:5px 10px;border-radius:14px;border:1px dashed var(--border2);background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">+ New</button>';
   driversBar+='</div></div>';
@@ -1551,13 +1557,15 @@ function _rzRenderPickups(){
     '<div><div class="st" style="margin-bottom:0">Pickup Vans</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+vanPickups.length+' pickups · '+vanPickups.reduce(function(s,p){return s+p.pax;},0)+' pax · '+_rzVehicles().length+' vehicles'+(selfDrive.length?' · '+selfDrive.length+' self-drive':'')+'</p></div>'+
     '<div style="display:flex;gap:6px;flex-shrink:0">'+
-      '<button class="btn btn-ghost" style="font-size:12px" onclick="window.pickupToggleVehicles()" title="Manage vehicles">⚙ Vehicles</button>'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.pickupAutoAllocate()">↺ Auto-allocate</button>'+
       '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.pickupSave()">💾 Save</button>'+
-    '</div></div>'+(S._pickupVehPanel?_rzVehiclePanel():'');
+    '</div></div>';
 
   // departure-time selector — click a time to focus the board on that departure's run.
-  let timeBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:6px">Departure</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
+  // A Save button sits here too, right by where pickups are reordered/edited (changes auto-save,
+  // but operators asked for a Save close to the action).
+  let timeBar='<div class="card" style="padding:10px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700">Departure</div>'+
+    '<button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;border-color:rgba(74,222,128,.5);color:#4ade80;font-weight:700" onclick="window.pickupSave()" title="Save the pickup list & order">💾 Save pickups</button></div><div style="display:flex;flex-wrap:wrap;gap:6px">';
   times.forEach(function(t){
     const grp=byTime[t];const pax=grp.reduce(function(s,p){return s+p.pax;},0);
     const on=depFilter===t;
@@ -1581,7 +1589,7 @@ function _rzRenderPickups(){
     vansH+='<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">'+
       '<div style="font-weight:800;font-size:14px;color:'+col+'">'+_rzEsc(_rzVehName(vi))+'</div>'+
       '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:700;color:'+(over?'#ef4444':'var(--text2)')+'">'+pax+' / '+seats+' pax'+(over?' ⚠':'')+'</span>'+
-      '<button onclick="window.pickupParkVehicle('+vi+')" title="Park this vehicle (move to spares)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0 2px">🅿</button></div></div>';
+      '<button onclick="window.pickupParkVehicle('+vi+')" title="Park this vehicle (move it to spares)" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:10px;font-weight:700;padding:3px 8px">Park</button></div></div>';
     // Driver / taxi slot — drop a driver bubble anywhere on the van to assign; no driver = taxi.
     var drv=(S._pickupDrivers||[])[vi]||null;
     vansH+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding:5px 9px;border-radius:8px;border:1px dashed '+(drv?col+'99':(vanIds.length?'#f59e0b88':'var(--border2)'))+';background:'+(drv?col+'14':(vanIds.length?'rgba(245,158,11,.08)':'transparent'))+'">'+
@@ -1648,24 +1656,75 @@ function _rzRenderPickups(){
 // Editable pickup-location dropdown for a pickup card (options = distinct locations seen).
 // Includes a "Self-drive" choice so a pickup can be switched to self-drive and back — people
 // ring up and change their minds both ways.
+// Location options for the picker = the 114-row master list (rz_pickup_locs) names, plus any
+// locations already on today's bookings that aren't in the master list, de-duped + sorted.
+function _rzLocOptions(){
+  if(typeof _rzPickupLocsLoad==='function')_rzPickupLocsLoad(); // lazy-load the master list on any tab
+  var names=[],seen={};
+  (S._rzPickupLocs||[]).forEach(function(o){var n=((o&&o.name)||'').trim();if(n&&!seen[n.toLowerCase()]){seen[n.toLowerCase()]=1;names.push(n);}});
+  _rzAllLocations().forEach(function(n){n=String(n||'').trim();if(n&&!_rzIsSelfDrive(n)&&!seen[n.toLowerCase()]){seen[n.toLowerCase()]=1;names.push(n);}});
+  names.sort(function(a,b){return a.toLowerCase().localeCompare(b.toLowerCase());});
+  return names;
+}
+// Minutes-before-departure for a location name (from the master list); null if unknown.
+function _rzLocMin(name){
+  name=String(name||'').trim().toLowerCase();if(!name)return null;
+  var hit=(S._rzPickupLocs||[]).find(function(o){return ((o&&o.name)||'').trim().toLowerCase()===name;});
+  if(!hit||hit.min===''||hit.min==null)return null;var n=parseInt(hit.min,10);return isNaN(n)?null:n;
+}
+// Subtract N minutes from an "HHMM" string → "HHMM" (clamped at 0000). '' if invalid.
+function _rzSubMins(hhmm,mins){var m=/^(\d{2})(\d{2})$/.exec(String(hhmm||''));if(!m)return '';var t=(+m[1])*60+(+m[2])-(parseInt(mins,10)||0);if(t<0)t=0;return String(Math.floor(t/60)).padStart(2,'0')+String(t%60).padStart(2,'0');}
+
+// Live-searchable location picker. Closed = a field showing the current location; open = a search
+// box + filtered list (filtered in-DOM by rzLocFilter, NO full re-render so typing stays smooth).
+// Only one picker is open at a time (S._rzLocPickerOpen = pickup id).
 function _rzLocSelect(id,current){
   var isSD=_rzIsSelfDrive(current);
-  var locs=_rzAllLocations().filter(function(l){return !_rzIsSelfDrive(l);});
-  if(current&&!isSD&&locs.indexOf(current)<0)locs.unshift(current);
-  var opts='<option value="__selfdrive__"'+(isSD?' selected':'')+'>🚗 Self-drive</option>'+
-    locs.map(function(l){return '<option value="'+_rzEsc(l)+'"'+(l===current?' selected':'')+'>'+_rzEsc(l)+'</option>';}).join('');
-  return '<select onclick="event.stopPropagation()" onchange="window.pickupSetLocation(\''+_rzEsc(id).replace(/'/g,"\\'")+'\',this.value)" '+
-    'style="flex:1;min-width:0;font-size:12px;padding:3px 4px;background:var(--card);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer">'+opts+'</select>';
+  var idE=_rzEsc(id).replace(/'/g,"\\'");
+  if(S._rzLocPickerOpen!==id){
+    var label=isSD?'🚗 Self-drive':(current?current:'— set location —');
+    return '<button type="button" onclick="event.stopPropagation();window.rzLocOpen(\''+idE+'\')" title="Change pickup location" style="flex:1;min-width:0;text-align:left;font-size:12px;padding:5px 8px;background:var(--card);color:var(--text2);border:1px solid var(--border2);border-radius:6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📍 '+_rzEsc(label)+' <span style="opacity:.45">▾</span></button>';
+  }
+  var opts=_rzLocOptions();
+  var rows='<div class="rzlocopt" data-s="self drive selfdrive own car no pickup" onclick="window.rzLocPick(\''+idE+'\',\'__selfdrive__\')" style="padding:8px 10px;cursor:pointer;font-size:12.5px;border-bottom:1px solid var(--border2)">🚗 Self-drive</div>';
+  opts.forEach(function(n){
+    var mn=_rzLocMin(n);
+    rows+='<div class="rzlocopt" data-s="'+_rzEsc(n.toLowerCase())+'" data-name="'+_rzEsc(n)+'" onclick="window.rzLocPick(\''+idE+'\',this.getAttribute(\'data-name\'))" style="padding:8px 10px;cursor:pointer;font-size:12.5px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between;gap:8px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_rzEsc(n)+'</span>'+(mn!=null?'<span style="opacity:.55;flex-shrink:0">'+mn+'m</span>':'')+'</div>';
+  });
+  return '<div style="position:relative;flex:1;min-width:0">'+
+    '<div style="position:fixed;inset:0;z-index:60" onclick="window.rzLocClose()"></div>'+
+    '<div style="position:relative;z-index:61;border:1px solid var(--acc);border-radius:8px;background:var(--card);box-shadow:0 10px 28px rgba(0,0,0,.4)">'+
+      '<input id="rzLocSearchBox" type="text" placeholder="Search '+opts.length+' locations…" oninput="window.rzLocFilter()" onclick="event.stopPropagation()" autocomplete="off" style="width:100%;box-sizing:border-box;font-size:16px;padding:9px 11px;background:var(--card2);color:var(--text);border:none;border-bottom:1px solid var(--border2);border-radius:8px 8px 0 0;outline:none">'+
+      '<div id="rzLocList" style="max-height:260px;overflow-y:auto">'+rows+'</div>'+
+    '</div></div>';
 }
+window.rzLocOpen=function(id){S._rzLocPickerOpen=id;if(typeof _rzPickupLocsLoad==='function')_rzPickupLocsLoad();render();setTimeout(function(){var el=document.getElementById('rzLocSearchBox');if(el){try{el.focus();}catch(e){}}},40);};
+window.rzLocClose=function(){S._rzLocPickerOpen=null;render();};
+window.rzLocFilter=function(){
+  var el=document.getElementById('rzLocSearchBox');if(!el)return;
+  var q=String(el.value||'').trim().toLowerCase();
+  var list=document.querySelectorAll('#rzLocList .rzlocopt');
+  for(var i=0;i<list.length;i++){var s=list[i].getAttribute('data-s')||'';list[i].style.display=(!q||s.indexOf(q)>=0)?'':'none';}
+};
+window.rzLocPick=function(id,val){S._rzLocPickerOpen=null;window.pickupSetLocation(id,val);};
 
 // Override a pickup's location (persists with the pickup list). "__selfdrive__" flips it to
-// self-drive (out of the vans); picking a real location flips it back into a van.
+// self-drive (out of the vans); picking a real location flips it back into a van AND auto-sets the
+// pickup time from that location's minutes-before-departure (from the master list).
 window.pickupSetLocation=function(id,val){
   S._pickupLocOverride=S._pickupLocOverride||{};
-  S._pickupLocOverride[id]=(val==='__selfdrive__')?'Self-drive':val;
-  // Reconcile van placement in-place (handles a pickup becoming / no longer being
-  // self-drive) WITHOUT nulling S._pickupVans — nulling then saving wiped the operator's
-  // hand-tuned van arrangement to an empty array before the rebuild ran.
+  var loc=(val==='__selfdrive__')?'Self-drive':val;
+  S._pickupLocOverride[id]=loc;
+  // Auto-set the pickup TIME = (departure/session time) − (location's minutes-before-departure).
+  S._pickupTimeOverride=S._pickupTimeOverride||{};
+  var mn=(val==='__selfdrive__')?null:_rzLocMin(loc);
+  if(mn!=null){
+    var depHHMM=_rzDepTime((String(id).split('|')[2])||''); // 3rd id segment = it.startTimeLocal
+    var t=_rzSubMins(depHHMM,mn);
+    if(t)S._pickupTimeOverride[id]=t;
+  } // unknown min → leave the existing pickup time untouched
+  // Reconcile van placement in-place (handles a pickup becoming / no longer being self-drive)
+  // WITHOUT nulling S._pickupVans — nulling then saving wiped the operator's hand-tuned arrangement.
   _rzEnsureVans();
   window.pickupSave(true);
   render();
@@ -1678,15 +1737,16 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','drivers','extraDrivers','spare','order','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
   if(Array.isArray(d.vans))S._pickupVans=d.vans; else if(d.vans===null)S._pickupVans=null;
   S._pickupCollected=(d.collected&&typeof d.collected==='object')?d.collected:{};
   S._pickupLocOverride=(d.locOverride&&typeof d.locOverride==='object')?d.locOverride:{};
+  S._pickupTimeOverride=(d.timeOverride&&typeof d.timeOverride==='object')?d.timeOverride:{};
   S._pickupDrivers=Array.isArray(d.drivers)?d.drivers:[];
   S._pickupExtraDrivers=Array.isArray(d.extraDrivers)?d.extraDrivers:[];
   S._pickupSpare=(d.spare&&typeof d.spare==='object')?d.spare:{};

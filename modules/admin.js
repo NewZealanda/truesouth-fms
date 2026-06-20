@@ -1,5 +1,10 @@
 function renderAdmin(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
+  // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20 — remap any old
+  // deep-link / restored view so it lands on the right tier-3 tab.
+  if(((S.admin||{}).section)==='aerodromes'||((S.admin||{}).section)==='fuels'){
+    if(!S.admin)S.admin={};S._opsSettingsTab=S.admin.section;S.admin.section='operations';
+  }
   // Settings ▸ Operations (operations-gated, separate from the admin_users/admin_crew tabs).
   if(((S.admin||{}).section)==='operations'){
     if(typeof hasRolePerm==='function'&&hasRolePerm('operations')&&typeof renderAdminOperations==='function')return renderAdminOperations();

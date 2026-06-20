@@ -579,8 +579,6 @@ function renderDrawer(){
       if(hasRolePerm('operations'))h+=_sn('Operations','operations');
       if(_isAdminPlus){
         h+=_sn('Drive','gdrive');
-        h+=_sn('Aerodromes','aerodromes');
-        h+=_sn('Fuels','fuels');
         h+=_sn('Statistics','statistics');
       }
       if(hasRolePerm('audit'))h+=_sn('Audit','audit');
@@ -625,7 +623,8 @@ function renderSettingsSubTabs(){
   if(_canUsers||_canCrew)sections.push({id:'people',lbl:'People'});
   if(_canUsers)sections.push({id:'perms',lbl:'Permissions'});
   if(hasRolePerm('operations'))sections.push({id:'operations',lbl:'Operations'});
-  if(_adminPlus)sections.push({id:'gdrive',lbl:'Drive'},{id:'aerodromes',lbl:'Aerodromes'},{id:'fuels',lbl:'Fuels'},{id:'statistics',lbl:'Statistics'});
+  // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20.
+  if(_adminPlus)sections.push({id:'gdrive',lbl:'Drive'},{id:'statistics',lbl:'Statistics'});
   if(hasRolePerm('audit'))sections.push({id:'audit',lbl:'Audit'});
   var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
   sections.forEach(function(s){
