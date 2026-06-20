@@ -374,10 +374,14 @@ window.setLsRouteField=function(field,val){
   // Departure-driven fuel default: a Milford departure uses the reduced Milford fuel; changing
   // the departure back to anywhere else (e.g. Queenstown) restores the aircraft's standard fuel.
   var _fuelChanged=false;
-  // Recompute the default fuel whenever the route (departure OR destination) changes: flyback =
-  // reduced Milford load, Mt Cook / Franz Josef = the longer-leg load, else the aircraft standard.
+  // Recompute the default fuel whenever the route (departure OR destination) changes: a Milford
+  // departure (flyback) uses the reduced load; a loadsheet that knows its product keeps the
+  // PRODUCT default (so scenic overheads don't drop back to standard); otherwise the route default.
   if((field==='dep'||field==='dest')&&S.form.ac){
-    var _rf=_lsRouteFuelKg(S.form.ac,S.form.dep,S.form.dest);
+    var _rf;
+    if(_isMilford(S.form.dep))_rf=_milfordFuelKg(S.form.ac);
+    else if(S.form.product&&typeof _rzProdFuelKg==='function')_rf=_rzProdFuelKg(S.form.product,S.form.ac);
+    else _rf=_lsRouteFuelKg(S.form.ac,S.form.dep,S.form.dest);
     if(_rf!=null){S.form.fuel=String(_rf);_fuelChanged=true;}
   }
   S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();
@@ -401,7 +405,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.91';
+const APP_VER='v23.92';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

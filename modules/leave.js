@@ -795,7 +795,7 @@ window._notifyPicLoadsheet=async function(f,lsId){
 // Operations ▸ Loadsheets inline editor (rezdyOpenLsTab), not the retired legacy loadsheet route.
 window.openLoadsheetFromNotif=function(id){
   S._notifOpen=false;S._newLsTab=false;
-  if(!id){toast('This notification has no loadsheet link.','warn');render();return;}
+  if(!id||id==='null'||id==='undefined'){toast('This notification has no loadsheet link.','warn');render();return;}
   if(typeof window.rezdyOpenLsTab==='function'){window.rezdyOpenLsTab(id);return;}
   // Fallback if the Rezdy module somehow isn't loaded.
   S.section='operations';S.tab='rloadsheets';S._rzLsActiveId=id;render();

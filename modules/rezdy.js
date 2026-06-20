@@ -196,21 +196,20 @@ function _rzRow(r){return (r&&r.data)?r.data:r||{};}
 // through MARKETPLACE_PREF_RATE with an auto-generated, non-TSF reference (e.g. RAFLTY0). Real
 // Viator/website flights are also MARKETPLACE_PREF_RATE but keep their TSF number, so we only
 // hide marketplace bookings whose order number is NOT a TSF order.
+// Supplier-side marketplace duplicate (e.g. the Tasman Glacier Heli Hike component): real customer
+// orders always carry a "TSF…" number; the duplicate component has an auto-generated non-TSF
+// reference. We check the RAW source code (sourceCode) since the display `source` now resolves to
+// the agent name (Viator/BookMe/…). Older cached rows have no sourceCode yet, so for those the
+// non-TSF order number alone is the reliable signature (synced rows only — manual bookings are
+// merged separately and never reach here). Returns true = drop it.
+function _rzIsSupplierDup(b){
+  var on=String((b&&b.orderNumber)||'');
+  if(!on||/^TSF/i.test(on))return false;
+  var rawCode=String((b&&b.sourceCode)||'');
+  return (!rawCode||/MARKETPLACE/i.test(rawCode));
+}
 function _rzMapBookings(rows){
-  return (rows||[]).map(_rzRow).filter(Boolean).filter(function(b){
-    var on=String((b&&b.orderNumber)||'');
-    // Supplier-side marketplace duplicate (e.g. the Tasman Glacier Heli Hike component): real
-    // customer orders always carry a "TSF…" number; the duplicate component has an auto-generated
-    // non-TSF reference. We check the RAW source code (sourceCode) since the display `source` now
-    // resolves to the agent name (Viator/BookMe/…). Older cached rows have no sourceCode yet, so
-    // for those the non-TSF order number alone is the reliable signature (synced rows only —
-    // manual bookings are merged separately and never reach here).
-    if(on&&!/^TSF/i.test(on)){
-      var rawCode=String((b&&b.sourceCode)||'');
-      if(!rawCode||/MARKETPLACE/i.test(rawCode))return false;
-    }
-    return true;
-  });
+  return (rows||[]).map(_rzRow).filter(Boolean).filter(function(b){return !_rzIsSupplierDup(b);});
 }
 // Manually-created (walk-in / phone) bookings live alongside the Rezdy-synced ones. They're
 // persisted per-date in the pickup blob (manualBk) so a Rezdy sync never wipes them. This
@@ -900,11 +899,7 @@ window.rezdyLoadAllBookings=async function(){
   S._rzAllBkLoading=true;safeRender();
   try{
     var rows=await sbF('ts_rezdy_bookings','','tour_date'); // all dates, no tour_date filter
-    var out=(rows||[]).map(function(r){var b=(r&&r.data)?r.data:null;if(b)b._tourDate=r.tour_date;return b;}).filter(Boolean).filter(function(b){
-      var src=String((b&&b.source)||'').toUpperCase();var on=String((b&&b.orderNumber)||'');
-      if(src.indexOf('MARKETPLACE_PREF_RATE')>=0&&on&&!/^TSF/i.test(on))return false;
-      return true;
-    });
+    var out=(rows||[]).map(function(r){var b=(r&&r.data)?r.data:null;if(b)b._tourDate=r.tour_date;return b;}).filter(Boolean).filter(function(b){return !_rzIsSupplierDup(b);});
     S._rzAllBk=out;S._rzAllBkAt=Date.now();
   }catch(e){S._rzAllBk=S._rzAllBk||[];}
   S._rzAllBkLoading=false;render();_rzRefocusSearch();
@@ -1198,6 +1193,10 @@ window.rezdySetDate=function(v){
   S._rezdyBookings=null;S._rezdyOpen={};S._pickupVans=null;S._pickupCollected=null;S._schedBlocks=null;S._schedGroupKey=null;S._schedEdit=null;S._rzManLoaded=false;S._rzManPax=null;S._rzLsTabsLoaded=false;S._rzLsTabs=null;
   // clear seatmap view-state that's scoped to a specific day (stale labels would mis-target Allocate/Create)
   S._rzManDepFilter=null;S._rzManShow=null;S._rzCombA=null;S._rzCombB=null;S._rzManCombineOpen=false;S._rzManCardOpen=null;S._rzManCoPic=null;
+  // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
+  // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
+  // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -2141,7 +2140,9 @@ function _rzManAcDest(dep,acId){
 // Milford load; otherwise the product default (else aircraft standard). Used for the seatmap fuel
 // readout and the W&B preview so they match the loadsheet that gets created.
 function _rzManDefFuelKg(dep,acId){
-  if(dep===RZ_FLYBACK_DEP){var m=_milfordFuelKg(acId);if(m!=null)return m;}
+  // Flyback (including a combined "Flybacks+…" departure) departs Milford → reduced load.
+  var _fb=(dep===RZ_FLYBACK_DEP)||(String(dep||'').split('+').indexOf(RZ_FLYBACK_DEP)>=0);
+  if(_fb){var m=_milfordFuelKg(acId);if(m!=null)return m;}
   return _rzProdFuelKg(_rzManAcProd(dep,acId),acId);
 }
 function _rzSeatKey(dep,acId){return String(dep||'—')+'|'+acId;}
@@ -2465,6 +2466,7 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   // Fuel + burn: a manual seatmap fuel override wins; otherwise the PRODUCT default — flyback
   // (dep Milford) = reduced load, else the per-product fuel/burn (else aircraft standard).
   var _prodCode=_rzManAcProd(dep,phys);
+  form.product=_prodCode; // remember the product so route edits keep the product fuel default
   if(S._rzManFuel&&S._rzManFuel[phys]!=null&&S._rzManFuel[phys]!==''){
     form.fuel=String(toKg(S._rzManFuel[phys],phys));
   }else if(_isFb||(typeof _isMilford==='function'&&_isMilford(form.dep))){
