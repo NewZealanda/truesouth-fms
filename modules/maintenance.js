@@ -983,6 +983,31 @@ window.saveMaintCheck=function(ac,field,val){
   saveMaintenance();render();
 };
 
+// "Monday 18 Aug" for a YYYY-MM-DD string.
+function _maintDateLabel(ds){var d=ds?new Date(ds+'T00:00:00'):null;return (d&&!isNaN(d))?d.toLocaleDateString('en-NZ',{weekday:'long',day:'numeric',month:'short'}):'';}
+// Notify Desk staff + pilots (anyone who flies/dispatches) when a maintenance booking is set,
+// moved, confirmed or cancelled. Includes a link to the Maintenance overview.
+window._notifyMaintBooking=async function(ac,dateStr,action){
+  try{
+    var acLbl=String(ac||'').replace('ZK-','');var when=_maintDateLabel(dateStr);
+    var verb=action==='cancelled'?'maintenance booking cancelled':action==='confirmed'?'maintenance confirmed':action==='moved'?'maintenance moved':'maintenance booked';
+    var msg='🔧 '+acLbl+' '+verb+(when?' for '+when:'')+'.';
+    var me=(S.user&&S.user.id)||null,seen={},recips=[];
+    (S.users||[]).forEach(function(u){
+      if(!u||u.inactive||!u.id||u.id===me||seen[u.id])return;
+      var role=String(u.role||'').toLowerCase();
+      if(role==='desk'||role==='pilot'||role==='cx_manager'||(typeof _picEligible==='function'&&_picEligible(u))){seen[u.id]=1;recips.push(u);}
+    });
+    if(!recips.length)return;
+    var now=new Date().toISOString();
+    var rows=recips.map(function(u){return {user_id:u.id,type:'maintenance',reference_id:null,message:msg,read:false,created_at:now};});
+    if(typeof sbU==='function')await sbU('ts_notifications',rows);
+    if(typeof auditLog==='function')auditLog('maint_notify',{ac:acLbl,action:action,date:dateStr,n:recips.length});
+  }catch(e){}
+};
+// Open the Maintenance overview from a notification.
+window.openMaintFromNotif=function(){S._notifOpen=false;S.maintTab='overview';if(typeof window.setTab==='function')window.setTab('maintenance');else{S.section='maintenance';render();}};
+
 window.addBooking=function(ac){
   if(!_maintBookGuard())return;
   initMaintenance();
@@ -995,16 +1020,27 @@ window.addBooking=function(ac){
 window.editBooking=function(ac,idx,field,val){
   if(!_maintBookGuard())return;
   initMaintenance();
-  if(!S.maintenance.bookings?.[ac]?.[idx]) return;
-  S.maintenance.bookings[ac][idx][field]=val;
-  saveMaintenance();render();
+  var bk=S.maintenance.bookings?.[ac]?.[idx];if(!bk)return;
+  var oldVal=bk[field];
+  bk[field]=val;saveMaintenance();
+  // Notify on a date set/move or a confirmation (not on every notes keystroke).
+  if(field==='date'&&val&&val!==oldVal){
+    var action=bk._announced?'moved':'booked';bk._announced=true;saveMaintenance();
+    if(window._notifyMaintBooking)window._notifyMaintBooking(ac,val,action);
+  }else if(field==='confirmed'&&val){
+    if(window._notifyMaintBooking)window._notifyMaintBooking(ac,bk.date,'confirmed');
+  }
+  render();
 };
 
 window.deleteBooking=function(ac,idx){
   if(!_maintBookGuard())return;
   initMaintenance();
+  var bk=S.maintenance.bookings?.[ac]?.[idx];var _d=bk&&bk.date,_ann=bk&&bk._announced;
   S.maintenance.bookings[ac].splice(idx,1);
-  saveMaintenance();render();
+  saveMaintenance();
+  if(_ann&&_d&&window._notifyMaintBooking)window._notifyMaintBooking(ac,_d,'cancelled'); // only if it had been announced
+  render();
 };
 
 window.toggleMaintPriority=function(ac){

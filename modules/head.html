@@ -31,16 +31,19 @@
 /* ── Light theme ── flips the core palette; subtle white overlays used inline stay faint but
    readable. Toggled by setting data-theme="light" on <html>. */
 html[data-theme="light"]{
-  --bg:#e7edf4;--card:#ffffff;--card2:#eef2f8;--border:#d3dce7;--border2:#b4c1d2;
+  --bg:#dde5f0;--card:#ffffff;--card2:#e6ecf5;--border:#cbd6e4;--border2:#aebed1;
   --text:#0f172a;--text2:#3a4860;--text3:#5b6a80;
-  --accent:#345b8a;--acc:#345b8a;--appbg:#e7edf4;
+  --accent:#345b8a;--acc:#345b8a;--appbg:#dde5f0;
   --ok-bg:#dcfce7;--ok-border:#4ade80;--ok-text:#15643a;
   --warn-bg:#fdf6c8;--warn-border:#facc15;--warn-text:#7c5306;
   --err-bg:#fde8e8;--err-border:#f87171;--err-text:#9b1c1c;
 }
-/* Light: give the white "boarding-pass" passenger bubbles a hairline edge so they separate from
-   the white cards they sit on (in dark mode the white-on-dark contrast already does this). */
-html[data-theme="light"] .card,html[data-theme="light"] .pax-chip{box-shadow:0 1px 2px rgba(15,23,42,.05);}
+/* The white "boarding-pass" passenger bubbles need a defining edge — crisp hairline ring in light
+   mode (where they sit on white cards), and just a soft lift in dark mode (white-on-dark already
+   separates). */
+.pax-bubble{box-shadow:0 1px 3px rgba(0,0,0,.22);}
+html[data-theme="light"] .pax-bubble{box-shadow:0 0 0 1px rgba(15,23,42,.18),0 1px 3px rgba(15,23,42,.13);}
+html[data-theme="light"] .card{box-shadow:0 1px 3px rgba(15,23,42,.06);}
 html[data-theme="light"] .sub-tab{background:#e2e8f0;color:#475569;border-color:#cbd5e1;}
 html[data-theme="light"] .sub-tab:hover{background:#d4dde8;color:#1e293b;}
 html[data-theme="light"] .sub-tab.on{background:#3f6390;border-color:#3f6390;color:#fff;}

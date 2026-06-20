@@ -596,7 +596,7 @@ function renderLoadsheet(){
         const cardStyle=sel
           ?'background:rgba(255,255,255,.97);border:2px solid var(--acc);box-shadow:0 0 0 3px rgba(124,58,237,.3),0 2px 10px rgba(0,0,0,.25)'
           :'background:rgba(255,255,255,.93);border-left:4px solid '+borderCol;
-        return '<div class="seat filled" style="'+cardStyle+';flex-shrink:0" onclick="window.tapUnallocated('+i+')" draggable="true" ondragstart="window.lsUnallocDragStart('+i+',event)">'
+        return '<div class="seat filled pax-bubble" style="'+cardStyle+';flex-shrink:0" onclick="window.tapUnallocated('+i+')" draggable="true" ondragstart="window.lsUnallocDragStart('+i+',event)">'
           +(gc?'<div class="seat-dot" style="background:'+gc+'"></div>':'')
           +(p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':'')
           +(p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')

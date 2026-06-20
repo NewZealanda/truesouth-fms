@@ -470,6 +470,9 @@ function renderNotificationPanel(){
       if(n.type==='loadsheet_pic'&&n.reference_id){
         h+='<div><button tabindex="-1" onclick="window.markNotifRead(\''+n.id+'\');window.openLoadsheetFromNotif(\''+n.reference_id+'\')" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">Open loadsheet →</button></div>';
       }
+      if(n.type==='maintenance'){
+        h+='<div><button tabindex="-1" onclick="window.markNotifRead(\''+n.id+'\');window.openMaintFromNotif()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">Open maintenance →</button></div>';
+      }
       h+='</div>';
     });
     h+='<div style="padding:10px 16px;border-top:1px solid var(--border);text-align:center;position:sticky;bottom:0;background:var(--card)"><button tabindex="-1" onclick="window.clearAllNotifications()" style="font-size:12px;color:#f87171;background:none;border:none;cursor:pointer;padding:4px">🗑 Clear all notifications</button></div>';
