@@ -28,7 +28,7 @@ function renderScratchpad(){
   if(!act) return renderSavedPadsList();
   var mode=act._mode||'text';
   if(mode==='draw') setTimeout(function(){window.initPadCanvas&&window.initPadCanvas();},30);
-  var titleSafe=(act.title||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  var titleSafe=(typeof esc==='function')?esc(act.title||''):(act.title||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); // escape & FIRST → no attribute breakout via a literal &quot;
   var contentSafe=(act.content||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   var unsaved=act._dirty?'<span style="font-size:10px;color:var(--warn-text);margin-left:4px">unsaved</span>':'';
   var colBtns=['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ffffff','#000000'].map(function(cl){
@@ -73,6 +73,7 @@ function _padCanvasXY(e){
   var cv=document.getElementById('pad-canvas');
   if(!cv)return{x:0,y:0};
   var r=cv.getBoundingClientRect();
+  if(!r.width||!r.height)return{x:0,y:0}; // canvas not laid out yet (0-width) → avoid NaN stroke points
   var scaleX=cv.width/r.width,scaleY=cv.height/r.height;
   var src=e.touches?e.touches[0]:e;
   return{x:(src.clientX-r.left)*scaleX,y:(src.clientY-r.top)*scaleY};

@@ -1015,7 +1015,7 @@ window.addBooking=function(ac){
   initMaintenance();
   S.maintenance.bookings=S.maintenance.bookings||{};
   S.maintenance.bookings[ac]=S.maintenance.bookings[ac]||[];
-  S.maintenance.bookings[ac].push({date:new Date().toISOString().slice(0,10),notes:'',confirmed:false});
+  S.maintenance.bookings[ac].push({date:(typeof _todayLocal==='function'?_todayLocal():new Date().toISOString().slice(0,10)),notes:'',confirmed:false});
   saveMaintenance();render();
 };
 

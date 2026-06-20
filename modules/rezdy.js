@@ -566,6 +566,9 @@ window.rezdyResetBooking=function(order){
   if(S._rzBookingAc)delete S._rzBookingAc[order];
   if(S._rzBookingWx)delete S._rzBookingWx[order];
   if(S._rzSchedAttach)delete S._rzSchedAttach[order];
+  // Prune this booking's pickup-location overrides (keyed order|product|time|ii) so they don't
+  // linger and re-attach a stale location if the booking re-appears.
+  if(S._pickupLocOverride)Object.keys(S._pickupLocOverride).forEach(function(k){if(k.indexOf(order+'|')===0)delete S._pickupLocOverride[k];});
   if(window.pickupSave)window.pickupSave(true);
   if(typeof toast==='function')toast('Reset to Rezdy ✓','ok');
   render();
@@ -1744,6 +1747,10 @@ window.pickupSave=async function(silent){
 // by the broadcast receiver in shared.js. Mirrors rezdyLoadPickups but never shows the spinner.
 window.rezdyReloadPickupLive=function(){
   if(!S.rezdyDate)return;
+  // Don't overwrite local pickup state while the user is mid-edit (typing a weight, a dropdown
+  // open, dragging) — that would discard their in-flight change. Reconciles on the next blur-time
+  // broadcast / tab revisit. Mirrors the loadsheet ls_update guard.
+  var _ae=document.activeElement;if(_ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(_ae.tagName||''))return;
   try{sbF('ts_pickup_lists','&list_date=eq.'+encodeURIComponent(S.rezdyDate)).then(function(rows){
     var row=(rows&&rows.length)?_rzRow(rows[0]):null;
     if(row&&Array.isArray(row.vans)){
@@ -2160,6 +2167,9 @@ function _rzPickupBroadcast(){
 // Reload the manifest for the current date from the cloud (used by the live-update receiver).
 window.rezdyReloadManifestLive=function(){
   if(!S.rezdyDate)return;
+  // Don't clobber an in-progress seatmap/manifest edit (focused weight/PIC/fuel input, open select).
+  // Reconciles on the next blur-time broadcast / tab revisit. Mirrors the loadsheet ls_update guard.
+  var _ae=document.activeElement;if(_ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(_ae.tagName||''))return;
   try{fetch(SB+'/rest/v1/ts_settings?key=eq.'+encodeURIComponent('rz_manifest_'+S.rezdyDate)+'&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
     var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}
     if(v){
@@ -2356,7 +2366,7 @@ window.rezdyManRemove=function(id){
   (S._rzManPax||[]).forEach(function(x){if(x.infantOf===id){delete x.infantOf;x.type='adult';}});
   S._rzManPax=(S._rzManPax||[]).filter(function(x){return x.id!==id;});_rzManSave();render();
 };
-window.rezdyManClear=function(){if(!confirm('Clear the whole manifest for this day?'))return;S._rzManPax=[];S._rzManSeats={};_rzManSave();render();};
+window.rezdyManClear=function(){if(!confirm('Clear the whole manifest for this day?'))return;S._rzManPax=[];S._rzManSeats={};S._rzManPic={};S._rzManCoPic={};S._rzManFuel={};S._rzManCargo={};S._rzManHidden=[];S._rzManDepMerge={};_rzManSave();render();};
 // Enter / edit a passenger's ACTUAL weight directly in the manifest.
 window.rezdyManEditWeight=function(id){var p=(S._rzManPax||[]).find(function(x){return x.id===id;});if(!p)return;var v=prompt('Actual weight (kg) for '+(p.name||'passenger')+':',p.weight||'');if(v==null)return;p.weight=String(v).replace(/[^0-9.]/g,'');if(p.weight)p.declaredWeight=false;var dep=_rzPaxDep(p);if(p.ac&&typeof window.rezdyManReseat==='function')window.rezdyManReseat(dep,p.ac);_rzManSave();render();};
 

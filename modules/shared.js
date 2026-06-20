@@ -288,9 +288,9 @@ const DEFAULT_ROLE_PERMS={
   desk:        {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false},
   maint:       {operations:false,calendar:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false,rezdy:false, pay_week:false},
   maintenance: {operations:false,calendar:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false,rezdy:false, pay_week:false},
-  ground_staff:{operations:false,calendar:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,rezdy:false, pay_week:false},
-  accounts: {operations:false,calendar:false,charter:false,maintenance:false,roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,rezdy:false, pay_week:true},
-  marketing: {operations:false,calendar:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,rezdy:false, pay_week:false}
+  ground_staff:{operations:false,calendar:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false},
+  accounts: {operations:false,calendar:false,charter:false,maintenance:false,roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:true},
+  marketing: {operations:false,calendar:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false}
 };
 function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
 // Flight / PIC eligibility is derived from a crew member's AIRCRAFT APPROVALS (endorsements)
@@ -401,7 +401,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.14';
+const APP_VER='v24.15';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1206,8 +1206,11 @@ function runSolver(){
 
 
 // ── State ──
-function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
-function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',paxType:{},paxGroups:{},paxPaymentReq:{},sig:null};}
+// LOCAL calendar date (YYYY-MM-DD). Using toISOString() here gave the UTC day, which in NZ
+// (UTC+12/13) is "tomorrow" late evening — defaulting new manifests/loadsheets to the wrong day.
+function _todayLocal(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
+function bD(){return{dep:'NZQN',dest:'NZMF',date:_todayLocal(),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
+function bF(){return{ac:'',pic:'',coPilot:'',date:_todayLocal(),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',paxType:{},paxGroups:{},paxPaymentReq:{},sig:null};}
 function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
 let S={
@@ -1535,7 +1538,7 @@ function initRealtime(){
             // gone, so on a RE-open (not the first connect) pull the collaborative tables once.
             if(_rtConnectedOnce){try{
               // ts_settings now also refreshes roster/roster_colors/rz_pickup_locs/fuels/perms.
-              Promise.all([reloadTable('ts_manifests'),reloadTable('ts_loadsheets'),reloadTable('ts_settings')]).then(function(){safeRender();}).catch(function(){});
+              Promise.all([reloadTable('ts_manifests'),reloadTable('ts_loadsheets'),reloadTable('ts_settings'),reloadTable('ts_scratchpads')]).then(function(){safeRender();}).catch(function(){});
               // A4: the Rezdy manifest, pickups, shared loadsheet tabs and calendar ride on
               // broadcasts (not postgres_changes), so a dropped socket leaves them stale — re-pull
               // the current date's state explicitly on reconnect.
@@ -1577,8 +1580,11 @@ function initRealtime(){
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_saved'){
-          if(S.tab==='saved'){reloadTable('ts_loadsheets');reloadTable('ts_scratchpads').then(function(){safeRender();});}
-          else{reloadTable('ts_loadsheets');}
+          var _lssp=msg.payload.payload;
+          if(!_lssp||_lssp.sessionId!==_sessionId){ // skip our own echo (avoids a self-refetch that can overwrite a locally-open form)
+            if(S.tab==='saved'){reloadTable('ts_loadsheets');reloadTable('ts_scratchpads').then(function(){safeRender();});}
+            else{reloadTable('ts_loadsheets');}
+          }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_tab_open'){
           const _tp=msg.payload.payload;
@@ -1888,7 +1894,7 @@ async function reloadTable(table){
           // A3: live roster — propagate another device's roster save. SKIPPED while this device has
           // an unsaved draft so we never clobber in-progress edits (it reconciles on their save).
           if(row.key==='roster'&&row.value&&!(typeof _rosterUnsaved==='function'&&_rosterUnsaved())){try{var _ro=JSON.parse(row.value);if(_ro&&typeof _ro==='object'){S.roster=_ro;lsSet('ts_roster',_ro);changed=true;}}catch(e){}}
-          if(row.key==='roster_colors'&&row.value){try{var _rc=JSON.parse(row.value);if(_rc&&typeof _rc==='object'){S.rosterColors=_rc;changed=true;}}catch(e){}}
+          if(row.key==='roster_colors'&&row.value&&!S._rosterColorEdit){try{var _rc=JSON.parse(row.value);if(_rc&&typeof _rc==='object'){S.rosterColors=_rc;changed=true;}}catch(e){}}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
           if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
           if(row.key==='maintenance'&&row.value){

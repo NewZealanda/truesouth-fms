@@ -1510,16 +1510,21 @@ window.lsAc=v=>{
   // Trim & warn about excess passengers
   if(newA){
     const maxIdx=newA.seats.length;
+    // A seat is unusable on the new aircraft if it's past the array OR explicitly removed
+    // (e.g. ZK-SLB has removedSeats [12,13] inside a 14-seat array). Ignoring removedSeats left a
+    // pax in a removed seat: hidden on the grid but still counted by calcFormWB = phantom weight.
+    const rm=(newA.removedSeats||[]);
+    const _gone=i=>{const n=parseInt(i);return n>=maxIdx||rm.indexOf(n)>=0;};
     const excessIdxs=new Set();
-    Object.keys(kN).forEach(i=>{if(parseInt(i)>=maxIdx&&kN[i])excessIdxs.add(i);});
-    Object.keys(kS).forEach(i=>{if(parseInt(i)>=maxIdx&&parseFloat(kS[i])>0)excessIdxs.add(i);});
+    Object.keys(kN).forEach(i=>{if(_gone(i)&&kN[i])excessIdxs.add(i);});
+    Object.keys(kS).forEach(i=>{if(_gone(i)&&parseFloat(kS[i])>0)excessIdxs.add(i);});
     // Move excess passengers to _unallocated instead of deleting
     excessIdxs.forEach(function(i){
       const nm=kN[i]||'';const wt=kS[i]||'';const bg=kB[i]||'';const inf=(kI||{})[i]||'';
       if(nm||wt){_uaPool().push({name:nm,weight:wt,bag:bg,infant:inf||null,group:(S.form.paxGroups||{})[i]||'',type:((S.form.paxType||{})[i]==='C'?'child':'adult'),paymentReq:!!((S.form.paxPaymentReq||{})[i])});}
     });
     [S.form.seats,S.form.bags,S.form.names,S.form.infantNames,S.form.paxGroups,S.form.paxType,S.form.paxPaymentReq].forEach(obj=>{
-      if(obj)Object.keys(obj).forEach(i=>{if(parseInt(i)>=maxIdx)delete obj[i];});
+      if(obj)Object.keys(obj).forEach(i=>{if(_gone(i))delete obj[i];});
     });
     if(excessIdxs.size>0){
       toast('⚠ '+excessIdxs.size+' passenger(s) removed — '+acDisp(v)+' only has '+(maxIdx-1)+' pax seats.','warn');
@@ -1627,22 +1632,19 @@ window.lsCoPilot=v=>{
   const wasPassenger=prevName&&prevName!==f.coPilot;
   f.coPilot=v;
   const cr=anyCrewList().find(x=>x.n===v);
-  if(v&&cr&&cr.w){
-    if(wasPassenger){
-      _uaPool().push({name:prevName,weight:prevWt,bag:prevBag,infant:prevInfant||null,group:prevGroup,type:(prevType==='C'?'child':'adult'),paymentReq:prevPay});
-    }
-    if(f.paxGroups)delete f.paxGroups[1];if(f.paxType)delete f.paxType[1];if(f.paxPaymentReq)delete f.paxPaymentReq[1];
-    // Clear the displaced passenger's bag + infant too — otherwise calcFormWB counts the orphaned
-    // bag (f.bags[1]) as crew weight, silently inflating TOW/CoG on a signable loadsheet.
-    if(f.bags)delete f.bags[1];if(f.infantNames)delete f.infantNames[1];
-    f.seats[1]=String(cr.w);f.names[1]=v;
-  } else if(!v){
-    // Copilot cleared - seat 1 becomes empty pax seat
-    delete f.seats[1];delete f.names[1];
-    if(f.infantNames)delete f.infantNames[1];
-  } else {
-    delete f.seats[1];delete f.names[1];
+  // Pool any displaced real passenger before overwriting seat 1 — regardless of whether the new
+  // co-pilot has a recorded weight (a weightless co-pilot must NOT silently drop the pax).
+  if(v&&wasPassenger){
+    _uaPool().push({name:prevName,weight:prevWt,bag:prevBag,infant:prevInfant||null,group:prevGroup,type:(prevType==='C'?'child':'adult'),paymentReq:prevPay});
   }
+  // ALWAYS clear every per-seat-index map at seat 1 so no bag/group/type/TO-PAY/infant is orphaned.
+  // An orphaned f.bags[1] would be counted as crew weight by calcFormWB, silently inflating the
+  // TOW/CoG on a signable loadsheet (the per-seat maps must always move/clear together).
+  delete f.seats[1];delete f.names[1];
+  if(f.bags)delete f.bags[1];if(f.infantNames)delete f.infantNames[1];
+  if(f.paxGroups)delete f.paxGroups[1];if(f.paxType)delete f.paxType[1];if(f.paxPaymentReq)delete f.paxPaymentReq[1];
+  // Seat the co-pilot: name always, weight only if the crew record has one (else blank, not stale).
+  if(v){f.names[1]=v;f.seats[1]=(cr&&cr.w)?String(cr.w):'';}
   autoSaveLS();
   render();
 };
@@ -1754,7 +1756,7 @@ window.submitLsInPlace=async function(){
   var _t=S.lsTabs.find(function(t){return t.id===id;});if(_t)delete _t.originalForm;
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Loadsheet submitted ✓','ok');
   // Keep the signed loadsheet OPEN so the pilot can read it while loading the aircraft. Mark the
@@ -1782,7 +1784,7 @@ window.handleSubmit=async()=>{
   if(_submitTab)delete _submitTab.originalForm;
   // Google Drive upload happens via nightly scheduler only
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
   toast('Loadsheet submitted.','ok');
   // Keep the signed loadsheet OPEN so the pilot can read it while loading.

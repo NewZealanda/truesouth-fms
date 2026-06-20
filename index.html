@@ -612,9 +612,9 @@ const DEFAULT_ROLE_PERMS={
   desk:        {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false},
   maint:       {operations:false,calendar:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false,rezdy:false, pay_week:false},
   maintenance: {operations:false,calendar:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false,rezdy:false, pay_week:false},
-  ground_staff:{operations:false,calendar:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,rezdy:false, pay_week:false},
-  accounts: {operations:false,calendar:false,charter:false,maintenance:false,roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,rezdy:false, pay_week:true},
-  marketing: {operations:false,calendar:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,rezdy:false, pay_week:false}
+  ground_staff:{operations:false,calendar:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false},
+  accounts: {operations:false,calendar:false,charter:false,maintenance:false,roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:true},
+  marketing: {operations:false,calendar:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false}
 };
 function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
 // Flight / PIC eligibility is derived from a crew member's AIRCRAFT APPROVALS (endorsements)
@@ -725,7 +725,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.14';
+const APP_VER='v24.15';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1530,8 +1530,11 @@ function runSolver(){
 
 
 // ── State ──
-function bD(){return{dep:'NZQN',dest:'NZMF',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
-function bF(){return{ac:'',pic:'',coPilot:'',date:new Date().toISOString().slice(0,10),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',paxType:{},paxGroups:{},paxPaymentReq:{},sig:null};}
+// LOCAL calendar date (YYYY-MM-DD). Using toISOString() here gave the UTC day, which in NZ
+// (UTC+12/13) is "tomorrow" late evening — defaulting new manifests/loadsheets to the wrong day.
+function _todayLocal(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
+function bD(){return{dep:'NZQN',dest:'NZMF',date:_todayLocal(),etd:'',etdCustom:false,name:'',acSetup:[],pax:[],seatMap:{},origAcMap:{},cargo:{},step:1};}
+function bF(){return{ac:'',pic:'',coPilot:'',date:_todayLocal(),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',paxType:{},paxGroups:{},paxPaymentReq:{},sig:null};}
 function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
 let S={
@@ -1859,7 +1862,7 @@ function initRealtime(){
             // gone, so on a RE-open (not the first connect) pull the collaborative tables once.
             if(_rtConnectedOnce){try{
               // ts_settings now also refreshes roster/roster_colors/rz_pickup_locs/fuels/perms.
-              Promise.all([reloadTable('ts_manifests'),reloadTable('ts_loadsheets'),reloadTable('ts_settings')]).then(function(){safeRender();}).catch(function(){});
+              Promise.all([reloadTable('ts_manifests'),reloadTable('ts_loadsheets'),reloadTable('ts_settings'),reloadTable('ts_scratchpads')]).then(function(){safeRender();}).catch(function(){});
               // A4: the Rezdy manifest, pickups, shared loadsheet tabs and calendar ride on
               // broadcasts (not postgres_changes), so a dropped socket leaves them stale — re-pull
               // the current date's state explicitly on reconnect.
@@ -1901,8 +1904,11 @@ function initRealtime(){
           }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_saved'){
-          if(S.tab==='saved'){reloadTable('ts_loadsheets');reloadTable('ts_scratchpads').then(function(){safeRender();});}
-          else{reloadTable('ts_loadsheets');}
+          var _lssp=msg.payload.payload;
+          if(!_lssp||_lssp.sessionId!==_sessionId){ // skip our own echo (avoids a self-refetch that can overwrite a locally-open form)
+            if(S.tab==='saved'){reloadTable('ts_loadsheets');reloadTable('ts_scratchpads').then(function(){safeRender();});}
+            else{reloadTable('ts_loadsheets');}
+          }
         }
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='ls_tab_open'){
           const _tp=msg.payload.payload;
@@ -2212,7 +2218,7 @@ async function reloadTable(table){
           // A3: live roster — propagate another device's roster save. SKIPPED while this device has
           // an unsaved draft so we never clobber in-progress edits (it reconciles on their save).
           if(row.key==='roster'&&row.value&&!(typeof _rosterUnsaved==='function'&&_rosterUnsaved())){try{var _ro=JSON.parse(row.value);if(_ro&&typeof _ro==='object'){S.roster=_ro;lsSet('ts_roster',_ro);changed=true;}}catch(e){}}
-          if(row.key==='roster_colors'&&row.value){try{var _rc=JSON.parse(row.value);if(_rc&&typeof _rc==='object'){S.rosterColors=_rc;changed=true;}}catch(e){}}
+          if(row.key==='roster_colors'&&row.value&&!S._rosterColorEdit){try{var _rc=JSON.parse(row.value);if(_rc&&typeof _rc==='object'){S.rosterColors=_rc;changed=true;}}catch(e){}}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
           if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
           if(row.key==='maintenance'&&row.value){
@@ -4202,7 +4208,7 @@ function renderLoadsheet(){
             // Two buttons side by side. Save Draft is for UNSIGNED work (disabled once signed);
             // Submit only enables once a signature is drawn (and W&B/PIC are OK).
             const signed=!!f.sig;
-            const canSubmit=signed&&canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0;
+            const canSubmit=signed&&canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0&&!_belowRes;
             const saveDisabled=signed||_overCap>0;
             const saveBtn=`<button class="btn-full btn-secondary" style="flex:1;padding:13px;font-size:13px;font-weight:700${saveDisabled?';opacity:.45':''}" onclick="saveUnsigned()" ${saveDisabled?'disabled':''}>${_overCap>0?'&#x26d4; Over-capacity':'&#x1f4be; Save Draft'}</button>`;
             const submitBtn=`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="flex:1;padding:13px;font-size:13px;font-weight:700${canSubmit?'':';opacity:.55'}" onclick="window.submitLsInPlace()" ${canSubmit?'':'disabled'}>${!signed?'&#x270d; Sign to submit':!f.pic?'&#x26a0; Select PIC':fwdCog?'&#x26a0; Fix CoG':!allOk?'&#x26a0; Fix W&amp;B':_overCap>0?'&#x26d4; Over-capacity':'&#x2713; Submit'}</button>`;
@@ -4458,7 +4464,7 @@ function renderScratchpad(){
   if(!act) return renderSavedPadsList();
   var mode=act._mode||'text';
   if(mode==='draw') setTimeout(function(){window.initPadCanvas&&window.initPadCanvas();},30);
-  var titleSafe=(act.title||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  var titleSafe=(typeof esc==='function')?esc(act.title||''):(act.title||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); // escape & FIRST → no attribute breakout via a literal &quot;
   var contentSafe=(act.content||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   var unsaved=act._dirty?'<span style="font-size:10px;color:var(--warn-text);margin-left:4px">unsaved</span>':'';
   var colBtns=['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ffffff','#000000'].map(function(cl){
@@ -4503,6 +4509,7 @@ function _padCanvasXY(e){
   var cv=document.getElementById('pad-canvas');
   if(!cv)return{x:0,y:0};
   var r=cv.getBoundingClientRect();
+  if(!r.width||!r.height)return{x:0,y:0}; // canvas not laid out yet (0-width) → avoid NaN stroke points
   var scaleX=cv.width/r.width,scaleY=cv.height/r.height;
   var src=e.touches?e.touches[0]:e;
   return{x:(src.clientX-r.left)*scaleX,y:(src.clientY-r.top)*scaleY};
@@ -5127,7 +5134,7 @@ function renderSaved(){
         <div style="font-weight:600;font-size:14px">${m.name||'Unnamed'}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
           ${(m.data?.acSetup||[]).map(s=>{const col=AC_COL[s.acId]||'#64748b';return`<span style="padding:1px 7px;border-radius:12px;background:${col}22;border:1px solid ${col}55;color:${col};font-weight:700;font-size:11px">${s.acId||'?'}</span>`;}).join('')}
-          <span style="font-size:11px;color:var(--text3)">${(function(){var _p=m.data&&m.data.pax||[];var a=_p.filter(function(x){return!x.infant&&x.type!=='child';}).length;var c=_p.filter(function(x){return x.type==='child';}).length;var i=_p.filter(function(x){return x.infant;}).length;var s=(a?a+'A ':'')+( c?c+'C ':''+(i?i+'i':''));return s.trim()||_p.length+' pax';})()}</span>${(function(){var nm=(m.data&&m.data.createdBy)||'';var at=(m.data&&m.data.createdAt)||'';if(!nm&&!at)return '';var ini=nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase();var ts=at?(function(){var d=new Date(at);return ('0'+d.getHours()).slice(-2)+':'+(  '0'+d.getMinutes()).slice(-2);}()):'';return '<span style="padding:1px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text3)">By '+ini+(ts?' '+ts:'')+'</span>';})()}
+          <span style="font-size:11px;color:var(--text3)">${(function(){var _p=m.data&&m.data.pax||[];var a=_p.filter(function(x){return!x.infant&&x.type!=='child';}).length;var c=_p.filter(function(x){return x.type==='child';}).length;var i=_p.filter(function(x){return x.infant;}).length;var s=(a?a+'A ':'')+(c?c+'C ':'')+(i?i+'i':'');return s.trim()||_p.length+' pax';})()}</span>${(function(){var nm=(m.data&&m.data.createdBy)||'';var at=(m.data&&m.data.createdAt)||'';if(!nm&&!at)return '';var ini=nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase();var ts=at?(function(){var d=new Date(at);return ('0'+d.getHours()).slice(-2)+':'+(  '0'+d.getMinutes()).slice(-2);}()):'';return '<span style="padding:1px 7px;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.22);border-radius:4px;font-size:10px;font-weight:600;color:var(--text3)">By '+ini+(ts?' '+ts:'')+'</span>';})()}
         </div>
       </div>
       <div style="display:flex;gap:6px">
@@ -6883,16 +6890,21 @@ window.lsAc=v=>{
   // Trim & warn about excess passengers
   if(newA){
     const maxIdx=newA.seats.length;
+    // A seat is unusable on the new aircraft if it's past the array OR explicitly removed
+    // (e.g. ZK-SLB has removedSeats [12,13] inside a 14-seat array). Ignoring removedSeats left a
+    // pax in a removed seat: hidden on the grid but still counted by calcFormWB = phantom weight.
+    const rm=(newA.removedSeats||[]);
+    const _gone=i=>{const n=parseInt(i);return n>=maxIdx||rm.indexOf(n)>=0;};
     const excessIdxs=new Set();
-    Object.keys(kN).forEach(i=>{if(parseInt(i)>=maxIdx&&kN[i])excessIdxs.add(i);});
-    Object.keys(kS).forEach(i=>{if(parseInt(i)>=maxIdx&&parseFloat(kS[i])>0)excessIdxs.add(i);});
+    Object.keys(kN).forEach(i=>{if(_gone(i)&&kN[i])excessIdxs.add(i);});
+    Object.keys(kS).forEach(i=>{if(_gone(i)&&parseFloat(kS[i])>0)excessIdxs.add(i);});
     // Move excess passengers to _unallocated instead of deleting
     excessIdxs.forEach(function(i){
       const nm=kN[i]||'';const wt=kS[i]||'';const bg=kB[i]||'';const inf=(kI||{})[i]||'';
       if(nm||wt){_uaPool().push({name:nm,weight:wt,bag:bg,infant:inf||null,group:(S.form.paxGroups||{})[i]||'',type:((S.form.paxType||{})[i]==='C'?'child':'adult'),paymentReq:!!((S.form.paxPaymentReq||{})[i])});}
     });
     [S.form.seats,S.form.bags,S.form.names,S.form.infantNames,S.form.paxGroups,S.form.paxType,S.form.paxPaymentReq].forEach(obj=>{
-      if(obj)Object.keys(obj).forEach(i=>{if(parseInt(i)>=maxIdx)delete obj[i];});
+      if(obj)Object.keys(obj).forEach(i=>{if(_gone(i))delete obj[i];});
     });
     if(excessIdxs.size>0){
       toast('⚠ '+excessIdxs.size+' passenger(s) removed — '+acDisp(v)+' only has '+(maxIdx-1)+' pax seats.','warn');
@@ -7000,22 +7012,19 @@ window.lsCoPilot=v=>{
   const wasPassenger=prevName&&prevName!==f.coPilot;
   f.coPilot=v;
   const cr=anyCrewList().find(x=>x.n===v);
-  if(v&&cr&&cr.w){
-    if(wasPassenger){
-      _uaPool().push({name:prevName,weight:prevWt,bag:prevBag,infant:prevInfant||null,group:prevGroup,type:(prevType==='C'?'child':'adult'),paymentReq:prevPay});
-    }
-    if(f.paxGroups)delete f.paxGroups[1];if(f.paxType)delete f.paxType[1];if(f.paxPaymentReq)delete f.paxPaymentReq[1];
-    // Clear the displaced passenger's bag + infant too — otherwise calcFormWB counts the orphaned
-    // bag (f.bags[1]) as crew weight, silently inflating TOW/CoG on a signable loadsheet.
-    if(f.bags)delete f.bags[1];if(f.infantNames)delete f.infantNames[1];
-    f.seats[1]=String(cr.w);f.names[1]=v;
-  } else if(!v){
-    // Copilot cleared - seat 1 becomes empty pax seat
-    delete f.seats[1];delete f.names[1];
-    if(f.infantNames)delete f.infantNames[1];
-  } else {
-    delete f.seats[1];delete f.names[1];
+  // Pool any displaced real passenger before overwriting seat 1 — regardless of whether the new
+  // co-pilot has a recorded weight (a weightless co-pilot must NOT silently drop the pax).
+  if(v&&wasPassenger){
+    _uaPool().push({name:prevName,weight:prevWt,bag:prevBag,infant:prevInfant||null,group:prevGroup,type:(prevType==='C'?'child':'adult'),paymentReq:prevPay});
   }
+  // ALWAYS clear every per-seat-index map at seat 1 so no bag/group/type/TO-PAY/infant is orphaned.
+  // An orphaned f.bags[1] would be counted as crew weight by calcFormWB, silently inflating the
+  // TOW/CoG on a signable loadsheet (the per-seat maps must always move/clear together).
+  delete f.seats[1];delete f.names[1];
+  if(f.bags)delete f.bags[1];if(f.infantNames)delete f.infantNames[1];
+  if(f.paxGroups)delete f.paxGroups[1];if(f.paxType)delete f.paxType[1];if(f.paxPaymentReq)delete f.paxPaymentReq[1];
+  // Seat the co-pilot: name always, weight only if the crew record has one (else blank, not stale).
+  if(v){f.names[1]=v;f.seats[1]=(cr&&cr.w)?String(cr.w):'';}
   autoSaveLS();
   render();
 };
@@ -7127,7 +7136,7 @@ window.submitLsInPlace=async function(){
   var _t=S.lsTabs.find(function(t){return t.id===id;});if(_t)delete _t.originalForm;
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Loadsheet submitted ✓','ok');
   // Keep the signed loadsheet OPEN so the pilot can read it while loading the aircraft. Mark the
@@ -7155,7 +7164,7 @@ window.handleSubmit=async()=>{
   if(_submitTab)delete _submitTab.originalForm;
   // Google Drive upload happens via nightly scheduler only
   await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
   toast('Loadsheet submitted.','ok');
   // Keep the signed loadsheet OPEN so the pilot can read it while loading.
@@ -9749,7 +9758,7 @@ window.addBooking=function(ac){
   initMaintenance();
   S.maintenance.bookings=S.maintenance.bookings||{};
   S.maintenance.bookings[ac]=S.maintenance.bookings[ac]||[];
-  S.maintenance.bookings[ac].push({date:new Date().toISOString().slice(0,10),notes:'',confirmed:false});
+  S.maintenance.bookings[ac].push({date:(typeof _todayLocal==='function'?_todayLocal():new Date().toISOString().slice(0,10)),notes:'',confirmed:false});
   saveMaintenance();render();
 };
 
@@ -12169,6 +12178,9 @@ window.rezdyResetBooking=function(order){
   if(S._rzBookingAc)delete S._rzBookingAc[order];
   if(S._rzBookingWx)delete S._rzBookingWx[order];
   if(S._rzSchedAttach)delete S._rzSchedAttach[order];
+  // Prune this booking's pickup-location overrides (keyed order|product|time|ii) so they don't
+  // linger and re-attach a stale location if the booking re-appears.
+  if(S._pickupLocOverride)Object.keys(S._pickupLocOverride).forEach(function(k){if(k.indexOf(order+'|')===0)delete S._pickupLocOverride[k];});
   if(window.pickupSave)window.pickupSave(true);
   if(typeof toast==='function')toast('Reset to Rezdy ✓','ok');
   render();
@@ -13347,6 +13359,10 @@ window.pickupSave=async function(silent){
 // by the broadcast receiver in shared.js. Mirrors rezdyLoadPickups but never shows the spinner.
 window.rezdyReloadPickupLive=function(){
   if(!S.rezdyDate)return;
+  // Don't overwrite local pickup state while the user is mid-edit (typing a weight, a dropdown
+  // open, dragging) — that would discard their in-flight change. Reconciles on the next blur-time
+  // broadcast / tab revisit. Mirrors the loadsheet ls_update guard.
+  var _ae=document.activeElement;if(_ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(_ae.tagName||''))return;
   try{sbF('ts_pickup_lists','&list_date=eq.'+encodeURIComponent(S.rezdyDate)).then(function(rows){
     var row=(rows&&rows.length)?_rzRow(rows[0]):null;
     if(row&&Array.isArray(row.vans)){
@@ -13763,6 +13779,9 @@ function _rzPickupBroadcast(){
 // Reload the manifest for the current date from the cloud (used by the live-update receiver).
 window.rezdyReloadManifestLive=function(){
   if(!S.rezdyDate)return;
+  // Don't clobber an in-progress seatmap/manifest edit (focused weight/PIC/fuel input, open select).
+  // Reconciles on the next blur-time broadcast / tab revisit. Mirrors the loadsheet ls_update guard.
+  var _ae=document.activeElement;if(_ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(_ae.tagName||''))return;
   try{fetch(SB+'/rest/v1/ts_settings?key=eq.'+encodeURIComponent('rz_manifest_'+S.rezdyDate)+'&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
     var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}
     if(v){
@@ -13959,7 +13978,7 @@ window.rezdyManRemove=function(id){
   (S._rzManPax||[]).forEach(function(x){if(x.infantOf===id){delete x.infantOf;x.type='adult';}});
   S._rzManPax=(S._rzManPax||[]).filter(function(x){return x.id!==id;});_rzManSave();render();
 };
-window.rezdyManClear=function(){if(!confirm('Clear the whole manifest for this day?'))return;S._rzManPax=[];S._rzManSeats={};_rzManSave();render();};
+window.rezdyManClear=function(){if(!confirm('Clear the whole manifest for this day?'))return;S._rzManPax=[];S._rzManSeats={};S._rzManPic={};S._rzManCoPic={};S._rzManFuel={};S._rzManCargo={};S._rzManHidden=[];S._rzManDepMerge={};_rzManSave();render();};
 // Enter / edit a passenger's ACTUAL weight directly in the manifest.
 window.rezdyManEditWeight=function(id){var p=(S._rzManPax||[]).find(function(x){return x.id===id;});if(!p)return;var v=prompt('Actual weight (kg) for '+(p.name||'passenger')+':',p.weight||'');if(v==null)return;p.weight=String(v).replace(/[^0-9.]/g,'');if(p.weight)p.declaredWeight=false;var dep=_rzPaxDep(p);if(p.ac&&typeof window.rezdyManReseat==='function')window.rezdyManReseat(dep,p.ac);_rzManSave();render();};
 

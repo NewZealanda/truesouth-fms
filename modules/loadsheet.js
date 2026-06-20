@@ -563,7 +563,7 @@ function renderLoadsheet(){
             // Two buttons side by side. Save Draft is for UNSIGNED work (disabled once signed);
             // Submit only enables once a signature is drawn (and W&B/PIC are OK).
             const signed=!!f.sig;
-            const canSubmit=signed&&canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0;
+            const canSubmit=signed&&canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0&&!_belowRes;
             const saveDisabled=signed||_overCap>0;
             const saveBtn=`<button class="btn-full btn-secondary" style="flex:1;padding:13px;font-size:13px;font-weight:700${saveDisabled?';opacity:.45':''}" onclick="saveUnsigned()" ${saveDisabled?'disabled':''}>${_overCap>0?'&#x26d4; Over-capacity':'&#x1f4be; Save Draft'}</button>`;
             const submitBtn=`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="flex:1;padding:13px;font-size:13px;font-weight:700${canSubmit?'':';opacity:.55'}" onclick="window.submitLsInPlace()" ${canSubmit?'':'disabled'}>${!signed?'&#x270d; Sign to submit':!f.pic?'&#x26a0; Select PIC':fwdCog?'&#x26a0; Fix CoG':!allOk?'&#x26a0; Fix W&amp;B':_overCap>0?'&#x26d4; Over-capacity':'&#x2713; Submit'}</button>`;
