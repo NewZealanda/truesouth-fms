@@ -4,7 +4,7 @@ Read this first in a new chat, alongside `CLAUDE.md` (auto-loaded). This is the 
 "how we work + where we are + what's next" note. `CLAUDE.md` has the architecture; this has the
 workflow, the recent history, and the gotchas.
 
-Current version: **v24.11**. Working tree is committed up to v24.11 (HEAD).
+Current version: **v24.13**. Working tree is committed up to v24.13 (HEAD).
 
 ---
 
@@ -79,12 +79,26 @@ Key files: `modules/rezdy.js` (biggest — Bookings/Seatmap/Calendar/Pickups/Loa
 
 ## Backlog / good next tasks
 From `ARCHITECTURE_REVIEW_v24.04.md` §3 (each has a concrete suggested fix in that doc):
-- **A2 — pickups/check-ins live-sync** (no broadcast today; two iPads don't see each other).
-- **A3 — roster live-sync** (roster edits invisible to other devices until reload).
-- **A4 — reconnect backfill** (after a dropped socket, Rezdy/roster/pickups can stay stale).
+- ✅ **A2 — pickups/check-ins live-sync** — DONE v24.13 (`pickup_update` broadcast/receiver,
+  `rezdyReloadPickupLive`). ⚠️ still needs a two-device real-iPad confirm.
+- ✅ **A3 — roster live-sync** — DONE v24.13 (roster/roster_colors added to the `ts_settings`
+  realtime reload; apply skipped while a local draft is open). ⚠️ confirm on two devices.
+- ✅ **A4 — reconnect backfill** — DONE v24.13 (re-pulls `ts_settings` + current-date Rezdy
+  state on socket re-open). ⚠️ confirm by forcing a network drop on a device.
+- ✅ **R-A — Rezdy create-loadsheet seat-fill fallback** — DONE v24.13 (real occupancy set
+  replaces the dead `seatOf['__'+n]` guard; verified the old code dropped a pax, new seats all).
 - **L-A / L-B — leave-day counts** computed live (currently frozen at submit / pre-roster-load).
-- **R-A — Rezdy create-loadsheet seat-fill fallback** has a dead overflow guard.
-These need runtime testing on a real device, so do them one at a time and verify, don't batch.
+- **L-C, R-B, roster save-guard leaks, notification recipient gating** — still open (§3).
+The three realtime ones (A2–A4) were implemented together but each still needs runtime testing
+on a real device — verify one at a time on the `test` branch before production.
+
+### New since v24.04: Pickup-location master list (v24.12)
+Editable list under Operations ▸ Pickups ▸ **📍 Locations** (name · address · minutes-before-
+departure). State `S._rzPickupLocs` → `ts_settings` key `rz_pickup_locs` (cache `ts_rz_pickup_locs`),
+live-synced. Seeded from `_RZ_PICKUP_LOC_SEED` (114 rows imported from the Rezdy pickup list);
+first device to open the editor writes the seed to the cloud. NOT yet wired into the live driver/
+booking pickup cards — a booking's pickup is still the free-text `it.pickup` string; joining the
+two (address + map link + auto pickup-time from minutes-prior) is the obvious next step.
 
 Rezdy API ideas (`REZDY_API_REFERENCE.md`) — all would extend the read-only `rezdy-sync` edge fn,
 key stays server-side: seats-remaining readout (`GET /availability`); push captured weights back

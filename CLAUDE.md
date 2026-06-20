@@ -141,8 +141,11 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
   built-in product→{dest,fuel,burn} config, overlaid by editable per-destination overrides
   (`_rzEffCfg`). Manual fuel via `form._fuelUserSet` always wins.
 - Open backlog (see `ARCHITECTURE_REVIEW_v24.04.md` §3): confirm RLS migrations applied live
-  (auth code is on); add pickup + roster live-sync + reconnect backfill (A2–A4); make leave-day
-  counts compute live (L-A/L-B); fix the Rezdy create-loadsheet seat-fill fallback (R-A).
+  (auth code is on); make leave-day counts compute live (L-A/L-B); shared crew-code keying
+  (L-C); split-destination push focus (R-B); roster save-guard leaks; notification recipient
+  gating. **DONE in v24.13:** A2 (pickup live-sync), A3 (roster live-sync), A4 (reconnect
+  backfill), R-A (seat-fill overflow guard) — still want a real-device pass on the test branch
+  for the three realtime ones.
 - Rezdy API options (see `REZDY_API_REFERENCE.md`): availability is readable; bookings can be
   created/cancelled and have status/customer/participant edited — but **date/time/product moves
   are NOT supported** by the API. Current edge fn is read-only.
