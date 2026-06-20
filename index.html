@@ -695,14 +695,10 @@ window.setLsRouteField=function(field,val){
   // Departure-driven fuel default: a Milford departure uses the reduced Milford fuel; changing
   // the departure back to anywhere else (e.g. Queenstown) restores the aircraft's standard fuel.
   var _fuelChanged=false;
-  // Recompute the default fuel whenever the route (departure OR destination) changes: a Milford
-  // departure (flyback) uses the reduced load; a loadsheet that knows its product keeps the
-  // PRODUCT default (so scenic overheads don't drop back to standard); otherwise the route default.
-  if((field==='dep'||field==='dest')&&S.form.ac){
-    var _rf;
-    if(_isMilford(S.form.dep))_rf=_milfordFuelKg(S.form.ac);
-    else if(S.form.product&&typeof _rzProdFuelKg==='function')_rf=_rzProdFuelKg(S.form.product,S.form.ac);
-    else _rf=_lsRouteFuelKg(S.form.ac,S.form.dep,S.form.dest);
+  // Recompute the DEFAULT fuel when the route changes — UNLESS the pilot has manually typed a fuel
+  // value, which always wins. (Milford = reduced, known product keeps its default, else the route.)
+  if((field==='dep'||field==='dest')&&S.form.ac&&!S.form._fuelUserSet){
+    var _rf=_lsDefaultFuelKg(S.form);
     if(_rf!=null){S.form.fuel=String(_rf);_fuelChanged=true;}
   }
   S.formDirty=true;if(typeof autoSaveLS==='function')autoSaveLS();
@@ -726,7 +722,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.92';
+const APP_VER='v23.94';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -792,6 +788,15 @@ function _lsRouteFuelKg(acId,dep,dest){
   return a.fuelKg;
 }
 window._lsRouteFuelKg=_lsRouteFuelKg;
+// The DEFAULT fuel (kg) for a loadsheet form: Milford departure → reduced; a known product →
+// its product default; else the route default. (Used unless the pilot has manually set fuel.)
+function _lsDefaultFuelKg(form){
+  if(!form||!form.ac)return null;
+  if(_isMilford(form.dep))return _milfordFuelKg(form.ac);
+  if(form.product&&typeof _rzProdFuelKg==='function'){var pf=_rzProdFuelKg(form.product,form.ac);if(pf!=null)return pf;}
+  return _lsRouteFuelKg(form.ac,form.dep,form.dest);
+}
+window._lsDefaultFuelKg=_lsDefaultFuelKg;
 // VFR final reserve = 30 min at the cruise burn rate the loadsheet uses (58 L/hr airvan, 136.1 kg/hr
 // caravan). Returned in kg so it compares directly against fuel-remaining-at-destination.
 function _finalReserveKg(acId){const a=_acSpec(acId);if(!a)return 0;return a.layout==='ga8'?toKg(29,acId):68.05;}
@@ -6940,7 +6945,17 @@ window.lsGrp=function(idx,val){
   autoSaveLS();_lsSafeRender();
 };
 window.lsN=(i,v)=>{S.form.names[i]=v;autoSaveLS();};window.lsS=(i,v)=>{S.form.seats[i]=v;autoSaveLS();setTimeout(_lsSafeRender,150);};window.lsB=(i,v)=>{S.form.bags[i]=v;autoSaveLS();setTimeout(_lsSafeRender,150);};window.lsC=(i,v)=>{if(!S.form.cargo)S.form.cargo={};S.form.cargo[i]=v;S.formDirty=true;autoSaveLS();setTimeout(_lsSafeRender,150);};
-window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));autoSaveLS();setTimeout(_lsSafeRender,150);};
+window.lsFuel=(v,acId)=>{
+  var s=String(v==null?'':v).trim();
+  if(s===''){ // cleared → drop back to the route/product default
+    S.form._fuelUserSet=false;
+    var _d=(typeof _lsDefaultFuelKg==='function')?_lsDefaultFuelKg(S.form):null;var _a=S.aircraft[acId];
+    S.form.fuel=String(_d!=null?_d:(_a&&_a.fuelKg!=null?_a.fuelKg:0));
+  }else{ // a typed value always overrides the standard/default fuel
+    S.form.fuel=String(toKg(s,acId));S.form._fuelUserSet=true;
+  }
+  autoSaveLS();setTimeout(_lsSafeRender,150);
+};
 window.lsBurn=(v,acId)=>{if(!v||v===''){const _a=S.aircraft[acId];S.form.burnOff=(_a&&_a.layout==='ga8')?'35':(_a&&_a.burnDef?String(_a.burnDef):'');}else{S.form.burnOff=v;}autoSaveLS();setTimeout(_lsSafeRender,150);};
 window.lsGndBurn=(v,acId)=>{const n=parseFloat(v);S.form.gndBurn=isNaN(n)?null:String(toKg(n,acId));autoSaveLS();setTimeout(_lsSafeRender,150);};
 window.clearSig=()=>{S.form.sig=null;S.sigTypedName='';autoSaveLS();render();};
@@ -13256,7 +13271,11 @@ function _rzRenderManifest(){
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px'+(open?';margin-bottom:8px':'')+'">'+
         '<div onclick="window.rezdyManToggleCard(\''+idE+'\')" style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0">'+
           '<span style="display:inline-block;transition:transform .12s;color:var(--text3);font-size:11px;'+(open?'transform:rotate(90deg)':'')+'">▸</span>'+
-          '<span style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+(function(){var _d=_rzManAcDest(selDep,id);return _d?'<span style="color:var(--text3);font-weight:800"> → </span><span style="color:var(--text2);font-weight:800">'+_d.short+'</span>'+(_d.scenic?'<span title="Scenic — returns to Queenstown" style="font-size:9px;font-weight:800;color:#22c55e;background:rgba(34,197,94,.14);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:middle">↺ SCENIC</span>':''):'';})()+'</span>'+
+          '<span style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+(function(){
+            var _ds=_rzManAcDestShorts(selDep,id);
+            if(_ds.length>1)return '<span style="color:var(--text3);font-weight:800"> → </span><span title="Passengers on this aircraft have DIFFERENT destinations ('+_rzEsc(_ds.join(', '))+'). Split them onto separate flights, or set fuel/destination manually." style="font-size:9px;font-weight:900;color:#fff;background:#ef4444;border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">⚠ MIXED '+_rzEsc(_ds.join('+'))+'</span>';
+            var _d=_rzManAcDest(selDep,id);return _d?'<span style="color:var(--text3);font-weight:800"> → </span><span style="color:var(--text2);font-weight:800">'+_d.short+'</span>'+(_d.scenic?'<span title="Scenic — returns to Queenstown" style="font-size:9px;font-weight:800;color:#22c55e;background:rgba(34,197,94,.14);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:middle">↺ SCENIC</span>':''):'';
+          })()+'</span>'+
           (list.length?'':'<span style="font-size:10px;color:var(--text3);font-weight:600">idle</span>')+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span>'+
@@ -13439,6 +13458,9 @@ window.rezdyManCombineDeps=function(a,b){
   // Every natural dep whose CURRENT (possibly already-combined) label is a or b joins the group.
   var members=_rzManBaseDeps().filter(function(base){var lbl=merge[base]||base;return lbl===a||lbl===b||base===a||base===b;});
   if(members.length<2){if(typeof toast==='function')toast('Nothing to combine.','warn');return;}
+  // Heads-up if the departures go to DIFFERENT destinations (fuel + dest follow only one of them).
+  var _ds={};members.forEach(function(base){var s=String(base).split('·')[1];if(s)_ds[s]=1;});
+  if(Object.keys(_ds).length>1&&!confirm('These departures go to different destinations ('+Object.keys(_ds).join(', ')+').\n\nCombining puts passengers with different destinations on the same aircraft — the fuel default and destination label will follow only one of them, and you’ll see a ⚠ MIXED warning. Combine anyway?'))return;
   var label=members.slice().sort(_rzDepCmp).join('+'); // e.g. "0800+1200" (earliest first)
   S._rzManDepMerge=S._rzManDepMerge||{};
   members.forEach(function(base){S._rzManDepMerge[base]=label;});
@@ -13588,6 +13610,17 @@ function _rzManAcDest(dep,acId){
   var d=_rzProductDest(_rzManAcProd(dep,acId));
   if(!d&&dep===RZ_FLYBACK_DEP)d={short:'QN',apt:'NZQN'};
   return d;
+}
+// Distinct destination shorts among an aircraft's seated pax on a departure. >1 ⇒ a combined
+// departure that mixes destinations onto one aircraft (fuel/dest then follow only one of them).
+function _rzManAcDestShorts(dep,acId){
+  var set={};
+  (S._rzManPax||[]).forEach(function(p){
+    if(p.ac!==acId||p.infantOf||_rzPaxDep(p)!==dep)return;
+    var i=_rzManDepInfo(p.group);var d=i?_rzProductDest(i.prod):null;
+    if(d&&d.short)set[d.short]=1;
+  });
+  return Object.keys(set);
 }
 // Default LOADED fuel (kg) for an aircraft on a departure: a Flybacks departure uses the reduced
 // Milford load; otherwise the product default (else aircraft standard). Used for the seatmap fuel
@@ -13921,7 +13954,7 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   var _prodCode=_rzManAcProd(dep,phys);
   form.product=_prodCode; // remember the product so route edits keep the product fuel default
   if(S._rzManFuel&&S._rzManFuel[phys]!=null&&S._rzManFuel[phys]!==''){
-    form.fuel=String(toKg(S._rzManFuel[phys],phys));
+    form.fuel=String(toKg(S._rzManFuel[phys],phys));form._fuelUserSet=true; // a hand-set seatmap fuel carries over as a manual override
   }else if(_isFb||(typeof _isMilford==='function'&&_isMilford(form.dep))){
     var _mfk=_milfordFuelKg(phys);form.fuel=String(_mfk!=null?_mfk:a.fuelKg);
   }else{

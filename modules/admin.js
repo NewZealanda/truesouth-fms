@@ -1644,7 +1644,17 @@ window.lsGrp=function(idx,val){
   autoSaveLS();_lsSafeRender();
 };
 window.lsN=(i,v)=>{S.form.names[i]=v;autoSaveLS();};window.lsS=(i,v)=>{S.form.seats[i]=v;autoSaveLS();setTimeout(_lsSafeRender,150);};window.lsB=(i,v)=>{S.form.bags[i]=v;autoSaveLS();setTimeout(_lsSafeRender,150);};window.lsC=(i,v)=>{if(!S.form.cargo)S.form.cargo={};S.form.cargo[i]=v;S.formDirty=true;autoSaveLS();setTimeout(_lsSafeRender,150);};
-window.lsFuel=(v,acId)=>{S.form.fuel=String(toKg(v,acId));autoSaveLS();setTimeout(_lsSafeRender,150);};
+window.lsFuel=(v,acId)=>{
+  var s=String(v==null?'':v).trim();
+  if(s===''){ // cleared → drop back to the route/product default
+    S.form._fuelUserSet=false;
+    var _d=(typeof _lsDefaultFuelKg==='function')?_lsDefaultFuelKg(S.form):null;var _a=S.aircraft[acId];
+    S.form.fuel=String(_d!=null?_d:(_a&&_a.fuelKg!=null?_a.fuelKg:0));
+  }else{ // a typed value always overrides the standard/default fuel
+    S.form.fuel=String(toKg(s,acId));S.form._fuelUserSet=true;
+  }
+  autoSaveLS();setTimeout(_lsSafeRender,150);
+};
 window.lsBurn=(v,acId)=>{if(!v||v===''){const _a=S.aircraft[acId];S.form.burnOff=(_a&&_a.layout==='ga8')?'35':(_a&&_a.burnDef?String(_a.burnDef):'');}else{S.form.burnOff=v;}autoSaveLS();setTimeout(_lsSafeRender,150);};
 window.lsGndBurn=(v,acId)=>{const n=parseFloat(v);S.form.gndBurn=isNaN(n)?null:String(toKg(n,acId));autoSaveLS();setTimeout(_lsSafeRender,150);};
 window.clearSig=()=>{S.form.sig=null;S.sigTypedName='';autoSaveLS();render();};

@@ -1803,7 +1803,11 @@ function _rzRenderManifest(){
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px'+(open?';margin-bottom:8px':'')+'">'+
         '<div onclick="window.rezdyManToggleCard(\''+idE+'\')" style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0">'+
           '<span style="display:inline-block;transition:transform .12s;color:var(--text3);font-size:11px;'+(open?'transform:rotate(90deg)':'')+'">▸</span>'+
-          '<span style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+(function(){var _d=_rzManAcDest(selDep,id);return _d?'<span style="color:var(--text3);font-weight:800"> → </span><span style="color:var(--text2);font-weight:800">'+_d.short+'</span>'+(_d.scenic?'<span title="Scenic — returns to Queenstown" style="font-size:9px;font-weight:800;color:#22c55e;background:rgba(34,197,94,.14);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:middle">↺ SCENIC</span>':''):'';})()+'</span>'+
+          '<span style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+(function(){
+            var _ds=_rzManAcDestShorts(selDep,id);
+            if(_ds.length>1)return '<span style="color:var(--text3);font-weight:800"> → </span><span title="Passengers on this aircraft have DIFFERENT destinations ('+_rzEsc(_ds.join(', '))+'). Split them onto separate flights, or set fuel/destination manually." style="font-size:9px;font-weight:900;color:#fff;background:#ef4444;border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">⚠ MIXED '+_rzEsc(_ds.join('+'))+'</span>';
+            var _d=_rzManAcDest(selDep,id);return _d?'<span style="color:var(--text3);font-weight:800"> → </span><span style="color:var(--text2);font-weight:800">'+_d.short+'</span>'+(_d.scenic?'<span title="Scenic — returns to Queenstown" style="font-size:9px;font-weight:800;color:#22c55e;background:rgba(34,197,94,.14);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:middle">↺ SCENIC</span>':''):'';
+          })()+'</span>'+
           (list.length?'':'<span style="font-size:10px;color:var(--text3);font-weight:600">idle</span>')+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span>'+
@@ -1986,6 +1990,9 @@ window.rezdyManCombineDeps=function(a,b){
   // Every natural dep whose CURRENT (possibly already-combined) label is a or b joins the group.
   var members=_rzManBaseDeps().filter(function(base){var lbl=merge[base]||base;return lbl===a||lbl===b||base===a||base===b;});
   if(members.length<2){if(typeof toast==='function')toast('Nothing to combine.','warn');return;}
+  // Heads-up if the departures go to DIFFERENT destinations (fuel + dest follow only one of them).
+  var _ds={};members.forEach(function(base){var s=String(base).split('·')[1];if(s)_ds[s]=1;});
+  if(Object.keys(_ds).length>1&&!confirm('These departures go to different destinations ('+Object.keys(_ds).join(', ')+').\n\nCombining puts passengers with different destinations on the same aircraft — the fuel default and destination label will follow only one of them, and you’ll see a ⚠ MIXED warning. Combine anyway?'))return;
   var label=members.slice().sort(_rzDepCmp).join('+'); // e.g. "0800+1200" (earliest first)
   S._rzManDepMerge=S._rzManDepMerge||{};
   members.forEach(function(base){S._rzManDepMerge[base]=label;});
@@ -2135,6 +2142,17 @@ function _rzManAcDest(dep,acId){
   var d=_rzProductDest(_rzManAcProd(dep,acId));
   if(!d&&dep===RZ_FLYBACK_DEP)d={short:'QN',apt:'NZQN'};
   return d;
+}
+// Distinct destination shorts among an aircraft's seated pax on a departure. >1 ⇒ a combined
+// departure that mixes destinations onto one aircraft (fuel/dest then follow only one of them).
+function _rzManAcDestShorts(dep,acId){
+  var set={};
+  (S._rzManPax||[]).forEach(function(p){
+    if(p.ac!==acId||p.infantOf||_rzPaxDep(p)!==dep)return;
+    var i=_rzManDepInfo(p.group);var d=i?_rzProductDest(i.prod):null;
+    if(d&&d.short)set[d.short]=1;
+  });
+  return Object.keys(set);
 }
 // Default LOADED fuel (kg) for an aircraft on a departure: a Flybacks departure uses the reduced
 // Milford load; otherwise the product default (else aircraft standard). Used for the seatmap fuel
@@ -2468,7 +2486,7 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   var _prodCode=_rzManAcProd(dep,phys);
   form.product=_prodCode; // remember the product so route edits keep the product fuel default
   if(S._rzManFuel&&S._rzManFuel[phys]!=null&&S._rzManFuel[phys]!==''){
-    form.fuel=String(toKg(S._rzManFuel[phys],phys));
+    form.fuel=String(toKg(S._rzManFuel[phys],phys));form._fuelUserSet=true; // a hand-set seatmap fuel carries over as a manual override
   }else if(_isFb||(typeof _isMilford==='function'&&_isMilford(form.dep))){
     var _mfk=_milfordFuelKg(phys);form.fuel=String(_mfk!=null?_mfk:a.fuelKg);
   }else{
