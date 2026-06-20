@@ -1728,7 +1728,36 @@ window.pickupSave=async function(silent){
     data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{}}
   };
   const r=await sbU('ts_pickup_lists',[payload]);
+  if(r&&typeof _rzPickupBroadcast==='function')_rzPickupBroadcast(); // A2: tell other devices to re-pull this date's pickups/check-ins
   if(!silent)toast(r?'Pickup list saved ✓':'Save failed',r?'ok':'err');
+};
+// A2: live-sync receiver — another device saved the pickup list (check-ins / allocations /
+// drivers) for the date we're viewing. Re-pull the blob WITHOUT the loading flash. Date-guarded
+// by the broadcast receiver in shared.js. Mirrors rezdyLoadPickups but never shows the spinner.
+window.rezdyReloadPickupLive=function(){
+  if(!S.rezdyDate)return;
+  try{sbF('ts_pickup_lists','&list_date=eq.'+encodeURIComponent(S.rezdyDate)).then(function(rows){
+    var row=(rows&&rows.length)?_rzRow(rows[0]):null;
+    if(row&&Array.isArray(row.vans)){
+      S._pickupVans=row.vans;
+      S._pickupCollected=(row.collected&&typeof row.collected==='object')?row.collected:{};
+      S._pickupLocOverride=(row.locOverride&&typeof row.locOverride==='object')?row.locOverride:{};
+      S._pickupDrivers=Array.isArray(row.drivers)?row.drivers:[];
+      S._pickupExtraDrivers=Array.isArray(row.extraDrivers)?row.extraDrivers:[];
+      S._pickupSpare=(row.spare&&typeof row.spare==='object')?row.spare:{};
+      S._pickupOrder=(row.order&&typeof row.order==='object')?row.order:{};
+      S._rzManualBk=Array.isArray(row.manualBk)?row.manualBk:[];
+      S._rezdyPaxMeta=(row.paxMeta&&typeof row.paxMeta==='object')?row.paxMeta:{};
+      S._schedPilots=(row.schedPilots&&typeof row.schedPilots==='object')?row.schedPilots:{};
+      S._rzBookingAc=(row.bookingAc&&typeof row.bookingAc==='object')?row.bookingAc:{};
+      S._rzBookingWx=(row.bookingWx&&typeof row.bookingWx==='object')?row.bookingWx:{};
+      S._rzBookingCheckedIn=(row.bookingCheckedIn&&typeof row.bookingCheckedIn==='object')?row.bookingCheckedIn:{};
+      S._rzSchedAttach=(row.schedAttach&&typeof row.schedAttach==='object')?row.schedAttach:{};
+      S._rzCheckin=(row.checkin&&typeof row.checkin==='object')?row.checkin:{};
+      if(typeof _rzApplyManualBk==='function')_rzApplyManualBk();
+      if(typeof safeRender==='function')safeRender();
+    }
+  }).catch(function(){});}catch(e){}
 };
 // Ground staff rostered on (not off/leave) for the current date — i.e. available to drive.
 function _rzAvailableDrivers(){
@@ -2109,6 +2138,15 @@ function _rzManBroadcast(){
     if(typeof _rtWs==='undefined'||!_rtWs||_rtWs.readyState!==1)return;
     if(typeof _rtRef!=='undefined')_rtRef++;
     _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'rz_manifest_update',payload:{date:S.rezdyDate,sessionId:(typeof _sessionId!=='undefined'?_sessionId:'')}},ref:String(typeof _rtRef!=='undefined'?_rtRef:1)}));
+  }catch(e){}
+}
+// A2: broadcast that this date's pickup list (check-ins / van allocation / drivers) changed, so
+// other devices re-pull it. Mirrors _rzManBroadcast; echo-guarded by sessionId + date on receipt.
+function _rzPickupBroadcast(){
+  try{
+    if(typeof _rtWs==='undefined'||!_rtWs||_rtWs.readyState!==1)return;
+    if(typeof _rtRef!=='undefined')_rtRef++;
+    _rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'pickup_update',payload:{date:S.rezdyDate,sessionId:(typeof _sessionId!=='undefined'?_sessionId:'')}},ref:String(typeof _rtRef!=='undefined'?_rtRef:1)}));
   }catch(e){}
 }
 // Reload the manifest for the current date from the cloud (used by the live-update receiver).
@@ -2799,11 +2837,18 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   var cap=(a.seats?a.seats.length:0)-1,nextFree=(_hasCo?2:1),overflow=0;
   var declMode=_rzManDeclMode(dep,phys); // all-actual or all-declared for this aircraft
   var byId={};(S._rzManPax||[]).forEach(function(x){byId[x.id]=x;});
+  // Real occupancy set so the fallback seat-advance can't drop a pax onto a seat another pax
+  // already owns (R-A). Reserve the co-pilot seat + every EXPLICIT manifest seat up front, then
+  // mark seats used as they're filled. (The old guard tested seatOf['__'+n], a key that never
+  // existed, so only form.names[n] was checked and a later seat-owner could be overwritten.)
+  var used={};if(_hasCo)used[1]=1;
+  list.forEach(function(p){var si=seatOf[p.id];if(si!=null&&!(_hasCo&&si===1)&&si>=1&&si<=cap)used[si]=1;});
   list.forEach(function(p){
     var idx=seatOf[p.id];
     if(_hasCo&&idx===1)idx=null; // seat 1 is the co-pilot's
-    if(idx==null){while(nextFree<=cap&&(form.names[nextFree]||seatOf['__'+nextFree]))nextFree++;idx=nextFree;}
+    if(idx==null){while(nextFree<=cap&&(used[nextFree]||form.names[nextFree]))nextFree++;idx=nextFree;}
     if(idx>cap){overflow++;return;}
+    used[idx]=1; // claim it so no later fallback pax reuses this seat
     form.names[idx]=p.name||'';
     var _wv=_rzPaxWeight(p,declMode);
     form.seats[idx]=(_wv!=null&&_wv!=='')?String(_wv):'';

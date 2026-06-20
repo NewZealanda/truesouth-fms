@@ -401,7 +401,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.12';
+const APP_VER='v24.13';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1533,7 +1533,19 @@ function initRealtime(){
             S.rtStatus='live';if(S._presSection)broadcastPresence(S._presSection);
             // Reconnect backfill: postgres_changes that fired while the socket was down are
             // gone, so on a RE-open (not the first connect) pull the collaborative tables once.
-            if(_rtConnectedOnce){try{Promise.all([reloadTable('ts_manifests'),reloadTable('ts_loadsheets')]).then(function(){safeRender();}).catch(function(){});}catch(e){}}
+            if(_rtConnectedOnce){try{
+              // ts_settings now also refreshes roster/roster_colors/rz_pickup_locs/fuels/perms.
+              Promise.all([reloadTable('ts_manifests'),reloadTable('ts_loadsheets'),reloadTable('ts_settings')]).then(function(){safeRender();}).catch(function(){});
+              // A4: the Rezdy manifest, pickups, shared loadsheet tabs and calendar ride on
+              // broadcasts (not postgres_changes), so a dropped socket leaves them stale — re-pull
+              // the current date's state explicitly on reconnect.
+              if(S.rezdyDate){
+                if(typeof window.rezdyReloadManifestLive==='function')window.rezdyReloadManifestLive();
+                if(typeof window.rezdyReloadPickupLive==='function')window.rezdyReloadPickupLive();
+                if(typeof window.rezdyReloadLsTabsLive==='function')window.rezdyReloadLsTabsLive();
+                if(S.rezdyTab==='schedule'&&typeof window.rezdyReloadScheduleLive==='function')window.rezdyReloadScheduleLive();
+              }
+            }catch(e){}}
             _rtConnectedOnce=true;
             safeRender();
           } else if(msg.payload&&msg.payload.status==='error'){
@@ -1771,6 +1783,13 @@ function initRealtime(){
             window.rezdyReloadLsTabsLive();
           }
         }
+        // A2: live pickups/check-ins — another device saved the pickup list for the date we're on.
+        if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='pickup_update'){
+          var _pkp=msg.payload.payload;
+          if(_pkp&&_pkp.sessionId!==_sessionId&&_pkp.date===S.rezdyDate&&typeof window.rezdyReloadPickupLive==='function'){
+            window.rezdyReloadPickupLive();
+          }
+        }
       }catch(err){}
     };
     _rtWs.onclose=function(){
@@ -1858,7 +1877,7 @@ async function reloadTable(table){
     if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,(r.rates&&parseFloat(r.rates.perHour)>0)?r.rates:dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
-      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames,rz_fuel_ov,rz_pickup_locs)&select=key,value',{headers:SH});
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames,rz_fuel_ov,rz_pickup_locs,roster,roster_colors)&select=key,value',{headers:SH});
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
@@ -1866,6 +1885,10 @@ async function reloadTable(table){
           if(row.key==='rz_depnames'&&row.value){try{var _dn=JSON.parse(row.value);if(_dn&&typeof _dn==='object'){S._rzDepNames=_dn;lsSet('ts_rz_depnames',_dn);changed=true;}}catch(e){}}
           if(row.key==='rz_fuel_ov'&&row.value){try{var _fo=JSON.parse(row.value);if(_fo&&typeof _fo==='object'){S._rzFuelOv=_fo;lsSet('ts_rz_fuel_ov',_fo);changed=true;}}catch(e){}}
           if(row.key==='rz_pickup_locs'&&row.value&&!S._rzPickupLocEdit){try{var _pl=JSON.parse(row.value);if(Array.isArray(_pl)){S._rzPickupLocs=_pl;S._rzPickupLocsLoaded=true;lsSet('ts_rz_pickup_locs',_pl);changed=true;}}catch(e){}}
+          // A3: live roster — propagate another device's roster save. SKIPPED while this device has
+          // an unsaved draft so we never clobber in-progress edits (it reconciles on their save).
+          if(row.key==='roster'&&row.value&&!(typeof _rosterUnsaved==='function'&&_rosterUnsaved())){try{var _ro=JSON.parse(row.value);if(_ro&&typeof _ro==='object'){S.roster=_ro;lsSet('ts_roster',_ro);changed=true;}}catch(e){}}
+          if(row.key==='roster_colors'&&row.value){try{var _rc=JSON.parse(row.value);if(_rc&&typeof _rc==='object'){S.rosterColors=_rc;changed=true;}}catch(e){}}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
           if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
           if(row.key==='maintenance'&&row.value){
