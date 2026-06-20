@@ -941,7 +941,8 @@ function _rzRenderBookings(){
   const q=String(S._bkSearch||'').trim();
   const searching=q.length>0;
   // Dedicated "Cancelled" view (a pseudo-departure) showing the whole day's cancelled bookings.
-  const _showCancelled=!searching&&S._bkDepFilter==='__cancelled__'&&cancelledRows.length>0;
+  // Auto-shown on days that have ONLY cancelled bookings (no active departures) so they're still visible.
+  const _showCancelled=!searching&&cancelledRows.length>0&&(S._bkDepFilter==='__cancelled__'||deps.length===0);
   // One departure at a time — default to the first departure when none is chosen. (No "All".)
   const depFilter=(searching||_showCancelled)?null:((S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:(deps[0]||null));
   if(depFilter)S._bkDepFilter=depFilter; // persist the resolved departure so Push knows which one
@@ -962,10 +963,11 @@ function _rzRenderBookings(){
     (searching?'<button onclick="window.rezdyBkSearchClear()" title="Clear search" style="flex-shrink:0;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:0 4px">✕</button>':'')+
     '</div>';
   // Prominent departure selector — big pills, one selected at a time, horizontally scrollable.
+  // Rendered when there are active departures OR cancelled bookings (so the Cancelled pill always shows).
   let depSel='';
-  if(deps.length){
+  if(deps.length||cancelledRows.length){
     depSel='<div class="card" style="padding:10px 12px'+(searching?';opacity:.5':'')+'">'+
-      '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:800;margin-bottom:8px">Departure'+(searching?' — paused while searching':'')+'</div>'+
+      '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:800;margin-bottom:8px">'+(deps.length?'Departure':'Cancelled bookings')+(searching?' — paused while searching':'')+'</div>'+
       '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">';
     deps.forEach(function(d){
       var depB=active.filter(function(b){return _rzBookingDep(b)===d;});
