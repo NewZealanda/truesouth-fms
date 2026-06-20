@@ -1445,7 +1445,11 @@ function _rzBgSync(force){
       sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(date)).then(function(rows){
         if(date!==S.rezdyDate)return;
         S._rezdyBookings=_rzMapBookings(rows);_rzApplyManualBk();
-        S._pickupVans=null;S._schedBlocks=null;render(); // re-derive vans + calendar blocks
+        // Do NOT null S._pickupVans here — that discarded the SAVED van layout (manual placement)
+        // and forced a full auto-allocate on every background sync, which is why pickups "reverted
+        // after a little bit" / on refresh. _rzEnsureVans already reconciles the saved layout
+        // against the refreshed bookings (drops cancelled ids, appends new ones to the first van).
+        S._schedBlocks=null;render(); // calendar blocks re-derive; pickup van layout is preserved
       });
     } else {safeRender();}
   }).catch(function(){S._rzBgSyncing=null;S._rzSyncing=false;safeRender();});
