@@ -120,7 +120,9 @@ function _getCustomAerodromes(){
 
 function renderAerodromes(){
   var custom=_getCustomAerodromes();
-  var all=NZ_AERODROMES.concat(custom);
+  // A custom entry OVERRIDES the built-in of the same ICAO (instead of duplicating it).
+  var _cset={};custom.forEach(function(c){_cset[c.icao]=1;});
+  var all=NZ_AERODROMES.filter(function(a){return !_cset[a.icao];}).concat(custom);
   var featSet=(typeof _featuredApts==='function')?_featuredApts():[];
   var srch=(S._aeroSearch||'').toLowerCase();
   var filt=srch?all.filter(function(a){return a.icao.toLowerCase().includes(srch)||a.name.toLowerCase().includes(srch);}):all;
@@ -197,7 +199,7 @@ function renderAerodromes(){
   h+='<div><label>Longitude</label><input class="fi" id="cae-lon" type="number" step="0.0001" placeholder="174.5678"></div>';
   h+='<div><label>Elevation (ft)</label><input class="fi" id="cae-elev" type="number" placeholder="100"></div>';
   h+='</div>';
-  h+='<button class="btn btn-primary" onclick="window.aeroAddCustom()">Add Aerodrome</button>';
+  h+='<button class="btn btn-primary" onclick="window.aeroAddCustom()">Add / Save Aerodrome</button>';
   h+='</div>';
   return h;
 }
@@ -253,8 +255,9 @@ window.aeroToggleFeatured=function(icao){
   render();
 };
 window.aeroEdit=function(icao){
-  var all=NZ_AERODROMES.concat(_getCustomAerodromes());
-  var a=all.find(function(x){return x.icao===icao;});
+  // Prefer the custom (edited) entry over the built-in of the same ICAO.
+  var custom=_getCustomAerodromes();
+  var a=custom.find(function(x){return x.icao===icao;})||NZ_AERODROMES.find(function(x){return x.icao===icao;});
   if(!a)return;
   var fi=document.getElementById('cae-icao');
   var fn=document.getElementById('cae-name');
