@@ -783,11 +783,8 @@ window._notifyPicLoadsheet=async function(f,lsId){
     var route=((f.dep||'').replace(/^NZ/,''))+'-'+((f.dest||'').replace(/^NZ/,''));
     var etd=(f.etd||'').replace(':','');
     var msg=code+' has created a loadsheet for you. '+(f.ac||'')+' '+route+(etd?' '+etd:'');
-    var res=await sbU('ts_notifications',[{user_id:picUser.id,type:'loadsheet_pic',reference_id:lsId||null,message:msg,read:false,created_at:new Date().toISOString()}]);
-    // reference_id is a UUID column; a text loadsheet id makes the insert fail. If so,
-    // retry without it so the notification still arrives (the Open button needs the
-    // reference_id, which works once reference_id is changed to TEXT in Supabase).
-    if(res===null){await sbU('ts_notifications',[{user_id:picUser.id,type:'loadsheet_pic',message:msg,read:false,created_at:new Date().toISOString()}]);}
+    // reference_id is TEXT, so the loadsheet id stores fine and the "Open loadsheet" button works.
+    await sbU('ts_notifications',[{user_id:picUser.id,type:'loadsheet_pic',reference_id:lsId||null,message:msg,read:false,created_at:new Date().toISOString()}]);
     if(S.user&&picUser.id===S.user.id&&window.loadNotifications)window.loadNotifications();
   }catch(e){}
 };

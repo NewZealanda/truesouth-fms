@@ -722,7 +722,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.94';
+const APP_VER='v23.95';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -11410,11 +11410,8 @@ window._notifyPicLoadsheet=async function(f,lsId){
     var route=((f.dep||'').replace(/^NZ/,''))+'-'+((f.dest||'').replace(/^NZ/,''));
     var etd=(f.etd||'').replace(':','');
     var msg=code+' has created a loadsheet for you. '+(f.ac||'')+' '+route+(etd?' '+etd:'');
-    var res=await sbU('ts_notifications',[{user_id:picUser.id,type:'loadsheet_pic',reference_id:lsId||null,message:msg,read:false,created_at:new Date().toISOString()}]);
-    // reference_id is a UUID column; a text loadsheet id makes the insert fail. If so,
-    // retry without it so the notification still arrives (the Open button needs the
-    // reference_id, which works once reference_id is changed to TEXT in Supabase).
-    if(res===null){await sbU('ts_notifications',[{user_id:picUser.id,type:'loadsheet_pic',message:msg,read:false,created_at:new Date().toISOString()}]);}
+    // reference_id is TEXT, so the loadsheet id stores fine and the "Open loadsheet" button works.
+    await sbU('ts_notifications',[{user_id:picUser.id,type:'loadsheet_pic',reference_id:lsId||null,message:msg,read:false,created_at:new Date().toISOString()}]);
     if(S.user&&picUser.id===S.user.id&&window.loadNotifications)window.loadNotifications();
   }catch(e){}
 };
@@ -13622,11 +13619,21 @@ function _rzManAcDestShorts(dep,acId){
   });
   return Object.keys(set);
 }
-// Default LOADED fuel (kg) for an aircraft on a departure: a Flybacks departure uses the reduced
-// Milford load; otherwise the product default (else aircraft standard). Used for the seatmap fuel
-// readout and the W&B preview so they match the loadsheet that gets created.
+// Default LOADED fuel (kg) for an aircraft on a departure. Each seated pax implies a fuel demand
+// for their leg (flyback return = reduced Milford load; otherwise the product default / aircraft
+// standard); we take the MAX so a combined/mixed-destination aircraft is fuelled for its most
+// demanding leg (the ⚠ MIXED warning still flags the mix). Used for the seatmap fuel readout, the
+// W&B preview and the created loadsheet so they all agree.
 function _rzManDefFuelKg(dep,acId){
-  // Flyback (including a combined "Flybacks+…" departure) departs Milford → reduced load.
+  var max=null;
+  (S._rzManPax||[]).forEach(function(p){
+    if(p.ac!==acId||p.infantOf||_rzPaxDep(p)!==dep)return;
+    var i=_rzManDepInfo(p.group);var prod=i?i.prod:'';
+    var f=(prod==='FLB'||prod==='CCF')?_milfordFuelKg(acId):_rzProdFuelKg(prod,acId);
+    if(f!=null&&(max==null||f>max))max=f;
+  });
+  if(max!=null)return max;
+  // No identifiable pax (e.g. all manual) → fall back to the dep-based default.
   var _fb=(dep===RZ_FLYBACK_DEP)||(String(dep||'').split('+').indexOf(RZ_FLYBACK_DEP)>=0);
   if(_fb){var m=_milfordFuelKg(acId);if(m!=null)return m;}
   return _rzProdFuelKg(_rzManAcProd(dep,acId),acId);
@@ -13955,10 +13962,8 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   form.product=_prodCode; // remember the product so route edits keep the product fuel default
   if(S._rzManFuel&&S._rzManFuel[phys]!=null&&S._rzManFuel[phys]!==''){
     form.fuel=String(toKg(S._rzManFuel[phys],phys));form._fuelUserSet=true; // a hand-set seatmap fuel carries over as a manual override
-  }else if(_isFb||(typeof _isMilford==='function'&&_isMilford(form.dep))){
-    var _mfk=_milfordFuelKg(phys);form.fuel=String(_mfk!=null?_mfk:a.fuelKg);
   }else{
-    var _pfk=_rzProdFuelKg(_prodCode,phys);form.fuel=String(_pfk!=null?_pfk:a.fuelKg);
+    var _df=_rzManDefFuelKg(dep,phys);form.fuel=String(_df!=null?_df:a.fuelKg); // same default as the seatmap preview (fuel-to-max for mixed)
   }
   var _pbd2=_rzProdBurnDisp(_prodCode,phys);if(_pbd2!=null)form.burnOff=String(_pbd2);
   // Seat the passengers at their manifest seat positions (run/refresh the seat plan first).

@@ -74,18 +74,24 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
   exclude roster RDO/off days and must read the PERSISTED roster (not the live draft/overlay).
 
 ## Useful files
-- `ARCHITECTURE_REVIEW_v22.87.md` — full architecture review + the known-issue backlog
+- `ARCHITECTURE_REVIEW_v23.04.md` — latest architecture review + the known-issue backlog
   (security A1, loadsheet live-sync A2, reconnect backfill A5, build hardening A6, etc.).
+  `ARCHITECTURE_REVIEW_v22.87.md` is the earlier snapshot.
 - `*.sql` files in the repo root — Supabase migrations Andrew runs in the SQL editor.
 - `build.py` — the concatenation build.
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v22.87**.
+- Latest version: **v23.95**.
 - Recent work: seatmap workspace separation + instance-aware duplicate aircraft; full leave
   edit/re-approval/audit/conflict system; notification system (bell, PIC notify, 10 s poll,
   clear-all, mobile panel); roster permissions + save guard; cross-device loadsheet tab
   close + live edit; cache/reload behaviour; dep/dest "Other" free-text box; seatmap
   live-sync; TO PAY follows the passenger on moves; and the v22.87 architecture-review fixes.
-- Open decisions (see ARCHITECTURE_REVIEW): enable RLS + real auth before production traffic;
-  settle the loadsheet live-sync model; add reconnect backfill.
+- Operations is now the Rezdy-powered flow (Bookings / Seatmap / Loadsheets); legacy
+  manifest.js retired. Seatmap departures are keyed by TIME+DESTINATION; a per-product config
+  (`_RZ_PROD_CFG` in rezdy.js) drives the seatmap "SLA → MC" label and auto-fills loadsheet
+  destination + default fuel + flight burn (manual fuel via `form._fuelUserSet` always wins).
+- Open decisions (see ARCHITECTURE_REVIEW): enable RLS + real auth before production traffic
+  (A1, still the top risk — anon key in the public bundle, client-side auth); settle the
+  loadsheet live-sync model; add reconnect backfill; unify the two fuel-default engines.

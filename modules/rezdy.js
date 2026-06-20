@@ -2154,11 +2154,21 @@ function _rzManAcDestShorts(dep,acId){
   });
   return Object.keys(set);
 }
-// Default LOADED fuel (kg) for an aircraft on a departure: a Flybacks departure uses the reduced
-// Milford load; otherwise the product default (else aircraft standard). Used for the seatmap fuel
-// readout and the W&B preview so they match the loadsheet that gets created.
+// Default LOADED fuel (kg) for an aircraft on a departure. Each seated pax implies a fuel demand
+// for their leg (flyback return = reduced Milford load; otherwise the product default / aircraft
+// standard); we take the MAX so a combined/mixed-destination aircraft is fuelled for its most
+// demanding leg (the ⚠ MIXED warning still flags the mix). Used for the seatmap fuel readout, the
+// W&B preview and the created loadsheet so they all agree.
 function _rzManDefFuelKg(dep,acId){
-  // Flyback (including a combined "Flybacks+…" departure) departs Milford → reduced load.
+  var max=null;
+  (S._rzManPax||[]).forEach(function(p){
+    if(p.ac!==acId||p.infantOf||_rzPaxDep(p)!==dep)return;
+    var i=_rzManDepInfo(p.group);var prod=i?i.prod:'';
+    var f=(prod==='FLB'||prod==='CCF')?_milfordFuelKg(acId):_rzProdFuelKg(prod,acId);
+    if(f!=null&&(max==null||f>max))max=f;
+  });
+  if(max!=null)return max;
+  // No identifiable pax (e.g. all manual) → fall back to the dep-based default.
   var _fb=(dep===RZ_FLYBACK_DEP)||(String(dep||'').split('+').indexOf(RZ_FLYBACK_DEP)>=0);
   if(_fb){var m=_milfordFuelKg(acId);if(m!=null)return m;}
   return _rzProdFuelKg(_rzManAcProd(dep,acId),acId);
@@ -2487,10 +2497,8 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   form.product=_prodCode; // remember the product so route edits keep the product fuel default
   if(S._rzManFuel&&S._rzManFuel[phys]!=null&&S._rzManFuel[phys]!==''){
     form.fuel=String(toKg(S._rzManFuel[phys],phys));form._fuelUserSet=true; // a hand-set seatmap fuel carries over as a manual override
-  }else if(_isFb||(typeof _isMilford==='function'&&_isMilford(form.dep))){
-    var _mfk=_milfordFuelKg(phys);form.fuel=String(_mfk!=null?_mfk:a.fuelKg);
   }else{
-    var _pfk=_rzProdFuelKg(_prodCode,phys);form.fuel=String(_pfk!=null?_pfk:a.fuelKg);
+    var _df=_rzManDefFuelKg(dep,phys);form.fuel=String(_df!=null?_df:a.fuelKg); // same default as the seatmap preview (fuel-to-max for mixed)
   }
   var _pbd2=_rzProdBurnDisp(_prodCode,phys);if(_pbd2!=null)form.burnOff=String(_pbd2);
   // Seat the passengers at their manifest seat positions (run/refresh the seat plan first).
