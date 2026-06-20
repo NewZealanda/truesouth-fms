@@ -456,6 +456,13 @@ function renderNotificationPanel(){
   h+='<span style="font-size:13px;font-weight:700;color:var(--text)">🔔 Notifications</span>';
   if(unread>0){h+='<button tabindex="-1" onclick="window.markNotificationsRead()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0">Mark all read</button>';}
   h+='</div>';
+  // Offer to turn on OS/browser pop-up notifications (must be triggered by this user tap).
+  h+=(function(){
+    var st=(typeof window.notifPermState==='function')?window.notifPermState():'unsupported';
+    if(st==='granted'||st==='unsupported')return '';
+    if(st==='denied')return '<div style="padding:9px 16px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3)">🔕 Pop-up alerts are blocked — turn them on for this site in your browser/phone settings.</div>';
+    return '<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11px;color:var(--text2)">Get a pop-up when you\'re notified</span><button tabindex="-1" onclick="window.requestNotifPermission()" style="font-size:11px;font-weight:700;padding:4px 11px;border-radius:8px;border:none;background:var(--acc);color:#fff;cursor:pointer;flex-shrink:0">🔔 Enable</button></div>';
+  })();
   if(notifs.length===0){
     h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No notifications</div>';
   } else {
@@ -814,10 +821,35 @@ window.loadNotifications=async function(){
     if(r.ok){
       var data=await r.json();
       var _s=JSON.stringify(data);
-      if(_s!==S.__notifStr){S.__notifStr=_s;S._notifications=data;safeRender();} // only re-render when something changed
+      if(_s!==S.__notifStr){
+        // Fire an OS/browser notification for any newly-arrived UNREAD items. The first load this
+        // session just seeds the "seen" set (so we don't replay history as a burst of pop-ups).
+        try{
+          if(!S._notifSeenIds){S._notifSeenIds={};(data||[]).forEach(function(n){S._notifSeenIds[String(n.id)]=1;});}
+          else{(data||[]).forEach(function(n){var k=String(n.id);if(!S._notifSeenIds[k]){S._notifSeenIds[k]=1;if(!n.read&&typeof _osNotify==='function')_osNotify(n);}});}
+        }catch(_){}
+        S.__notifStr=_s;S._notifications=data;safeRender();
+      } // only re-render when something changed
     }
   }catch(e){}
 };
+// ── OS / browser notifications (foreground) ────────────────────────────────────
+// Shows a system notification when a new user notification arrives. Works when the tab/PWA is
+// open or recently backgrounded. True background push (app fully closed) needs the PWA installed
+// + a service worker + Web Push (VAPID) — a follow-up if you want it.
+function _osNotifySupported(){return (typeof window!=='undefined')&&('Notification' in window);}
+window.notifPermState=function(){return _osNotifySupported()?Notification.permission:'unsupported';};
+window.requestNotifPermission=function(){
+  if(!_osNotifySupported()){if(typeof toast==='function')toast('This device/browser does not support notifications','warn');return;}
+  try{Notification.requestPermission().then(function(p){S._notifPerm=p;if(typeof toast==='function')toast(p==='granted'?'Notifications enabled ✓':(p==='denied'?'Notifications blocked — enable them in your browser/OS settings':'Notifications not enabled'),p==='granted'?'ok':'warn');if(typeof render==='function')render();});}catch(e){}
+};
+function _osNotify(n){
+  if(!_osNotifySupported()||Notification.permission!=='granted')return;
+  try{
+    var note=new Notification('TrueSouth FMS',{body:String((n&&n.message)||'You have a new notification'),tag:'tsfms-'+((n&&n.id)||Date.now()),icon:(typeof _TS_LOGO!=='undefined'?_TS_LOGO:undefined)});
+    note.onclick=function(){try{window.focus();}catch(e){}S._notifOpen=true;if(typeof render==='function')render();try{note.close();}catch(e){}};
+  }catch(e){}
+}
 // Poll for new notifications every 10s (and on foreground) so the bell stays current.
 setInterval(function(){if(S.user&&document.visibilityState==='visible'&&window.loadNotifications)window.loadNotifications();},10000);
 
