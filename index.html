@@ -725,7 +725,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.10';
+const APP_VER='v24.11';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -14520,7 +14520,7 @@ function _rzRenderLoadsheets(){
 //  (3) SCHEDULE — Google-Calendar-like day view
 // ─────────────────────────────────────────────────────────────────────────────
 // Column-per-aircraft day grid. 06:00–18:00 in 15-minute rows.
-const _RZ_SCH_START=6, _RZ_SCH_END=18;
+let _RZ_SCH_START=6, _RZ_SCH_END=18; // visible-hour window; recomputed per render to fit the day's blocks
 const _RZ_SLOT_MIN=15;                 // minutes per grid row
 const _RZ_PX_PER_SLOT=15;              // height of one 15-min row
 const _RZ_PX_PER_MIN=_RZ_PX_PER_SLOT/_RZ_SLOT_MIN;
@@ -14661,7 +14661,19 @@ function _rzRenderSchedule(){
     return hdr+formH+'<div class="card" style="text-align:center;padding:36px;color:var(--text3);font-size:13px">No aircraft configured.</div>';
   }
 
-  const slots=((_RZ_SCH_END-_RZ_SCH_START)*60)/_RZ_SLOT_MIN; // 48
+  // Fit the visible window to the day's flights: 1 hour before the earliest block to 1 hour after
+  // the latest, on whole hours (clamped 0–24, min 3h span). No blocks → default daytime window.
+  (function(){
+    var _mins=[],_maxs=[];
+    blocks.concat(bkBlocks).forEach(function(b){var s=_rzMinsFromHHMM(b.start),e=_rzMinsFromHHMM(b.end);if(s!=null){_mins.push(s);_maxs.push(e!=null?e:s+30);}});
+    if(_mins.length){
+      var _lo=Math.min.apply(null,_mins),_hi=Math.max.apply(null,_maxs);
+      _RZ_SCH_START=Math.max(0,Math.floor(_lo/60)-1);
+      _RZ_SCH_END=Math.min(24,Math.ceil(_hi/60)+1);
+      if(_RZ_SCH_END-_RZ_SCH_START<3)_RZ_SCH_END=Math.min(24,_RZ_SCH_START+3);
+    } else {_RZ_SCH_START=6;_RZ_SCH_END=18;}
+  })();
+  const slots=((_RZ_SCH_END-_RZ_SCH_START)*60)/_RZ_SLOT_MIN;
   const gridH=slots*_RZ_PX_PER_SLOT;
 
   // left time axis (rows + labels every 30 min, lighter ticks for the in-between 15s)
