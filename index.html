@@ -725,7 +725,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.08';
+const APP_VER='v24.10';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2926,6 +2926,10 @@ document.addEventListener('keydown',function(e){
       var _mn=_mc+_dir;if(_mn<0)_mn=_mt.length-1;if(_mn>=_mt.length)_mn=0;
       e.preventDefault();S.maintTab=_mt[_mn];render();return;
     }
+    // Calendar: cycle the day.
+    if(S.section==='rezdy'&&S.rezdyTab==='schedule'&&typeof window.rezdyShiftDate==='function'){
+      e.preventDefault();window.rezdyShiftDate(_dir);return;
+    }
     if(S.section!=='operations')return;
     var _tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
     var _cur=_tabs.indexOf(S.tab);if(_cur<0)_cur=0;
@@ -2941,6 +2945,8 @@ window._cycleTier2=function(dir){
     var cur=tabs.indexOf(S.tab);if(cur<0)cur=0;var nx=(cur+dir+tabs.length)%tabs.length;
     if(typeof window.switchOpsTab==='function')window.switchOpsTab(tabs[nx]);
   } else if(S.section==='rezdy'){
+    // On the Calendar, cycle the DAY (swipe outside the grid / arrow keys) instead of the sub-tabs.
+    if(S.rezdyTab==='schedule'&&typeof window.rezdyShiftDate==='function'){window.rezdyShiftDate(dir);return;}
     var rt=['schedule','pickups','mypickups'];var c=rt.indexOf(S.rezdyTab);if(c<0)c=0;var n=(c+dir+rt.length)%rt.length;
     S.rezdyTab=rt[n];render();
   }
@@ -12880,6 +12886,8 @@ window.rezdySetDate=function(v){
   S._rezdyBookings=null;S._rezdyOpen={};S._pickupVans=null;S._pickupCollected=null;S._schedBlocks=null;S._schedGroupKey=null;S._schedEdit=null;S._rzManLoaded=false;S._rzManPax=null;S._rzLsTabsLoaded=false;S._rzLsTabs=null;
   // clear seatmap view-state that's scoped to a specific day (stale labels would mis-target Allocate/Create)
   S._rzManDepFilter=null;S._rzManShow=null;S._rzCombA=null;S._rzCombB=null;S._rzManCombineOpen=false;S._rzManCardOpen=null;S._rzManCoPic=null;
+  // reset the calendar→seatmap PIC auto-fill tracking + the pickup-blob sync flag for the new day
+  S._rzManPicSeed={};S._rzManPicAuto={};S._rzManPickupSynced=false;
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
@@ -13366,8 +13374,24 @@ function _rzManBubble(p,allPax){
     '<div onclick="event.stopPropagation();window.rezdyManRemove(\''+idEsc+'\')" title="Remove from manifest" style="position:absolute;top:0;right:1px;font-size:10px;color:#94a3b8;cursor:pointer;padding:0 2px">✕</div>'+
   '</div>';
 }
+// The pilot allocated on the CALENDAR for this aircraft at this departure's time — used to
+// auto-fill the seatmap PIC. Booking-derived blocks key on "ac|HH:MM|product"; manual schedule
+// blocks key on the block id (matched by aircraft + start time). null if none allocated.
+function _rzSchedPilotFor(acId,dep){
+  if(!acId||acId==='__unalloc__')return null;
+  var sp=S._schedPilots||{};
+  var t=String(dep||'').split('·')[0].split('+')[0]; // first-leg time token, e.g. "0930"
+  var tc=_rzHHMMcolon(t);                              // "09:30" to match the calendar group key
+  var prefix=acId+'|'+tc+'|',found=null;
+  Object.keys(sp).forEach(function(k){if(!found&&k.indexOf(prefix)===0&&sp[k])found=sp[k];});
+  if(!found)(S._schedBlocks||[]).forEach(function(b){if(!found&&b&&b.aircraft===acId&&String(b.start)===tc&&sp[String(b.id)])found=sp[String(b.id)];});
+  return found;
+}
 function _rzRenderManifest(){
   if(!S._rzManLoaded){if(window.rezdyLoadManifest)window.rezdyLoadManifest();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading manifest…</div>';}
+  // The calendar's pilot allocations live in the pickup blob — load it once so the seatmap can
+  // auto-fill PIC from the calendar even if the Calendar/Pickups tab hasn't been opened.
+  if(!S._rzManPickupSynced){S._rzManPickupSynced=true;if(window.rezdyLoadPickups)window.rezdyLoadPickups();}
   var pax=S._rzManPax||[];
   var deps=_rzManDeps();
   var selDep=(S._rzManDepFilter&&deps.indexOf(S._rzManDepFilter)>=0)?S._rzManDepFilter:(deps[0]||'—');
@@ -13477,6 +13501,16 @@ function _rzRenderManifest(){
     var list=pax.filter(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===selDep;});
     var nA=0,nC=0,nI=0;list.forEach(function(p){if(p.type==='child')nC++;else nA++;if(p.infantName)nI++;});
     nI+=pax.filter(function(p){return p.ac===id&&p.infantOf&&_rzPaxDep(p)===selDep;}).length; // manually-folded lap infants
+    // Auto-fill PIC from the calendar's pilot for this aircraft+departure. One-time per
+    // (departure, aircraft); only fills when empty or when the value is still our own auto-fill,
+    // so a manual change/clear always wins (the user can override by drag / select / clear ✕).
+    (function(){
+      S._rzManPicSeed=S._rzManPicSeed||{};S._rzManPicAuto=S._rzManPicAuto||{};
+      var _sk=selDep+'|'+id;if(S._rzManPicSeed[_sk])return;S._rzManPicSeed[_sk]=1;
+      var _sp=_rzSchedPilotFor(id,selDep);if(!_sp)return;
+      var _cur=(S._rzManPic||{})[id];
+      if((!_cur||_cur===S._rzManPicAuto[id])&&_cur!==_sp){S._rzManPic=S._rzManPic||{};S._rzManPic[id]=_sp;S._rzManPicAuto[id]=_sp;}
+    })();
     var picCode=(S._rzManPic||{})[id]||'';
     var unit=(a&&a.layout==='ga8')?'L':'lbs';
     var std=a?Math.round(fromKg(_rzManDefFuelKg(selDep,id),id)):0;
@@ -14493,6 +14527,18 @@ const _RZ_PX_PER_MIN=_RZ_PX_PER_SLOT/_RZ_SLOT_MIN;
 const _RZ_AXIS_W=50;                   // left time-axis width
 const _RZ_COL_W=150;                   // each aircraft column width
 function _rzMinsFromHHMM(s){const m=/^(\d{1,2}):(\d{2})$/.exec(s||'');if(!m)return null;return (+m[1])*60+(+m[2]);}
+// Per-minute "now" line update — repositions the existing element directly (no re-render → no
+// flash). Does nothing if the calendar isn't on screen or the day isn't today.
+function _rzTickNowLine(){
+  if(S.rezdyDate!==_rzToday())return;
+  var el=document.getElementById('rzNowLine');if(!el)return;
+  var n=new Date(),nm=n.getHours()*60+n.getMinutes();
+  if(nm<_RZ_SCH_START*60||nm>_RZ_SCH_END*60){el.style.display='none';return;}
+  el.style.display='block';
+  el.style.top=((nm-_RZ_SCH_START*60)*_RZ_PX_PER_MIN)+'px';
+  var t=document.getElementById('rzNowTime');
+  if(t)t.textContent=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
+}
 function _rzSchTop(start){const mins=_rzMinsFromHHMM(start);if(mins==null)return 0;return Math.max(0,(mins-_RZ_SCH_START*60)*_RZ_PX_PER_MIN);}
 function _rzSchHeight(start,end){const a=_rzMinsFromHHMM(start),b=_rzMinsFromHHMM(end);if(a==null||b==null||b<=a)return _RZ_PX_PER_SLOT*2;return (b-a)*_RZ_PX_PER_MIN;}
 
@@ -14540,9 +14586,18 @@ function _rzRenderSchedule(){
     return g;
   });
   const _totBk=bkBlocks.reduce(function(s,g){return s+g.bookings.length;},0);
+  // Whole-day passenger breakdown for the overview (same format as the Bookings header). Seats
+  // sold excludes infants (lap pax — they travel free).
+  var _cA=0,_cC=0,_cI=0;(S._rezdyBookings||[]).forEach(function(b){if(/cancel/i.test(b.status||''))return;var _e=_rzEffBreakdown(b);_cA+=_e.a;_cC+=_e.c;_cI+=_e.i;});
+  var _cSeats=_cA+_cC;
+  var _calBd=(_cA+_cC+_cI>0)?'<div style="font-size:12px;margin:5px 0 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+      '<span style="font-weight:800;color:var(--text2);letter-spacing:.02em">'+_cA+'A'+(_cC?' · '+_cC+'C':'')+(_cI?' · '+_cI+'i':'')+'</span>'+
+      '<span style="padding:2px 9px;border-radius:20px;background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.32);color:#4ade80;font-weight:800;font-size:11px;white-space:nowrap">'+_cSeats+' seat'+(_cSeats===1?'':'s')+' sold</span>'+
+      (_cI?'<span style="font-size:10px;color:var(--text3)">'+_cI+' infant'+(_cI===1?'':'s')+' travel free</span>':'')+
+    '</div>':'';
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
     '<div><div class="st" style="margin-bottom:0">Calendar</div>'+
-      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzDowLabel(S.rezdyDate)+' · '+_totBk+' booking'+(_totBk===1?'':'s')+(blocks.length?' · '+blocks.length+' manual block'+(blocks.length===1?'':'s'):'')+'</p></div>'+
+      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzDowLabel(S.rezdyDate)+' · '+_totBk+' booking'+(_totBk===1?'':'s')+(blocks.length?' · '+blocks.length+' manual block'+(blocks.length===1?'':'s'):'')+'</p>'+_calBd+'</div>'+
     '<button class="btn btn-ghost" style="font-size:12px" onclick="window.schedNewBlock()">+ Add block</button></div>';
   // Click-through detail for a stacked block: every booking in the group + a link back to it.
   let detailH='';
@@ -14680,15 +14735,16 @@ function _rzRenderSchedule(){
   });
   headH+='</div>';
 
-  // Red "now" line — slides down the grid as the day passes (today only).
+  // Red "now" line — slides down the grid as the day passes (today only). The element is always
+  // present for today (hidden outside schedule hours) so the per-minute tick can reposition it
+  // in place via _rzTickNowLine — NO full re-render, which is what made the calendar flash.
   var nowLine='';
   if(S.rezdyDate===_rzToday()){
     var _n=new Date();var _nm=_n.getHours()*60+_n.getMinutes();
-    if(_nm>=_RZ_SCH_START*60&&_nm<=_RZ_SCH_END*60){
-      var _ny=(_nm-_RZ_SCH_START*60)*_RZ_PX_PER_MIN;
-      nowLine='<div style="position:absolute;left:0;right:0;top:'+_ny+'px;height:2px;background:#ef4444;z-index:60;pointer-events:none"><div style="position:absolute;left:2px;top:-4px;width:8px;height:8px;border-radius:50%;background:#ef4444"></div><div style="position:absolute;right:4px;top:-9px;font-size:9px;font-weight:800;color:#ef4444">'+String(_n.getHours()).padStart(2,'0')+':'+String(_n.getMinutes()).padStart(2,'0')+'</div></div>';
-    }
-    if(!S._rzNowTimer)S._rzNowTimer=setInterval(function(){if(S.rezdyTab==='schedule'&&typeof safeRender==='function')safeRender();},60000);
+    var _inR=(_nm>=_RZ_SCH_START*60&&_nm<=_RZ_SCH_END*60);
+    var _ny=(_nm-_RZ_SCH_START*60)*_RZ_PX_PER_MIN;
+    nowLine='<div id="rzNowLine" style="position:absolute;left:0;right:0;top:'+_ny+'px;height:2px;background:#ef4444;z-index:60;pointer-events:none;display:'+(_inR?'block':'none')+'"><div style="position:absolute;left:2px;top:-4px;width:8px;height:8px;border-radius:50%;background:#ef4444"></div><div id="rzNowTime" style="position:absolute;right:4px;top:-9px;font-size:9px;font-weight:800;color:#ef4444">'+String(_n.getHours()).padStart(2,'0')+':'+String(_n.getMinutes()).padStart(2,'0')+'</div></div>';
+    if(!S._rzNowTimer)S._rzNowTimer=setInterval(_rzTickNowLine,60000);
   }
   const grid='<div class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+
     headH+
@@ -14709,7 +14765,18 @@ function _rzRenderSchedule(){
 // Open a booking's passenger detail straight from its calendar block.
 window.rezdySchedShowGroup=function(key){S._schedGroupKey=key;S._schedEdit=null;render();};
 // Jump from a calendar block's passenger detail straight to that booking in the Bookings tab.
-window.rezdyGotoBooking=function(order){S.rezdyTab='bookings';S._rezdyOpen=S._rezdyOpen||{};if(order)S._rezdyOpen[order]=true;S._schedGroupKey=null;render();};
+// The Bookings page lives in the Operations section (S.section/S.tab), NOT as a rezdy sub-tab —
+// setting S.rezdyTab did nothing, so the button appeared dead. Switch sections and open the card.
+window.rezdyGotoBooking=function(order){
+  order=String(order||'');
+  S._rezdyOpen=S._rezdyOpen||{};if(order)S._rezdyOpen[order]=true;
+  S._schedGroupKey=null;
+  // Select the booking's departure (or the cancelled view) so its card is actually on screen.
+  var _b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===order;});
+  if(_b)S._bkDepFilter=/cancel/i.test(_b.status||'')?'__cancelled__':_rzBookingDep(_b);
+  if(typeof window.switchOpsTab==='function')window.switchOpsTab('bookings');
+  else{S.section='operations';S.tab='bookings';render();}
+};
 
 window.rezdyLoadSchedule=async function(){
   S._schedLoading=true;safeRender();

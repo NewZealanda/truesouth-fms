@@ -71,6 +71,10 @@ document.addEventListener('keydown',function(e){
       var _mn=_mc+_dir;if(_mn<0)_mn=_mt.length-1;if(_mn>=_mt.length)_mn=0;
       e.preventDefault();S.maintTab=_mt[_mn];render();return;
     }
+    // Calendar: cycle the day.
+    if(S.section==='rezdy'&&S.rezdyTab==='schedule'&&typeof window.rezdyShiftDate==='function'){
+      e.preventDefault();window.rezdyShiftDate(_dir);return;
+    }
     if(S.section!=='operations')return;
     var _tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
     var _cur=_tabs.indexOf(S.tab);if(_cur<0)_cur=0;
@@ -86,6 +90,8 @@ window._cycleTier2=function(dir){
     var cur=tabs.indexOf(S.tab);if(cur<0)cur=0;var nx=(cur+dir+tabs.length)%tabs.length;
     if(typeof window.switchOpsTab==='function')window.switchOpsTab(tabs[nx]);
   } else if(S.section==='rezdy'){
+    // On the Calendar, cycle the DAY (swipe outside the grid / arrow keys) instead of the sub-tabs.
+    if(S.rezdyTab==='schedule'&&typeof window.rezdyShiftDate==='function'){window.rezdyShiftDate(dir);return;}
     var rt=['schedule','pickups','mypickups'];var c=rt.indexOf(S.rezdyTab);if(c<0)c=0;var n=(c+dir+rt.length)%rt.length;
     S.rezdyTab=rt[n];render();
   }
