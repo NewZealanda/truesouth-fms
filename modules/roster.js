@@ -291,11 +291,14 @@ function renderRosterView(){
   });
   h+='</tr>';
   h+='<tr style="background:var(--card2);border-bottom:2px solid var(--border2)">';
-  h+='<td style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--text3);position:sticky;left:0;z-index:21;background:var(--card2);border-right:1px solid var(--border)">Totals</td>';
+  h+='<td style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--text3);position:sticky;left:0;z-index:21;background:var(--card2);border-right:1px solid var(--border)">Staff on duty<div style="font-size:9px;font-weight:600;color:var(--text3);opacity:.8">'+displayUsers.length+' staff total</div></td>';
   days.forEach(function(d,i){
     var ds=_rIso(d),isTdy=ds===todayStr;
     var tots=_dayTots(ds);
+    var _dayTotal=0;ROLE_GROUPS.forEach(function(g){_dayTotal+=tots[g.key]||0;});
     h+='<td style="padding:3px 2px;text-align:center;background:'+(isTdy?'rgba(124,58,237,.08)':'transparent')+'">';
+    // Overall staff-on-duty count for the day, above the per-role breakdown.
+    h+='<div style="font-size:14px;font-weight:900;line-height:1;margin-bottom:3px;color:'+(isTdy?'#a78bfa':'var(--text1)')+'" title="'+_dayTotal+' staff on duty">'+_dayTotal+'</div>';
     ROLE_GROUPS.forEach(function(g){
       if(tots[g.key]>0){
         h+='<span style="display:inline-block;padding:1px 4px;border-radius:4px;font-size:9px;font-weight:800;margin:1px;background:'+g.col+'1a;color:'+g.col+'">'+g.label[0]+tots[g.key]+'</span>';

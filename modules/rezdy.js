@@ -1052,9 +1052,18 @@ function _rzRenderBookings(){
   if(depFilter)S._bkDepFilter=depFilter; // persist the resolved departure so Push knows which one
   // Checked-in count for the SELECTED departure (push is departure-scoped).
   var _ciCount=active.filter(function(b){return _rzBookingDep(b)===depFilter&&(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')];}).length;
+  // Whole-day passenger breakdown across the ACTIVE bookings. Seats sold excludes infants
+  // (lap pax — they travel free and don't take a seat).
+  var _dayA=0,_dayC=0,_dayI=0;active.forEach(function(b){var _x=_rzEffBreakdown(b);_dayA+=_x.a;_dayC+=_x.c;_dayI+=_x.i;});
+  var _seatsSold=_dayA+_dayC;
+  var _dayBd=(allRows.length&&active.length)?'<div style="font-size:12px;margin:5px 0 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+      '<span style="font-weight:800;color:var(--text2);letter-spacing:.02em">'+_dayA+'A'+(_dayC?' · '+_dayC+'C':'')+(_dayI?' · '+_dayI+'i':'')+'</span>'+
+      '<span style="padding:2px 9px;border-radius:20px;background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.32);color:#4ade80;font-weight:800;font-size:11px;white-space:nowrap">'+_seatsSold+' seat'+(_seatsSold===1?'':'s')+' sold</span>'+
+      (_dayI?'<span style="font-size:10px;color:var(--text3)">'+_dayI+' infant'+(_dayI===1?'':'s')+' travel free</span>':'')+
+    '</div>':'';
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
     '<div><div class="st" style="margin-bottom:0">Rezdy Bookings</div>'+
-      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+(allRows.length?active.length+' active'+(cancelledRows.length?' · '+cancelledRows.length+' cancelled':'')+' for '+_rzDowLabel(S.rezdyDate):'No cached bookings')+'</p></div>'+
+      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+(allRows.length?active.length+' active'+(cancelledRows.length?' · '+cancelledRows.length+' cancelled':'')+' for '+_rzDowLabel(S.rezdyDate):'No cached bookings')+'</p>'+_dayBd+'</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.rezdyNewBookingOpen()">+ New booking</button>'+
       (allRows.length?'<button class="btn btn-ghost" style="font-size:12px" title="Print the day’s bookings" onclick="window.rezdyBookingsPrint()">🖨 Print</button>':'')+

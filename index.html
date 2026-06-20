@@ -725,7 +725,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.04';
+const APP_VER='v24.05';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -10082,11 +10082,14 @@ function renderRosterView(){
   });
   h+='</tr>';
   h+='<tr style="background:var(--card2);border-bottom:2px solid var(--border2)">';
-  h+='<td style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--text3);position:sticky;left:0;z-index:21;background:var(--card2);border-right:1px solid var(--border)">Totals</td>';
+  h+='<td style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--text3);position:sticky;left:0;z-index:21;background:var(--card2);border-right:1px solid var(--border)">Staff on duty<div style="font-size:9px;font-weight:600;color:var(--text3);opacity:.8">'+displayUsers.length+' staff total</div></td>';
   days.forEach(function(d,i){
     var ds=_rIso(d),isTdy=ds===todayStr;
     var tots=_dayTots(ds);
+    var _dayTotal=0;ROLE_GROUPS.forEach(function(g){_dayTotal+=tots[g.key]||0;});
     h+='<td style="padding:3px 2px;text-align:center;background:'+(isTdy?'rgba(124,58,237,.08)':'transparent')+'">';
+    // Overall staff-on-duty count for the day, above the per-role breakdown.
+    h+='<div style="font-size:14px;font-weight:900;line-height:1;margin-bottom:3px;color:'+(isTdy?'#a78bfa':'var(--text1)')+'" title="'+_dayTotal+' staff on duty">'+_dayTotal+'</div>';
     ROLE_GROUPS.forEach(function(g){
       if(tots[g.key]>0){
         h+='<span style="display:inline-block;padding:1px 4px;border-radius:4px;font-size:9px;font-weight:800;margin:1px;background:'+g.col+'1a;color:'+g.col+'">'+g.label[0]+tots[g.key]+'</span>';
@@ -12569,9 +12572,18 @@ function _rzRenderBookings(){
   if(depFilter)S._bkDepFilter=depFilter; // persist the resolved departure so Push knows which one
   // Checked-in count for the SELECTED departure (push is departure-scoped).
   var _ciCount=active.filter(function(b){return _rzBookingDep(b)===depFilter&&(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')];}).length;
+  // Whole-day passenger breakdown across the ACTIVE bookings. Seats sold excludes infants
+  // (lap pax — they travel free and don't take a seat).
+  var _dayA=0,_dayC=0,_dayI=0;active.forEach(function(b){var _x=_rzEffBreakdown(b);_dayA+=_x.a;_dayC+=_x.c;_dayI+=_x.i;});
+  var _seatsSold=_dayA+_dayC;
+  var _dayBd=(allRows.length&&active.length)?'<div style="font-size:12px;margin:5px 0 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+      '<span style="font-weight:800;color:var(--text2);letter-spacing:.02em">'+_dayA+'A'+(_dayC?' · '+_dayC+'C':'')+(_dayI?' · '+_dayI+'i':'')+'</span>'+
+      '<span style="padding:2px 9px;border-radius:20px;background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.32);color:#4ade80;font-weight:800;font-size:11px;white-space:nowrap">'+_seatsSold+' seat'+(_seatsSold===1?'':'s')+' sold</span>'+
+      (_dayI?'<span style="font-size:10px;color:var(--text3)">'+_dayI+' infant'+(_dayI===1?'':'s')+' travel free</span>':'')+
+    '</div>':'';
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
     '<div><div class="st" style="margin-bottom:0">Rezdy Bookings</div>'+
-      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+(allRows.length?active.length+' active'+(cancelledRows.length?' · '+cancelledRows.length+' cancelled':'')+' for '+_rzDowLabel(S.rezdyDate):'No cached bookings')+'</p></div>'+
+      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+(allRows.length?active.length+' active'+(cancelledRows.length?' · '+cancelledRows.length+' cancelled':'')+' for '+_rzDowLabel(S.rezdyDate):'No cached bookings')+'</p>'+_dayBd+'</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.rezdyNewBookingOpen()">+ New booking</button>'+
       (allRows.length?'<button class="btn btn-ghost" style="font-size:12px" title="Print the day’s bookings" onclick="window.rezdyBookingsPrint()">🖨 Print</button>':'')+
