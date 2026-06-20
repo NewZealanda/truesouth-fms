@@ -725,7 +725,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.16';
+const APP_VER='v24.17';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3408,6 +3408,12 @@ function renderDrawer(){
   h+='<button onclick="S._drawerOpen=false;render()" style="background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;padding:5px 7px;border-radius:6px;flex-shrink:0;line-height:1">✕</button>';
   h+='</div>';
   h+='<nav style="flex:1;padding:10px 8px">';
+  // Calendar — its own tier-1 section (was Rezdy ▸ Calendar), gated on the 'calendar' permission.
+  // Pinned to the TOP of the drawer.
+  if(hasRolePerm('calendar')){
+    var _calOn=sec==='calendar';
+    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'calendar\';S.rezdyTab=\'schedule\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_calOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_calOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_calOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📅</span><span style="flex:1">Calendar</span></button>';
+  }
   if(_canOps){
     h+=_secBtn('Operations','operations','✈️');
     if(_isExp('operations')){
@@ -3466,11 +3472,6 @@ function renderDrawer(){
       if(hasRolePerm('audit'))h+=_sn('Audit','audit');
     }
    }
-  }
-  // Calendar — its own tier-1 section (was Rezdy ▸ Calendar), gated on the 'calendar' permission.
-  if(hasRolePerm('calendar')){
-    var _calOn=sec==='calendar';
-    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'calendar\';S.rezdyTab=\'schedule\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_calOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_calOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_calOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📅</span><span style="flex:1">Calendar</span></button>';
   }
   h+='</nav>';
   h+='<div style="padding:10px 16px;font-size:10px;color:rgba(255,255,255,.18);font-family:monospace;border-top:1px solid rgba(255,255,255,.06)">'+APP_VER+'</div>';
@@ -13363,8 +13364,15 @@ window.pickupSave=async function(silent){
     data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{}}
   };
   const r=await sbU('ts_pickup_lists',[payload]);
-  if(r&&typeof _rzPickupBroadcast==='function')_rzPickupBroadcast(); // A2: tell other devices to re-pull this date's pickups/check-ins
-  if(!silent)toast(r?'Pickup list saved ✓':'Save failed',r?'ok':'err');
+  if(r){
+    S._pickupSavedTs=Date.now(); // mark a fresh local save so a stale live-reload can't revert it
+    if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast(); // A2: tell other devices to re-pull this date's pickups/check-ins
+    if(!silent&&typeof toast==='function')toast('Pickup list saved ✓','ok');
+  }else{
+    // A silently-failed save is exactly the "my pickups reverted" bug — surface it ALWAYS, even on
+    // the high-frequency auto-saves, so a permission/connection failure can't lose work quietly.
+    if(typeof toast==='function')toast('Pickup changes did NOT save — check your connection/permission','err');
+  }
 };
 // A2: live-sync receiver — another device saved the pickup list (check-ins / allocations /
 // drivers) for the date we're viewing. Re-pull the blob WITHOUT the loading flash. Date-guarded
@@ -13375,6 +13383,10 @@ window.rezdyReloadPickupLive=function(){
   // open, dragging) — that would discard their in-flight change. Reconciles on the next blur-time
   // broadcast / tab revisit. Mirrors the loadsheet ls_update guard.
   var _ae=document.activeElement;if(_ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(_ae.tagName||''))return;
+  // Don't let a stale broadcast / socket-reconnect backfill revert a change the user JUST made
+  // locally (reorder, check-in, van move). Their save is the freshest; apply remote updates after
+  // a short grace window. (The deeper multi-device whole-blob merge is the proper long-term fix.)
+  if(S._pickupSavedTs&&(Date.now()-S._pickupSavedTs)<7000)return;
   try{sbF('ts_pickup_lists','&list_date=eq.'+encodeURIComponent(S.rezdyDate)).then(function(rows){
     var row=(rows&&rows.length)?_rzRow(rows[0]):null;
     if(row&&Array.isArray(row.vans)){

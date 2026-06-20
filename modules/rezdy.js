@@ -1739,8 +1739,15 @@ window.pickupSave=async function(silent){
     data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{}}
   };
   const r=await sbU('ts_pickup_lists',[payload]);
-  if(r&&typeof _rzPickupBroadcast==='function')_rzPickupBroadcast(); // A2: tell other devices to re-pull this date's pickups/check-ins
-  if(!silent)toast(r?'Pickup list saved ✓':'Save failed',r?'ok':'err');
+  if(r){
+    S._pickupSavedTs=Date.now(); // mark a fresh local save so a stale live-reload can't revert it
+    if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast(); // A2: tell other devices to re-pull this date's pickups/check-ins
+    if(!silent&&typeof toast==='function')toast('Pickup list saved ✓','ok');
+  }else{
+    // A silently-failed save is exactly the "my pickups reverted" bug — surface it ALWAYS, even on
+    // the high-frequency auto-saves, so a permission/connection failure can't lose work quietly.
+    if(typeof toast==='function')toast('Pickup changes did NOT save — check your connection/permission','err');
+  }
 };
 // A2: live-sync receiver — another device saved the pickup list (check-ins / allocations /
 // drivers) for the date we're viewing. Re-pull the blob WITHOUT the loading flash. Date-guarded
@@ -1751,6 +1758,10 @@ window.rezdyReloadPickupLive=function(){
   // open, dragging) — that would discard their in-flight change. Reconciles on the next blur-time
   // broadcast / tab revisit. Mirrors the loadsheet ls_update guard.
   var _ae=document.activeElement;if(_ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(_ae.tagName||''))return;
+  // Don't let a stale broadcast / socket-reconnect backfill revert a change the user JUST made
+  // locally (reorder, check-in, van move). Their save is the freshest; apply remote updates after
+  // a short grace window. (The deeper multi-device whole-blob merge is the proper long-term fix.)
+  if(S._pickupSavedTs&&(Date.now()-S._pickupSavedTs)<7000)return;
   try{sbF('ts_pickup_lists','&list_date=eq.'+encodeURIComponent(S.rezdyDate)).then(function(rows){
     var row=(rows&&rows.length)?_rzRow(rows[0]):null;
     if(row&&Array.isArray(row.vans)){

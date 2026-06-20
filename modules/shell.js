@@ -522,6 +522,12 @@ function renderDrawer(){
   h+='<button onclick="S._drawerOpen=false;render()" style="background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;padding:5px 7px;border-radius:6px;flex-shrink:0;line-height:1">✕</button>';
   h+='</div>';
   h+='<nav style="flex:1;padding:10px 8px">';
+  // Calendar — its own tier-1 section (was Rezdy ▸ Calendar), gated on the 'calendar' permission.
+  // Pinned to the TOP of the drawer.
+  if(hasRolePerm('calendar')){
+    var _calOn=sec==='calendar';
+    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'calendar\';S.rezdyTab=\'schedule\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_calOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_calOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_calOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📅</span><span style="flex:1">Calendar</span></button>';
+  }
   if(_canOps){
     h+=_secBtn('Operations','operations','✈️');
     if(_isExp('operations')){
@@ -580,11 +586,6 @@ function renderDrawer(){
       if(hasRolePerm('audit'))h+=_sn('Audit','audit');
     }
    }
-  }
-  // Calendar — its own tier-1 section (was Rezdy ▸ Calendar), gated on the 'calendar' permission.
-  if(hasRolePerm('calendar')){
-    var _calOn=sec==='calendar';
-    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'calendar\';S.rezdyTab=\'schedule\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_calOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_calOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_calOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📅</span><span style="flex:1">Calendar</span></button>';
   }
   h+='</nav>';
   h+='<div style="padding:10px 16px;font-size:10px;color:rgba(255,255,255,.18);font-family:monospace;border-top:1px solid rgba(255,255,255,.06)">'+APP_VER+'</div>';
