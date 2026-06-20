@@ -1067,7 +1067,8 @@ function _rzSourceLabel(b){
 }
 // Build the expanded detail panel for one booking (passengers, extras, requests, balance).
 function _rzBookingDetail(b){
-  const sec='font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:4px';
+  const sec='font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:800;margin-bottom:5px';
+  const _pan='background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:9px 11px'; // each section sits in its own subtle panel for readability
   var _bdOrder=String(b.orderNumber||'');var _bdOE=_rzEsc(_bdOrder).replace(/'/g,"\\'");
   // Passenger bubbles (moved here from the collapsed card) + a per-booking "Reset to Rezdy".
   var bubsH='';var _bub=_rzPaxBubbles(b);
@@ -1081,7 +1082,7 @@ function _rzBookingDetail(b){
   var _dOrder=String(b.orderNumber||'');
   var oDE=_rzEsc(_dOrder).replace(/'/g,"\\'");
   var _pr=_rzPaxRows(b);
-  let paxH='<div style="margin-bottom:10px"><div style="'+sec+'">Passengers ('+_pr.length+') <span style="font-weight:400;text-transform:none;letter-spacing:0">— tap A/C/i to preset</span></div>';
+  let paxH='<div style="'+_pan+'"><div style="'+sec+'">Passengers ('+_pr.length+') <span style="font-weight:400;text-transform:none;letter-spacing:0">— tap A/C/i to preset</span></div>';
   if(!_pr.length){
     paxH+='<div style="font-size:12px;color:var(--text3)">—</div>';
   }else{
@@ -1112,7 +1113,7 @@ function _rzBookingDetail(b){
   (b.items||[]).forEach(function(it){(it.extras||[]).forEach(function(e){if(e&&e.name)extras.push(e);});});
   let exH='';
   if(extras.length){
-    exH='<div style="margin-bottom:10px"><div style="'+sec+'">Extras / Lunches</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
+    exH='<div style="'+_pan+'"><div style="'+sec+'">Extras / Lunches</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
     extras.forEach(function(e){
       exH+='<span style="padding:3px 9px;border-radius:12px;background:var(--card);border:1px solid var(--border2);font-size:11px;color:var(--text2)">'+_rzEsc(e.name)+' × '+(parseInt(e.qty,10)||1)+'</span>';
     });
@@ -1130,7 +1131,7 @@ function _rzBookingDetail(b){
   if(b.comments&&String(b.comments).trim()!=='')reqs.push({label:'Comments',value:String(b.comments)});
   let reqH='';
   if(reqs.length){
-    reqH='<div style="margin-bottom:10px"><div style="'+sec+'">Special Requests</div><div style="display:flex;flex-direction:column;gap:4px">';
+    reqH='<div style="'+_pan+'"><div style="'+sec+'">Special Requests</div><div style="display:flex;flex-direction:column;gap:4px">';
     reqs.forEach(function(r){
       reqH+='<div style="font-size:12px;color:var(--text)"><b style="color:var(--text2)">'+_rzEsc(r.label)+':</b> '+_rzEsc(r.value)+'</div>';
     });
@@ -1139,7 +1140,7 @@ function _rzBookingDetail(b){
   // Contact (email hidden from the table — shown here on expand).
   let contactH='';
   if(b.email||b.phone){
-    contactH='<div style="margin-bottom:10px"><div style="'+sec+'">Contact</div>';
+    contactH='<div style="'+_pan+'"><div style="'+sec+'">Contact</div>';
     if(b.phone)contactH+='<div style="font-size:12.5px"><a href="tel:'+_rzEsc(b.phone)+'" style="color:var(--acc);text-decoration:none">📞 '+_rzEsc(b.phone)+'</a></div>';
     if(b.email)contactH+='<div style="font-size:12.5px;word-break:break-all"><a href="mailto:'+_rzEsc(b.email)+'" style="color:var(--acc);text-decoration:none">✉ '+_rzEsc(b.email)+'</a></div>';
     contactH+='</div>';
@@ -1157,20 +1158,20 @@ function _rzBookingDetail(b){
     _pkRows.push('<div style="display:flex;align-items:center;gap:6px">'+(pt?'<span style="font-size:11px;font-weight:800;color:var(--text2);white-space:nowrap;flex-shrink:0">🕑 '+_rzEsc(pt)+'</span>':'')+_rzLocSelect(pid,cur)+'</div>');
   });
   if(_pkRows.length){
-    pkH='<div style="margin-bottom:10px"><div style="'+sec+'">Pickup'+(_pkRows.length>1?'s':'')+'</div><div style="display:flex;flex-direction:column;gap:4px">'+_pkRows.join('')+'</div></div>';
+    pkH='<div style="'+_pan+'"><div style="'+sec+'">Pickup'+(_pkRows.length>1?'s':'')+'</div><div style="display:flex;flex-direction:column;gap:4px">'+_pkRows.join('')+'</div></div>';
   }
   // Balance.
   const bal=parseFloat(b.balanceDue);
   const owing=isFinite(bal)&&bal>0;
-  let balH='<div><div style="'+sec+'">Balance</div>';
+  let balH='<div style="'+_pan+'"><div style="'+sec+'">Balance</div>';
   balH+='<div style="font-size:14px;font-weight:800;color:'+(owing?'#f59e0b':'#4ade80')+'">'+(owing?'⚠ '+_rzEsc(_rzMoney(bal,b.currency))+' owing':'Paid in full')+'</div>';
   balH+='<div style="font-size:11px;color:var(--text3);margin-top:2px">Total '+_rzEsc(_rzMoney(b.totalAmount,b.currency)||'—')+' · Paid '+_rzEsc(_rzMoney(b.totalPaid,b.currency)||'—')+'</div>';
   balH+='</div>';
   // Booking source / marketplace — always shown (e.g. Viator, GYG, Direct).
-  var srcH='<div style="margin-bottom:10px"><div style="'+sec+'">Source</div><span class="pill" style="background:var(--card2);border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px">'+_rzEsc(_rzSourceLabel(b))+'</span></div>';
-  return bubsH+'<div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">'+
-    '<div style="flex:1 1 300px;min-width:240px">'+paxH+exH+'</div>'+
-    '<div style="flex:1 1 260px;min-width:220px">'+contactH+pkH+reqH+srcH+balH+'</div>'+
+  var srcH='<div style="'+_pan+'"><div style="'+sec+'">Source</div><span class="pill" style="background:var(--card);border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px">'+_rzEsc(_rzSourceLabel(b))+'</span></div>';
+  return bubsH+'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start">'+
+    '<div style="flex:1 1 300px;min-width:240px;display:flex;flex-direction:column;gap:8px">'+paxH+exH+'</div>'+
+    '<div style="flex:1 1 240px;min-width:220px;display:flex;flex-direction:column;gap:8px">'+pkH+contactH+reqH+balH+srcH+'</div>'+
     '</div>';
 }
 
@@ -1855,10 +1856,8 @@ function _rzRenderManifest(){
       h+=_rzManWBReadout(selDep,id);
       h+=_rzManSeatGrid(selDep,id,col);
       h+=_rzManCargoZones(selDep,id);
-      // Only show pax that didn't fit a seat (overflow) — the seat plan is the single bubble set.
-      var _sm=_rzManSeatsFor(selDep,id);var _seated={};Object.keys(_sm).forEach(function(k){_seated[_sm[k]]=1;});
-      var _over=list.filter(function(p){return !_seated[p.id];});
-      if(_over.length){h+='<div style="font-size:10px;color:#f59e0b;font-weight:800;margin:2px 0 4px">Unseated ('+_over.length+') — drag to a seat:</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';_over.forEach(function(p){h+=_rzManBubble(p,pax);});h+='</div>';}
+      // No per-aircraft "unseated" area: anyone who doesn't fit a seat is bumped back to the shared
+      // unallocated pool (see rezdyManReseat / rezdyManDrop), so the pool is the single overflow area.
     }
     h+='<button class="btn btn-primary" style="width:100%;padding:8px;font-size:12px;'+(list.length?'':'opacity:.5')+'" onclick="window.rezdyManCreateLoadsheet(\''+idE+'\',\''+_rzEsc(selDep).replace(/'/g,"\\'")+'\')">📋 Create loadsheet</button>';
     } // /open
@@ -2053,6 +2052,10 @@ window.rezdyManDrop=function(ac,e){
     var paxSeats=(typeof paxSeatIdxs==='function')?paxSeatIdxs(dest,_coSeat===1):[];var freeIdx=null;
     for(var i=0;i<paxSeats.length;i++){if(!sm[paxSeats[i]]){freeIdx=paxSeats[i];break;}}
     if(freeIdx!=null){sm[freeIdx]=p.id;S._rzManSeats[key]=sm;}
+    else{ // cabin full — leave them in the shared unallocated pool rather than an unseated overflow
+      p.ac=null;(S._rzManPax||[]).forEach(function(x){if(x.infantOf===p.id)x.ac=null;});
+      if(typeof toast==='function')toast(String(dest).replace('ZK-','')+' is full — '+(p.name||'passenger')+' stays in the pool.','warn');
+    }
   }
   _rzManSave();render();
 };

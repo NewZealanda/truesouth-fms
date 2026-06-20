@@ -1744,16 +1744,11 @@ window.submitLsInPlace=async function(){
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Loadsheet submitted ✓','ok');
-  // Submitting closes the tab everywhere (only the tabs still being worked on stay open)
-  var _sidx=S.lsTabs.findIndex(function(t){return t.id===id;});
-  if(_sidx!==-1){
-    if(S.activeTabId===id){
-      if(S.lsTabs.length>1){var _snx=S.lsTabs[_sidx>0?_sidx-1:1];S.activeTabId=_snx.id;S.form=_snx.form;S.lsAc=(_snx.acId||'').replace('ZK-','');S.editId=_snx.id;}
-      else{S.activeTabId=null;S.editId=null;S._newLsTab=false;S.tab='saved';}
-    }
-    S.lsTabs.splice(_sidx,1);
-  }
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_close',payload:{id:id}},ref:String(_rtRef)}));}
+  // Keep the signed loadsheet OPEN so the pilot can read it while loading the aircraft. Mark the
+  // live form + its tab complete (removes the "unsigned" banner; the chip shows ✓).
+  f.status='complete';
+  var _t2=S.lsTabs.find(function(t){return t.id===id;});if(_t2){_t2.form=f;_t2.status='complete';}
+  S.activeTabId=id;S.form=f;S.editId=id;S.lsAc=(f.ac||'').replace('ZK-','');
   window.saveWorkspace&&window.saveWorkspace();
   try{window.scrollTo(0,0);}catch(e){}
   render();
@@ -1777,16 +1772,10 @@ window.handleSubmit=async()=>{
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
   toast('Loadsheet submitted.','ok');
-  // Close the tab
-  var _tid=id;S.editId=null;S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.formDirty=false;
-  var _idx=S.lsTabs.findIndex(function(t){return t.id===_tid;});
-  if(_idx!==-1){
-    if(S.activeTabId===_tid){
-      if(S.lsTabs.length>1){var _nx=S.lsTabs[_idx>0?_idx-1:1];S.activeTabId=_nx.id;S.form=_nx.form;S.lsAc=_nx.acId.replace('ZK-','');S.editId=_nx.id;}
-      else{S.activeTabId=null;S._newLsTab=false;S.tab='saved';}
-    }
-    S.lsTabs.splice(_idx,1);
-  } else {S.tab='saved';}
+  // Keep the signed loadsheet OPEN so the pilot can read it while loading.
+  f.status='complete';
+  var _t3=S.lsTabs.find(function(t){return t.id===id;});if(_t3){_t3.form=f;_t3.status='complete';}
+  S.activeTabId=id;S.form=f;S.editId=id;S.lsAc=(f.ac||'').replace('ZK-','');S.formDirty=false;
   render();
 };
 // (window.newSheet removed in v23.76 — legacy loadsheet route retired.)
@@ -2661,7 +2650,10 @@ function setupSig(){
   const pos=e=>{const r=c.getBoundingClientRect(),s=e.touches?e.touches[0]:e,sx=c.width/r.width,sy=c.height/r.height;return{x:(s.clientX-r.left)*sx,y:(s.clientY-r.top)*sy};};
   c.onmousedown=c.ontouchstart=e=>{e.preventDefault();drawing=true;const p=pos(e);c.getContext('2d').beginPath();c.getContext('2d').moveTo(p.x,p.y);};
   c.onmousemove=c.ontouchmove=e=>{if(!drawing)return;e.preventDefault();const ctx=c.getContext('2d'),p=pos(e);ctx.lineWidth=2.5;ctx.lineCap='round';ctx.strokeStyle='#e2e8f0';ctx.lineTo(p.x,p.y);ctx.stroke();ctx.beginPath();ctx.moveTo(p.x,p.y);};
-  c.onmouseup=c.onmouseleave=c.ontouchend=()=>{if(drawing){drawing=false;S.form.sig=c.toDataURL();}};
+  c.onmouseup=c.onmouseleave=c.ontouchend=()=>{if(drawing){drawing=false;var _had=!!S.form.sig;S.form.sig=c.toDataURL();
+    // First stroke → re-render so "Save Draft" swaps to "Submit" immediately (the drawn strokes are
+    // preserved via S.form.sig and redrawn by setupSig). Later strokes don't re-render (no flicker).
+    if(!_had)render();}};
 }
 
 // ── Admin handlers ──

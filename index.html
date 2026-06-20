@@ -722,7 +722,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.95';
+const APP_VER='v23.96';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3460,15 +3460,15 @@ function renderApp(){
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:10px">
           <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;S._drawerSection=S.section;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;margin-top:5px" title="Menu">☰</button>
-          <img src="${_TS_LOGO}" alt="True South Flights" style="height:38px;width:auto;display:block;object-fit:contain">
+          <img src="${_TS_LOGO}" alt="True South Flights" style="height:${S.mobileView?'28':'38'}px;width:auto;display:block;object-fit:contain">
         </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-          <div style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)" title="${S._sessionExpired?'Session expired — sign out and back in to keep saving':S.rtStatus==='live'?'Live — synced':S.rtStatus==='connecting'?'Connecting...':'Offline'}">
+        <div style="display:flex;align-items:center;gap:${S.mobileView?'8':'6'}px;flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:5px;${S.mobileView?'':'padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)'}" title="${(S._sessionExpired?'Session expired — sign out and back in to keep saving':S.rtStatus==='live'?'Live — synced':S.rtStatus==='connecting'?'Connecting...':'Offline')+' · '+APP_VER}">
             <span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${S._sessionExpired?'#ef4444':S.rtStatus==='live'?'#22c55e':S.rtStatus==='connecting'?'#f59e0b':'#6b7280'}"></span>
-            <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.04em">${APP_VER}</span>
+            ${S.mobileView?'':`<span style="font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.04em">${APP_VER}</span>`}
           </div>
           ${(function(){var _unc=(S._notifications||[]).filter(function(n){return !n.read;}).length;return '<div style="position:relative;display:inline-block">'+'<button tabindex="-1" onclick="event.stopPropagation();S._notifOpen=!S._notifOpen;if(S._notifOpen)window.loadNotifications();render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:14px;color:rgba(255,255,255,.5);cursor:pointer;position:relative" title="Notifications">\u{1F514}</button>'+(_unc>0?'<span style="position:absolute;top:-3px;right:-3px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;pointer-events:none;min-width:14px;text-align:center">'+_unc+'</span>':'')+(S._notifOpen?('<div onclick="S._notifOpen=false;render()" style="position:fixed;inset:0;z-index:2050"></div>'+renderNotificationPanel()):'')+'</div>';})()}
-          <button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:12px;color:rgba(255,255,255,.4);cursor:pointer;font-weight:700" title="Help">?</button>
+          ${S.mobileView?'':`<button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:12px;color:rgba(255,255,255,.4);cursor:pointer;font-weight:700" title="Help">?</button>`}
           <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 10px 5px 6px;border-radius:20px;cursor:pointer;font-size:11px;color:rgba(255,255,255,.75)" title="Profile & Settings">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${(S.user.name.match(/\b\w/g)||['?']).slice(0,2).join('').toUpperCase()}</div>
             <span style="white-space:nowrap">${S.user.name.split(' ')[0]}</span>
@@ -4053,7 +4053,7 @@ function renderLoadsheet(){
     loadingH=`<div class="card" id="lsf-loading" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
       <div class="st">Passengers, Loading &amp; Fuel</div>
       ${wbSummary}
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button><button onclick="S._showUnalloc=!S._showUnalloc;autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--border2)'};background:${S._showUnalloc||(_uaPool().length>0)?'rgba(245,158,11,.18)':'transparent'};color:${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--text3)'}">&#x1f465; Unallocated${_uaPool().length>0?' ('+_uaPool().length+')':''}</button></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button onclick="S._lsSeatMode='edit';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button><button onclick="S._showUnalloc=!S._showUnalloc;autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--border2)'};background:${S._showUnalloc||(_uaPool().length>0)?'rgba(245,158,11,.18)':'transparent'};color:${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--text3)'}">&#x1f465; Unallocated${_uaPool().length>0?' ('+_uaPool().length+')':''}</button></div>
       <div style="display:flex;gap:${isMob?'8px':'14px'};align-items:flex-start;${isMob?'':'flex-wrap:wrap;'}">
         <div style="${isMob?'flex:1 1 0;min-width:0':'flex:1;min-width:180px'};overflow-x:auto;-webkit-overflow-scrolling:touch">
           ${renderLsSeatGrid(f,a)}
@@ -4124,20 +4124,14 @@ function renderLoadsheet(){
             const _overCap=a?Object.keys(f.seats).filter(i=>parseInt(i)>=a.seats.length&&(parseFloat(f.seats[i])>0||f.names[i])).length:0;
             const fwdCog=r&&a&&r.towCog!=null&&r.towCog<a.cogMin;
             const fwdWarn=fwdCog?`<div style="padding:8px 12px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fde68a">&#x26a0; Forward CoG ${r.towCog?.toFixed(2)}" &#x2014; forward of limit ${a?.cogMin}". Adjust seating before submitting.</div>`:'';
-            if(f.sig){
-              // Signed: Submit in place (save + toast, stay on tab)
-              const canSubmit=canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0;
-              const btn=`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="width:100%;padding:13px;font-size:14px;font-weight:700" onclick="window.submitLsInPlace()" ${canSubmit?'':'disabled'}>
-                ${!f.pic?'&#x26a0; Select PIC first':fwdCog?'&#x26a0; Fix CoG first':!allOk?'&#x26a0; Fix W&B first':_overCap>0?'&#x26d4; Fix over-capacity first':'&#x2713; Submit'}
-              </button>`;
-              return fwdWarn+btn;
-            } else {
-              // Unsigned: Save draft & close
-              const btn=`<button class="btn-full btn-secondary" style="width:100%;padding:13px;font-size:14px;font-weight:700" onclick="saveUnsigned()" ${_overCap>0?'disabled':''}>
-                ${_overCap>0?'&#x26d4; Fix over-capacity first':'&#x1f4be; Save Draft &amp; Close'}
-              </button>`;
-              return fwdWarn+btn;
-            }
+            // Two buttons side by side. Save Draft is for UNSIGNED work (disabled once signed);
+            // Submit only enables once a signature is drawn (and W&B/PIC are OK).
+            const signed=!!f.sig;
+            const canSubmit=signed&&canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0;
+            const saveDisabled=signed||_overCap>0;
+            const saveBtn=`<button class="btn-full btn-secondary" style="flex:1;padding:13px;font-size:13px;font-weight:700${saveDisabled?';opacity:.45':''}" onclick="saveUnsigned()" ${saveDisabled?'disabled':''}>${_overCap>0?'&#x26d4; Over-capacity':'&#x1f4be; Save Draft'}</button>`;
+            const submitBtn=`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="flex:1;padding:13px;font-size:13px;font-weight:700${canSubmit?'':';opacity:.55'}" onclick="window.submitLsInPlace()" ${canSubmit?'':'disabled'}>${!signed?'&#x270d; Sign to submit':!f.pic?'&#x26a0; Select PIC':fwdCog?'&#x26a0; Fix CoG':!allOk?'&#x26a0; Fix W&amp;B':_overCap>0?'&#x26d4; Over-capacity':'&#x2713; Submit'}</button>`;
+            return fwdWarn+`<div style="display:flex;gap:8px">${saveBtn}${submitBtn}</div>`;
           })()}
         </div>
         <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">${a.doc}</div>
@@ -7045,16 +7039,11 @@ window.submitLsInPlace=async function(){
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
   toast('Loadsheet submitted ✓','ok');
-  // Submitting closes the tab everywhere (only the tabs still being worked on stay open)
-  var _sidx=S.lsTabs.findIndex(function(t){return t.id===id;});
-  if(_sidx!==-1){
-    if(S.activeTabId===id){
-      if(S.lsTabs.length>1){var _snx=S.lsTabs[_sidx>0?_sidx-1:1];S.activeTabId=_snx.id;S.form=_snx.form;S.lsAc=(_snx.acId||'').replace('ZK-','');S.editId=_snx.id;}
-      else{S.activeTabId=null;S.editId=null;S._newLsTab=false;S.tab='saved';}
-    }
-    S.lsTabs.splice(_sidx,1);
-  }
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_close',payload:{id:id}},ref:String(_rtRef)}));}
+  // Keep the signed loadsheet OPEN so the pilot can read it while loading the aircraft. Mark the
+  // live form + its tab complete (removes the "unsigned" banner; the chip shows ✓).
+  f.status='complete';
+  var _t2=S.lsTabs.find(function(t){return t.id===id;});if(_t2){_t2.form=f;_t2.status='complete';}
+  S.activeTabId=id;S.form=f;S.editId=id;S.lsAc=(f.ac||'').replace('ZK-','');
   window.saveWorkspace&&window.saveWorkspace();
   try{window.scrollTo(0,0);}catch(e){}
   render();
@@ -7078,16 +7067,10 @@ window.handleSubmit=async()=>{
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
   toast('Loadsheet submitted.','ok');
-  // Close the tab
-  var _tid=id;S.editId=null;S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.formDirty=false;
-  var _idx=S.lsTabs.findIndex(function(t){return t.id===_tid;});
-  if(_idx!==-1){
-    if(S.activeTabId===_tid){
-      if(S.lsTabs.length>1){var _nx=S.lsTabs[_idx>0?_idx-1:1];S.activeTabId=_nx.id;S.form=_nx.form;S.lsAc=_nx.acId.replace('ZK-','');S.editId=_nx.id;}
-      else{S.activeTabId=null;S._newLsTab=false;S.tab='saved';}
-    }
-    S.lsTabs.splice(_idx,1);
-  } else {S.tab='saved';}
+  // Keep the signed loadsheet OPEN so the pilot can read it while loading.
+  f.status='complete';
+  var _t3=S.lsTabs.find(function(t){return t.id===id;});if(_t3){_t3.form=f;_t3.status='complete';}
+  S.activeTabId=id;S.form=f;S.editId=id;S.lsAc=(f.ac||'').replace('ZK-','');S.formDirty=false;
   render();
 };
 // (window.newSheet removed in v23.76 — legacy loadsheet route retired.)
@@ -7962,7 +7945,10 @@ function setupSig(){
   const pos=e=>{const r=c.getBoundingClientRect(),s=e.touches?e.touches[0]:e,sx=c.width/r.width,sy=c.height/r.height;return{x:(s.clientX-r.left)*sx,y:(s.clientY-r.top)*sy};};
   c.onmousedown=c.ontouchstart=e=>{e.preventDefault();drawing=true;const p=pos(e);c.getContext('2d').beginPath();c.getContext('2d').moveTo(p.x,p.y);};
   c.onmousemove=c.ontouchmove=e=>{if(!drawing)return;e.preventDefault();const ctx=c.getContext('2d'),p=pos(e);ctx.lineWidth=2.5;ctx.lineCap='round';ctx.strokeStyle='#e2e8f0';ctx.lineTo(p.x,p.y);ctx.stroke();ctx.beginPath();ctx.moveTo(p.x,p.y);};
-  c.onmouseup=c.onmouseleave=c.ontouchend=()=>{if(drawing){drawing=false;S.form.sig=c.toDataURL();}};
+  c.onmouseup=c.onmouseleave=c.ontouchend=()=>{if(drawing){drawing=false;var _had=!!S.form.sig;S.form.sig=c.toDataURL();
+    // First stroke → re-render so "Save Draft" swaps to "Submit" immediately (the drawn strokes are
+    // preserved via S.form.sig and redrawn by setupSig). Later strokes don't re-render (no flicker).
+    if(!_had)render();}};
 }
 
 // ── Admin handlers ──
@@ -12532,7 +12518,8 @@ function _rzSourceLabel(b){
 }
 // Build the expanded detail panel for one booking (passengers, extras, requests, balance).
 function _rzBookingDetail(b){
-  const sec='font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:4px';
+  const sec='font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:800;margin-bottom:5px';
+  const _pan='background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:9px 11px'; // each section sits in its own subtle panel for readability
   var _bdOrder=String(b.orderNumber||'');var _bdOE=_rzEsc(_bdOrder).replace(/'/g,"\\'");
   // Passenger bubbles (moved here from the collapsed card) + a per-booking "Reset to Rezdy".
   var bubsH='';var _bub=_rzPaxBubbles(b);
@@ -12546,7 +12533,7 @@ function _rzBookingDetail(b){
   var _dOrder=String(b.orderNumber||'');
   var oDE=_rzEsc(_dOrder).replace(/'/g,"\\'");
   var _pr=_rzPaxRows(b);
-  let paxH='<div style="margin-bottom:10px"><div style="'+sec+'">Passengers ('+_pr.length+') <span style="font-weight:400;text-transform:none;letter-spacing:0">— tap A/C/i to preset</span></div>';
+  let paxH='<div style="'+_pan+'"><div style="'+sec+'">Passengers ('+_pr.length+') <span style="font-weight:400;text-transform:none;letter-spacing:0">— tap A/C/i to preset</span></div>';
   if(!_pr.length){
     paxH+='<div style="font-size:12px;color:var(--text3)">—</div>';
   }else{
@@ -12577,7 +12564,7 @@ function _rzBookingDetail(b){
   (b.items||[]).forEach(function(it){(it.extras||[]).forEach(function(e){if(e&&e.name)extras.push(e);});});
   let exH='';
   if(extras.length){
-    exH='<div style="margin-bottom:10px"><div style="'+sec+'">Extras / Lunches</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
+    exH='<div style="'+_pan+'"><div style="'+sec+'">Extras / Lunches</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
     extras.forEach(function(e){
       exH+='<span style="padding:3px 9px;border-radius:12px;background:var(--card);border:1px solid var(--border2);font-size:11px;color:var(--text2)">'+_rzEsc(e.name)+' × '+(parseInt(e.qty,10)||1)+'</span>';
     });
@@ -12595,7 +12582,7 @@ function _rzBookingDetail(b){
   if(b.comments&&String(b.comments).trim()!=='')reqs.push({label:'Comments',value:String(b.comments)});
   let reqH='';
   if(reqs.length){
-    reqH='<div style="margin-bottom:10px"><div style="'+sec+'">Special Requests</div><div style="display:flex;flex-direction:column;gap:4px">';
+    reqH='<div style="'+_pan+'"><div style="'+sec+'">Special Requests</div><div style="display:flex;flex-direction:column;gap:4px">';
     reqs.forEach(function(r){
       reqH+='<div style="font-size:12px;color:var(--text)"><b style="color:var(--text2)">'+_rzEsc(r.label)+':</b> '+_rzEsc(r.value)+'</div>';
     });
@@ -12604,7 +12591,7 @@ function _rzBookingDetail(b){
   // Contact (email hidden from the table — shown here on expand).
   let contactH='';
   if(b.email||b.phone){
-    contactH='<div style="margin-bottom:10px"><div style="'+sec+'">Contact</div>';
+    contactH='<div style="'+_pan+'"><div style="'+sec+'">Contact</div>';
     if(b.phone)contactH+='<div style="font-size:12.5px"><a href="tel:'+_rzEsc(b.phone)+'" style="color:var(--acc);text-decoration:none">📞 '+_rzEsc(b.phone)+'</a></div>';
     if(b.email)contactH+='<div style="font-size:12.5px;word-break:break-all"><a href="mailto:'+_rzEsc(b.email)+'" style="color:var(--acc);text-decoration:none">✉ '+_rzEsc(b.email)+'</a></div>';
     contactH+='</div>';
@@ -12622,20 +12609,20 @@ function _rzBookingDetail(b){
     _pkRows.push('<div style="display:flex;align-items:center;gap:6px">'+(pt?'<span style="font-size:11px;font-weight:800;color:var(--text2);white-space:nowrap;flex-shrink:0">🕑 '+_rzEsc(pt)+'</span>':'')+_rzLocSelect(pid,cur)+'</div>');
   });
   if(_pkRows.length){
-    pkH='<div style="margin-bottom:10px"><div style="'+sec+'">Pickup'+(_pkRows.length>1?'s':'')+'</div><div style="display:flex;flex-direction:column;gap:4px">'+_pkRows.join('')+'</div></div>';
+    pkH='<div style="'+_pan+'"><div style="'+sec+'">Pickup'+(_pkRows.length>1?'s':'')+'</div><div style="display:flex;flex-direction:column;gap:4px">'+_pkRows.join('')+'</div></div>';
   }
   // Balance.
   const bal=parseFloat(b.balanceDue);
   const owing=isFinite(bal)&&bal>0;
-  let balH='<div><div style="'+sec+'">Balance</div>';
+  let balH='<div style="'+_pan+'"><div style="'+sec+'">Balance</div>';
   balH+='<div style="font-size:14px;font-weight:800;color:'+(owing?'#f59e0b':'#4ade80')+'">'+(owing?'⚠ '+_rzEsc(_rzMoney(bal,b.currency))+' owing':'Paid in full')+'</div>';
   balH+='<div style="font-size:11px;color:var(--text3);margin-top:2px">Total '+_rzEsc(_rzMoney(b.totalAmount,b.currency)||'—')+' · Paid '+_rzEsc(_rzMoney(b.totalPaid,b.currency)||'—')+'</div>';
   balH+='</div>';
   // Booking source / marketplace — always shown (e.g. Viator, GYG, Direct).
-  var srcH='<div style="margin-bottom:10px"><div style="'+sec+'">Source</div><span class="pill" style="background:var(--card2);border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px">'+_rzEsc(_rzSourceLabel(b))+'</span></div>';
-  return bubsH+'<div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">'+
-    '<div style="flex:1 1 300px;min-width:240px">'+paxH+exH+'</div>'+
-    '<div style="flex:1 1 260px;min-width:220px">'+contactH+pkH+reqH+srcH+balH+'</div>'+
+  var srcH='<div style="'+_pan+'"><div style="'+sec+'">Source</div><span class="pill" style="background:var(--card);border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px">'+_rzEsc(_rzSourceLabel(b))+'</span></div>';
+  return bubsH+'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start">'+
+    '<div style="flex:1 1 300px;min-width:240px;display:flex;flex-direction:column;gap:8px">'+paxH+exH+'</div>'+
+    '<div style="flex:1 1 240px;min-width:220px;display:flex;flex-direction:column;gap:8px">'+pkH+contactH+reqH+balH+srcH+'</div>'+
     '</div>';
 }
 
@@ -13320,10 +13307,8 @@ function _rzRenderManifest(){
       h+=_rzManWBReadout(selDep,id);
       h+=_rzManSeatGrid(selDep,id,col);
       h+=_rzManCargoZones(selDep,id);
-      // Only show pax that didn't fit a seat (overflow) — the seat plan is the single bubble set.
-      var _sm=_rzManSeatsFor(selDep,id);var _seated={};Object.keys(_sm).forEach(function(k){_seated[_sm[k]]=1;});
-      var _over=list.filter(function(p){return !_seated[p.id];});
-      if(_over.length){h+='<div style="font-size:10px;color:#f59e0b;font-weight:800;margin:2px 0 4px">Unseated ('+_over.length+') — drag to a seat:</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';_over.forEach(function(p){h+=_rzManBubble(p,pax);});h+='</div>';}
+      // No per-aircraft "unseated" area: anyone who doesn't fit a seat is bumped back to the shared
+      // unallocated pool (see rezdyManReseat / rezdyManDrop), so the pool is the single overflow area.
     }
     h+='<button class="btn btn-primary" style="width:100%;padding:8px;font-size:12px;'+(list.length?'':'opacity:.5')+'" onclick="window.rezdyManCreateLoadsheet(\''+idE+'\',\''+_rzEsc(selDep).replace(/'/g,"\\'")+'\')">📋 Create loadsheet</button>';
     } // /open
@@ -13518,6 +13503,10 @@ window.rezdyManDrop=function(ac,e){
     var paxSeats=(typeof paxSeatIdxs==='function')?paxSeatIdxs(dest,_coSeat===1):[];var freeIdx=null;
     for(var i=0;i<paxSeats.length;i++){if(!sm[paxSeats[i]]){freeIdx=paxSeats[i];break;}}
     if(freeIdx!=null){sm[freeIdx]=p.id;S._rzManSeats[key]=sm;}
+    else{ // cabin full — leave them in the shared unallocated pool rather than an unseated overflow
+      p.ac=null;(S._rzManPax||[]).forEach(function(x){if(x.infantOf===p.id)x.ac=null;});
+      if(typeof toast==='function')toast(String(dest).replace('ZK-','')+' is full — '+(p.name||'passenger')+' stays in the pool.','warn');
+    }
   }
   _rzManSave();render();
 };

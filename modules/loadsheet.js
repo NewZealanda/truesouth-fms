@@ -484,7 +484,7 @@ function renderLoadsheet(){
     loadingH=`<div class="card" id="lsf-loading" style="border-left:4px solid ${AC_COL[f.ac]||'var(--accent)'}">
       <div class="st">Passengers, Loading &amp; Fuel</div>
       ${wbSummary}
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.pushLsToSeatmap()">&#x1f5fa; Push to Seatmap</button><button onclick="S._lsSeatMode='edit';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button><button onclick="S._showUnalloc=!S._showUnalloc;autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--border2)'};background:${S._showUnalloc||(_uaPool().length>0)?'rgba(245,158,11,.18)':'transparent'};color:${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--text3)'}">&#x1f465; Unallocated${_uaPool().length>0?' ('+_uaPool().length+')':''}</button></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${(S._lsFormUndoStack&&S._lsFormUndoStack.length)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.lsUndo()">&#x21b6; Undo (${S._lsFormUndoStack.length})</button>`:''}<button onclick="S._lsSeatMode='edit';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--border2)'};background:${(S._lsSeatMode||'edit')==='edit'?'rgba(124,58,237,.18)':'transparent'};color:${(S._lsSeatMode||'edit')==='edit'?'var(--acc)':'var(--text3)'}">&#x270f; Edit</button><button onclick="S._lsSeatMode='move';autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._lsSeatMode==='move'?'#22c55e':'var(--border2)'};background:${S._lsSeatMode==='move'?'rgba(34,197,94,.18)':'transparent'};color:${S._lsSeatMode==='move'?'#22c55e':'var(--text3)'}">&#x21c4; Move</button><button onclick="S._showUnalloc=!S._showUnalloc;autoSaveLS();render()" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--border2)'};background:${S._showUnalloc||(_uaPool().length>0)?'rgba(245,158,11,.18)':'transparent'};color:${S._showUnalloc||(_uaPool().length>0)?'#f59e0b':'var(--text3)'}">&#x1f465; Unallocated${_uaPool().length>0?' ('+_uaPool().length+')':''}</button></div>
       <div style="display:flex;gap:${isMob?'8px':'14px'};align-items:flex-start;${isMob?'':'flex-wrap:wrap;'}">
         <div style="${isMob?'flex:1 1 0;min-width:0':'flex:1;min-width:180px'};overflow-x:auto;-webkit-overflow-scrolling:touch">
           ${renderLsSeatGrid(f,a)}
@@ -555,20 +555,14 @@ function renderLoadsheet(){
             const _overCap=a?Object.keys(f.seats).filter(i=>parseInt(i)>=a.seats.length&&(parseFloat(f.seats[i])>0||f.names[i])).length:0;
             const fwdCog=r&&a&&r.towCog!=null&&r.towCog<a.cogMin;
             const fwdWarn=fwdCog?`<div style="padding:8px 12px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fde68a">&#x26a0; Forward CoG ${r.towCog?.toFixed(2)}" &#x2014; forward of limit ${a?.cogMin}". Adjust seating before submitting.</div>`:'';
-            if(f.sig){
-              // Signed: Submit in place (save + toast, stay on tab)
-              const canSubmit=canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0;
-              const btn=`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="width:100%;padding:13px;font-size:14px;font-weight:700" onclick="window.submitLsInPlace()" ${canSubmit?'':'disabled'}>
-                ${!f.pic?'&#x26a0; Select PIC first':fwdCog?'&#x26a0; Fix CoG first':!allOk?'&#x26a0; Fix W&B first':_overCap>0?'&#x26d4; Fix over-capacity first':'&#x2713; Submit'}
-              </button>`;
-              return fwdWarn+btn;
-            } else {
-              // Unsigned: Save draft & close
-              const btn=`<button class="btn-full btn-secondary" style="width:100%;padding:13px;font-size:14px;font-weight:700" onclick="saveUnsigned()" ${_overCap>0?'disabled':''}>
-                ${_overCap>0?'&#x26d4; Fix over-capacity first':'&#x1f4be; Save Draft &amp; Close'}
-              </button>`;
-              return fwdWarn+btn;
-            }
+            // Two buttons side by side. Save Draft is for UNSIGNED work (disabled once signed);
+            // Submit only enables once a signature is drawn (and W&B/PIC are OK).
+            const signed=!!f.sig;
+            const canSubmit=signed&&canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0;
+            const saveDisabled=signed||_overCap>0;
+            const saveBtn=`<button class="btn-full btn-secondary" style="flex:1;padding:13px;font-size:13px;font-weight:700${saveDisabled?';opacity:.45':''}" onclick="saveUnsigned()" ${saveDisabled?'disabled':''}>${_overCap>0?'&#x26d4; Over-capacity':'&#x1f4be; Save Draft'}</button>`;
+            const submitBtn=`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="flex:1;padding:13px;font-size:13px;font-weight:700${canSubmit?'':';opacity:.55'}" onclick="window.submitLsInPlace()" ${canSubmit?'':'disabled'}>${!signed?'&#x270d; Sign to submit':!f.pic?'&#x26a0; Select PIC':fwdCog?'&#x26a0; Fix CoG':!allOk?'&#x26a0; Fix W&amp;B':_overCap>0?'&#x26d4; Over-capacity':'&#x2713; Submit'}</button>`;
+            return fwdWarn+`<div style="display:flex;gap:8px">${saveBtn}${submitBtn}</div>`;
           })()}
         </div>
         <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">${a.doc}</div>
