@@ -327,6 +327,7 @@ function _rzApplyManualBk(){
 function _rzPickups(){
   const out=[];const ov=S._pickupLocOverride||{};
   (S._rezdyBookings||[]).forEach(function(b){
+    if(/cancel/i.test(b.status||''))return; // don't send drivers to collect cancelled customers
     (b.items||[]).forEach(function(it,ii){
       if(!it.pickup)return;
       // include the item index so two same-product/same-time items in one order don't collide
@@ -2559,7 +2560,7 @@ function _rzManCargoZones(dep,acId){
 window.rezdyManCargo=function(dep,acId,zi,v){
   S._rzManCargo=S._rzManCargo||{};var key=_rzSeatKey(dep,acId);var c=S._rzManCargo[key]||{};
   var n=String(v).replace(/[^0-9.]/g,'');if(n==='')delete c[zi];else c[zi]=n;
-  S._rzManCargo[key]=c;_rzManSave();
+  S._rzManCargo[key]=c;_rzManSave();if(typeof safeRender==='function')safeRender();
 };
 
 // ── Manifest PIC / fuel / aircraft controls ──
@@ -2619,7 +2620,7 @@ window.rezdyManSetPic=function(acId,code){
   S._rzManPic=S._rzManPic||{};S._rzManPic[acId]=code;_rzManSave();render();
 };
 window.rezdyManClearPic=function(acId){if(S._rzManPic)delete S._rzManPic[acId];_rzManSave();render();};
-window.rezdyManFuel=function(acId,v){S._rzManFuel=S._rzManFuel||{};var n=String(v).replace(/[^0-9.]/g,'');if(n==='')delete S._rzManFuel[acId];else S._rzManFuel[acId]=n;_rzManSave();};
+window.rezdyManFuel=function(acId,v){S._rzManFuel=S._rzManFuel||{};var n=String(v).replace(/[^0-9.]/g,'');if(n==='')delete S._rzManFuel[acId];else S._rzManFuel[acId]=n;_rzManSave();if(typeof safeRender==='function')safeRender();};
 window.rezdyManDeleteAc=function(acId){
   (S._rzManPax||[]).forEach(function(p){if(p.ac===acId){p.ac=null;}}); // pax back to the pool
   if(S._rzManPic)delete S._rzManPic[acId];

@@ -234,7 +234,7 @@ function renderToasts(){
       const border=t.type==='ok'?'#22c55e':t.type==='err'?'#ef4444':t.type==='warn'?'#f59e0b':'#3b82f6';
       const txt=t.type==='ok'?'#86efac':t.type==='err'?'#fca5a5':t.type==='warn'?'#fde68a':'#93c5fd';
       return'<div id="toast-'+t.id+'" style="background:'+bg+';border:1px solid '+border+';border-radius:10px;padding:10px 14px;font-size:13px;color:'+txt+';display:flex;align-items:flex-start;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.4);transition:opacity .3s">'+
-        '<span style="flex:1;line-height:1.4">'+t.msg+'</span>'+
+        '<span style="flex:1;line-height:1.4">'+esc(t.msg)+'</span>'+
         '<button onclick="S.toasts=(S.toasts||[]).filter(function(x){return x.id!==\''+t.id+'\';});render()" style="background:none;border:none;color:'+txt+';cursor:pointer;font-size:16px;padding:0;line-height:1;opacity:.7;flex-shrink:0">&times;</button>'+
         '</div>';
     }).join('')+

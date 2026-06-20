@@ -401,7 +401,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.03';
+const APP_VER='v24.04';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1263,7 +1263,7 @@ async function loadAll(){
     let crew=_pCrew;
     if(crew&&crew.length){
       S.crew=crew.map(c=>({id:c.id,n:c.name,w:c.weight||0,
-        endorse:c.endorsements?JSON.parse(c.endorsements):([]),
+        endorse:(function(){try{return c.endorsements?JSON.parse(c.endorsements):[];}catch(e){return [];}})(),
         code:c.code||'',dlNum:c.dl_num||'',caaNum:c.caa_license||'',
         medExpiry:c.medical_expiry||'',ocaDue:c.oca_due||'',
         firstAid:c.first_aid||'',avsecExpiry:c.avsec_expiry||'',
@@ -1828,7 +1828,7 @@ async function reloadTable(table){
     const crew=await sbF('ts_crew');
     if(crew&&crew.length){
       S.crew=crew.map(function(c){return{id:c.id,n:c.name,w:c.weight||0,
-        endorse:c.endorsements?JSON.parse(c.endorsements):[],
+        endorse:(function(){try{return c.endorsements?JSON.parse(c.endorsements):[];}catch(e){return [];}})(),
         code:c.code||'',dlNum:c.dl_num||'',caaNum:c.caa_license||'',
         medExpiry:c.medical_expiry||'',ocaDue:c.oca_due||'',
         firstAid:c.first_aid||'',avsecExpiry:c.avsec_expiry||'',

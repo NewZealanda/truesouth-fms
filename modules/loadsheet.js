@@ -360,10 +360,10 @@ function renderLoadsheet(){
         <div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;margin-bottom:2px">
           <span style="font-size:9px;font-weight:700;color:var(--text3);min-width:16px;flex-shrink:0">${s.lbl}</span>
           ${nm
-            ?`<div onclick="event.stopPropagation();window.lsNamePopup(${idx})" style="padding:2px 9px;border-radius:20px;background:${gc||'var(--card)'};${gc?'':'border:1px solid var(--border2);'}color:${gc?'#fff':'var(--text1)'};font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px">${displayNm.split(' ')[0]}</div>`
+            ?`<div onclick="event.stopPropagation();window.lsNamePopup(${idx})" style="padding:2px 9px;border-radius:20px;background:${gc||'var(--card)'};${gc?'':'border:1px solid var(--border2);'}color:${gc?'#fff':'var(--text1)'};font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px">${esc(displayNm.split(' ')[0])}</div>`
             :`<input class="fi" type="text" placeholder="Name" style="flex:1;font-size:11px;padding:2px 5px;min-width:0" onblur="lsN(${idx},this.value)" onclick="event.stopPropagation()">`
           }
-          ${infantNm?`<span style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:12px;background:rgba(236,72,153,.15);border:1px solid rgba(236,72,153,.35);font-size:9px;font-weight:700;color:#ec4899;white-space:nowrap">👶 ${infantNm}<button onclick="event.stopPropagation();window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:10px;cursor:pointer;padding:0;line-height:1;opacity:.7;margin-left:1px">×</button></span>`:''}
+          ${infantNm?`<span style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:12px;background:rgba(236,72,153,.15);border:1px solid rgba(236,72,153,.35);font-size:9px;font-weight:700;color:#ec4899;white-space:nowrap">👶 ${esc(infantNm)}<button onclick="event.stopPropagation();window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:10px;cursor:pointer;padding:0;line-height:1;opacity:.7;margin-left:1px">×</button></span>`:''}
           ${hasPerson?`<button onclick="event.stopPropagation();window.lsTogglePayReq(${idx})" style="padding:1px 5px;border-radius:12px;border:1px solid ${payReq?'#ef4444':'var(--border)'};background:${payReq?'rgba(239,68,68,.2)':'transparent'};color:${payReq?'#ef4444':'var(--text3)'};font-size:8px;font-weight:800;cursor:pointer;flex-shrink:0">${payReq?'$ PAY':'$'}</button>`:''}
           ${hasPerson?`<button onclick="event.stopPropagation();window.lsDelPax(${idx})" style="margin-left:auto;width:14px;height:14px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:9px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;opacity:.5" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.5'">×</button>`:''}
         </div>
@@ -554,7 +554,10 @@ function renderLoadsheet(){
         :`<div style="padding:10px;background:var(--card2);border-radius:8px;font-size:12px;color:var(--text3);margin-bottom:8px">${canSign?(r&&a&&r.towCog!=null&&r.towCog<a.cogMin?"⚠ Forward CoG — fix seating before signing.":!allOk?"⚠ Fix W&B before signing.":""):"Only pilots can sign loadsheets. Save as draft for a pilot to complete."}</div>`}
         <div style="margin-top:12px">
           ${(()=>{
-            const _overCap=a?Object.keys(f.seats).filter(i=>parseInt(i)>=a.seats.length&&(parseFloat(f.seats[i])>0||f.names[i])).length:0;
+            // Block submit/save for invalid (>=capacity) AND removed seats — both carry weight in
+            // calcFormWB but a removed-seat pax is hidden on the grid, so it must gate signing too.
+            const _gateRm=(a&&a.removedSeats)||[];
+            const _overCap=a?Object.keys(f.seats).filter(i=>{const n=parseInt(i);return (n>=a.seats.length||_gateRm.includes(n))&&(parseFloat(f.seats[i])>0||f.names[i]);}).length:0;
             const fwdCog=r&&a&&r.towCog!=null&&r.towCog<a.cogMin;
             const fwdWarn=fwdCog?`<div style="padding:8px 12px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fde68a">&#x26a0; Forward CoG ${r.towCog?.toFixed(2)}" &#x2014; forward of limit ${a?.cogMin}". Adjust seating before submitting.</div>`:'';
             // Two buttons side by side. Save Draft is for UNSIGNED work (disabled once signed);
@@ -603,7 +606,7 @@ function renderLoadsheet(){
           +(p.paymentReq?'<div style="position:absolute;top:3px;left:3px;font-size:7px;font-weight:900;background:rgba(239,68,68,.3);color:#ef4444;border-radius:3px;padding:0 2px;line-height:1.4">$</div>':'')
           +(p.type==='child'?'<div style="position:absolute;bottom:3px;right:3px;font-size:8px;font-weight:900;background:rgba(251,146,60,.5);color:#c2500a;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">C</div>':'')
           +((p.infant||p.infantName)?'<div style="position:absolute;bottom:3px;'+(p.type==='child'?'left:3px':'right:3px')+';font-size:8px;font-weight:900;background:rgba(236,72,153,.5);color:#9d1768;border-radius:3px;padding:0 3px;line-height:1.4;border:1px solid rgba(0,0,0,.4)">i</div>':'')
-          +'<div class="seat-name" style="color:#1e293b;font-weight:700">'+(p.name?p.name.split(' ')[0]:'?')+'</div>'
+          +'<div class="seat-name" style="color:#1e293b;font-weight:700">'+(p.name?esc(p.name.split(' ')[0]):'?')+'</div>'
           +'<div class="seat-wt" style="color:#334155">'+(wt>0?wt+'kg':'')+'</div>'
           +'</div>';
       }).join('');

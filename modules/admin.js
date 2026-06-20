@@ -348,18 +348,18 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'</div>'
         +'<div style="display:grid;grid-template-columns:1fr 90px;gap:8px;margin-bottom:8px">'
         +'<div><label style="font-size:11px;color:var(--text3)">FULL NAME</label>'
-        +'<input class="fi" type="text" value="'+(d.n||'')+'" placeholder="Full name" style="font-size:14px" oninput="S.admin.personModal.draft.n=this.value"></div>'
+        +'<input class="fi" type="text" value="'+esc(d.n||'')+'" placeholder="Full name" style="font-size:14px" oninput="S.admin.personModal.draft.n=this.value"></div>'
         +'<div><label style="font-size:11px;color:var(--text3)">CODE</label>'
-        +'<input class="fi" type="text" value="'+(d.code||'')+'" placeholder="e.g. PD" style="font-size:13px;text-transform:uppercase" oninput="S.admin.personModal.draft.code=this.value.toUpperCase()"></div>'
+        +'<input class="fi" type="text" value="'+esc(d.code||'')+'" placeholder="e.g. PD" style="font-size:13px;text-transform:uppercase" oninput="S.admin.personModal.draft.code=this.value.toUpperCase()"></div>'
         +'</div>'
         +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
         +'<div><label style="font-size:11px;color:var(--text3)">WEIGHT (kg)</label>'
         +'<input class="fi" type="number" value="'+(d.w||'')+'" placeholder="kg" style="font-size:13px" oninput="S.admin.personModal.draft.w=this.value"></div>'
         +'<div><label style="font-size:11px;color:var(--text3)">DL NUMBER</label>'
-        +'<input class="fi" type="text" value="'+(d.dlNum||'')+'" placeholder="Driver licence #" style="font-size:13px" oninput="S.admin.personModal.draft.dlNum=this.value"></div>'
+        +'<input class="fi" type="text" value="'+esc(d.dlNum||'')+'" placeholder="Driver licence #" style="font-size:13px" oninput="S.admin.personModal.draft.dlNum=this.value"></div>'
         +'</div>'
         +'<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--text3)">CAA LICENSE NUMBER</label>'
-        +'<input class="fi" type="text" value="'+(d.caaNum||'')+'" placeholder="CAA pilot licence #" style="font-size:14px" oninput="S.admin.personModal.draft.caaNum=this.value"></div>'
+        +'<input class="fi" type="text" value="'+esc(d.caaNum||'')+'" placeholder="CAA pilot licence #" style="font-size:14px" oninput="S.admin.personModal.draft.caaNum=this.value"></div>'
         +'<div style="background:var(--card2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px;margin-bottom:10px">'
         +'<div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em">EXPIRY DATES</div>'
         +expiryRows+'</div>'
@@ -370,7 +370,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
       const isOwnAccount=m.userId===S.user?.id;
       bodyHtml='<div style="display:flex;flex-direction:column;gap:12px">'
         +'<div><label style="font-size:11px;color:var(--text3)">EMAIL ADDRESS</label>'
-        +'<input class="fi" type="email" value="'+(d.email||'')+'" placeholder="email@truesouth.co.nz" style="font-size:14px" oninput="S.admin.personModal.draft.email=this.value"></div>'
+        +'<input class="fi" type="email" value="'+esc(d.email||'')+'" placeholder="email@truesouth.co.nz" style="font-size:14px" oninput="S.admin.personModal.draft.email=this.value"></div>'
         +(isAdmin?'<div><label style="font-size:11px;color:var(--text3)">ROLE</label>'
         +'<select class="fi" style="font-size:13px" onchange="S.admin.personModal.draft.role=this.value">'
         +(S.user?.superAdmin?'<option value="superadmin"'+(d.role==='superadmin'?' selected':'')+'>Superadmin</option>':'')
@@ -1627,6 +1627,9 @@ window.lsCoPilot=v=>{
       _uaPool().push({name:prevName,weight:prevWt,bag:prevBag,infant:prevInfant||null,group:prevGroup,type:(prevType==='C'?'child':'adult'),paymentReq:prevPay});
     }
     if(f.paxGroups)delete f.paxGroups[1];if(f.paxType)delete f.paxType[1];if(f.paxPaymentReq)delete f.paxPaymentReq[1];
+    // Clear the displaced passenger's bag + infant too — otherwise calcFormWB counts the orphaned
+    // bag (f.bags[1]) as crew weight, silently inflating TOW/CoG on a signable loadsheet.
+    if(f.bags)delete f.bags[1];if(f.infantNames)delete f.infantNames[1];
     f.seats[1]=String(cr.w);f.names[1]=v;
   } else if(!v){
     // Copilot cleared - seat 1 becomes empty pax seat
@@ -2755,8 +2758,11 @@ window.savePerson=async function(){
   }
 
   // ── Save crew record ──
+  // Crew weight/endorsements drive W&B and PIC eligibility — only admins, admin_crew, or the
+  // person editing their OWN profile may write the crew record (server RLS also gates ts_crew).
+  const _canEditCrew=isAdmin||(typeof hasRolePerm==='function'&&hasRolePerm('admin_crew'))||(m.userId&&m.userId===S.user?.id);
   let crewId=m.crewId;
-  if(crewId||finalName){
+  if(_canEditCrew&&(crewId||finalName)){
     crewId=crewId||('c_'+Date.now());
     const crewRec={id:crewId,n:finalName,w:parseFloat(d.w)||0,endorse:d.endorse||[],
       code:d.code||'',dlNum:d.dlNum||'',caaNum:d.caaNum||'',
@@ -3281,7 +3287,7 @@ function renderAdminAudit(){
     if(diff<86400000)return Math.floor(diff/3600000)+'h ago';
     return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});
   }
-  function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
   // Turn raw action+detail into a plain-English summary.
   function _auditAction(a){
     var M={session_restore:'Signed in',login:'Signed in',logout:'Signed out',login_fail:'Failed sign-in',

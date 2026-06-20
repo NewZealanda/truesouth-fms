@@ -1028,6 +1028,7 @@ window.editBooking=function(ac,idx,field,val){
     var action=bk._announced?'moved':'booked';bk._announced=true;saveMaintenance();
     if(window._notifyMaintBooking)window._notifyMaintBooking(ac,val,action);
   }else if(field==='confirmed'&&val){
+    bk._announced=true;saveMaintenance(); // so a later delete still fires the 'cancelled' notice
     if(window._notifyMaintBooking)window._notifyMaintBooking(ac,bk.date,'confirmed');
   }
   render();

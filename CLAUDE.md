@@ -25,8 +25,13 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
   scratchpad.js, aerodromes.js, saved.js, charter.js, admin.js, maintenance.js, roster.js,
   leave.js, tail.html.
 - **Backend: Supabase** (REST + realtime websocket). `SB`/`SH` (URL/headers) and the anon
-  key are in `shared.js`. ⚠️ RLS is currently disabled and auth is client-side — see
-  ARCHITECTURE_REVIEW for the security caveat (A1).
+  key are in `shared.js`. **Auth update (was A1):** `AUTH_PHASE_A`/`AUTH_PHASE_C` are now
+  `true` — login uses Supabase Auth/GoTrue (server-side password verify via the `verify-login`
+  edge fn), and REST + realtime carry the user JWT. RLS + per-role `has_perm()` policies exist
+  in the repo `auth_*.sql` migrations. ⚠️ Andrew must confirm those migrations are APPLIED in
+  the live Supabase project for RLS to actually be on. Residual: server gating is by
+  permission, not row-ownership (any `operations` user can delete any loadsheet/manifest); no
+  CSP (incompatible with the inline-handler UI). See ARCHITECTURE_REVIEW_v24.04 §2.
 - **Deploy: Netlify.** Branch `test` → test--testtruesouth.netlify.app;
   branch `main` → truesouth.netlify.app (production). Andrew currently commits to whichever
   branch is checked out and merges/pushes himself. `_headers` sets no-store on the HTML.
@@ -74,24 +79,33 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
   exclude roster RDO/off days and must read the PERSISTED roster (not the live draft/overlay).
 
 ## Useful files
-- `ARCHITECTURE_REVIEW_v23.04.md` — latest architecture review + the known-issue backlog
-  (security A1, loadsheet live-sync A2, reconnect backfill A5, build hardening A6, etc.).
-  `ARCHITECTURE_REVIEW_v22.87.md` is the earlier snapshot.
-- `*.sql` files in the repo root — Supabase migrations Andrew runs in the SQL editor.
-- `build.py` — the concatenation build.
+- `ARCHITECTURE_REVIEW_v24.04.md` — **latest** review (full bug sweep): what was fixed in
+  v24.04 + the current backlog (realtime sync gaps A2–A4, leave-day count L-A/L-B, Rezdy seat
+  alloc R-A, roster save-guard leaks, etc.) + the updated security posture. Earlier snapshots:
+  `ARCHITECTURE_REVIEW_v23.04.md`, `ARCHITECTURE_REVIEW_v22.87.md`.
+- `auth_*.sql` + other `*.sql` files in the repo root — Supabase migrations Andrew runs in the
+  SQL editor (the RLS / per-role policy work).
+- `build.py` — the concatenation build (now: module-presence check + top-level
+  duplicate-declaration scan across the shared scope).
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v23.95**.
-- Recent work: seatmap workspace separation + instance-aware duplicate aircraft; full leave
-  edit/re-approval/audit/conflict system; notification system (bell, PIC notify, 10 s poll,
-  clear-all, mobile panel); roster permissions + save guard; cross-device loadsheet tab
-  close + live edit; cache/reload behaviour; dep/dest "Other" free-text box; seatmap
-  live-sync; TO PAY follows the passenger on moves; and the v22.87 architecture-review fixes.
-- Operations is now the Rezdy-powered flow (Bookings / Seatmap / Loadsheets); legacy
-  manifest.js retired. Seatmap departures are keyed by TIME+DESTINATION; a per-product config
-  (`_RZ_PROD_CFG` in rezdy.js) drives the seatmap "SLA → MC" label and auto-fills loadsheet
-  destination + default fuel + flight burn (manual fuel via `form._fuelUserSet` always wins).
-- Open decisions (see ARCHITECTURE_REVIEW): enable RLS + real auth before production traffic
-  (A1, still the top risk — anon key in the public bundle, client-side auth); settle the
-  loadsheet live-sync model; add reconnect backfill; unify the two fuel-default engines.
+- Latest version: **v24.04**.
+- Recent work: editable **Standard Fuels & Burns** table (Admin ▸ Settings ▸ Fuels,
+  per-destination airvan/caravan fuel+burn overrides via `S._rzFuelOv` / `rz_fuel_ov`);
+  bookings Print run-sheet; drag-pilot-onto-PIC replaces PIC; aerodrome edit override fix;
+  seatmap ETD carries to loadsheet; Saved View/Edit/Reopen route to the current Operations
+  loadsheet editor; signed loadsheets no longer falsely show "Unsigned"; dark-ink signatures
+  on a light pad (visible on light theme + print); plus the **v24.04 bug-sweep fixes** (W&B
+  co-pilot orphaned-bag + removed-seat submit gate; toast/seat-name XSS escaping; cancelled
+  bookings no longer create pickups; fuel/cargo edits refresh the W&B readout; maintenance
+  cancellation notice fires after confirm; crew-load hardened against a bad endorsements row;
+  build.py hardening).
+- Operations is the Rezdy-powered flow (Bookings / Seatmap / Loadsheets); legacy manifest.js
+  retired. Seatmap departures keyed by TIME+DESTINATION; `_RZ_PROD_CFG` in rezdy.js is the
+  built-in product→{dest,fuel,burn} config, now overlaid by the editable per-destination
+  overrides (`_rzEffCfg`). Manual fuel via `form._fuelUserSet` always wins.
+- Open decisions (see ARCHITECTURE_REVIEW_v24.04): confirm RLS migrations are applied live
+  (auth code is on); add pickup + roster live-sync and reconnect backfill (A2–A4); make
+  leave-day counts compute live (L-A/L-B); fix the Rezdy create-loadsheet seat-fill fallback
+  (R-A).
