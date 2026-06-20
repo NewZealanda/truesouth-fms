@@ -1697,6 +1697,7 @@ function _rzRenderManifest(){
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzDowLabel(S.rezdyDate)+' · '+pax.length+' pax · '+pool.length+' unallocated'+(selDep&&selDep!=='—'?' @ '+_rzEsc(selDep):'')+'</p></div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.rezdyManAdd()">+ Add passenger</button>'+
+      (pax.filter(function(p){return p.ac&&!p.infantOf&&_rzPaxDep(p)===selDep;}).length?'<button class="btn btn-ghost" style="font-size:12px" title="Print the passenger manifest for this departure" onclick="window.rezdyManPrint()">🖨 Print manifest</button>':'')+
       (_rzManBaseDeps().length>1?'<button class="btn btn-ghost" style="font-size:12px'+(S._rzManCombineOpen?';border-color:var(--accent);color:var(--accent)':'')+'" onclick="window.rezdyManCombineToggle()">🔗 Combine departures</button>':'')+
       (pool.length?'<button class="btn btn-primary" style="font-size:12px;padding:7px 12px" onclick="window.rezdyManAllocate()">✈ Allocate to aircraft</button>':'')+
       (pax.length?'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.rezdyManClear()">🗑 Clear</button>':'')+
@@ -2180,6 +2181,65 @@ function _rzManDefFuelKg(dep,acId){
 }
 function _rzSeatKey(dep,acId){return String(dep||'—')+'|'+acId;}
 function _rzManSeatsFor(dep,acId){S._rzManSeats=S._rzManSeats||{};return S._rzManSeats[_rzSeatKey(dep,acId)]||{};}
+// ── Printable passenger manifest (per departure) ──────────────────────────────
+function _rzManPrintAcHTML(dep,acId,paxList){
+  var reg=String(acId).replace('ZK-','');
+  var dest=_rzManAcDest(dep,acId),prod=_rzManAcProd(dep,acId);
+  var picCode=(S._rzManPic||{})[acId],pic=picCode?_rzPilotByCode(picCode):null;
+  var coCode=(S._rzManCoPic||{})[acId],co=coCode?_rzPilotByCode(coCode):null;
+  var declMode=_rzManDeclMode(dep,acId),wb=_rzManAcWB(dep,acId);
+  var _leg=String(dep||'').split('+')[0].split('·')[0];
+  var etd=(_leg===RZ_FLYBACK_DEP)?'15:30':_rzHHMMcolon(_leg);
+  var sm=_rzManSeatsFor(dep,acId),seatOf={};Object.keys(sm).forEach(function(k){seatOf[sm[k]]=parseInt(k,10);});
+  var rows=paxList.slice().sort(function(x,y){return (seatOf[x.id]!=null?seatOf[x.id]:99)-(seatOf[y.id]!=null?seatOf[y.id]:99);});
+  var totW=0;
+  var trs=rows.map(function(p,i){
+    var w=_rzPaxWeight(p,declMode);var wn=parseFloat(w)||0;totW+=wn;
+    var inf=(S._rzManPax||[]).find(function(z){return z.infantOf===p.id;});
+    var infN=p.infantName||(inf&&inf.name)||'';
+    var typ=p.type==='child'?'Child':(infN?'+ Infant':'');
+    var wt=(w!=null&&w!=='')?(wn+(declMode?' (d)':'')):'TBC';
+    return '<tr><td>'+(i+1)+'</td><td>'+_rzEsc(p.name||'')+(infN?' <i>(+ infant '+_rzEsc(infN)+')</i>':'')+'</td><td class="r">'+wt+'</td><td>'+typ+'</td></tr>';
+  }).join('');
+  return '<div class="acb">'
+    +'<div class="ach">'+_rzEsc(reg)+(dest?' &rarr; '+_rzEsc(dest.short)+(dest.scenic?' (scenic)':''):'')+'</div>'
+    +'<div class="acs">'+_rzEsc(_rzDowLabel(S.rezdyDate))+(etd&&/^\d{1,2}:\d{2}$/.test(etd)?' &middot; ETD '+_rzEsc(etd):'')+(prod?' &middot; '+_rzEsc(prod):'')+'</div>'
+    +'<table class="crew"><tr><td><b>PIC</b></td><td>'+_rzEsc((pic&&pic.name)||'—')+(pic&&pic.weight?' ('+pic.weight+'kg)':'')+'</td>'+(co?'<td><b>Co-pilot</b></td><td>'+_rzEsc(co.name)+(co.weight?' ('+co.weight+'kg)':'')+'</td>':'<td></td><td></td>')+'</tr></table>'
+    +'<table class="pax"><thead><tr><th>#</th><th>Passenger</th><th class="r">Wt&nbsp;kg</th><th>Type</th></tr></thead><tbody>'+(trs||'<tr><td colspan="4" style="text-align:center;color:#777">No passengers</td></tr>')+'</tbody></table>'
+    +'<div class="tot">PAX '+rows.length+' &middot; Pax weight '+Math.round(totW)+' kg'+(wb?' &middot; TOW '+Math.round(wb.tow)+' kg'+(wb.towOk?'':' &#9888;'):'')+'</div>'
+    +'</div>';
+}
+window.rezdyManPrint=function(){
+  var dep=_rzManSelDep();
+  var byAc={};
+  (S._rzManPax||[]).forEach(function(p){if(p.ac&&!p.infantOf&&_rzPaxDep(p)===dep)(byAc[p.ac]=byAc[p.ac]||[]).push(p);});
+  var acIds=Object.keys(byAc).sort();
+  if(!acIds.length){if(typeof toast==='function')toast('No allocated passengers to print for this departure.','warn');return;}
+  var depLbl=_rzManDepLabel(dep);
+  var bodyH=acIds.map(function(id){return _rzManPrintAcHTML(dep,id,byAc[id]);}).join('');
+  var w=window.open('','_blank','width=900,height=750');
+  if(!w){if(typeof toast==='function')toast('Allow pop-ups to print the manifest.','warn');return;}
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Manifest — '+_rzEsc(depLbl)+'</title><style>'
+    +'*{box-sizing:border-box;margin:0;padding:0}'
+    +'body{background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;padding:10mm}'
+    +'@page{size:A4 portrait;margin:10mm}'
+    +'h1{font-size:19px}.sub{font-size:12px;color:#555;margin:2px 0 14px}'
+    +'.acb{border:1.5px solid #222;border-radius:6px;padding:10px 12px;margin-bottom:12px;page-break-inside:avoid}'
+    +'.ach{font-size:16px;font-weight:800}.acs{font-size:11px;color:#555;margin-bottom:6px}'
+    +'table{width:100%;border-collapse:collapse}'
+    +'.crew td{font-size:12px;padding:1px 4px}'
+    +'.pax{margin-top:6px}.pax th,.pax td{border:1px solid #999;padding:4px 8px;font-size:13px;text-align:left}'
+    +'.pax th{background:#eee;font-size:10px;text-transform:uppercase;letter-spacing:.04em}'
+    +'.pax td:first-child,.pax th:first-child{width:28px;text-align:center;color:#666}'
+    +'.r{text-align:right!important}'
+    +'.tot{margin-top:6px;font-size:13px;font-weight:700}'
+    +'</style></head><body>'
+    +'<h1>Passenger Manifest</h1><div class="sub">'+_rzEsc(_rzDowLabel(S.rezdyDate))+' &middot; '+_rzEsc(depLbl)+'</div>'
+    +bodyH
+    +'<script>window.onload=function(){window.print();}<\/script>'
+    +'</body></html>');
+  w.document.close();
+};
 // An aircraft must use ONE weight basis for all pax (except the PIC): all ACTUAL, or all DECLARED.
 // If any seated/allocated pax on this aircraft lacks an actual weight, the whole aircraft falls
 // back to declared weights. Returns true = declared mode.
