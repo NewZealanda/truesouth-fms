@@ -1671,29 +1671,46 @@ window.pickupSetLocation=function(id,val){
   render();
 };
 
+// ── Pickup blob: shared field list + state<->blob mapping + 3-way merge save ──
+// The whole pickup list for a date is ONE JSON blob in ts_pickup_lists, edited by several devices
+// at once (desk + driver iPads). A naive whole-blob save was last-write-wins, so a stale session
+// could silently overwrite another's van arrangement / check-ins — the "pickups revert" bug.
+// We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
+// actually changed since it loaded (its baseline); every other field keeps the cloud's current
+// value. So Device A's van reorder and Device B's check-in both survive.
+var _PK_FIELDS=['vans','collected','locOverride','drivers','extraDrivers','spare','order','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin'];
+function _pkBlobFromState(){
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{}};
+}
+function _pkApplyBlob(d){
+  if(!d||typeof d!=='object')return;
+  if(Array.isArray(d.vans))S._pickupVans=d.vans; else if(d.vans===null)S._pickupVans=null;
+  S._pickupCollected=(d.collected&&typeof d.collected==='object')?d.collected:{};
+  S._pickupLocOverride=(d.locOverride&&typeof d.locOverride==='object')?d.locOverride:{};
+  S._pickupDrivers=Array.isArray(d.drivers)?d.drivers:[];
+  S._pickupExtraDrivers=Array.isArray(d.extraDrivers)?d.extraDrivers:[];
+  S._pickupSpare=(d.spare&&typeof d.spare==='object')?d.spare:{};
+  S._pickupOrder=(d.order&&typeof d.order==='object')?d.order:{};
+  S._rzManualBk=Array.isArray(d.manualBk)?d.manualBk:[];
+  S._rezdyPaxMeta=(d.paxMeta&&typeof d.paxMeta==='object')?d.paxMeta:{};
+  S._schedPilots=(d.schedPilots&&typeof d.schedPilots==='object')?d.schedPilots:{};
+  S._rzBookingAc=(d.bookingAc&&typeof d.bookingAc==='object')?d.bookingAc:{};
+  S._rzBookingWx=(d.bookingWx&&typeof d.bookingWx==='object')?d.bookingWx:{};
+  S._rzBookingCheckedIn=(d.bookingCheckedIn&&typeof d.bookingCheckedIn==='object')?d.bookingCheckedIn:{};
+  S._rzSchedAttach=(d.schedAttach&&typeof d.schedAttach==='object')?d.schedAttach:{};
+  S._rzCheckin=(d.checkin&&typeof d.checkin==='object')?d.checkin:{};
+}
+function _pkSnapshot(d){try{return JSON.parse(JSON.stringify(d));}catch(e){return null;}}
+function _pkEq(a,b){try{return JSON.stringify(a===undefined?null:a)===JSON.stringify(b===undefined?null:b);}catch(e){return false;}}
+function _pkSetBaseline(){S._pickupBaseline=_pkSnapshot(_pkBlobFromState());} // remember the as-loaded blob
+
 window.rezdyLoadPickups=async function(){
   S._pickupLoading=true;safeRender();
   const rows=await sbF('ts_pickup_lists','&list_date=eq.'+encodeURIComponent(S.rezdyDate));
   const row=(rows&&rows.length)?_rzRow(rows[0]):null;
-  if(row&&Array.isArray(row.vans)){
-    S._pickupVans=row.vans;
-    S._pickupCollected=(row.collected&&typeof row.collected==='object')?row.collected:{};
-    S._pickupLocOverride=(row.locOverride&&typeof row.locOverride==='object')?row.locOverride:{};
-    S._pickupDrivers=Array.isArray(row.drivers)?row.drivers:[];
-    S._pickupExtraDrivers=Array.isArray(row.extraDrivers)?row.extraDrivers:[];
-    S._pickupSpare=(row.spare&&typeof row.spare==='object')?row.spare:{};
-    S._pickupOrder=(row.order&&typeof row.order==='object')?row.order:{};
-    S._rzManualBk=Array.isArray(row.manualBk)?row.manualBk:[];
-    S._rezdyPaxMeta=(row.paxMeta&&typeof row.paxMeta==='object')?row.paxMeta:{};
-    S._schedPilots=(row.schedPilots&&typeof row.schedPilots==='object')?row.schedPilots:{};
-    S._rzBookingAc=(row.bookingAc&&typeof row.bookingAc==='object')?row.bookingAc:{};
-    S._rzBookingWx=(row.bookingWx&&typeof row.bookingWx==='object')?row.bookingWx:{};
-    S._rzBookingCheckedIn=(row.bookingCheckedIn&&typeof row.bookingCheckedIn==='object')?row.bookingCheckedIn:{};
-    S._rzSchedAttach=(row.schedAttach&&typeof row.schedAttach==='object')?row.schedAttach:{};
-    S._rzCheckin=(row.checkin&&typeof row.checkin==='object')?row.checkin:{};
-  }else{
-    S._pickupVans=null;S._pickupCollected={};S._pickupLocOverride={};S._pickupDrivers=[];S._pickupExtraDrivers=[];S._pickupSpare={};S._pickupOrder={};S._rzManualBk=[];S._rezdyPaxMeta={};S._schedPilots={};S._rzBookingAc={};S._rzBookingWx={};S._rzBookingCheckedIn={};S._rzSchedAttach={};S._rzCheckin={};
-  }
+  if(row&&Array.isArray(row.vans)){ _pkApplyBlob(row); }
+  else{ _pkApplyBlob({vans:null}); } // no saved row → empty state (vans null → auto-allocate)
+  _pkSetBaseline(); // baseline = what we loaded, so a later save only writes fields WE changed
   _rzApplyManualBk(); // merge this date's manual bookings into the loaded list
   S._pickupLoading=false;
   render();
@@ -1737,15 +1754,31 @@ window.pickupDropOnVan=function(vi,e){
 
 // silent=true skips the toast (used by auto-saves on toggle/drag)
 window.pickupSave=async function(silent){
-  const payload={
-    id:'pl_'+S.rezdyDate,
-    list_date:S.rezdyDate,
-    data:{vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{}}
-  };
-  const r=await sbU('ts_pickup_lists',[payload]);
+  var local=_pkBlobFromState();
+  var merged=local, didMerge=false;
+  // 3-way merge against the LATEST cloud blob so a concurrent/stale device can't overwrite fields
+  // we didn't touch. Only the fields THIS device changed since it loaded (vs S._pickupBaseline) are
+  // written from local; everything else keeps the cloud's current value.
+  try{
+    var rows=await sbF('ts_pickup_lists','&list_date=eq.'+encodeURIComponent(S.rezdyDate));
+    var cloud=(rows&&rows.length)?_rzRow(rows[0]):null;
+    var base=S._pickupBaseline;
+    if(cloud&&base){
+      merged={};
+      _PK_FIELDS.forEach(function(f){
+        var changedLocally=!_pkEq(local[f],base[f]);
+        merged[f]= changedLocally ? local[f] : (cloud[f]!==undefined ? cloud[f] : local[f]);
+      });
+      didMerge=true;
+    }
+  }catch(e){ merged=local; } // offline / fetch failed → write local (same as before)
+  var r=await sbU('ts_pickup_lists',[{id:'pl_'+S.rezdyDate,list_date:S.rezdyDate,data:merged}]);
   if(r){
-    S._pickupSavedTs=Date.now(); // mark a fresh local save so a stale live-reload can't revert it
-    if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast(); // A2: tell other devices to re-pull this date's pickups/check-ins
+    if(didMerge)_pkApplyBlob(merged); // reflect any merged-in remote changes (e.g. another iPad's check-ins)
+    S._pickupBaseline=_pkSnapshot(merged); // new baseline = exactly what we just wrote
+    S._pickupSavedTs=Date.now();           // recent-save guard for the live-reload receiver
+    if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast(); // tell other devices to re-pull
+    if(didMerge&&typeof safeRender==='function')safeRender();
     if(!silent&&typeof toast==='function')toast('Pickup list saved ✓','ok');
   }else{
     // A silently-failed save is exactly the "my pickups reverted" bug — surface it ALWAYS, even on
@@ -1769,21 +1802,8 @@ window.rezdyReloadPickupLive=function(){
   try{sbF('ts_pickup_lists','&list_date=eq.'+encodeURIComponent(S.rezdyDate)).then(function(rows){
     var row=(rows&&rows.length)?_rzRow(rows[0]):null;
     if(row&&Array.isArray(row.vans)){
-      S._pickupVans=row.vans;
-      S._pickupCollected=(row.collected&&typeof row.collected==='object')?row.collected:{};
-      S._pickupLocOverride=(row.locOverride&&typeof row.locOverride==='object')?row.locOverride:{};
-      S._pickupDrivers=Array.isArray(row.drivers)?row.drivers:[];
-      S._pickupExtraDrivers=Array.isArray(row.extraDrivers)?row.extraDrivers:[];
-      S._pickupSpare=(row.spare&&typeof row.spare==='object')?row.spare:{};
-      S._pickupOrder=(row.order&&typeof row.order==='object')?row.order:{};
-      S._rzManualBk=Array.isArray(row.manualBk)?row.manualBk:[];
-      S._rezdyPaxMeta=(row.paxMeta&&typeof row.paxMeta==='object')?row.paxMeta:{};
-      S._schedPilots=(row.schedPilots&&typeof row.schedPilots==='object')?row.schedPilots:{};
-      S._rzBookingAc=(row.bookingAc&&typeof row.bookingAc==='object')?row.bookingAc:{};
-      S._rzBookingWx=(row.bookingWx&&typeof row.bookingWx==='object')?row.bookingWx:{};
-      S._rzBookingCheckedIn=(row.bookingCheckedIn&&typeof row.bookingCheckedIn==='object')?row.bookingCheckedIn:{};
-      S._rzSchedAttach=(row.schedAttach&&typeof row.schedAttach==='object')?row.schedAttach:{};
-      S._rzCheckin=(row.checkin&&typeof row.checkin==='object')?row.checkin:{};
+      _pkApplyBlob(row);
+      _pkSetBaseline(); // the cloud is now our baseline — local matches it until the user edits again
       if(typeof _rzApplyManualBk==='function')_rzApplyManualBk();
       if(typeof safeRender==='function')safeRender();
     }
