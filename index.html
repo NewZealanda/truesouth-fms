@@ -232,10 +232,10 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
   .g3{grid-template-columns:1fr 1fr;}
   .page{padding:10px 8px max(100px,calc(env(safe-area-inset-bottom) + 80px));}
 
-  /* Nav bar */
+  /* Nav bar — larger touch targets on phones (min ~40px tall, was ~26px) */
   .nav-bar{padding:6px 8px 4px;}
-  .nav-tab{padding:5px 10px;font-size:11px;}
-  .sub-tab{padding:5px 10px;font-size:11px;}
+  .nav-tab{padding:9px 12px;font-size:11px;min-height:40px;display:inline-flex;align-items:center;}
+  .sub-tab{padding:9px 13px;font-size:11px;min-height:40px;display:inline-flex;align-items:center;}
 
   /* Cards */
   .card{padding:10px 10px;}
@@ -725,7 +725,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.15';
+const APP_VER='v24.16';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2793,6 +2793,7 @@ function _restoreLastView(){
         return;
       }
       S.tab=v.tab||'bookings';
+      if(v.groundTab)S._groundTab=v.groundTab; // restore Ground ▸ Pickups/My Pickups sub-tab
       // Legacy tab ids retired → map to the new Operations flow.
       if(S.tab==='manifest'||S.tab==='loadsheet')S.tab='bookings';else if(S.tab==='seatmap')S.tab='rseatmap';
       if(v.savedTab)S.savedTab=v.savedTab;
@@ -2934,7 +2935,7 @@ document.addEventListener('keydown',function(e){
     var _da=document.activeElement,_dt=_da&&_da.tagName;
     if(_dt==='INPUT'||_dt==='SELECT'||_dt==='TEXTAREA'||(_da&&_da.isContentEditable))return;
     if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
-    if(S.section==='operations'&&(S.tab==='bookings'||S.tab==='rseatmap'||S.tab==='rloadsheets')&&typeof window.rezdyShiftDate==='function'){
+    if(((S.section==='operations'&&(S.tab==='bookings'||S.tab==='rseatmap'||S.tab==='rloadsheets'||S.tab==='ground'))||S.section==='calendar')&&typeof window.rezdyShiftDate==='function'){
       e.preventDefault();window.rezdyShiftDate(e.key==='ArrowRight'?1:-1);
     }
     return;
@@ -2961,7 +2962,7 @@ document.addEventListener('keydown',function(e){
       e.preventDefault();window.rezdyShiftDate(_dir);return;
     }
     if(S.section!=='operations')return;
-    var _tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
+    var _tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');_tabs.push('ground');
     var _cur=_tabs.indexOf(S.tab);if(_cur<0)_cur=0;
     var _next=_cur+_dir;if(_next<0)_next=_tabs.length-1;if(_next>=_tabs.length)_next=0;
     e.preventDefault();if(typeof window.switchOpsTab==='function')window.switchOpsTab(_tabs[_next]);
@@ -3041,8 +3042,18 @@ function render(){
   const r=document.getElementById('root');
   if(!r)return;
   document.body.classList.toggle('wide-mode',!!S.wideMode);
-  // Auto-detect mobile on first render
-  if(typeof S._mobileInit==='undefined'){S._mobileInit=true;if(typeof S.mobileView==='undefined')S.mobileView=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)&&window.innerWidth<800;}
+  // Auto-detect mobile on first render, and keep it reactive (iPad rotate / split-view / window
+  // resize). Same detection formula as before — only now it re-evaluates instead of freezing at boot.
+  if(typeof S._mobileInit==='undefined'){
+    S._mobileInit=true;
+    if(typeof S.mobileView==='undefined')S.mobileView=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)&&window.innerWidth<800;
+    try{
+      var _recalcMobile=function(){var nv=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)&&window.innerWidth<800;if(nv!==S.mobileView){S.mobileView=nv;render();}};
+      var _mqT;var _onViewportChange=function(){clearTimeout(_mqT);_mqT=setTimeout(_recalcMobile,150);};
+      window.addEventListener('resize',_onViewportChange);
+      window.addEventListener('orientationchange',_onViewportChange);
+    }catch(e){}
+  }
   document.body.classList.toggle('mobile-view',!!S.mobileView);
   // ── Nav migration (v24.14): the old 'rezdy' section was split — Calendar is now its own
   // tier-1 section, Pickups/My Pickups moved to Operations ▸ Ground. Remap any restored last-view
@@ -3055,7 +3066,7 @@ function render(){
   // ── Remember the current view so a reload returns to the same page ──
   // Gated on S._viewRestored so the default-view renders during boot DON'T overwrite the
   // saved last view before _restoreLastView() has had a chance to read and apply it.
-  if(S.user&&S._viewRestored){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'bookings',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
+  if(S.user&&S._viewRestored){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'bookings',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null,groundTab:S._groundTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
   // ── Preserve focused input across re-renders ──
   const _ae=document.activeElement;
   const _aeId=_ae?.id||null;
@@ -3226,7 +3237,7 @@ function renderLoginInner(){
           <label style="display:block;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase">Email</label>
           <div style="display:flex;align-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;overflow:hidden">
             <input id="li_e" type="text" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
-              style="flex:1;padding:11px 14px;background:transparent;border:none;color:#fff;font-size:14px;outline:none;min-width:0;width:100%"
+              style="flex:1;padding:11px 14px;background:transparent;border:none;color:#fff;font-size:16px;outline:none;min-width:0;width:100%"
               oninput="window.updateLoginSuffix()" onfocus="document.getElementById('li_e_sfx').style.display='inline';window.updateLoginSuffix()" onblur="if(!this.value)document.getElementById('li_e_sfx').style.display='none';" onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
             <span id="li_e_sfx" style="display:none;flex-shrink:0;padding:0 12px 0 0;color:rgba(255,255,255,.45);font-size:12px;white-space:nowrap;align-self:center">@truesouthflights.co.nz</span>
           </div>
@@ -3237,7 +3248,7 @@ function renderLoginInner(){
             <span style="font-size:11px;color:rgba(255,255,255,.25)">Contact your administrator to reset</span>
           </div>
           <input id="li_p" type="password" autocomplete="current-password" placeholder="••••••••••••"
-            style="width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box"
+            style="width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:16px;outline:none;box-sizing:border-box"
             onfocus="this.setAttribute('placeholder','')" onblur="if(!this.value)this.setAttribute('placeholder','••••••••••••')"
             onkeydown="if(event.key==='Enter')window.tryLogin();else if(event.key==='Backspace'&&S.loginErr&&this.value){this.value='';event.preventDefault();}">
         </div>
@@ -3390,7 +3401,7 @@ function renderDrawer(){
     return '<button tabindex="-1" onclick="'+oc+'" style="width:100%;text-align:left;padding:7px 14px 7px 44px;border-radius:8px;border:none;background:'+(active?'rgba(255,255,255,.09)':'transparent')+';color:'+(active?'#fff':'rgba(255,255,255,.5)')+';font-size:13px;font-weight:'+(active?'600':'400')+';cursor:pointer;margin-bottom:1px">'+label+'</button>';
   }
   var h='<div style="position:fixed;inset:0;z-index:1000;display:flex" onclick="S._drawerOpen=false;S._notifOpen=false;render()">';
-  h+='<div onclick="event.stopPropagation()" style="width:270px;height:100%;background:linear-gradient(180deg,#080c17,#0d1526);border-right:1px solid rgba(255,255,255,.1);overflow-y:auto;display:flex;flex-direction:column;padding-top:max(0px,env(safe-area-inset-top));flex-shrink:0">';
+  h+='<div onclick="event.stopPropagation()" style="width:min(270px,82vw);height:100%;background:linear-gradient(180deg,#080c17,#0d1526);border-right:1px solid rgba(255,255,255,.1);overflow-y:auto;display:flex;flex-direction:column;padding-top:max(0px,env(safe-area-inset-top));flex-shrink:0">';
   h+='<div style="padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px">';
   h+='<img src="'+_TS_LOGO+'" alt="True South Flights" style="height:30px;width:auto;max-width:175px;object-fit:contain;flex-shrink:0">';
   h+='<div style="flex:1"></div>';
@@ -8600,8 +8611,9 @@ function renderAdminPerms(){
     {k:'maint_bookings',lbl:'Bookings',       tip:'Manage maintenance bookings'},
     {k:'audit',         lbl:'Audit',          tip:'View the system audit log'},
     {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'},
-    {k:'calendar',      lbl:'Calendar',       tip:'Access the Calendar tab'},
-    {k:'rezdy',         lbl:'Rezdy',          tip:'Access the Rezdy bookings/pickups/schedule tab'}
+    {k:'calendar',      lbl:'Calendar',       tip:'Access the Calendar tab'}
+    // (the old 'rezdy' column was retired in v24.16 — the Rezdy section no longer exists; Calendar
+    //  has its own perm and Pickups live under Operations ▸ Ground gated by 'operations'.)
   ];
   var ROLE_ROWS=[
     {k:'admin',        lbl:'Admin'},

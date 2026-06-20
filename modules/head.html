@@ -232,10 +232,10 @@ canvas{touch-action:none;cursor:crosshair;display:block;width:100%;}
   .g3{grid-template-columns:1fr 1fr;}
   .page{padding:10px 8px max(100px,calc(env(safe-area-inset-bottom) + 80px));}
 
-  /* Nav bar */
+  /* Nav bar — larger touch targets on phones (min ~40px tall, was ~26px) */
   .nav-bar{padding:6px 8px 4px;}
-  .nav-tab{padding:5px 10px;font-size:11px;}
-  .sub-tab{padding:5px 10px;font-size:11px;}
+  .nav-tab{padding:9px 12px;font-size:11px;min-height:40px;display:inline-flex;align-items:center;}
+  .sub-tab{padding:9px 13px;font-size:11px;min-height:40px;display:inline-flex;align-items:center;}
 
   /* Cards */
   .card{padding:10px 10px;}

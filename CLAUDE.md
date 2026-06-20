@@ -79,10 +79,10 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
   exclude roster RDO/off days and must read the PERSISTED roster (not the live draft/overlay).
 
 ## Useful files
-- `ARCHITECTURE_REVIEW_v24.04.md` — **latest** review (full bug sweep): what was fixed in
-  v24.04 + the current backlog (realtime sync gaps A2–A4, leave-day count L-A/L-B, Rezdy seat
-  alloc R-A, roster save-guard leaks, etc.) + the updated security posture. Earlier snapshots:
-  `ARCHITECTURE_REVIEW_v23.04.md`, `ARCHITECTURE_REVIEW_v22.87.md`.
+- `ARCHITECTURE_REVIEW_v24.14.md` — **latest** review (full 6-reviewer bug sweep): fixed in
+  v24.15/v24.16 + the prioritised OPEN backlog + security posture. Earlier snapshots:
+  `ARCHITECTURE_REVIEW_v24.04.md` (A2–A4/R-A now done), `ARCHITECTURE_REVIEW_v23.04.md`,
+  `ARCHITECTURE_REVIEW_v22.87.md`.
 - `auth_*.sql` + other `*.sql` files in the repo root — Supabase migrations Andrew runs in the
   SQL editor (the RLS / per-role policy work).
 - `build.py` — the concatenation build (now: module-presence check + top-level
@@ -90,7 +90,24 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v24.13**. See `HANDOFF.md` for the full session-by-session log + how-to-work.
+- Latest version: **v24.16** (v24.15 committed `bcad457`; **v24.16 built+verified but commit is
+  BLOCKED on a stale `.git/HEAD.lock` — clear it then commit**). See `HANDOFF.md` for the full log.
+- **`ARCHITECTURE_REVIEW_v24.14.md` is the latest full bug-sweep** (6-reviewer audit) — what was
+  fixed in v24.15/v24.16 + the prioritised OPEN backlog (roster pattern-push data loss, roster
+  whole-blob save merge, leave L-A/L-B/L-C, cross-aircraft seat-swap, dep|acId fuel/crew keying,
+  aircraft_obs live-sync, charter quote ids, maintenance UTC dates, etc.).
+- Recent work (v24.14 → v24.16):
+  - **v24.14** nav restructure: Calendar → own tier-1 section + new `calendar` permission;
+    Pickups/My Pickups → Operations ▸ **Ground** (tier-2, tier-3 sub-tabs via `S._groundTab`);
+    pickup-location editor → Settings ▸ **Operations** (tier-3, `renderAdminOperations`); the empty
+    Rezdy section retired with a `render()` migration shim (`S.section==='rezdy'` remapped).
+  - **v24.15** bug-sweep pass 1 (W&B safety: submit-below-reserve gate, lsCoPilot seat-1 orphan,
+    lsAc removedSeats phantom weight; realtime guards: ls_saved echo, manifest/pickup live-reload
+    focused-input guard, roster_colors guard, ts_scratchpads backfill; scratchpad XSS; saved pax
+    summary; rezdyManClear; pickup-override prune; `_todayLocal()` UTC fix; missing perm keys).
+  - **v24.16** UI/responsive/login (resize→mobileView reflow, 40px touch targets, drawer width,
+    login 16px inputs; arrow/⌘-arrow include Ground+Calendar; Ground sub-tab persists; dead Rezdy
+    perm column removed).
 - Recent work (v24.12 → v24.13):
   - **Pickup-location master list** (v24.12): new editable list under Operations ▸ Pickups ▸
     **📍 Locations** (`_rzRenderPickupLocs`) — name · address · minutes-before-departure per row,

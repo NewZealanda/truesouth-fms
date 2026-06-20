@@ -3220,8 +3220,9 @@ function renderAdminPerms(){
     {k:'maint_bookings',lbl:'Bookings',       tip:'Manage maintenance bookings'},
     {k:'audit',         lbl:'Audit',          tip:'View the system audit log'},
     {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'},
-    {k:'calendar',      lbl:'Calendar',       tip:'Access the Calendar tab'},
-    {k:'rezdy',         lbl:'Rezdy',          tip:'Access the Rezdy bookings/pickups/schedule tab'}
+    {k:'calendar',      lbl:'Calendar',       tip:'Access the Calendar tab'}
+    // (the old 'rezdy' column was retired in v24.16 — the Rezdy section no longer exists; Calendar
+    //  has its own perm and Pickups live under Operations ▸ Ground gated by 'operations'.)
   ];
   var ROLE_ROWS=[
     {k:'admin',        lbl:'Admin'},

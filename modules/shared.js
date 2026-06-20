@@ -401,7 +401,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.15';
+const APP_VER='v24.16';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2469,6 +2469,7 @@ function _restoreLastView(){
         return;
       }
       S.tab=v.tab||'bookings';
+      if(v.groundTab)S._groundTab=v.groundTab; // restore Ground ▸ Pickups/My Pickups sub-tab
       // Legacy tab ids retired → map to the new Operations flow.
       if(S.tab==='manifest'||S.tab==='loadsheet')S.tab='bookings';else if(S.tab==='seatmap')S.tab='rseatmap';
       if(v.savedTab)S.savedTab=v.savedTab;
