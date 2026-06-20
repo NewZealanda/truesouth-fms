@@ -722,7 +722,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v23.89';
+const APP_VER='v23.91';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -11563,26 +11563,27 @@ var _RZ_PROD_CFG={
   MCHS: {short:'MC',apt:'NZMC',av:{fuel:210},cv:{fuel:1000}},
   STT:  {short:'MC',apt:'NZMC',av:{fuel:210},cv:{fuel:1000}},
   // Mt Cook overhead scenic (QN → QN, no landing).  ⚠ airvan fuel assumed 210 L (unspecified).
-  MCOH: {short:'MC',apt:'NZQN',av:{fuel:210,burn:150},cv:{fuel:1000,burn:600}},
+  MCOH: {short:'MC',apt:'NZQN',scenic:true,av:{fuel:210,burn:150},cv:{fuel:1000,burn:600}},
   // Franz Josef landing flights (QN → Franz Josef).
   FJHH: {short:'FJ',apt:'NZFJ',av:{fuel:210},cv:{fuel:1000}},
   FJGL: {short:'FJ',apt:'NZFJ',av:{fuel:210},cv:{fuel:1000}},
   // Franz Josef overhead scenic (QN → QN, no landing).
-  FJOH: {short:'FJ',apt:'NZQN',av:{fuel:210,burn:150},cv:{fuel:1000,burn:600}},
+  FJOH: {short:'FJ',apt:'NZQN',scenic:true,av:{fuel:210,burn:150},cv:{fuel:1000,burn:600}},
   // Milford fly/explore-cruise-fly (QN → Milford). Standard aircraft fuel/burn.
   FCF:  {short:'MF',apt:'NZMF'},
   FEF:  {short:'MF',apt:'NZMF'},
   // Milford overhead scenic (QN → QN, no landing).
-  MFOH: {short:'MF',apt:'NZQN',av:{fuel:150,burn:70},cv:{fuel:800,burn:300}},
-  // Branches Station scenic (no ICAO → loadsheet dest stays Queenstown). Standard fuel/burn.
+  MFOH: {short:'MF',apt:'NZQN',scenic:true,av:{fuel:150,burn:70},cv:{fuel:800,burn:300}},
+  // Branches Station — a real flight to a destination and back (not an overhead scenic). Standard
+  // fuel; the pilot sets the burn-off. No ICAO for Branches, so the loadsheet dest stays Queenstown.
   BRA:  {short:'BRA',apt:'NZQN'},
   // Flyback / coach-cruise-fly return (Milford → QN). Reduced fuel applied via the Milford departure.
   FLB:  {short:'QN',apt:'NZQN'},
   CCF:  {short:'QN',apt:'NZQN'}
 };
 function _rzProdCfg(code){return _RZ_PROD_CFG[String(code||'').toUpperCase()]||null;}
-// Destination {short, apt} for the seatmap label / loadsheet dest. null if unknown.
-function _rzProductDest(code){var c=_rzProdCfg(code);return c?{short:c.short,apt:c.apt}:null;}
+// Destination {short, apt, scenic} for the seatmap label / loadsheet dest. null if unknown.
+function _rzProductDest(code){var c=_rzProdCfg(code);return c?{short:c.short,apt:c.apt,scenic:!!c.scenic}:null;}
 // Default loaded fuel (kg) for a product on an aircraft — product override else aircraft standard.
 function _rzProdFuelKg(code,acId){var a=_acSpec(acId);if(!a)return null;var c=_rzProdCfg(code);if(c){var u=(a.layout==='ga8')?c.av:c.cv;if(u&&u.fuel!=null)return toKg(u.fuel,acId);}return a.fuelKg;}
 // Flight burn in DISPLAY units (L airvan / lb caravan) for a product — null = use aircraft burnDef.
@@ -13252,7 +13253,7 @@ function _rzRenderManifest(){
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px'+(open?';margin-bottom:8px':'')+'">'+
         '<div onclick="window.rezdyManToggleCard(\''+idE+'\')" style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0">'+
           '<span style="display:inline-block;transition:transform .12s;color:var(--text3);font-size:11px;'+(open?'transform:rotate(90deg)':'')+'">▸</span>'+
-          '<span style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+(function(){var _d=_rzManAcDest(selDep,id);return _d?'<span style="color:var(--text3);font-weight:800"> → </span><span style="color:var(--text2);font-weight:800">'+_d.short+'</span>':'';})()+'</span>'+
+          '<span style="font-weight:800;font-size:14px;color:'+col+'">'+id.replace('ZK-','')+(function(){var _d=_rzManAcDest(selDep,id);return _d?'<span style="color:var(--text3);font-weight:800"> → </span><span style="color:var(--text2);font-weight:800">'+_d.short+'</span>'+(_d.scenic?'<span title="Scenic — returns to Queenstown" style="font-size:9px;font-weight:800;color:#22c55e;background:rgba(34,197,94,.14);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:middle">↺ SCENIC</span>':''):'';})()+'</span>'+
           (list.length?'':'<span style="font-size:10px;color:var(--text3);font-weight:600">idle</span>')+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span>'+
@@ -13416,7 +13417,9 @@ window.rezdyManPull=function(depScope){
   var keep=(S._rzManPax||[]).filter(function(p){
     if(freshIds[p.id])return false;                       // refreshed below
     if(String(p.id).indexOf('m_')===0)return true;        // manually-added pax stay
-    if(depScope)return _rzPaxDep(p)!==depScope;            // other departures stay
+    // depScope is time-only (the bookings push); a seatmap pax dep is TIME·DEST. Compare on the
+    // time so re-pushing a departure cleanly refreshes ALL its pax (every destination at that time).
+    if(depScope)return String(_rzPaxDep(p)).split('·')[0]!==String(depScope).split('·')[0];
     return false;                                         // full refresh when unscoped
   });
   S._rzManPax=keep.concat(fresh);_rzManSave();
@@ -13533,23 +13536,42 @@ function _rzManDepInfo(order){
   if(!b)return null;
   return {dep:_rzBookingDep(b),prod:_rzProduct((((b.items||[])[0]||{}).product)||'')};
 }
-// Natural (un-combined) departure for a manifest pax.
-function _rzBaseDep(p){if(!p)return '—';if(p._dep)return p._dep;var i=_rzManDepInfo(p.group);return (i&&i.dep)||'—';}
+// Natural (un-combined) departure for a manifest pax. The departure identity is TIME + DESTINATION,
+// so products at the same time to the SAME place (e.g. FEF + FCF → Milford) are one flight, while
+// same-time products to DIFFERENT places (e.g. Milford vs Mt Cook) are separate flights. Products
+// with no known destination (and the Flybacks group) key on the time/label alone.
+function _rzBaseDep(p){
+  if(!p)return '—';
+  if(p._dep)return p._dep; // manual pax carry their explicit departure key
+  var i=_rzManDepInfo(p.group);
+  if(!i)return '—';
+  var dep=i.dep||'—';
+  if(dep===RZ_FLYBACK_DEP||dep==='—')return dep;
+  var d=_rzProductDest(i.prod);
+  return d?(dep+'·'+d.short):dep; // "0800·MF"
+}
 // Effective departure — applies any manual "combine departures" remap (S._rzManDepMerge).
 function _rzPaxDep(p){var base=_rzBaseDep(p);var m=S._rzManDepMerge||{};return m[base]||base;}
 // The distinct NATURAL departures present (before combining) — for the combine picker.
 function _rzManBaseDeps(){var set={};(S._rzManPax||[]).forEach(function(p){if(!p.infantOf)set[_rzBaseDep(p)]=1;});return Object.keys(set).sort(_rzDepCmp);}
 // The departure currently focused on the seatmap (defaults to the first one present).
-function _rzManSelDep(){var deps=_rzManDeps();return (S._rzManDepFilter&&deps.indexOf(S._rzManDepFilter)>=0)?S._rzManDepFilter:(deps[0]||'—');}
+function _rzManSelDep(){
+  var deps=_rzManDeps();var f=S._rzManDepFilter;
+  if(f&&deps.indexOf(f)>=0)return f;
+  // A bookings push focuses by TIME only ("0800"); match it to the first time+dest departure.
+  if(f){var t=String(f).split('·')[0];var hit=deps.find(function(d){return d.split('·')[0]===t;});if(hit)return hit;}
+  return deps[0]||'—';
+}
 // Distinct departures present in the manifest, sorted.
 function _rzManDeps(){
   var set={};(S._rzManPax||[]).forEach(function(p){if(!p.infantOf)set[_rzPaxDep(p)]=1;});
   return Object.keys(set).sort(_rzDepCmp);
 }
 function _rzManDepLabel(dep){
-  // "0800 FCF" — find the product flown at this departure.
+  // "0800 FCF" — show the time(s) (strip the ·DEST grouping suffix) + the product flown.
+  var disp=String(dep||'').split('+').map(function(s){return s.split('·')[0];}).join('+');
   var prod='';(S._rzManPax||[]).some(function(p){if(_rzPaxDep(p)===dep){var i=_rzManDepInfo(p.group);if(i&&i.prod){prod=i.prod;return true;}}return false;});
-  return _rzEsc(dep)+(prod?' '+_rzEsc(prod):'');
+  return _rzEsc(disp)+(prod?' '+_rzEsc(prod):'');
 }
 // The product flown by one aircraft's pax on a departure (from the seated pax' booking groups).
 function _rzManAcProd(dep,acId){
@@ -13868,7 +13890,7 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   form.date=S.rezdyDate||form.date;
   // Carry the departure time through to the loadsheet ETD ("1200" → "12:00"; the Flyback group
   // uses its 1530 return time; a combined "0800+1200" uses the earliest leg).
-  var _firstLeg=String(dep||'').split('+')[0];
+  var _firstLeg=String(dep||'').split('+')[0].split('·')[0]; // strip the ·DEST grouping suffix
   var _etd=(_firstLeg===RZ_FLYBACK_DEP)?'15:30':_rzHHMMcolon(_firstLeg);
   if(_etd&&/^\d{1,2}:\d{2}$/.test(_etd)){form.etd=_etd;form.etdCustom=true;}
   // Flybacks fly the RETURN leg Milford → Queenstown with reduced fuel.
