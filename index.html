@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.46';
+const APP_VER='v24.47';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16190,8 +16190,24 @@ var BIZ_DEFAULT={
       {code:'SLD',type:'GA8', burn:70, fuelType:'avgas',hours:503.8,maint:95000, eoCost:210000, eoInt:2000,propCost:20000,propInt:2400},
       {code:'SLQ',type:'GA8', burn:70, fuelType:'avgas',hours:524.3,maint:152000,eoCost:210000, eoInt:2000,propCost:20000,propInt:2400}
     ]
-  }
+  },
+  // Staff pay-rate reference (daily rates). new = post-raise (Oct).
+  payRates:[
+    {code:'DF',cur:130,nw:130},{code:'BR',cur:70,nw:72.5},{code:'BF',cur:72.5,nw:75},{code:'FC',cur:62.5,nw:65},
+    {code:'IG',cur:60,nw:62.5},{code:'RK',cur:60,nw:65},{code:'JT',cur:60,nw:62.5},{code:'JY',cur:130,nw:130},
+    {code:'AA',cur:130,nw:130},{code:'LH',cur:72.5,nw:75},{code:'TP',cur:72.5,nw:72.5},{code:'MS',cur:70,nw:72.5},
+    {code:'LL',cur:67.5,nw:67.5},{code:'DO',cur:60,nw:67.5},{code:'JC',cur:65,nw:65},{code:'MD',cur:60,nw:60},{code:'EB',cur:60,nw:60}
+  ],
+  // Pax tracker: monthly targets + daily pax (this year / prior year), keyed by date.
+  paxTargets:{'2025-06':828},
+  paxData:{}  // 'YYYY-MM-DD' -> {p26, p25}
 };
+// Consolidated loan cashflow: total payment (incl. paydowns) per calendar month across all loans.
+function _bizTimeline(){
+  var p=_bizState();var byMonth={};
+  p.loans.forEach(function(l){var s=_bizLoanSchedule(l);s.rows.forEach(function(r){var ym=String(r.date).slice(0,7);byMonth[ym]=byMonth[ym]||{};byMonth[ym][l.id]=(byMonth[ym][l.id]||0)+r.payment+(r.extra||0);});});
+  return {months:Object.keys(byMonth).sort(),byMonth:byMonth,loans:p.loans};
+}
 
 function _bizState(){
   if(!S._bizPlan||typeof S._bizPlan!=='object')S._bizPlan=JSON.parse(JSON.stringify(BIZ_DEFAULT));
@@ -16201,6 +16217,9 @@ function _bizState(){
   if(!S._bizPlan.running||typeof S._bizPlan.running!=='object')S._bizPlan.running=JSON.parse(JSON.stringify(BIZ_DEFAULT.running));
   if(!S._bizPlan.running.fuel)S._bizPlan.running.fuel=JSON.parse(JSON.stringify(BIZ_DEFAULT.running.fuel));
   if(!Array.isArray(S._bizPlan.running.aircraft))S._bizPlan.running.aircraft=[];
+  if(!Array.isArray(S._bizPlan.payRates))S._bizPlan.payRates=JSON.parse(JSON.stringify(BIZ_DEFAULT.payRates));
+  if(!S._bizPlan.paxTargets||typeof S._bizPlan.paxTargets!=='object')S._bizPlan.paxTargets={};
+  if(!S._bizPlan.paxData||typeof S._bizPlan.paxData!=='object')S._bizPlan.paxData={};
   return S._bizPlan;
 }
 // Per-aircraft cost-per-flight-hour breakdown.
@@ -16275,6 +16294,12 @@ window.bizSetFuel=function(k,value){var p=_bizState();p.running.fuel[k]=(value==
 window.bizSetRunAc=function(i,field,value){var p=_bizState();if(!p.running.aircraft[i])return;p.running.aircraft[i][field]=(field==='code'||field==='type'||field==='fuelType')?value:(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizAddRunAc=function(){_bizState().running.aircraft.push({code:'NEW',type:'C208',burn:170,fuelType:'jeta1',hours:500,maint:0,eoCost:1000000,eoInt:3600,propCost:20000,propInt:2400});_bizSave();render();};
 window.bizDelRunAc=function(i){var p=_bizState();p.running.aircraft.splice(i,1);_bizSave();render();};
+window.bizSetPay=function(i,field,value){var p=_bizState();if(!p.payRates[i])return;p.payRates[i][field]=(field==='code')?value:(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizAddPay=function(){_bizState().payRates.push({code:'NEW',cur:0,nw:0});_bizSave();render();};
+window.bizDelPay=function(i){var p=_bizState();p.payRates.splice(i,1);_bizSave();render();};
+window.bizPaxMonth=function(dir){var m=S._bizPaxMonth||'2025-06';var d=new Date(+m.slice(0,4),+m.slice(5,7)-1+dir,1);S._bizPaxMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');render();};
+window.bizSetPaxTarget=function(ym,value){var p=_bizState();p.paxTargets[ym]=(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizSetPax=function(ds,field,value){var p=_bizState();p.paxData[ds]=p.paxData[ds]||{};if(value===''||value==null)delete p.paxData[ds][field];else p.paxData[ds][field]=Math.max(0,Math.round(+value)||0);if(!p.paxData[ds].p26&&!p.paxData[ds].p25)delete p.paxData[ds];_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizReset=function(){if(typeof confirm==='function'&&!confirm('Reset the Main Plan to the original spreadsheet values?'))return;S._bizPlan=JSON.parse(JSON.stringify(BIZ_DEFAULT));_bizSave();render();};
 
 // ── render ──
@@ -16283,11 +16308,94 @@ function renderBusinessPlan(){
   if(!(typeof hasRolePerm==='function'&&hasRolePerm('businessplan'))&&!(S.user&&S.user.superAdmin))
     return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
   var tab=S._bizTab||'mainplan';
-  var tabs=[{id:'mainplan',lbl:'Acquisition'},{id:'loans',lbl:'Loan schedules'},{id:'budget',lbl:'FY Budgets'},{id:'pnl',lbl:'P&L'},{id:'running',lbl:'Running costs'}];
+  var tabs=[{id:'mainplan',lbl:'Acquisition'},{id:'loans',lbl:'Loan schedules'},{id:'timeline',lbl:'Loan timeline'},{id:'running',lbl:'Running costs'},{id:'budget',lbl:'FY Budgets'},{id:'pnl',lbl:'P&L'},{id:'pax',lbl:'Pax tracker'},{id:'roster',lbl:'Pay rates'}];
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
     tabs.map(function(t){return '<button class="sub-tab '+(tab===t.id?'on':'')+'" onclick="window.bizSetTab(\''+t.id+'\')">'+t.lbl+'</button>';}).join('')+'</div>';
-  var body=(tab==='mainplan')?_bizRenderMainPlan():(tab==='loans')?_bizRenderLoans():(tab==='running')?_bizRenderRunning():_bizComingSoon(tabs.find(function(x){return x.id===tab;}));
+  var body=(tab==='mainplan')?_bizRenderMainPlan():(tab==='loans')?_bizRenderLoans():(tab==='running')?_bizRenderRunning()
+    :(tab==='timeline')?_bizRenderTimeline():(tab==='roster')?_bizRenderRoster():(tab==='pax')?_bizRenderPax():_bizComingSoon(tabs.find(function(x){return x.id===tab;}));
   return '<div>'+bar+body+'</div>';
+}
+
+function _bizRenderPax(){
+  var p=_bizState();var ym=S._bizPaxMonth||'2025-06';
+  var y=+ym.slice(0,4),mo=+ym.slice(5,7);var daysIn=new Date(y,mo,0).getDate();
+  var target=(p.paxTargets[ym]!=null&&p.paxTargets[ym]!=='')?(+p.paxTargets[ym]):'';
+  var _inS='width:60px;font-size:12px;padding:3px 4px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:center;box-sizing:border-box';
+  var monLbl=new Date(y,mo-1,1).toLocaleDateString('en-NZ',{month:'long',year:'numeric'});
+  var h='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+    '<div><div class="st" style="margin-bottom:0">Pax tracker</div><p style="font-size:12px;color:var(--text3);margin:2px 0 0">Daily pax vs target and vs last year. Accumulated / % of target / tracking computed live.</p></div>'+
+    '<div style="display:flex;align-items:center;gap:6px"><button class="btn btn-ghost" style="font-size:13px;padding:4px 10px" onclick="window.bizPaxMonth(-1)">◁</button>'+
+    '<span style="font-weight:700;font-size:13px;min-width:130px;text-align:center">'+monLbl+'</span>'+
+    '<button class="btn btn-ghost" style="font-size:13px;padding:4px 10px" onclick="window.bizPaxMonth(1)">▶</button></div></div>';
+  // running totals
+  var accum=0,run25=0,totT=(+target||0);
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end">'+
+    '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">Monthly target</label><input type="number" value="'+(target!==''?target:'')+'" onchange="window.bizSetPaxTarget(\''+ym+'\',this.value)" style="'+_inS+';width:90px;text-align:right"></div></div>';
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:560px">';
+  h+='<thead><tr style="background:var(--card2)">'+['Date','26 Pax','Accum','% target','% month','Tracking','25 Pax','25 run','vs 25'].map(function(t,i){return '<th style="text-align:'+(i===0?'left':'center')+';padding:6px 6px;font-size:10px;color:var(--text3)">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+  for(var d=1;d<=daysIn;d++){
+    var ds=ym+'-'+String(d).padStart(2,'0');var row=p.paxData[ds]||{};
+    var p26=(+row.p26||0),p25=(+row.p25||0);accum+=p26;run25+=p25;
+    var pctTarget=totT?accum/totT:0;var pctMonth=d/daysIn;var tracking=pctTarget-pctMonth;
+    var dow=new Date(y,mo-1,d).toLocaleDateString('en-NZ',{weekday:'short'});
+    h+='<tr style="border-top:1px solid var(--border2)">'+
+      '<td style="padding:2px 6px;white-space:nowrap"><b>'+d+'</b> <span style="color:var(--text3)">'+dow+'</span></td>'+
+      '<td style="padding:2px 4px"><input type="number" value="'+(row.p26!=null?row.p26:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p26\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:2px 6px;text-align:center;font-weight:700">'+(accum||'')+'</td>'+
+      '<td style="padding:2px 6px;text-align:center;color:var(--text2)">'+(totT?Math.round(pctTarget*100)+'%':'—')+'</td>'+
+      '<td style="padding:2px 6px;text-align:center;color:var(--text3)">'+Math.round(pctMonth*100)+'%</td>'+
+      '<td style="padding:2px 6px;text-align:center;font-weight:700;color:'+(totT?(tracking>=0?'#22c55e':'#ef4444'):'var(--text3)')+'">'+(totT?(tracking>=0?'+':'')+Math.round(tracking*100)+'%':'—')+'</td>'+
+      '<td style="padding:2px 4px"><input type="number" value="'+(row.p25!=null?row.p25:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p25\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:2px 6px;text-align:center;color:var(--text3)">'+(run25||'')+'</td>'+
+      '<td style="padding:2px 6px;text-align:center;color:var(--text2)">'+(run25?Math.round(accum/run25*100)+'%':'—')+'</td>'+
+      '</tr>';
+  }
+  h+='<tr style="border-top:2px solid var(--border);background:var(--card2);font-weight:800"><td style="padding:6px">Month</td><td style="text-align:center">'+accum+'</td><td colspan="3" style="text-align:center;color:var(--text3)">'+(totT?Math.round(accum/totT*100)+'% of '+totT:'')+'</td><td></td><td style="text-align:center">'+run25+'</td><td></td><td style="text-align:center">'+(run25?Math.round(accum/run25*100)+'%':'')+'</td></tr>';
+  h+='</tbody></table></div>';
+  h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px">Tracking = % of target reached minus % of the month elapsed (green = ahead of pace). "vs 25" compares this year\'s running total to last year\'s.</div>';
+  return h;
+}
+
+function _bizRenderTimeline(){
+  var t=_bizTimeline();
+  if(!t.months.length)return '<div class="card" style="color:var(--text3);padding:24px">No loans to show — add some on the Loan schedules tab.</div>';
+  var h='<div class="card"><div class="st">Loan timeline — total repayments per month</div><p style="font-size:12px;color:var(--text3);margin:0 0 0">Every loan\'s monthly payment (including lump-sum paydowns) consolidated into one cash-out schedule.</p></div>';
+  // annual summary
+  var byYear={};t.months.forEach(function(ym){var y=ym.slice(0,4);var tot=0;t.loans.forEach(function(l){tot+=(t.byMonth[ym][l.id]||0);});byYear[y]=(byYear[y]||0)+tot;});
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+Object.keys(byYear).sort().map(function(y){return '<div style="flex:0 1 auto;border:1px solid var(--border2);border-top:3px solid #7c3aed;border-radius:9px;padding:8px 12px"><div style="font-size:10px;color:var(--text3);font-weight:700">'+y+'</div><div style="font-size:15px;font-weight:800">'+_bizMoney(byYear[y])+'</div></div>';}).join('')+'</div>';
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:'+(220+t.loans.length*90)+'px">';
+  h+='<thead><tr style="background:var(--card2)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--text3);position:sticky;left:0;background:var(--card2)">Month</th>'+
+    t.loans.map(function(l){return '<th style="text-align:right;padding:6px 8px;font-size:10px;color:var(--text3);white-space:nowrap">'+_rzEscSafe(l.name)+'</th>';}).join('')+
+    '<th style="text-align:right;padding:6px 8px;font-size:10px;color:var(--text3)">Total /mo</th></tr></thead><tbody>';
+  t.months.forEach(function(ym){
+    var tot=0;
+    h+='<tr style="border-top:1px solid var(--border2)"><td style="padding:3px 8px;white-space:nowrap;position:sticky;left:0;background:var(--card)">'+_bizMonLabel(ym+'-01')+'</td>'+
+      t.loans.map(function(l){var v=t.byMonth[ym][l.id]||0;tot+=v;return '<td style="padding:3px 8px;text-align:right;color:'+(v?'var(--text2)':'var(--text3)')+'">'+(v?_bizMoney(v):'—')+'</td>';}).join('')+
+      '<td style="padding:3px 8px;text-align:right;font-weight:800;color:#f59e0b">'+_bizMoney(tot)+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  return h;
+}
+
+function _bizRenderRoster(){
+  var p=_bizState();var _inS='width:80px;font-size:12px;padding:4px 5px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:right;box-sizing:border-box';
+  var totCur=p.payRates.reduce(function(s,r){return s+(+r.cur||0);},0),totNw=p.payRates.reduce(function(s,r){return s+(+r.nw||0);},0);
+  var h='<div class="card"><div class="st">Staff pay rates <span style="font-weight:400;font-size:11px;color:var(--text3)">(daily rate, $)</span></div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;max-width:460px">';
+  h+='<thead><tr style="background:var(--card2)"><th style="text-align:left;padding:7px 8px;font-size:10px;color:var(--text3)">Staff</th><th style="text-align:right;padding:7px 8px;font-size:10px;color:var(--text3)">Current</th><th style="text-align:right;padding:7px 8px;font-size:10px;color:var(--text3)">New rate</th><th></th></tr></thead><tbody>';
+  p.payRates.forEach(function(r,i){
+    var up=(+r.nw||0)>(+r.cur||0);
+    h+='<tr style="border-top:1px solid var(--border2)">'+
+      '<td style="padding:3px 6px"><input value="'+_rzEscSafe(r.code||'')+'" onchange="window.bizSetPay('+i+',\'code\',this.value)" style="'+_inS+';width:80px;text-align:left;font-weight:700"></td>'+
+      '<td style="padding:3px 6px;text-align:right"><input type="number" step="2.5" value="'+(r.cur!==''?r.cur:'')+'" onchange="window.bizSetPay('+i+',\'cur\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:3px 6px;text-align:right"><input type="number" step="2.5" value="'+(r.nw!==''?r.nw:'')+'" onchange="window.bizSetPay('+i+',\'nw\',this.value)" style="'+_inS+';'+(up?'color:#22c55e':'')+'"></td>'+
+      '<td style="padding:3px 6px;text-align:center"><button onclick="window.bizDelPay('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button></td>'+
+      '</tr>';
+  });
+  h+='<tr style="border-top:2px solid var(--border);background:var(--card2);font-weight:800"><td style="padding:7px 8px">Total / day</td><td style="padding:7px 8px;text-align:right">'+_bizMoney(totCur)+'</td><td style="padding:7px 8px;text-align:right;color:#22c55e">'+_bizMoney(totNw)+'</td><td></td></tr>';
+  h+='</tbody></table></div><div style="margin-top:8px"><button class="btn btn-ghost" style="font-size:12px" onclick="window.bizAddPay()">+ Add staff</button></div>';
+  h+='<div style="font-size:11px;color:var(--text3);margin-top:6px">Daily rates; the "New rate" column is the post-raise figure. Total/day is the sum of all daily rates.</div></div>';
+  return h;
 }
 
 function _bizRenderRunning(){
