@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.26';
+const APP_VER='v24.27';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -13295,7 +13295,11 @@ function _rzRenderPickups(){
       '</div>'+
       (_dpOpen?'<div style="position:relative;z-index:30;margin-top:4px;border:1px solid var(--acc);border-radius:8px;background:var(--card);max-height:280px;overflow-y:auto;box-shadow:0 10px 28px rgba(0,0,0,.45)">'+_rzDriverPickRows('window.pickupSetVanDriver('+vi+',%N%)')+'</div>':'')+
       '</div>';
-    var _vlist=vanIds.slice().sort(function(a,b){return _rzPkTimeVal(_rzPickupById(pickups,a))-_rzPkTimeVal(_rzPickupById(pickups,b));}).filter(function(id){if(!depFilter)return true;var pp=_rzPickupById(pickups,id);return pp&&pp.depart===depFilter;});
+    var _depJs=_rzEsc(depFilter||'').replace(/'/g,"\\'");
+    // Honour the manual run order (same S._pickupOrder the driver uses) so reordering here sticks.
+    var _grp0=vanIds.map(function(id){return _rzPickupById(pickups,id);}).filter(function(p){return p&&(!depFilter||p.depart===depFilter);}).sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
+    if(depFilter)_grp0=_rzApplyMyOrder(_grp0,vi,depFilter);
+    var _vlist=_grp0.map(function(p){return p.id;});
     if(!vanIds.length){
       vansH+='<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px;border:1px dashed var(--border2);border-radius:8px">Drop pickups here</div>';
     }else if(!_vlist.length){
@@ -13307,8 +13311,14 @@ function _rzRenderPickups(){
         vansH+='<div draggable="true" ondragstart="window.pickupDragStart(\''+_rzEsc(id).replace(/'/g,"\\'")+'\',event)" '+
           'style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:10px;margin-bottom:8px;cursor:grab;'+(collected?'opacity:.55':'')+'">'+
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">'+
-            '<div style="font-weight:700;font-size:13px;color:var(--text);'+(collected?'text-decoration:line-through':'')+'">'+_rzEsc(p.customer||p.order)+'</div>'+
-            '<span style="flex-shrink:0;font-size:11px;font-weight:700;color:'+col+'">'+p.pax+' pax</span>'+
+            '<div style="font-weight:700;font-size:13px;color:var(--text);min-width:0;'+(collected?'text-decoration:line-through':'')+'"><span style="color:var(--text3);font-weight:700;margin-right:6px;cursor:grab;font-size:17px;vertical-align:middle" title="Drag to reorder">≡</span>'+_rzEsc(p.customer||p.order)+'</div>'+
+            '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">'+
+              '<span style="font-size:11px;font-weight:700;color:'+col+'">'+p.pax+' pax</span>'+
+              (depFilter?'<div style="display:flex;flex-direction:column;gap:2px">'+
+                '<button onclick="event.stopPropagation();window.myPkMove('+vi+',\''+_depJs+'\',\''+_rzEsc(id).replace(/'/g,"\\'")+'\',-1)" title="Move up" style="width:38px;height:26px;border-radius:6px;border:1px solid var(--border2);background:var(--card);color:var(--text2);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">▲</button>'+
+                '<button onclick="event.stopPropagation();window.myPkMove('+vi+',\''+_depJs+'\',\''+_rzEsc(id).replace(/'/g,"\\'")+'\',1)" title="Move down" style="width:38px;height:26px;border-radius:6px;border:1px solid var(--border2);background:var(--card);color:var(--text2);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">▼</button>'+
+              '</div>':'')+
+            '</div>'+
           '</div>'+
           '<div style="display:flex;align-items:center;gap:5px;margin-top:4px"><span style="font-size:12px">📍</span>'+_rzLocSelect(p.id,p.location)+'</div>'+
           (p.pickupTime?'<div style="font-size:11px;color:var(--text2);margin-top:3px;font-weight:700">🕑 Pickup '+_rzEsc(p.pickupTime)+'</div>':'')+
@@ -13518,6 +13528,36 @@ setInterval(function(){
     if(S.section==='operations'&&S.tab==='ground'&&typeof window.rezdyReloadPickupLive==='function')window.rezdyReloadPickupLive();
   }catch(e){}
 },15000);
+// ── Unacknowledged-pickup chime (mobile) ───────────────────────────────────────
+// Repeating chime while the signed-in driver has an unacknowledged run, until they acknowledge.
+// Web Audio needs a user gesture first (autoplay policy), so we (re)arm the audio context on any
+// tap/click; until then it stays silent.
+var _rzAudioCtx=null;
+function _rzEnsureAudio(){try{if(!_rzAudioCtx&&(window.AudioContext||window.webkitAudioContext))_rzAudioCtx=new (window.AudioContext||window.webkitAudioContext)();if(_rzAudioCtx&&_rzAudioCtx.state==='suspended')_rzAudioCtx.resume();}catch(e){}}
+try{['click','touchend'].forEach(function(ev){window.addEventListener(ev,_rzEnsureAudio,{passive:true});});}catch(e){}
+function _rzChimeBeep(){
+  if(!_rzAudioCtx||_rzAudioCtx.state!=='running')return;
+  try{
+    var t=_rzAudioCtx.currentTime;
+    [880,1175].forEach(function(freq,i){ // two-note chime
+      var o=_rzAudioCtx.createOscillator(),g=_rzAudioCtx.createGain(),s=t+i*0.18;
+      o.type='sine';o.frequency.value=freq;o.connect(g);g.connect(_rzAudioCtx.destination);
+      g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.3,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.35);
+      o.start(s);o.stop(s+0.37);
+    });
+  }catch(e){}
+}
+function _rzDriverHasUnacked(){
+  var me=((S.user&&S.user.name)||'').trim();if(!me)return false;
+  var has=false;(S._pickupVans||[]).forEach(function(ids,vi){if(((S._pickupDrivers||[])[vi]||'').trim()===me&&!_rzVanAcked(vi))has=true;});
+  return has;
+}
+setInterval(function(){
+  try{
+    if(typeof S==='undefined'||!S.user||!S.mobileView||document.visibilityState!=='visible')return;
+    if(typeof _rzDriverHasUnacked==='function'&&_rzDriverHasUnacked())_rzChimeBeep();
+  }catch(e){}
+},9000);
 
 window.rezdyLoadPickups=async function(){
   S._pickupLoading=true;safeRender();
