@@ -141,6 +141,8 @@ function _sectionAllowed(sec){
     case 'calendar':    return hasRolePerm('calendar');
     case 'settings':    return hasRolePerm('admin_users')||hasRolePerm('admin_crew');
     case 'operations':  return hasRolePerm('operations');
+    case 'flightduty':  return !!(S.user&&S.user.superAdmin); // placeholder — superadmin only for now
+    case 'businessplan':return !!(S.user&&S.user.superAdmin); // placeholder — superadmin only for now
     default:            return true;
   }
 }
@@ -585,6 +587,16 @@ function renderDrawer(){
     }
    }
   }
+  // Superadmin-only placeholder sections (coming soon) — pinned to the bottom of the drawer.
+  if(S.user&&S.user.superAdmin){
+    var _phBtn=function(label,section,icon){
+      var on=sec===section;
+      return '<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+section+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(on?'rgba(124,58,237,.22)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(on?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+icon+'</span><span style="flex:1">'+label+'</span><span style="font-size:9px;font-weight:800;letter-spacing:.04em;color:rgba(255,255,255,.35);background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px">SOON</span></button>';
+    };
+    h+='<div style="margin:8px 6px 4px;border-top:1px solid rgba(255,255,255,.06)"></div>';
+    h+=_phBtn('Flight & Duty','flightduty','🕓');
+    h+=_phBtn('TSF Business Plan','businessplan','📈');
+  }
   h+='</nav>';
   h+='<div style="padding:10px 16px;font-size:10px;color:rgba(255,255,255,.18);font-family:monospace;border-top:1px solid rgba(255,255,255,.06)">'+APP_VER+'</div>';
   h+='</div>';
@@ -722,6 +734,12 @@ function renderApp(){
         }
         if(_sec==='leave')return'<div id="flash-leave">'+renderLeave()+'</div>';
         if(_sec==='calendar')return renderCalendar();
+        if(_sec==='flightduty'||_sec==='businessplan'){
+          if(!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return _sec==='flightduty'
+            ? _renderPlaceholderSection('Flight &amp; Duty','🕓','Crew flight &amp; duty-time tracking will live here — daily/weekly/cumulative duty, rest, and limit checks.')
+            : _renderPlaceholderSection('TSF Business Plan','📈','The TrueSouth Flights business plan and targets will live here.');
+        }
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
@@ -755,6 +773,15 @@ function _applyLsFlash(){
     }
   });
   _triggerFlash('flash-loadsheet');
+}
+// Simple "coming soon" page for a placeholder tier-1 section.
+function _renderPlaceholderSection(title,icon,sub){
+  return '<div class="card" style="text-align:center;padding:56px 24px;max-width:560px;margin:24px auto">'+
+    '<div style="font-size:46px;margin-bottom:12px">'+icon+'</div>'+
+    '<div class="st" style="justify-content:center;font-size:20px;margin-bottom:6px">'+title+'</div>'+
+    '<div style="font-size:13px;color:var(--text3);line-height:1.5;margin-bottom:14px">'+sub+'</div>'+
+    '<span style="display:inline-block;font-size:11px;font-weight:800;letter-spacing:.05em;color:#c084fc;background:rgba(124,58,237,.14);border:1px solid rgba(124,58,237,.4);padding:4px 12px;border-radius:14px">COMING SOON</span>'+
+  '</div>';
 }
 function renderOperations(){
   const opsTab=S.tab||'bookings';

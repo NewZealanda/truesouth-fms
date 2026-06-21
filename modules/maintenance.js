@@ -680,7 +680,7 @@ function renderMaintEstimator(){
       if(!date) return'<span style="color:var(--text3)">—</span>';
       const yr=Math.round(days/365*10)/10;
       const _d=new Date(date+'T00:00:00');
-      const _lbl=isNaN(_d.getTime())?date.slice(0,7):_d.toLocaleDateString('en-NZ',{month:'short',year:'numeric'}); // 3-letter month, e.g. "Jun 2026"
+      const _lbl=isNaN(_d.getTime())?date.slice(0,10):_d.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'}); // full date, e.g. "14 Aug 2026"
       return`<span style="font-weight:700">${_lbl}</span><span style="font-size:10px;color:var(--text3);margin-left:4px">(${yr}yr)</span>`;
     }
 
@@ -712,6 +712,22 @@ function renderMaintEstimator(){
   <div style="font-size:11px;color:var(--text3);padding:8px 0">Estimates use average hrs/yr from all available history. Actual dates vary with utilisation.</div>`;
 }
 
+// Quick-set the maintenance search date range. Calendar-based for month/year/FY; rolling for 3m/12m.
+// NZ financial year runs 1 Apr – 31 Mar; 'fy' = the last COMPLETED financial year.
+window.maintSearchRange=function(key){
+  S.maintSearch=S.maintSearch||{};
+  var now=new Date();var y=now.getFullYear(),mo=now.getMonth(),dd=now.getDate();
+  function ymd(yy,mm,d){return new Date(Date.UTC(yy,mm,d)).toISOString().slice(0,10);}
+  var from='',to='';
+  if(key==='clear'){from='';to='';}
+  else if(key==='12m'){from=ymd(y-1,mo,dd);to=ymd(y,mo,dd);}
+  else if(key==='3m'){from=ymd(y,mo-3,dd);to=ymd(y,mo,dd);}
+  else if(key==='1m'){from=ymd(y,mo-1,1);to=ymd(y,mo,0);}            // previous calendar month
+  else if(key==='cy'){from=ymd(y-1,0,1);to=ymd(y-1,11,31);}          // previous calendar year
+  else if(key==='fy'){var fyStart=(mo>=3?y:y-1)-1;from=ymd(fyStart,3,1);to=ymd(fyStart+1,2,31);} // 1 Apr → 31 Mar
+  S.maintSearch.from=from;S.maintSearch.to=to;
+  if(typeof safeRender==='function')safeRender();
+};
 function renderMaintSearch(){
   const sf=S.maintSearch||{};
   const hist=S.maintenance?.hist||[];
@@ -737,6 +753,15 @@ function renderMaintSearch(){
           <option value="starts" ${sf.type==='starts'?'selected':''}>Engine Starts</option>
           <option value="landings" ${sf.type==='landings'?'selected':''}>Landings</option>
         </select></div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+      <span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-right:2px">Quick range</span>
+      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.maintSearchRange('1m')">Last month</button>
+      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.maintSearchRange('3m')">Last 3 months</button>
+      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.maintSearchRange('12m')">Last 12 months</button>
+      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.maintSearchRange('cy')">Last calendar year</button>
+      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="window.maintSearchRange('fy')" title="NZ financial year: 1 Apr – 31 Mar (last completed)">Last FY</button>
+      ${(sf.from||sf.to)?`<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;color:var(--text3)" onclick="window.maintSearchRange('clear')">✕ Clear</button>`:''}
     </div>
   </div>`;
 

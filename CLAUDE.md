@@ -90,7 +90,19 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v24.31** — built+verified, ready to commit. See `HANDOFF.md` for the full log.
+- Latest version: **v24.36** — built+verified. See `HANDOFF.md` for the full log.
+- **v24.36 (misc):** (a) theme now DEFAULTS TO LIGHT — head.html boot applies `data-theme=light`
+  unless `ts_theme==='dark'` (was: dark default, light opt-in); toggle still persists choice. (b)
+  Maintenance **estimator** next-check/engine/prop dates show the full date "14 Aug 2026" (`fmtEst`
+  now `{day,month:'short',year}`). (c) Maintenance **Search** has quick-range buttons
+  (`window.maintSearchRange`): Last month / Last 3 months / Last 12 months / Last calendar year /
+  Last FY (NZ 1 Apr–31 Mar, last completed) / Clear. (d) Two **superadmin-only placeholder** tier-1
+  sections pinned to the bottom of the drawer: **Flight & Duty** (`flightduty`) and **TSF Business
+  Plan** (`businessplan`) — gated in `_sectionAllowed` + the render dispatch on `S.user.superAdmin`,
+  rendering `_renderPlaceholderSection` ("Coming soon").
+- **v24.35:** fixed loadsheet archive→signed revert on refresh (`reloadTable` dropped
+  `drive_uploaded`); printed bookings run-sheet swaps In column for an aircraft pill.
+- Earlier latest was **v24.31** — built+verified, ready to commit. See `HANDOFF.md` for the full log.
 - **Transport (pickups + drop-offs) (v24.31):** the Ground ▸ **Pickups** sub-tab is renamed **Transport**
   (id still `pickups`). `_rzPickups` now emits, for every non-flyback non-self-drive pickup, a SECOND
   "drop-off" entry (`id+'|D'`, `depart=_rzDropDep(pdep)` = `'↩'+dep`, `dropoff:true`) duplicating the
