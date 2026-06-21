@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.38';
+const APP_VER='v24.39';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -15700,11 +15700,11 @@ function _fdCurrency(uid,type,asOf){
   return {current:true,total:total,expiry:expiry,daysLeft:daysLeft};
 }
 
-// ── days off (from the roster) ──
-// A day counts as "free of duty" if the roster status is not a working code. Returns counts for the
-// rule floors (2 off / any 14 days; 2 CONSECUTIVE off / any 30 days), looking back from asOf.
-function _fdRosterStatus(uid,ds){var r=S.roster||{};var day=r[ds];return day?(day[uid]||''):'';}
-function _fdIsOffDay(uid,ds){var st=_fdRosterStatus(uid,ds);if(!st)return false;var raw=st.indexOf('other:')===0?'other':st;return typeof ROSTER_WORKING!=='undefined'?!ROSTER_WORKING.has(raw):/rdo|off|leave|ul|sick/.test(raw);}
+// ── days off ──
+// A day is "free of duty" when there is NO duty/flight entry for it — so a past date with nothing
+// logged counts as a day off; a logged duty period or flight makes it a working day. Counts the
+// rule floors (2 off / any 14 days; 2 CONSECUTIVE off / any 30 days) looking back from asOf.
+function _fdIsOffDay(uid,ds){var r=_fdRow(uid,ds);return !(r&&((r.ds&&r.de)||(+r.ft||0)>0));}
 function _fdDaysOff(uid,asOf){
   var off14=0,maxConsec30=0,run=0;
   for(var i=0;i<30;i++){var ds=_fdAddDays(asOf,-i);var off=_fdIsOffDay(uid,ds);
@@ -15751,6 +15751,12 @@ window.fdSaveRow=function(uid,ds,patch){
   if(typeof safeRender==='function')safeRender();
 };
 window.fdEditField=function(uid,ds,field,value){var p={};p[field]=value;window.fdSaveRow(uid,ds,p);};
+// Duty start/end are locked to 15-minute blocks — round the entered time to the nearest quarter hour.
+window.fdSetTime=function(uid,ds,field,value){
+  var m=/(\d{1,2}):(\d{2})/.exec(String(value||''));
+  if(m){var t=Math.round(((+m[1])*60+(+m[2]))/15)*15;if(t>=1440)t=1425;value=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');}
+  window.fdEditField(uid,ds,field,value);
+};
 window.fdToggle=function(uid,ds,field){var r=_fdRow(uid,ds)||{};var p={};p[field]=!r[field];window.fdSaveRow(uid,ds,p);};
 window.fdCertify=function(uid,month){
   if(!uid||!month)return;
@@ -15823,7 +15829,7 @@ function _fdRenderRecord(canManage){
   if(!uid)return '<div class="card" style="color:var(--text3);padding:24px">No pilot selected.</div>';
   var u=(S.users||[]).find(function(x){return x.id===uid;});
   var month=S._fdMonth||_fdMonth(_fdToday());
-  var types=_fdTypeRatings(uid);
+  var types=_fdTypeRatings(uid);if(!types.length)types=['c208b','ga8']; // show both landing columns by default
   var L=_fdLimits();
   var h='';
 
@@ -15868,7 +15874,7 @@ function _fdRenderRecord(canManage){
   h+='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text2)">'+
     '<span style="color:'+(doffOk1?'#22c55e':'#ef4444')+';font-weight:700">'+(doffOk1?'✓':'⚠')+' '+doff.off14+' day(s) off / last 14 <span style="color:var(--text3);font-weight:400">(min 2)</span></span>'+
     '<span style="color:'+(doffOk2?'#22c55e':'#ef4444')+';font-weight:700">'+(doffOk2?'✓':'⚠')+' '+doff.consec30+' consecutive off / last 30 <span style="color:var(--text3);font-weight:400">(min 2)</span></span>'+
-    '<span style="color:var(--text3)">days off read from the roster (RDO/leave)</span>'+
+    '<span style="color:var(--text3)">a day with no logged duty counts as a day off</span>'+
     '</div></div>';
 
   // ── currency ──
@@ -15905,17 +15911,39 @@ function _fdRenderRecord(canManage){
       '</div></div>';
   }
 
+  // ── look-ahead: how much you can still work as past days roll off the 30-day window ──
+  function _r1(x){return Math.round(x*10)/10;}
+  function _fdShort(d){var o=_fdDateObj(d);return o?o.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'}):d;}
+  var _laTh=function(t,al){return '<th style="text-align:'+(al||'center')+';padding:6px 6px;font-size:10px;color:var(--text3);font-weight:700">'+t+'</th>';};
+  h+='<div class="card"><div class="st">Look ahead — how much you can still work <span style="font-weight:400;font-size:11px;color:var(--text3)">— if no further duty is added before then</span></div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:440px;table-layout:fixed">';
+  h+='<colgroup><col style="width:118px"><col style="width:62px"><col style="width:64px"><col style="width:64px"><col style="width:64px"><col style="width:64px"></colgroup>';
+  h+='<thead><tr style="background:var(--card2)">'+_laTh('Date','left')+_laTh('Rolls off')+_laTh('Duty/30')+_laTh('Can work')+_laTh('Flight/30')+_laTh('Can fly')+'</tr></thead><tbody>';
+  for(var k=0;k<14;k++){
+    var fd=_fdAddDays(asOf,k);
+    var pd=_fdValueFor(uid,'duty_30',fd),pf=_fdValueFor(uid,'flt_30',fd);   // existing entries only → declines
+    var rollOff=_fdDutyHours(_fdRow(uid,_fdAddDays(fd,-30))||{});
+    var dCol=_FD_COL[_fdStatus(pd,L.duty_30)],fCol=_FD_COL[_fdStatus(pf,L.flt_30)];
+    h+='<tr style="border-top:1px solid var(--border2)'+(k===0?';background:rgba(124,58,237,.06)':'')+'">'+
+      '<td style="padding:4px 8px;white-space:nowrap">'+(k===0?'<b>Today</b> · ':'')+_rzEscSafe(_fdShort(fd))+'</td>'+
+      '<td style="padding:4px;text-align:center;color:var(--text3)">'+(rollOff?'−'+_r1(rollOff):'')+'</td>'+
+      '<td style="padding:4px;text-align:center;font-weight:700;color:'+dCol+'">'+_r1(pd)+'</td>'+
+      '<td style="padding:4px;text-align:center;font-weight:800;color:'+dCol+'">'+_r1(Math.max(0,L.duty_30.val-pd))+'h</td>'+
+      '<td style="padding:4px;text-align:center;font-weight:700;color:'+fCol+'">'+_r1(pf)+'</td>'+
+      '<td style="padding:4px;text-align:center;font-weight:800;color:'+fCol+'">'+_r1(Math.max(0,L.flt_30.val-pf))+'h</td>'+
+      '</tr>';
+  }
+  h+='</tbody></table></div><div style="font-size:11px;color:var(--text3);padding:6px 2px">"Rolls off" = duty that leaves the 30-day window that day. "Can work / fly" = hours left to your 30-day limit ('+L.duty_30.val+'h duty / '+L.flt_30.val+'h flight) if nothing more is added before then.</div></div>';
+
   // ── daily grid for the month ──
-  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px">';
+  var _gTh=function(t,c){return '<th style="text-align:center;padding:7px 4px;font-size:10px;color:'+(c||'var(--text3)')+';font-weight:700">'+t+'</th>';};
+  var _inS='width:100%;font-size:12px;padding:4px 3px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:center;box-sizing:border-box';
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:620px;table-layout:fixed">';
+  h+='<colgroup><col style="width:94px"><col style="width:72px"><col style="width:72px"><col style="width:52px"><col style="width:62px"><col style="width:60px"><col style="width:58px"><col style="width:58px"><col style="width:40px"></colgroup>';
   h+='<thead><tr style="background:var(--card2)">'+
-    '<th style="text-align:left;padding:7px 8px;font-size:10px;color:var(--text3)">Date</th>'+
-    '<th style="padding:7px 6px;font-size:10px;color:var(--text3)">Duty start</th>'+
-    '<th style="padding:7px 6px;font-size:10px;color:var(--text3)">Duty end</th>'+
-    '<th style="padding:7px 6px;font-size:10px;color:var(--text3)">Duty h</th>'+
-    '<th style="padding:7px 6px;font-size:10px;color:var(--text3)">Flight h</th>'+
-    (types.indexOf('c208b')>=0?'<th style="padding:7px 6px;font-size:10px;color:var(--text3)">C208B ldg</th>':'')+
-    (types.indexOf('ga8')>=0?'<th style="padding:7px 6px;font-size:10px;color:var(--text3)">GA8 ldg</th>':'')+
-    '<th style="padding:7px 6px;font-size:10px;color:var(--text3)" title="Disrupted-schedule extension to 12h">12h</th>'+
+    '<th style="text-align:left;padding:7px 8px;font-size:10px;color:var(--text3);font-weight:700">Date</th>'+
+    _gTh('Start')+_gTh('End')+_gTh('Duty&nbsp;h')+_gTh('Duty&nbsp;30d')+_gTh('Flight&nbsp;h')+_gTh('C208B','#22c55e')+_gTh('GA8','#60a5fa')+
+    '<th style="text-align:center;padding:7px 4px;font-size:10px;color:var(--text3);font-weight:700" title="Tick when a commenced duty is extended to 12h to complete a disrupted schedule (normal max 11h)">Ext</th>'+
     '</tr></thead><tbody>';
   var mDate=_fdDateObj(month+'-01');var y=mDate.getFullYear(),mo=mDate.getMonth();
   var daysIn=new Date(y,mo+1,0).getDate();
@@ -15924,22 +15952,25 @@ function _fdRenderRecord(canManage){
     var ds=y+'-'+String(mo+1).padStart(2,'0')+'-'+String(dd).padStart(2,'0');
     var r=_fdRow(uid,ds)||{};
     var dh=_fdDutyHours(r);
-    var dHotCol=dh>L.duty_daily.val+1e-9?'#ef4444':(r.ext&&dh>11?'#f59e0b':'var(--text1)');
+    var _dlim=r.ext?FD_DUTY_EXT:L.duty_daily.val;
+    var dHotCol=dh>_dlim+1e-9?'#ef4444':(dh>L.duty_daily.val+1e-9?'#f59e0b':'var(--text1)');
+    var d30=_fdValueFor(uid,'duty_30',ds);var d30col=_FD_COL[_fdStatus(d30,L.duty_30)];
     var dow=_fdDateObj(ds).toLocaleDateString('en-NZ',{weekday:'short'});
-    var isToday=ds===today;var off=_fdIsOffDay(uid,ds);
-    h+='<tr style="border-top:1px solid var(--border2);'+(isToday?'background:rgba(124,58,237,.06)':off?'background:rgba(100,116,139,.05)':'')+'">'+
+    var isToday=ds===today;var future=ds>today;var off=!future&&_fdIsOffDay(uid,ds);
+    h+='<tr style="border-top:1px solid var(--border2);'+(isToday?'background:rgba(124,58,237,.06)':off?'background:rgba(100,116,139,.05)':'')+(future?'opacity:.55;':'')+'">'+
       '<td style="padding:4px 8px;white-space:nowrap"><b>'+dd+'</b> <span style="color:var(--text3)">'+dow+'</span>'+(off?' <span style="font-size:9px;color:#94a3b8">off</span>':'')+'</td>'+
-      '<td style="padding:3px 4px"><input type="time" value="'+_rzEscSafe(r.ds||'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'ds\',this.value)" style="width:88px;font-size:12px;padding:3px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text)"></td>'+
-      '<td style="padding:3px 4px"><input type="time" value="'+_rzEscSafe(r.de||'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'de\',this.value)" style="width:88px;font-size:12px;padding:3px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text)"></td>'+
+      '<td style="padding:3px 4px"><input type="time" step="900" value="'+_rzEscSafe(r.ds||'')+'" onchange="window.fdSetTime(\''+uid+'\',\''+ds+'\',\'ds\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:3px 4px"><input type="time" step="900" value="'+_rzEscSafe(r.de||'')+'" onchange="window.fdSetTime(\''+uid+'\',\''+ds+'\',\'de\',this.value)" style="'+_inS+'"></td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700;color:'+dHotCol+'">'+(dh?Math.round(dh*10)/10:'')+'</td>'+
-      '<td style="padding:3px 4px"><input type="number" step="0.1" min="0" value="'+(r.ft!=null&&r.ft!==''?r.ft:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'ft\',this.value)" style="width:56px;font-size:12px;padding:3px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:center"></td>'+
-      (types.indexOf('c208b')>=0?'<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lc!=null&&r.lc!==''?r.lc:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lc\',this.value)" style="width:46px;font-size:12px;padding:3px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:center"></td>':'')+
-      (types.indexOf('ga8')>=0?'<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lg!=null&&r.lg!==''?r.lg:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lg\',this.value)" style="width:46px;font-size:12px;padding:3px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:center"></td>':'')+
+      '<td style="padding:3px 4px;text-align:center;font-weight:700;color:'+(d30?d30col:'var(--text3)')+'">'+(d30?Math.round(d30*10)/10:'')+'</td>'+
+      '<td style="padding:3px 4px"><input type="number" step="0.1" min="0" value="'+(r.ft!=null&&r.ft!==''?r.ft:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'ft\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lc!=null&&r.lc!==''?r.lc:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lc\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lg!=null&&r.lg!==''?r.lg:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lg\',this.value)" style="'+_inS+'"></td>'+
       '<td style="padding:3px 4px;text-align:center"><input type="checkbox" '+(r.ext?'checked':'')+' onchange="window.fdToggle(\''+uid+'\',\''+ds+'\',\'ext\')"></td>'+
       '</tr>';
   }
   h+='</tbody></table></div>';
-  h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px">Advisory only — your printed &amp; signed monthly record is the controlled document. Limits per AC119-2 / Exposition; tune them in Settings ▸ Operations ▸ Flight &amp; Duty.</div>';
+  h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px"><b>Duty&nbsp;30d</b> = rolling duty over the previous 30 days (towards the '+L.duty_30.val+'h limit). <b>Ext</b> = tick when a commenced duty ran past 11h to 12h to finish a disrupted schedule. Start/end times are locked to 15-minute blocks. Advisory only — your printed &amp; signed monthly record is the controlled document; limits in Settings ▸ Operations ▸ Flight &amp; Duty.</div>';
   return h;
 }
 
