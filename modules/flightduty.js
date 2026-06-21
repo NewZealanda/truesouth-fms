@@ -83,20 +83,22 @@ function _fdStatus(val,L){
 var _FD_COL={ok:'#22c55e',amber:'#f59e0b',red:'#ef4444',over:'#ef4444'};
 
 // ── currency (3 landings / 90 days, per type, day) ──
-// Returns {current,total,expiry,daysLeft} computed from daily landing counts.
+// Expiry = the 3rd-most-recent landing (across ALL history) + 90 days. If that's in the future the
+// pilot is current (daysLeft); if it's passed they're un-current by daysOver. Returns
+// {current,everCurrent,recent,expiry,daysLeft,daysOver}.
 function _fdCurrency(uid,type,asOf){
   asOf=asOf||_fdToday();
-  var from=_fdAddDays(asOf,-(FD_CURRENCY_DAYS-1));
   var field=type==='ga8'?'lg':'lc';
-  var days=_fdRows(uid).filter(function(r){return r.date>=from&&r.date<=asOf&&(+r[field]||0)>0;});
-  var total=days.reduce(function(s,r){return s+(+r[field]||0);},0);
-  if(total<FD_CURRENCY_LDG)return {current:false,total:total,expiry:null,daysLeft:0};
-  // Walk most-recent first; the day the running count reaches FD_CURRENCY_LDG is the "3rd-landing" day.
+  var days=_fdRows(uid).filter(function(r){return r.date<=asOf&&(+r[field]||0)>0;}); // all landing-days, ascending
+  var recent=days.filter(function(r){return r.date>=_fdAddDays(asOf,-(FD_CURRENCY_DAYS-1));}).reduce(function(s,r){return s+(+r[field]||0);},0);
+  // date of the 3rd-most-recent landing overall
   var acc=0,thirdDay=null;
   for(var i=days.length-1;i>=0;i--){acc+=(+days[i][field]||0);if(acc>=FD_CURRENCY_LDG){thirdDay=days[i].date;break;}}
-  var expiry=thirdDay?_fdAddDays(thirdDay,FD_CURRENCY_DAYS):null;
-  var daysLeft=expiry?_fdDaysBetween(asOf,expiry):0;
-  return {current:true,total:total,expiry:expiry,daysLeft:daysLeft};
+  if(!thirdDay)return {current:false,everCurrent:false,recent:recent,expiry:null,daysLeft:0,daysOver:0};
+  var expiry=_fdAddDays(thirdDay,FD_CURRENCY_DAYS);
+  var diff=_fdDaysBetween(asOf,expiry); // +ve = days remaining, -ve = days overdue
+  if(diff>=0)return {current:true,everCurrent:true,recent:recent,expiry:expiry,daysLeft:diff,daysOver:0};
+  return {current:false,everCurrent:true,recent:recent,expiry:expiry,daysLeft:0,daysOver:-diff};
 }
 
 // ── days off ──
@@ -315,7 +317,9 @@ function _fdRenderRecord(canManage){
         '<div style="font-weight:800;font-size:14px;color:'+col+'">'+_rzEscSafe(ty.lbl)+'</div>'+
         (c.current
           ?'<div style="font-size:12px;color:var(--text2);margin-top:2px">Current — expires <b>'+_rzEscSafe(_fdFmt(c.expiry))+'</b> ('+c.daysLeft+' day'+(c.daysLeft===1?'':'s')+')</div>'
-          :'<div style="font-size:12px;color:#ef4444;font-weight:700;margin-top:2px">NOT CURRENT — '+c.total+'/'+FD_CURRENCY_LDG+' landings in last '+FD_CURRENCY_DAYS+' days</div>')+
+          :(c.everCurrent
+            ?'<div style="font-size:12px;color:#ef4444;font-weight:700;margin-top:2px">NOT CURRENT — lapsed '+_rzEscSafe(_fdFmt(c.expiry))+', <b>'+c.daysOver+' day'+(c.daysOver===1?'':'s')+' overdue</b> ('+c.recent+'/'+FD_CURRENCY_LDG+' in last '+FD_CURRENCY_DAYS+' days)</div>'
+            :'<div style="font-size:12px;color:#ef4444;font-weight:700;margin-top:2px">NOT CURRENT — '+c.recent+'/'+FD_CURRENCY_LDG+' landings on record</div>'))+
         '</div>';
     });
     h+='</div></div>';
@@ -431,12 +435,12 @@ function _fdRenderSummary(){
   function cell(val,key){var lim=L[key];var st=_fdStatus(val,lim);var col=_FD_COL[st];return '<td style="padding:5px 6px;text-align:center;font-weight:700;color:'+col+'">'+(Math.round(val*10)/10)+'<span style="font-size:10px;color:var(--text3);font-weight:500"> /'+lim.val+'</span></td>';}
   function currCell(uid,type){
     var rated=_fdTypeRatings(uid).indexOf(type)>=0;
-    var field=type==='ga8'?'lg':'lc';
     var c=_fdCurrency(uid,type,asOf);
-    var hasData=c.total>0||_fdRows(uid).some(function(r){return (+(r[field]||0))>0;});
-    if(!rated&&!hasData)return '<td style="padding:5px 6px;text-align:center;color:var(--text3)">—</td>';
+    if(!rated&&!c.everCurrent)return '<td style="padding:5px 6px;text-align:center;color:var(--text3)">—</td>';
+    if(!c.everCurrent)return '<td style="padding:5px 6px;text-align:center;font-weight:700;color:#ef4444" title="Fewer than '+FD_CURRENCY_LDG+' landings on record">'+c.recent+'/'+FD_CURRENCY_LDG+'</td>';
     var col=!c.current?'#ef4444':(c.daysLeft<=14?'#f59e0b':'#22c55e');
-    return '<td style="padding:5px 6px;text-align:center;font-weight:700;color:'+col+'">'+(c.current?c.daysLeft+'d':'EXPIRED')+'</td>';
+    // current → days remaining; un-current → days overdue ("−Nd uncurrent")
+    return '<td style="padding:5px 6px;text-align:center;font-weight:700;color:'+col+'" title="'+(c.current?'expires '+_rzEscSafe(_fdFmt(c.expiry)):'lapsed '+_rzEscSafe(_fdFmt(c.expiry)))+'">'+(c.current?c.daysLeft+'d':'−'+c.daysOver+'d')+'</td>';
   }
   pilots.forEach(function(p){
     h+='<tr style="border-top:1px solid var(--border2)">'+
