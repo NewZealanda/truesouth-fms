@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.51';
+const APP_VER='v24.52';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16269,8 +16269,19 @@ function _bizState(){
   if(!Array.isArray(S._bizPlan.running.aircraft))S._bizPlan.running.aircraft=[];
   if(!Array.isArray(S._bizPlan.payRates))S._bizPlan.payRates=JSON.parse(JSON.stringify(BIZ_DEFAULT.payRates));
   if(!S._bizPlan.paxTargets||typeof S._bizPlan.paxTargets!=='object')S._bizPlan.paxTargets={};
-  // Seed historical pax from the spreadsheet when there's none (covers a saved blob with an empty {}).
-  if(!S._bizPlan.paxData||typeof S._bizPlan.paxData!=='object'||!Object.keys(S._bizPlan.paxData).length)S._bizPlan.paxData=(typeof _bizPaxDefault==='function')?_bizPaxDefault():{};
+  if(!S._bizPlan.paxData||typeof S._bizPlan.paxData!=='object')S._bizPlan.paxData={};
+  // Backfill historical pax from the spreadsheet for any date/field not already present, so a saved
+  // or partial cloud blob can't hide the history. Runs once per load; Rezdy-synced / edited values win.
+  if(!S._bizPaxMerged&&typeof _bizPaxDefault==='function'){
+    var _seed=_bizPaxDefault(),_pd=S._bizPlan.paxData;
+    Object.keys(_seed).forEach(function(ds){
+      if(!_pd[ds])_pd[ds]={};
+      if(_pd[ds].p26==null&&_seed[ds].p26!=null)_pd[ds].p26=_seed[ds].p26;
+      if(_pd[ds].p25==null&&_seed[ds].p25!=null)_pd[ds].p25=_seed[ds].p25;
+      if(_pd[ds].p26==null&&_pd[ds].p25==null)delete _pd[ds];
+    });
+    S._bizPaxMerged=true;
+  }
   if(!Array.isArray(S._bizPlan.budgets))S._bizPlan.budgets=JSON.parse(JSON.stringify(BIZ_DEFAULT.budgets));
   if(!Array.isArray(S._bizPlan.pnls)&&typeof _bizPnlDefault==='function')S._bizPlan.pnls=_bizPnlDefault();
   return S._bizPlan;
@@ -16331,8 +16342,8 @@ function _bizMonthly(t){
 
 // ── persistence ──
 window.loadBusinessPlan=function(){
-  try{var c=lsGet&&lsGet('ts_business_plan');if(c&&typeof c==='object')S._bizPlan=c;}catch(e){}
-  try{fetch(SB+'/rest/v1/ts_settings?key=eq.business_plan&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){try{if(rows&&rows[0]&&rows[0].value)S._bizPlan=JSON.parse(rows[0].value);}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});}catch(e){}
+  try{var c=lsGet&&lsGet('ts_business_plan');if(c&&typeof c==='object'){S._bizPlan=c;S._bizPaxMerged=false;}}catch(e){}
+  try{fetch(SB+'/rest/v1/ts_settings?key=eq.business_plan&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){try{if(rows&&rows[0]&&rows[0].value){S._bizPlan=JSON.parse(rows[0].value);S._bizPaxMerged=false;}}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});}catch(e){}
 };
 function _bizSave(){
   var p=_bizState();
@@ -16408,12 +16419,14 @@ function renderBusinessPlan(){
   if(!S._bizLoaded){S._bizLoaded=true;if(window.loadBusinessPlan)window.loadBusinessPlan();}
   if(!(typeof hasRolePerm==='function'&&hasRolePerm('businessplan'))&&!(S.user&&S.user.superAdmin))
     return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
-  var tab=S._bizTab||'mainplan';
-  var tabs=[{id:'mainplan',lbl:'Acquisition'},{id:'loans',lbl:'Loan schedules'},{id:'timeline',lbl:'Loan timeline'},{id:'running',lbl:'Running costs'},{id:'budget',lbl:'FY Budgets'},{id:'pnl',lbl:'P&L'},{id:'pax',lbl:'Pax tracker'},{id:'roster',lbl:'Pay rates'}];
+  // Acquisition / Loan schedules / Loan timeline / FY Budgets / P&L are hidden for now (to be rebuilt
+  // properly) — their render code is kept dormant below. Active tabs: Running costs, Pax tracker, Pay rates.
+  var tabs=[{id:'pax',lbl:'Pax tracker'},{id:'running',lbl:'Running costs'},{id:'roster',lbl:'Pay rates'}];
+  var tab=S._bizTab||'pax';
+  if(!tabs.some(function(t){return t.id===tab;}))tab='pax';
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
     tabs.map(function(t){return '<button class="sub-tab '+(tab===t.id?'on':'')+'" onclick="window.bizSetTab(\''+t.id+'\')">'+t.lbl+'</button>';}).join('')+'</div>';
-  var body=(tab==='mainplan')?_bizRenderMainPlan():(tab==='loans')?_bizRenderLoans():(tab==='running')?_bizRenderRunning()
-    :(tab==='timeline')?_bizRenderTimeline():(tab==='roster')?_bizRenderRoster():(tab==='pax')?_bizRenderPax():(tab==='budget')?_bizRenderBudget():(tab==='pnl')?_bizRenderPnl():_bizComingSoon(tabs.find(function(x){return x.id===tab;}));
+  var body=(tab==='running')?_bizRenderRunning():(tab==='roster')?_bizRenderRoster():_bizRenderPax();
   return '<div>'+bar+body+'</div>';
 }
 
@@ -16573,7 +16586,7 @@ function _bizRenderPaxDaily(){
   var p=_bizState();var ym=S._bizPaxMonth||_bizDefaultPaxMonth();
   var y=+ym.slice(0,4),mo=+ym.slice(5,7);var daysIn=new Date(y,mo,0).getDate();
   var target=_bizPaxTarget(ym);var totT=(+target||0);
-  var _inS='width:54px;font-size:12px;padding:3px 3px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:center;box-sizing:border-box';
+  var _inS='width:100%;font-size:12px;padding:4px 2px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:center;box-sizing:border-box';
   var monLbl=new Date(y,mo-1,1).toLocaleDateString('en-NZ',{month:'long',year:'numeric'});
   var curMonth=_bizDefaultPaxMonth();var today=new Date();
   var h='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
@@ -16581,29 +16594,30 @@ function _bizRenderPaxDaily(){
     '<span style="font-weight:700;font-size:14px;min-width:130px;text-align:center">'+monLbl+'</span>'+
     '<button class="btn btn-ghost" style="font-size:13px;padding:4px 10px" onclick="window.bizPaxMonth(1)">▶</button></div>'+
     '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(96,165,250,.5);color:#60a5fa" onclick="window.bizPaxSyncRezdy(\''+ym+'\')" title="Fill 26 Pax from Rezdy seats sold for this month">⟳ Sync seats sold</button></div>';
-  // table
-  var col='min-width:54px';
-  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:480px;table-layout:fixed">';
-  h+='<colgroup><col style="width:74px"><col style="width:58px"><col style="width:54px"><col style="width:62px"><col style="width:58px"><col style="width:62px"><col style="width:64px"></colgroup>';
+  // Fixed-width table (natural width from the colgroup) so headers, inputs and computed cells line up.
+  var W=[78,62,60,72,62,64,72]; // Date,26 Pax,Accum,Tracking,Last Yr,Accum LY,Compare
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;table-layout:fixed;width:'+W.reduce(function(a,b){return a+b;},0)+'px">';
+  h+='<colgroup>'+W.map(function(w){return '<col style="width:'+w+'px">';}).join('')+'</colgroup>';
   h+='<thead><tr style="background:var(--card2)">'+['Date','26 Pax','Accum','Tracking','Last Yr','Accum LY','Compare'].map(function(t,i){return '<th style="text-align:'+(i===0?'left':'center')+';padding:6px 4px;font-size:9.5px;color:var(--text3);font-weight:700">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
   var accum=0,runLy=0,daysElapsed=0;
   for(var d=1;d<=daysIn;d++){
     var ds=ym+'-'+String(d).padStart(2,'0');var row=p.paxData[ds]||{};
     var p26=(+row.p26||0),ly=(+row.p25||0);accum+=p26;runLy+=ly;
     var isPast=(ym<curMonth)||(ym===curMonth&&d<=today.getDate());if(isPast)daysElapsed=d;
-    var tracking=totT?(accum/totT)-(d/daysIn):null; // % of target reached − % of month elapsed
+    var hasAny=row.p26!=null||row.p25!=null;
+    var tracking=(totT&&hasAny)?(accum/totT)-(d/daysIn):null; // % of target reached − % of month elapsed
     var compare=runLy?accum/runLy:null;
     var ht=tracking!=null?_bizHeat(tracking,-0.15,0.15):null;
     var hc=compare!=null?_bizHeat(compare,0.7,1.3):null;
     var dow=new Date(y,mo-1,d).toLocaleDateString('en-NZ',{weekday:'short'});
     h+='<tr style="border-top:1px solid var(--border2)">'+
-      '<td style="padding:2px 4px;white-space:nowrap;font-size:11px"><b>'+d+'</b> <span style="color:var(--text3)">'+dow+'</span></td>'+
-      '<td style="padding:2px 2px"><input type="number" value="'+(row.p26!=null?row.p26:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p26\',this.value)" style="'+_inS+'"></td>'+
-      '<td style="padding:2px 4px;text-align:center;font-weight:700">'+(accum||'')+'</td>'+
-      '<td style="padding:2px 4px;text-align:center;font-weight:700'+(ht?';background:'+ht.bg+';color:'+ht.fg:';color:var(--text3)')+'">'+(tracking!=null?(tracking>=0?'+':'')+Math.round(tracking*100)+'%':'—')+'</td>'+
-      '<td style="padding:2px 2px"><input type="number" value="'+(row.p25!=null?row.p25:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p25\',this.value)" style="'+_inS+'"></td>'+
-      '<td style="padding:2px 4px;text-align:center;color:var(--text3)">'+(runLy||'')+'</td>'+
-      '<td style="padding:2px 4px;text-align:center;font-weight:700'+(hc?';background:'+hc.bg+';color:'+hc.fg:';color:var(--text3)')+'">'+(compare!=null?Math.round(compare*100)+'%':'—')+'</td>'+
+      '<td style="padding:3px 4px;white-space:nowrap;font-size:11px"><b>'+d+'</b> <span style="color:var(--text3)">'+dow+'</span></td>'+
+      '<td style="padding:2px 3px"><input type="number" value="'+(row.p26!=null?row.p26:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p26\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:3px 4px;text-align:center;font-weight:700">'+(accum||'')+'</td>'+
+      '<td style="padding:3px 4px;text-align:center;font-weight:700'+(ht?';background:'+ht.bg+';color:'+ht.fg:';color:var(--text3)')+'">'+(tracking!=null?(tracking>=0?'+':'')+Math.round(tracking*100)+'%':'—')+'</td>'+
+      '<td style="padding:2px 3px"><input type="number" value="'+(row.p25!=null?row.p25:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p25\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:3px 4px;text-align:center;color:var(--text3)">'+(runLy||'')+'</td>'+
+      '<td style="padding:3px 4px;text-align:center;font-weight:700'+(hc?';background:'+hc.bg+';color:'+hc.fg:';color:var(--text3)')+'">'+(compare!=null?Math.round(compare*100)+'%':'—')+'</td>'+
       '</tr>';
   }
   h+='</tbody></table></div>';
