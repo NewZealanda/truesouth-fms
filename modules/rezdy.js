@@ -929,17 +929,43 @@ function _rzOrdersForBlockKey(key){
   return out;
 }
 window.rezdySchedBlockDragStart=function(key,e){S._rzSchedBlockDrag=key;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','block');}catch(_){}};
+// Reassign every booking in a calendar block to an aircraft — exactly like the user picking the
+// aircraft pill on each booking (sets S._rzBookingAc, which overrides the comments). Returns count.
+function _rzReassignBlockToAc(src,ac){
+  var orders=_rzOrdersForBlockKey(src);if(!orders.length)return 0;
+  var setTo=(ac==='__unalloc__')?'__none__':ac;
+  S._rzBookingAc=S._rzBookingAc||{};S._rzSchedAttach=S._rzSchedAttach||{};
+  orders.forEach(function(o){S._rzBookingAc[o]=setTo;if(S._rzSchedAttach[o])delete S._rzSchedAttach[o];}); // moving a block breaks any flyback combine
+  return orders.length;
+}
+function _rzReassignToast(n,ac){if(typeof toast==='function')toast(n+' booking'+(n===1?'':'s')+' → '+(ac==='__unalloc__'?'Unallocated':String(ac).replace('ZK-',''))+' ✓','ok');}
+// Drop a dragged block anywhere in an aircraft COLUMN → move its whole booking set to that aircraft.
+window.rezdySchedDropBlockToAc=function(ac,e){
+  if(e&&e.preventDefault)e.preventDefault();
+  var src=S._rzSchedBlockDrag;S._rzSchedBlockDrag=null;
+  if(!src||!ac)return;
+  var srcAc=String(src).indexOf('|')>=0?String(src).split('|')[0]:null;
+  if(srcAc===ac)return; // already on this aircraft
+  var n=_rzReassignBlockToAc(src,ac);if(!n)return;
+  if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();_rzReassignToast(n,ac);
+};
 window.rezdySchedDropPilot=function(key,e){
   if(e&&e.preventDefault)e.preventDefault();if(e&&e.stopPropagation)e.stopPropagation();
-  // A block (e.g. unallocated FLB/CCF) dragged onto a flight → combine into that flight.
+  // A block dragged onto another block: a flyback/CCF folds INTO that flight (combine, as before);
+  // any other block just moves its bookings to that block's aircraft.
   if(S._rzSchedBlockDrag){
     var src=S._rzSchedBlockDrag;S._rzSchedBlockDrag=null;
     if(src===key)return;
     var tgtAc=String(key).indexOf('|')>=0?String(key).split('|')[0]:null;
-    var orders=_rzOrdersForBlockKey(src);
-    S._rzSchedAttach=S._rzSchedAttach||{};
-    orders.forEach(function(o){S._rzSchedAttach[o]=key;if(tgtAc&&tgtAc!=='__unalloc__'){S._rzBookingAc=S._rzBookingAc||{};S._rzBookingAc[o]=tgtAc;}});
-    if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();return;
+    var srcProd=String(src).indexOf('|')>=0?(String(src).split('|')[2]||''):'';
+    if(_rzIsFlyback(srcProd)&&tgtAc&&tgtAc!=='__unalloc__'){
+      var orders=_rzOrdersForBlockKey(src);
+      S._rzSchedAttach=S._rzSchedAttach||{};
+      orders.forEach(function(o){S._rzSchedAttach[o]=key;S._rzBookingAc=S._rzBookingAc||{};S._rzBookingAc[o]=tgtAc;});
+      if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();return;
+    }
+    if(tgtAc){var nn=_rzReassignBlockToAc(src,tgtAc);if(nn){if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();_rzReassignToast(nn,tgtAc);}}
+    return;
   }
   var code=S._schedPilotDrag;S._schedPilotDrag=null;if(!code||!key)return;
   // Only a type-rated pilot may be put on a given aircraft.
@@ -3479,6 +3505,9 @@ function _rzRenderSchedule(){
   const bkBlocks=Object.keys(bkGroups).map(function(k){
     var g=bkGroups[k];var sm=_rzMinsFromHHMM(g.start)||0;var em=sm+_rzProductDuration(g.product);
     g.end=String(Math.floor(em/60)).padStart(2,'0')+':'+String(em%60).padStart(2,'0');
+    // FLB/CCF seats are parked in the OUTBOUND (1200) Rezdy slot to hold them, but the flight
+    // actually flies BACK at 15:30. On a 1200 session, show a 1-hour block 15:30–16:30 instead.
+    if(_rzIsFlyback(g.product)&&sm===720){g.start='15:30';g.end='16:30';}
     var acLbl=g.aircraft==='__unalloc__'?'?':g.aircraft.replace(/^ZK-?/,'');
     var gbd={a:0,c:0,i:0};g.bookings.forEach(function(bk){var e=_rzEffBreakdown(bk.b);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
     var pilot=(S._schedPilots||{})[g.key]||null;
@@ -3627,16 +3656,18 @@ function _rzRenderSchedule(){
       const _pos='left:'+(2+idx*OFF)+'px;width:calc(100% - '+((n-1)*OFF+4)+'px);z-index:'+(sel?50:idx+1)+';'+(n>1?'box-shadow:-3px 1px 7px rgba(0,0,0,.3);':'');
       const _click=isBk?('window.rezdySchedShowGroup(\''+_rzEsc(b.order).replace(/'/g,"\\'")+'\')'):('window.schedEditBlock(\''+_rzEsc(b.id).replace(/'/g,"\\'")+'\')');
       const _dropKey=(isBk?b.order:b.id);
-      // Unallocated booking blocks can be dragged onto a flight to combine (flyback/CCF).
-      const _drag=(isBk&&ac==='__unalloc__')?(' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(String(b.order)).replace(/'/g,"\\'")+'\',event)"'):'';
+      // Any booking block can be dragged to another aircraft column (reassigns its bookings) or
+      // onto a flight to combine a flyback/CCF.
+      const _drag=isBk?(' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(String(b.order)).replace(/'/g,"\\'")+'\',event)"'):'';
       blocksH+='<div'+_drag+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
         '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(b.label||b.aircraft)+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+(isBk?'':'–'+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';
     });
+    var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
     colsH+='<div style="width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border)">'+
-      '<div style="position:relative;height:'+gridH+'px">'+rows+blocksH+'</div></div>';
+      '<div ondragover="event.preventDefault()" ondrop="window.rezdySchedDropBlockToAc(\''+_acJs+'\',event)" style="position:relative;height:'+gridH+'px">'+rows+blocksH+'</div></div>';
   });
 
   // sticky aircraft-id header row, aligned with columns

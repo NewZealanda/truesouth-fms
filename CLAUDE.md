@@ -90,7 +90,16 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v24.28** — built+verified, ready to commit. See `HANDOFF.md` for the full log.
+- Latest version: **v24.29** — built+verified, ready to commit. See `HANDOFF.md` for the full log.
+- **Calendar (v24.29):** (a) FLB/CCF held in a **1200** Rezdy slot now render as a 1-hour block
+  **15:30–16:30** (the actual flyback time), not the held outbound slot — in the bkBlocks map:
+  `if(_rzIsFlyback(g.product)&&sm===720){g.start='15:30';g.end='16:30';}` (key/grouping unchanged,
+  so `_rzOrdersForBlockKey` still matches the original `ac|12:00|FLB`). (b) **Drag a booking block
+  to another aircraft column** → reassigns every booking in it to that aircraft as a user-style
+  selection (`S._rzBookingAc[order]=ac`, overrides comments) via `_rzReassignBlockToAc` +
+  `rezdySchedDropBlockToAc(ac,e)` on the column; all booking blocks are now `draggable`. Block-on-
+  block still folds a flyback into a flight (combine); any other block-on-block reassigns. Drop on
+  the **Unallocated** column → `__none__`.
 - **Pickups are now PER DEPARTURE (v24.28).** Drivers, the active/parked van set, and driver
   acknowledgement are all tracked per `(vehicle, departure)`, keyed `"vi|dep"`:
   `S._pickupDrivers`, `S._pickupSpare`, `S._pickupAck` are now OBJECTS keyed `_pkKey(vi,dep)`
