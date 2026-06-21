@@ -725,7 +725,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.21';
+const APP_VER='v24.22';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -13194,7 +13194,7 @@ function _rzRenderPickups(){
     '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
   if(!_spareV.length){driversBar+='<span style="font-size:12px;color:var(--text3)">None — all vehicles are in use.</span>';}
   else _spareV.forEach(function(o){var col=o.v.color||'#64748b';
-    driversBar+='<div draggable="true" ondragstart="window.pickupVehParkDragStart('+o.vi+',event)" onclick="window.pickupActivateVehicle('+o.vi+')" title="Parked — tap or drag onto the run to use" style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:14px;border:2px solid '+col+';background:'+col+'1f;color:'+col+';cursor:grab;font-size:13px;font-weight:800"><span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:#0057B8;color:#fff;font-weight:900;font-size:15px;border-radius:5px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.35)">P</span>'+_rzEsc(o.v.name||('Van '+(o.vi+1)))+' <span style="opacity:.7;font-weight:600">'+(o.v.seats||11)+'p</span></div>';
+    driversBar+='<div draggable="true" ondragstart="window.pickupVehParkDragStart('+o.vi+',event)" onclick="window.pickupActivateVehicle('+o.vi+')" title="Parked — tap or drag onto the run to use" style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:14px;border:2px solid '+col+';background:var(--card2);color:var(--text);cursor:grab;font-size:13px;font-weight:800;box-shadow:inset 0 0 0 1px var(--border2)"><span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:#0057B8;color:#fff;font-weight:900;font-size:15px;border-radius:5px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.35)">P</span>'+_rzEsc(o.v.name||('Van '+(o.vi+1)))+' <span style="opacity:.6;font-weight:600;color:var(--text2)">'+(o.v.seats||11)+'p</span></div>';
   });
   driversBar+='<button onclick="window.pickupVehAdd()" title="Create a new vehicle" style="padding:5px 10px;border-radius:14px;border:1px dashed var(--border2);background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">+ New</button>';
   driversBar+='</div></div>';
@@ -13215,7 +13215,7 @@ function _rzRenderPickups(){
   }
 
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
-    '<div><div class="st" style="margin-bottom:0">Pickup Vans</div>'+
+    '<div><div class="st" style="margin-bottom:0">Pickup Summary</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+vanPickups.length+' pickups · '+vanPickups.reduce(function(s,p){return s+p.pax;},0)+' pax · '+_rzVehicles().length+' vehicles'+(selfDrive.length?' · '+selfDrive.length+' self-drive':'')+'</p></div>'+
     '<div style="display:flex;gap:6px;flex-shrink:0">'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.pickupAutoAllocate()">↺ Auto-allocate</button>'+
