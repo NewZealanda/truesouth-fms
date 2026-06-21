@@ -1880,8 +1880,9 @@ window.pickupDropOnVan=function(vi,e){
   if(e&&e.preventDefault)e.preventDefault();
   // A driver bubble dropped on a van assigns that driver to it.
   if(S._rezdyDragDriver){
-    S._pickupDrivers=S._pickupDrivers||[];S._pickupDrivers[vi]=S._rezdyDragDriver;S._rezdyDragDriver=null;
-    window.pickupSave(true);render();return;
+    var _dn=S._rezdyDragDriver;S._rezdyDragDriver=null;
+    window.pickupSetVanDriver(vi,_dn); // resets the van's ack + notifies the new driver, then saves
+    return;
   }
   let id=S._rezdyDragId;
   try{if(!id&&e.dataTransfer)id=e.dataTransfer.getData('text/plain');}catch(_){}
@@ -1962,7 +1963,7 @@ function _rzAvailableDrivers(){
   }).map(function(u){return (u.name||'').trim();}).filter(Boolean);
 }
 window.pickupDriverDragStart=function(name,e){S._rezdyDragDriver=name;try{e.dataTransfer.setData('text/plain','driver:'+name);e.dataTransfer.effectAllowed='copy';}catch(_){}};
-window.pickupClearDriver=function(vi){if(S._pickupDrivers)S._pickupDrivers[vi]=null;window.pickupSave(true);render();};
+window.pickupClearDriver=function(vi){if(S._pickupDrivers)S._pickupDrivers[vi]=null;if(S._pickupAck&&S._pickupAck[vi]!=null)delete S._pickupAck[vi];window.pickupSave(true);render();};
 // ── Tap-based controls (iOS Safari has no HTML5 touch drag-and-drop) ──
 // Combined driver list = rostered ground staff + anyone added via "＋" + anyone already assigned.
 function _rzAllDriverNames(){
@@ -1971,7 +1972,28 @@ function _rzAllDriverNames(){
 }
 // Tap-to-assign a driver to a van (the drag-driver-onto-van path doesn't work on iPhone).
 window.pickupVanDriverPickOpen=function(vi){S._pickupVanDriverPick=(S._pickupVanDriverPick===vi)?null:vi;S._pickupMovePick=null;render();};
-window.pickupSetVanDriver=function(vi,name){S._pickupDrivers=S._pickupDrivers||[];S._pickupDrivers[vi]=(name||'').trim()||null;S._pickupVanDriverPick=null;if(window.pickupSave)window.pickupSave(true);render();};
+// Notify the newly-assigned driver (persistent ts_notifications row → bell + OS pop-up via the
+// notification poll, even if they aren't on the pickups page). Skips notifying yourself.
+function _rzNotifyDriverAssigned(vi,name){
+  name=(name||'').trim();if(!name)return;
+  if(name===((S.user&&S.user.name)||'').trim())return;
+  var u=(S.users||[]).find(function(x){return x&&(x.name||'').trim()===name;});
+  if(!u||!u.id)return;
+  var msg='🚐 You\'re driving '+_rzVehName(vi)+' for '+_rzDowLabel(S.rezdyDate)+' pickups — open My Pickups to review & acknowledge your run.';
+  try{if(typeof sbU==='function')sbU('ts_notifications',[{user_id:u.id,type:'pickup_assigned',message:msg,read:false,created_at:new Date().toISOString()}]).catch(function(){});}catch(e){}
+}
+window.pickupSetVanDriver=function(vi,name){
+  S._pickupDrivers=S._pickupDrivers||[];
+  var prev=(S._pickupDrivers[vi]||'').trim();
+  var next=(name||'').trim()||null;
+  S._pickupDrivers[vi]=next;
+  if((prev||'')!==(next||'')){ // driver changed → reset this van's ack; notify the new driver
+    if(S._pickupAck&&S._pickupAck[vi]!=null)delete S._pickupAck[vi];
+    if(next)_rzNotifyDriverAssigned(vi,next);
+  }
+  S._pickupVanDriverPick=null;
+  if(window.pickupSave)window.pickupSave(true);render();
+};
 // Tap-to-move a pickup to another van (the drag-pickup-onto-van path doesn't work on iPhone).
 window.pickupMovePickOpen=function(id){S._pickupMovePick=(S._pickupMovePick===id)?null:id;S._pickupVanDriverPick=null;render();};
 window.pickupMoveToVan=function(id,vi){
