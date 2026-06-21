@@ -257,7 +257,7 @@ function _fdRenderRecord(canManage){
   if(!uid)return '<div class="card" style="color:var(--text3);padding:24px">No pilot selected.</div>';
   var u=(S.users||[]).find(function(x){return x.id===uid;});
   var month=S._fdMonth||_fdMonth(_fdToday());
-  var types=_fdTypeRatings(uid);if(!types.length)types=['c208b','ga8']; // show both landing columns by default
+  var types=_fdTypeRatings(uid); // currency tracks ONLY the pilot's rated types (set on their crew profile)
   var L=_fdLimits();
   var h='';
 
@@ -323,8 +323,8 @@ function _fdRenderRecord(canManage){
         '</div>';
     });
     h+='</div></div>';
-  } else if(!canManage){
-    h+='<div class="card" style="font-size:12px;color:var(--text3)">No type ratings on your profile — ask an admin to set C208B / GA8 so currency can be tracked.</div>';
+  } else {
+    h+='<div class="card" style="font-size:12px;color:var(--text3)">'+(canManage?'No type ratings on this pilot’s profile':'No type ratings on your profile')+' — set C208B / GA8 in the crew profile so currency can be tracked.</div>';
   }
 
   // ── monthly cert banner ──
@@ -434,12 +434,10 @@ function _fdRenderSummary(){
     '</tr></thead><tbody>';
   function cell(val,key){var lim=L[key];var st=_fdStatus(val,lim);var col=_FD_COL[st];return '<td style="padding:5px 6px;text-align:center;font-weight:700;color:'+col+'">'+(Math.round(val*10)/10)+'<span style="font-size:10px;color:var(--text3);font-weight:500"> /'+lim.val+'</span></td>';}
   function currCell(uid,type){
-    var _trs=_fdTypeRatings(uid);
-    // No type ratings set on the profile → show BOTH types (matches My Record's default), so an
-    // un-rated-but-flying pilot still sees a not-current flag rather than a blank dash.
-    var rated=_trs.length?(_trs.indexOf(type)>=0):true;
+    // Currency shows ONLY for a type the pilot is rated on (set on their crew profile); otherwise dash.
+    var rated=_fdTypeRatings(uid).indexOf(type)>=0;
+    if(!rated)return '<td style="padding:5px 6px;text-align:center;color:var(--text3)">—</td>';
     var c=_fdCurrency(uid,type,asOf);
-    if(!rated&&!c.everCurrent)return '<td style="padding:5px 6px;text-align:center;color:var(--text3)">—</td>';
     if(!c.everCurrent)return '<td style="padding:5px 6px;text-align:center;font-weight:700;color:#ef4444" title="Fewer than '+FD_CURRENCY_LDG+' landings on record">'+c.recent+'/'+FD_CURRENCY_LDG+'</td>';
     var col=!c.current?'#ef4444':(c.daysLeft<=14?'#f59e0b':'#22c55e');
     // current → days remaining; un-current → days overdue ("−Nd uncurrent")
