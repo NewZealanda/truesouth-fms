@@ -376,14 +376,9 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +'<div><label style="font-size:11px;color:var(--text3)">AIRCRAFT APPROVALS</label>'
         +'<div style="font-size:10px;color:var(--text3);margin-top:2px;opacity:.8">Anyone approved on at least one aircraft is PIC-eligible and appears in the manifest pilot list.</div>'
         +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'+endorseButtons+'</div></div>'
-        +'<div style="display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:start;margin-top:4px">'
-        +'<div><label style="font-size:11px;color:var(--text3)">DATE OF BIRTH</label>'
-        +'<input class="fi" type="date" value="'+esc(d.dob||'')+'" style="font-size:13px" onchange="S.admin.personModal.draft.dob=this.value"></div>'
-        +'<div><label style="font-size:11px;color:var(--text3)">TYPE RATINGS</label>'
-        +'<div style="font-size:10px;color:var(--text3);margin-top:2px;opacity:.8">Drives Flight &amp; Duty 90-day currency tracking.</div>'
-        +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'
-        +[['c208b','C208B'],['ga8','GA8']].map(function(t){var on=(d.typeRatings||[]).indexOf(t[0])>=0;return '<button onclick="(function(){var tr=S.admin.personModal.draft.typeRatings||[];var ix=tr.indexOf(\''+t[0]+'\');if(ix>=0)tr.splice(ix,1);else tr.push(\''+t[0]+'\');S.admin.personModal.draft.typeRatings=tr;render();})()" style="padding:5px 14px;border-radius:20px;font-size:11px;cursor:pointer;font-weight:700;border:1.5px solid '+(on?'#7c3aed':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.18)':'transparent')+';color:'+(on?'#c4b5fd':'var(--text3)')+'">'+t[1]+'</button>';}).join('')
-        +'</div></div></div>';
+        +'<div style="margin-top:4px"><label style="font-size:11px;color:var(--text3)">DATE OF BIRTH</label>'
+        +'<input class="fi" type="date" value="'+esc(d.dob||'')+'" style="font-size:13px;max-width:200px" onchange="S.admin.personModal.draft.dob=this.value">'
+        +'<div style="font-size:10px;color:var(--text3);margin-top:4px;opacity:.8">Flight &amp; Duty type ratings (C208B / GA8) are taken automatically from the aircraft approvals above — SLA/SLB/SDB ⇒ C208B, SLD/SLQ ⇒ GA8.</div></div>';
     } else if(tab==='login'){
       const isOwnAccount=m.userId===S.user?.id;
       bodyHtml='<div style="display:flex;flex-direction:column;gap:12px">'

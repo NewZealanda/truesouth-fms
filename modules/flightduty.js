@@ -118,11 +118,19 @@ function _fdDaysOff(uid,asOf){
 }
 
 // ── who is a tracked pilot ──
+// Type ratings are DERIVED from the pilot's aircraft endorsements (crew.endorse) by each
+// aircraft's W&B layout: a 'c208' airframe (SLA/SLB/SDB) ⇒ C208B, a 'ga8' airframe (SLD/SLQ) ⇒ GA8.
+// So endorsing a registration automatically gives the matching type rating — no separate field.
 function _fdTypeRatings(uid){
   var u=(S.users||[]).find(function(x){return x.id===uid;});
   var cr=u&&typeof _crewForUser==='function'?_crewForUser(u):null;
-  var tr=(cr&&cr.typeRatings)||[];
-  return Array.isArray(tr)?tr:[];
+  var en=(cr&&cr.endorse)||[];var set={};
+  en.forEach(function(e){
+    var sp=(typeof _acSpec==='function')?_acSpec(e):((S.aircraft||{})[e]);
+    var lay=sp&&sp.layout;
+    if(lay==='ga8')set.ga8=1; else if(lay==='c208')set.c208b=1;
+  });
+  return Object.keys(set);
 }
 // A tracked "pilot" = anyone who can act as PIC: role pilot, the isPilot flag, has type ratings,
 // or holds at least one aircraft approval (endorsement) — i.e. is PIC-eligible.
@@ -285,7 +293,8 @@ function _fdRenderRecord(canManage){
   var asOf=_fdToday();
   h+='<div class="card"><div class="st">Rolling limits <span style="font-weight:400;font-size:11px;color:var(--text3)">— as at '+_rzEscSafe(_fdFmt(asOf))+'</span></div>';
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">';
-  Object.keys(L).forEach(function(key){
+  // Daily-duty isn't a rolling window — it's shown per-day in the grid below, so leave it out here.
+  Object.keys(L).filter(function(key){return key!=='duty_daily';}).forEach(function(key){
     var lim=L[key];var val=_fdValueFor(uid,key,asOf);var st=_fdStatus(val,lim);var col=_FD_COL[st];
     var pct=Math.min(100,lim.val?val/lim.val*100:0);
     h+='<div style="border:1px solid var(--border2);border-left:3px solid '+col+';border-radius:8px;padding:8px 10px">'+
@@ -342,7 +351,8 @@ function _fdRenderRecord(canManage){
   }
 
   // ── look-ahead: how much you can still work as past days roll off the 30-day window ──
-  function _r1(x){return Math.round(x*10)/10;}
+  // 2 dp so quarter-hour figures read true (e.g. 0.25 = 15 min, not rounded to 0.3).
+  function _r1(x){return Math.round(x*100)/100;}
   function _fdShort(d){var o=_fdDateObj(d);return o?o.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'}):d;}
   var _laTh=function(t,al){return '<th style="text-align:'+(al||'center')+';padding:6px 6px;font-size:10px;color:var(--text3);font-weight:700">'+t+'</th>';};
   h+='<div class="card"><div class="st">Look ahead — how much you can still work <span style="font-weight:400;font-size:11px;color:var(--text3)">— if no further duty is added before then</span></div>';
@@ -382,11 +392,13 @@ function _fdRenderRecord(canManage){
       (withNow?'<button title="Set to now (nearest 15 min)" onclick="window.fdTimeNow('+a+')" style="'+_stepBtn+';width:24px;color:#4ade80">⏱</button>':'')+
     '</div></td>';
   }
-  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:720px;table-layout:fixed">';
-  h+='<colgroup><col style="width:94px"><col style="width:120px"><col style="width:146px"><col style="width:52px"><col style="width:62px"><col style="width:60px"><col style="width:58px"><col style="width:58px"><col style="width:40px"></colgroup>';
+  // Landing-entry columns appear ONLY for the types the pilot is rated on (derived from endorsements).
+  var showC=types.indexOf('c208b')>=0, showG=types.indexOf('ga8')>=0;
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:'+(580+(showC?60:0)+(showG?60:0))+'px;table-layout:fixed">';
+  h+='<colgroup><col style="width:94px"><col style="width:120px"><col style="width:146px"><col style="width:52px"><col style="width:62px"><col style="width:60px">'+(showC?'<col style="width:58px">':'')+(showG?'<col style="width:58px">':'')+'<col style="width:40px"></colgroup>';
   h+='<thead><tr style="background:var(--card2)">'+
     '<th style="text-align:left;padding:7px 8px;font-size:10px;color:var(--text3);font-weight:700">Date</th>'+
-    _gTh('Start')+_gTh('End')+_gTh('Duty&nbsp;h')+_gTh('Duty&nbsp;30d')+_gTh('Flight&nbsp;h')+_gTh('C208B','#22c55e')+_gTh('GA8','#60a5fa')+
+    _gTh('Start')+_gTh('End')+_gTh('Duty&nbsp;h')+_gTh('Duty&nbsp;30d')+_gTh('Flight&nbsp;h')+(showC?_gTh('C208B','#22c55e'):'')+(showG?_gTh('GA8','#60a5fa'):'')+
     '<th style="text-align:center;padding:7px 4px;font-size:10px;color:var(--text3);font-weight:700" title="Tick when a commenced duty is extended to 12h to complete a disrupted schedule (normal max 11h)">Ext</th>'+
     '</tr></thead><tbody>';
   var mDate=_fdDateObj(month+'-01');var y=mDate.getFullYear(),mo=mDate.getMonth();
@@ -408,8 +420,8 @@ function _fdRenderRecord(canManage){
       '<td style="padding:3px 4px;text-align:center;font-weight:700;color:'+dHotCol+'">'+(dh?Math.round(dh*10)/10:'')+'</td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700;color:'+(d30?d30col:'var(--text3)')+'">'+(d30?Math.round(d30*10)/10:'')+'</td>'+
       '<td style="padding:3px 4px"><input type="number" step="0.1" min="0" value="'+(r.ft!=null&&r.ft!==''?r.ft:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'ft\',this.value)" style="'+_inS+'"></td>'+
-      '<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lc!=null&&r.lc!==''?r.lc:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lc\',this.value)" style="'+_inS+'"></td>'+
-      '<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lg!=null&&r.lg!==''?r.lg:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lg\',this.value)" style="'+_inS+'"></td>'+
+      (showC?'<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lc!=null&&r.lc!==''?r.lc:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lc\',this.value)" style="'+_inS+'"></td>':'')+
+      (showG?'<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lg!=null&&r.lg!==''?r.lg:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lg\',this.value)" style="'+_inS+'"></td>':'')+
       '<td style="padding:3px 4px;text-align:center"><input type="checkbox" '+(r.ext?'checked':'')+' onchange="window.fdToggle(\''+uid+'\',\''+ds+'\',\'ext\')"></td>'+
       '</tr>';
   }
