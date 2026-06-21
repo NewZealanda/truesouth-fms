@@ -230,18 +230,29 @@ function _scheduleRefresh(){
   var ms=_sbSession.expires_at-Date.now()-60000; // refresh ~1 min before expiry
   _sbRefreshTimer=setTimeout(function(){_sbRefresh();},Math.max(5000,ms));
 }
-async function _sbRefresh(){
-  if(!_sbSession||!_sbSession.refresh_token)return false;
-  try{
-    var r=await fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({refresh_token:_sbSession.refresh_token})});
-    if(!r.ok){return false;}
-    var j=await r.json();
-    var sess={access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+(j.expires_in||3600)*1000};
-    try{localStorage.setItem('ts_sb_session',JSON.stringify(sess));}catch(e){}
-    _applySession(sess);
-    if(_rtWs)initRealtime();   // re-join realtime with the fresh token
-    return true;
-  }catch(e){return false;}
+// SINGLE-FLIGHT the refresh. Supabase rotates the refresh token on every use, so if several REST
+// calls 401 at once (the pickup/notification polls + a save near token-expiry) and each starts its
+// own refresh, the first wins and rotates the token — the others then POST a now-stale refresh
+// token, get a 4xx, and falsely warn "session expired" even though the session is fine. Sharing one
+// in-flight refresh promise fixes the spurious "sign out / sign back in" toast.
+let _sbRefreshing=null;
+function _sbRefresh(){
+  if(_sbRefreshing)return _sbRefreshing; // a refresh is already in flight — reuse it
+  _sbRefreshing=(async function(){
+    if(!_sbSession||!_sbSession.refresh_token)return false;
+    try{
+      var r=await fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({refresh_token:_sbSession.refresh_token})});
+      if(!r.ok){return false;}
+      var j=await r.json();
+      var sess={access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+(j.expires_in||3600)*1000};
+      try{localStorage.setItem('ts_sb_session',JSON.stringify(sess));}catch(e){}
+      _applySession(sess);
+      if(_rtWs)initRealtime();   // re-join realtime with the fresh token
+      return true;
+    }catch(e){return false;}
+  })();
+  _sbRefreshing.then(function(){_sbRefreshing=null;},function(){_sbRefreshing=null;}); // clear once settled
+  return _sbRefreshing;
 }
 // Sign in via Supabase Auth; on first post-migration login, fall back to migrate-login once.
 async function _sbSignIn(email,password){
@@ -401,7 +412,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.23';
+const APP_VER='v24.24';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

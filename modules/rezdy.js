@@ -767,6 +767,15 @@ window.rezdyCheckinSave=function(){
   if(typeof toast==='function')toast('Checked in ✓','ok');render();
 };
 // The check-in modal (rendered when a draft is open).
+// Rezdy "extras" on a booking that are lunches/meals (so check-in + the booking row can flag them).
+function _rzBookingLunches(b){
+  var out=[];
+  ((b&&b.items)||[]).forEach(function(it){((it&&it.extras)||[]).forEach(function(e){
+    if(e&&e.name&&/lunch|meal|picnic|hamper|food/i.test(String(e.name)))out.push(e);
+  });});
+  return out;
+}
+function _rzBookingHasLunch(b){return _rzBookingLunches(b).length>0;}
 function _rzCheckinModal(){
   var d=S._rzCheckinDraft;if(!d)return '';
   var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===d.order;});
@@ -779,6 +788,11 @@ function _rzCheckinModal(){
   var _ciBal=b?parseFloat(b.balanceDue):0;
   if(isFinite(_ciBal)&&_ciBal>0){
     h+='<div style="display:flex;align-items:center;gap:8px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.5);border-radius:9px;padding:9px 12px;margin:0 0 12px"><span style="font-size:16px">💲</span><span style="font-size:12px;font-weight:700;color:#f87171">Outstanding balance of '+_rzEsc(_rzMoney(_ciBal,b.currency))+' — collect payment before checking in.</span></div>';
+  }
+  // Lunch / meal extras — flagged prominently so they aren't missed at check-in.
+  var _ciLun=_rzBookingLunches(b);
+  if(_ciLun.length){
+    h+='<div style="display:flex;align-items:center;gap:10px;background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:9px;padding:11px 13px;margin:0 0 12px"><span style="font-size:22px">🍱</span><div style="font-size:13.5px;font-weight:800;color:#fbbf24">Lunch ordered — '+_ciLun.map(function(e){return _rzEsc(e.name)+(e.quantity?(' ×'+e.quantity):'');}).join(', ')+'</div></div>';
   }
   d.rows.forEach(function(r,i){
     var isInf=r.type==='infant';
@@ -1058,6 +1072,7 @@ function _rzBookingCard(b){
        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
          '<span onclick="window.rezdyToggleRow(\''+oE+'\')" style="cursor:pointer;color:var(--text2);display:inline-block;transition:transform .12s;'+(open?'transform:rotate(90deg)':'')+'">▸</span>'+
          '<span style="font-size:15px;font-weight:800;color:var(--text1)">'+_rzEsc(b.customerName||ono)+'</span>'+
+         (_rzBookingHasLunch(b)?'<span title="Lunch / meal ordered" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:#f59e0b;color:#3a2c06;font-weight:900;font-size:11px;border-radius:4px;flex-shrink:0;line-height:1">L</span>':'')+
          '<span style="font-size:11px;color:var(--text3)">#'+_rzEsc(ono)+'</span>'+
        '</div>'+
        '<div style="font-size:11px;color:var(--text3);margin-top:3px">'+_rzBdCompact(bd)+(prod?' '+_rzEsc(prod):'')+'</div>'+
