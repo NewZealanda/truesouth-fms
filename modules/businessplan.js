@@ -463,14 +463,17 @@ function _bizRenderPaxDaily(){
     var ds=ym+'-'+String(d).padStart(2,'0');var row=p.paxData[ds]||{};
     var p26=(+row.p26||0),ly=(+row.p25||0);accum+=p26;runLy+=ly;
     var isPast=(ym<curMonth)||(ym===curMonth&&d<=today.getDate());if(isPast)daysElapsed=d;
+    var isToday=(ym===curMonth&&d===today.getDate());
+    var isFuture=(ym>curMonth)||(ym===curMonth&&d>today.getDate()); // forward bookings — indicative, not confirmed
     var hasAny=row.p26!=null||row.p25!=null;
     var tracking=(totT&&hasAny)?(accum/totT)-(d/daysIn):null; // % of target reached − % of month elapsed
     var compare=runLy?accum/runLy:null;
     var ht=tracking!=null?_bizHeat(tracking,-0.15,0.15):null;
     var hc=compare!=null?_bizHeat(compare,0.7,1.3):null;
     var dow=new Date(y,mo-1,d).toLocaleDateString('en-NZ',{weekday:'short'});
-    h+='<tr style="border-top:1px solid var(--border2)">'+
-      '<td style="padding:3px 4px;white-space:nowrap;font-size:11px"><b>'+d+'</b> <span style="color:var(--text3)">'+dow+'</span></td>'+
+    var rowStyle='border-top:1px solid var(--border2);'+(isToday?'background:rgba(124,58,237,.14);box-shadow:inset 3px 0 0 #7c3aed;':(isFuture?'opacity:.45;':''));
+    h+='<tr style="'+rowStyle+'">'+
+      '<td style="padding:3px 4px;white-space:nowrap;font-size:11px"><b>'+d+'</b> <span style="color:var(--text3)">'+dow+'</span>'+(isToday?' <span style="font-size:8.5px;color:#a78bfa;font-weight:800">TODAY</span>':'')+'</td>'+
       '<td style="padding:2px 3px"><input type="number" value="'+(row.p26!=null?row.p26:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p26\',this.value)" style="'+_inS+'"></td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700">'+(accum||'')+'</td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700'+(ht?';background:'+ht.bg+';color:'+ht.fg:';color:var(--text3)')+'">'+(tracking!=null?(tracking>=0?'+':'')+Math.round(tracking*100)+'%':'—')+'</td>'+
@@ -491,7 +494,7 @@ function _bizRenderPaxDaily(){
     fig('Days to target',(daysToTarget!=null?daysToTarget:'—'),'#ef4444')+
     fig('Target',(target!=null?target:'—'),'#22c55e')+
     '</div>';
-  h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px">Target comes from the FY budget for this month. Tracking = % of target reached − % of the month elapsed (green = ahead of pace). Compare = this year vs last year. "Sync seats sold" pulls 26 Pax from Rezdy bookings.</div>';
+  h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px">Today is highlighted; <span style="opacity:.55">dimmed days are still to come — forward bookings, not yet confirmed flown</span>. Target comes from the FY budget for this month. Tracking = % of target reached − % of the month elapsed (green = ahead of pace). Compare = this year vs last year. "Sync seats sold" pulls 26 Pax from Rezdy bookings.</div>';
   return h;
 }
 
