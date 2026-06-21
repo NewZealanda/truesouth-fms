@@ -11,8 +11,8 @@ var FD_LIMITS_DEFAULT={
   duty_daily:{lbl:'Daily duty',           val:11,   unit:'h', win:'day'},
   duty_30:   {lbl:'Duty · any 30 days',   val:200,  unit:'h', win:30},
   flt_7:     {lbl:'Flight · any 7 days',  val:35,   unit:'h', win:7},
-  flt_28:    {lbl:'Flight · any 28 days', val:100,  unit:'h', win:28},
-  flt_30:    {lbl:'Flight · any 30 days', val:160,  unit:'h', win:30},
+  flt_28:    {lbl:'Flight · 28 days (ATO)', val:100,  unit:'h', win:28},
+  flt_30:    {lbl:'Flight · 30 days (CTO cap)', val:160,  unit:'h', win:30},
   flt_90:    {lbl:'Flight · any 90 days', val:300,  unit:'h', win:90},
   flt_365:   {lbl:'Flight · any 365 days',val:1000, unit:'h', win:365}
 };
@@ -151,11 +151,22 @@ window.fdSaveRow=function(uid,ds,patch){
 };
 window.fdEditField=function(uid,ds,field,value){var p={};p[field]=value;window.fdSaveRow(uid,ds,p);};
 // Duty start/end are locked to 15-minute blocks — round the entered time to the nearest quarter hour.
+function _fdHM(t){t=Math.round(t/15)*15;if(t<0)t=0;if(t>=1440)t=1425;return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');}
 window.fdSetTime=function(uid,ds,field,value){
   var m=/(\d{1,2}):(\d{2})/.exec(String(value||''));
-  if(m){var t=Math.round(((+m[1])*60+(+m[2]))/15)*15;if(t>=1440)t=1425;value=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');}
+  if(m)value=_fdHM((+m[1])*60+(+m[2]));
   window.fdEditField(uid,ds,field,value);
 };
+// "Now" button — fill the field with the current time (nearest 15 min). Mainly for the end time.
+window.fdTimeNow=function(uid,ds,field){var d=new Date();window.fdEditField(uid,ds,field,_fdHM(d.getHours()*60+d.getMinutes()));};
+// +/- 15-minute steppers. Bases off the current value, or now if empty.
+window.fdTimeAdj=function(uid,ds,field,delta){
+  var r=_fdRow(uid,ds)||{};var m=/(\d{1,2}):(\d{2})/.exec(String(r[field]||''));
+  var t=m?((+m[1])*60+(+m[2])):(function(){var d=new Date();return d.getHours()*60+d.getMinutes();})();
+  window.fdEditField(uid,ds,field,_fdHM(t+delta));
+};
+// 15-minute time options (realistic duty window 04:00–22:00; any out-of-range existing value is added).
+var _FD_TIMES=(function(){var a=[];for(var t=4*60;t<=22*60;t+=15)a.push(String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'));return a;})();
 window.fdToggle=function(uid,ds,field){var r=_fdRow(uid,ds)||{};var p={};p[field]=!r[field];window.fdSaveRow(uid,ds,p);};
 window.fdCertify=function(uid,month){
   if(!uid||!month)return;
@@ -337,8 +348,22 @@ function _fdRenderRecord(canManage){
   // ── daily grid for the month ──
   var _gTh=function(t,c){return '<th style="text-align:center;padding:7px 4px;font-size:10px;color:'+(c||'var(--text3)')+';font-weight:700">'+t+'</th>';};
   var _inS='width:100%;font-size:12px;padding:4px 3px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:center;box-sizing:border-box';
-  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:620px;table-layout:fixed">';
-  h+='<colgroup><col style="width:94px"><col style="width:72px"><col style="width:72px"><col style="width:52px"><col style="width:62px"><col style="width:60px"><col style="width:58px"><col style="width:58px"><col style="width:40px"></colgroup>';
+  var _stepBtn='width:20px;height:26px;border:1px solid var(--border2);border-radius:5px;background:var(--card2);color:var(--text2);font-size:13px;font-weight:800;cursor:pointer;padding:0;line-height:1;flex-shrink:0';
+  // a 15-min time picker (select) + −/+ steppers (+ a "now" button on the end time)
+  function _timeCell(ds,field,val,withNow){
+    var a="'"+uid+"','"+ds+"','"+field+"'";
+    var opts='<option value=""'+(!val?' selected':'')+'>—</option>';var found=false;
+    for(var i=0;i<_FD_TIMES.length;i++){var t=_FD_TIMES[i];if(t===val)found=true;opts+='<option value="'+t+'"'+(t===val?' selected':'')+'>'+t+'</option>';}
+    if(val&&!found)opts+='<option value="'+_rzEscSafe(val)+'" selected>'+_rzEscSafe(val)+'</option>';
+    return '<td style="padding:3px 2px"><div style="display:flex;align-items:center;gap:2px;justify-content:center">'+
+      '<button title="−15 min" onclick="window.fdTimeAdj('+a+',-15)" style="'+_stepBtn+'">–</button>'+
+      '<select onchange="window.fdEditField('+a+',this.value)" style="width:66px;font-size:12px;padding:3px 1px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);box-sizing:border-box">'+opts+'</select>'+
+      '<button title="+15 min" onclick="window.fdTimeAdj('+a+',15)" style="'+_stepBtn+'">+</button>'+
+      (withNow?'<button title="Set to now (nearest 15 min)" onclick="window.fdTimeNow('+a+')" style="'+_stepBtn+';width:24px;color:#4ade80">⏱</button>':'')+
+    '</div></td>';
+  }
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:720px;table-layout:fixed">';
+  h+='<colgroup><col style="width:94px"><col style="width:120px"><col style="width:146px"><col style="width:52px"><col style="width:62px"><col style="width:60px"><col style="width:58px"><col style="width:58px"><col style="width:40px"></colgroup>';
   h+='<thead><tr style="background:var(--card2)">'+
     '<th style="text-align:left;padding:7px 8px;font-size:10px;color:var(--text3);font-weight:700">Date</th>'+
     _gTh('Start')+_gTh('End')+_gTh('Duty&nbsp;h')+_gTh('Duty&nbsp;30d')+_gTh('Flight&nbsp;h')+_gTh('C208B','#22c55e')+_gTh('GA8','#60a5fa')+
@@ -358,8 +383,8 @@ function _fdRenderRecord(canManage){
     var isToday=ds===today;var future=ds>today;var off=!future&&_fdIsOffDay(uid,ds);
     h+='<tr style="border-top:1px solid var(--border2);'+(isToday?'background:rgba(124,58,237,.06)':off?'background:rgba(100,116,139,.05)':'')+(future?'opacity:.55;':'')+'">'+
       '<td style="padding:4px 8px;white-space:nowrap"><b>'+dd+'</b> <span style="color:var(--text3)">'+dow+'</span>'+(off?' <span style="font-size:9px;color:#94a3b8">off</span>':'')+'</td>'+
-      '<td style="padding:3px 4px"><input type="time" step="900" value="'+_rzEscSafe(r.ds||'')+'" onchange="window.fdSetTime(\''+uid+'\',\''+ds+'\',\'ds\',this.value)" style="'+_inS+'"></td>'+
-      '<td style="padding:3px 4px"><input type="time" step="900" value="'+_rzEscSafe(r.de||'')+'" onchange="window.fdSetTime(\''+uid+'\',\''+ds+'\',\'de\',this.value)" style="'+_inS+'"></td>'+
+      _timeCell(ds,'ds',r.ds,false)+
+      _timeCell(ds,'de',r.de,true)+
       '<td style="padding:3px 4px;text-align:center;font-weight:700;color:'+dHotCol+'">'+(dh?Math.round(dh*10)/10:'')+'</td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700;color:'+(d30?d30col:'var(--text3)')+'">'+(d30?Math.round(d30*10)/10:'')+'</td>'+
       '<td style="padding:3px 4px"><input type="number" step="0.1" min="0" value="'+(r.ft!=null&&r.ft!==''?r.ft:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'ft\',this.value)" style="'+_inS+'"></td>'+
@@ -388,7 +413,15 @@ function _fdRenderSummary(){
     '<th style="padding:7px 6px;font-size:10px;color:var(--text3)">GA8 curr</th>'+
     '</tr></thead><tbody>';
   function cell(val,key){var lim=L[key];var st=_fdStatus(val,lim);var col=_FD_COL[st];return '<td style="padding:5px 6px;text-align:center;font-weight:700;color:'+col+'">'+(Math.round(val*10)/10)+'<span style="font-size:10px;color:var(--text3);font-weight:500"> /'+lim.val+'</span></td>';}
-  function currCell(uid,type){var tr=_fdTypeRatings(uid);if(tr.indexOf(type)<0)return '<td style="padding:5px 6px;text-align:center;color:var(--text3)">—</td>';var c=_fdCurrency(uid,type,asOf);var col=!c.current?'#ef4444':(c.daysLeft<=14?'#f59e0b':'#22c55e');return '<td style="padding:5px 6px;text-align:center;font-weight:700;color:'+col+'">'+(c.current?c.daysLeft+'d':'EXPIRED')+'</td>';}
+  function currCell(uid,type){
+    var rated=_fdTypeRatings(uid).indexOf(type)>=0;
+    var field=type==='ga8'?'lg':'lc';
+    var c=_fdCurrency(uid,type,asOf);
+    var hasData=c.total>0||_fdRows(uid).some(function(r){return (+(r[field]||0))>0;});
+    if(!rated&&!hasData)return '<td style="padding:5px 6px;text-align:center;color:var(--text3)">—</td>';
+    var col=!c.current?'#ef4444':(c.daysLeft<=14?'#f59e0b':'#22c55e');
+    return '<td style="padding:5px 6px;text-align:center;font-weight:700;color:'+col+'">'+(c.current?c.daysLeft+'d':'EXPIRED')+'</td>';
+  }
   pilots.forEach(function(p){
     h+='<tr style="border-top:1px solid var(--border2)">'+
       '<td style="padding:5px 8px;font-weight:700;cursor:pointer" onclick="window.fdSetTab(\'record\');window.fdSetPilot(\''+p.id+'\')">'+_rzEscSafe(p.name)+'</td>'+
@@ -428,7 +461,7 @@ window.fdPrint=function(uid,month){
     '<tr class="tot"><td colspan="3">Month totals</td><td class="c">'+(Math.round(totD*10)/10)+'</td><td class="c">'+(Math.round(totF*10)/10)+'</td><td class="c"></td><td class="c"></td></tr>'+
     '</tbody></table>'+
     '<div class="sub">Rolling at period end — Duty/30 days: '+(Math.round(d30*10)/10)+' / '+L.duty_30.val+' h · Flight/30 days: '+(Math.round(f30*10)/10)+' / '+L.flt_30.val+' h</div>'+
-    '<div class="sign"><div>Pilot signature &amp; date</div><div>Chief Pilot review &amp; date</div></div>'+
+    '<div class="sign"><div>Pilot signature &amp; date</div></div>'+
     '<div class="note">+ = duty extended to '+FD_DUTY_EXT+'h to complete a disrupted schedule. I certify the above flight and duty times are correct and complete.</div>'+
     '<script>window.onload=function(){window.print();}<\/script></body></html>');
   w.document.close();
