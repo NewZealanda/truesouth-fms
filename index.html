@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.24';
+const APP_VER='v24.25';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -13197,19 +13197,22 @@ function _rzRenderPickups(){
   driversBar+='</div>';
   if(!displayDrivers.length)driversBar+='<div style="font-size:12px;color:var(--text3);margin-top:6px">No ground staff rostered on — use ＋ to add anyone, or a van with no driver goes by taxi.</div>';
   if(S._pickupDriverPickerOpen){
-    var _groups=_rzRosteredByRole();var _anyPick=false;
+    var _dg=_rzDriverGroups();
+    var _onPick=_dg.onDuty.filter(function(n){return displayDrivers.indexOf(n)<0;});
+    var _offPick=_dg.dayOff.filter(function(n){return displayDrivers.indexOf(n)<0;});
     driversBar+='<div style="margin-top:10px;border-top:1px solid var(--border2);padding-top:10px">';
-    driversBar+='<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Rostered on '+_rzDowLabel(S.rezdyDate)+' — tap to add as a driver</div>';
-    _groups.forEach(function(g){
-      var picks=g.members.filter(function(n){return displayDrivers.indexOf(n)<0;});
-      if(!picks.length)return;_anyPick=true;
-      driversBar+='<div style="margin-bottom:8px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:4px">'+_rzEsc(g.label)+'</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
-      picks.forEach(function(nm){
-        driversBar+='<button onclick="window.pickupAddDriver(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\')" style="padding:6px 11px;border-radius:16px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer">＋ '+_rzEsc(nm)+'</button>';
-      });
-      driversBar+='</div></div>';
-    });
-    if(!_anyPick)driversBar+='<div style="font-size:12px;color:var(--text3)">Everyone rostered on is already listed.</div>';
+    driversBar+='<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Tap to add as a driver — '+_rzDowLabel(S.rezdyDate)+'</div>';
+    if(_onPick.length){
+      driversBar+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+      _onPick.forEach(function(nm){driversBar+='<button onclick="window.pickupAddDriver(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\')" style="padding:8px 12px;border-radius:16px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;min-height:38px">＋ '+_rzEsc(nm)+'</button>';});
+      driversBar+='</div>';
+    }
+    if(_offPick.length){
+      driversBar+='<div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800;margin:4px 0 4px">Day off (tap to call in)</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
+      _offPick.forEach(function(nm){driversBar+='<button onclick="window.pickupAddDriver(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\')" title="On a day off — tap to call them in" style="padding:8px 12px;border-radius:16px;border:1px dashed var(--border2);background:transparent;color:var(--text3);opacity:.75;font-size:12px;font-weight:700;cursor:pointer;min-height:38px">😴 '+_rzEsc(nm)+'</button>';});
+      driversBar+='</div>';
+    }
+    if(!_onPick.length&&!_offPick.length)driversBar+='<div style="font-size:12px;color:var(--text3)">Everyone available is already listed.</div>';
     driversBar+='</div>';
   }
   // Spare vehicles — parked resources sitting next to the drivers. Drag (or tap) one to add it
@@ -13279,14 +13282,18 @@ function _rzRenderPickups(){
       '<button onclick="window.pickupParkVehicle('+vi+')" title="Park this vehicle (move it to spares)" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:10px;font-weight:700;padding:3px 8px">Park</button></div></div>';
     // Driver / taxi slot — drop a driver bubble anywhere on the van to assign; no driver = taxi.
     var drv=(S._pickupDrivers||[])[vi]||null;
-    vansH+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding:5px 9px;border-radius:8px;border:1px dashed '+(drv?col+'99':(vanIds.length?'#f59e0b88':'var(--border2)'))+';background:'+(drv?col+'14':(vanIds.length?'rgba(245,158,11,.08)':'transparent'))+'">'+
+    var _dpOpen=(S._pickupVanDriverPick===vi);
+    vansH+='<div style="margin-bottom:10px">'+
+      '<div onclick="window.pickupVanDriverPickOpen('+vi+')" title="Tap to assign / change the driver" style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;cursor:pointer;min-height:40px;border:1px dashed '+(drv?col+'99':(vanIds.length?'#f59e0b88':'var(--border2)'))+';background:'+(drv?col+'14':(vanIds.length?'rgba(245,158,11,.08)':'transparent'))+'">'+
       (drv
         ?'<span style="font-size:12px;font-weight:700;color:'+col+'">👤 '+_rzEsc(drv)+'</span>'+
-          (function(){var a=_rzVanAck(vi);if(_rzVanAcked(vi)){var t='';try{t=new Date(a.at).toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});}catch(e){}return '<span title="Driver acknowledged this list" style="font-size:10px;font-weight:800;color:#22c55e;background:rgba(34,197,94,.14);padding:2px 7px;border-radius:10px;margin-left:6px;white-space:nowrap">✓ acked'+(t?' '+t:'')+'</span>';}return '<span title="The list changed since the driver last acknowledged" style="font-size:10px;font-weight:800;color:#f59e0b;background:rgba(245,158,11,.14);padding:2px 7px;border-radius:10px;margin-left:6px;white-space:nowrap">⚠ awaiting ack</span>';})()+
-          '<button onclick="window.pickupClearDriver('+vi+')" style="margin-left:auto;background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;line-height:1" title="Clear driver">✕</button>'
+          (function(){var a=_rzVanAck(vi);if(_rzVanAcked(vi)){var t='';try{t=new Date(a.at).toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});}catch(e){}return '<span title="Driver acknowledged this list" style="font-size:10px;font-weight:800;color:#22c55e;background:rgba(34,197,94,.14);padding:2px 7px;border-radius:10px;margin-left:6px;white-space:nowrap">✓ acked'+(t?' '+t:'')+'</span>';}return '<span title="The list changed since the driver last acknowledged" style="font-size:10px;font-weight:800;color:#f59e0b;background:rgba(245,158,11,.14);padding:2px 7px;border-radius:10px;margin-left:6px;white-space:nowrap">⚠ awaiting ack</span>';})()
         :(vanIds.length
-          ?'<span style="font-size:12px;font-weight:700;color:#f59e0b">🚕 Taxi — drop a driver to assign</span>'
-          :'<span style="font-size:11px;color:var(--text3)">Drop a driver here</span>'))+
+          ?'<span style="font-size:12px;font-weight:700;color:#f59e0b">🚕 Tap to assign a driver</span>'
+          :'<span style="font-size:11px;color:var(--text3)">Tap to assign a driver</span>'))+
+      '<span style="margin-left:auto;color:var(--text3);font-size:12px;flex-shrink:0">'+(_dpOpen?'▴':'▾')+'</span>'+
+      '</div>'+
+      (_dpOpen?'<div style="position:relative;z-index:30;margin-top:4px;border:1px solid var(--acc);border-radius:8px;background:var(--card);max-height:280px;overflow-y:auto;box-shadow:0 10px 28px rgba(0,0,0,.45)">'+_rzDriverPickRows('window.pickupSetVanDriver('+vi+',%N%)')+'</div>':'')+
       '</div>';
     var _vlist=vanIds.slice().sort(function(a,b){return _rzPkTimeVal(_rzPickupById(pickups,a))-_rzPkTimeVal(_rzPickupById(pickups,b));}).filter(function(id){if(!depFilter)return true;var pp=_rzPickupById(pickups,id);return pp&&pp.depart===depFilter;});
     if(!vanIds.length){
@@ -13310,6 +13317,14 @@ function _rzRenderPickups(){
           '<button onclick="window.pickupToggleCollected(\''+_rzEsc(id).replace(/'/g,"\\'")+'\')" '+
             'style="margin-top:8px;width:100%;padding:9px;border-radius:7px;border:1px solid '+(collected?'#166534':'var(--border2)')+';background:'+(collected?'var(--ok-bg)':'transparent')+';color:'+(collected?'var(--ok-text)':'var(--text2)')+';font-size:13px;font-weight:700;cursor:pointer">'+
             (collected?'✓ Collected':'Mark collected')+'</button>'+
+          (function(){ // tap-to-move (iPhone: drag pickup→van doesn\'t work)
+            var idE=_rzEsc(id).replace(/'/g,"\\'");var open=(S._pickupMovePick===id);
+            var btn='<button onclick="event.stopPropagation();window.pickupMovePickOpen(\''+idE+'\')" style="margin-top:6px;width:100%;padding:8px;border-radius:7px;border:1px dashed var(--border2);background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">⇄ Move to another van '+(open?'▴':'▾')+'</button>';
+            if(!open)return btn;
+            var rows='';(S._pickupVans||[]).forEach(function(vv,vj){if(vj===vi||_rzVanParked(vj))return;rows+='<div onclick="window.pickupMoveToVan(\''+idE+'\','+vj+')" style="padding:9px 10px;cursor:pointer;font-size:12.5px;font-weight:700;border-bottom:1px solid var(--border2);min-height:40px;display:flex;align-items:center;gap:7px;color:'+_rzVehColor(vj)+'">🚐 '+_rzEsc(_rzVehName(vj))+'</div>';});
+            if(!rows)rows='<div style="padding:10px;font-size:12px;color:var(--text3)">No other active van — activate a spare first.</div>';
+            return btn+'<div style="margin-top:4px;border:1px solid var(--acc);border-radius:8px;background:var(--card);overflow:hidden">'+rows+'</div>';
+          })()+
           '</div>';
       });
     }
@@ -13620,6 +13635,37 @@ function _rzAvailableDrivers(){
 }
 window.pickupDriverDragStart=function(name,e){S._rezdyDragDriver=name;try{e.dataTransfer.setData('text/plain','driver:'+name);e.dataTransfer.effectAllowed='copy';}catch(_){}};
 window.pickupClearDriver=function(vi){if(S._pickupDrivers)S._pickupDrivers[vi]=null;window.pickupSave(true);render();};
+// ── Tap-based controls (iOS Safari has no HTML5 touch drag-and-drop) ──
+// Combined driver list = rostered ground staff + anyone added via "＋" + anyone already assigned.
+function _rzAllDriverNames(){
+  var out=[];[].concat(_rzAvailableDrivers(),(S._pickupExtraDrivers||[]),(S._pickupDrivers||[]).filter(Boolean)).forEach(function(n){n=(n||'').trim();if(n&&out.indexOf(n)<0)out.push(n);});
+  return out;
+}
+// Tap-to-assign a driver to a van (the drag-driver-onto-van path doesn't work on iPhone).
+window.pickupVanDriverPickOpen=function(vi){S._pickupVanDriverPick=(S._pickupVanDriverPick===vi)?null:vi;S._pickupMovePick=null;render();};
+window.pickupSetVanDriver=function(vi,name){S._pickupDrivers=S._pickupDrivers||[];S._pickupDrivers[vi]=(name||'').trim()||null;S._pickupVanDriverPick=null;if(window.pickupSave)window.pickupSave(true);render();};
+// Tap-to-move a pickup to another van (the drag-pickup-onto-van path doesn't work on iPhone).
+window.pickupMovePickOpen=function(id){S._pickupMovePick=(S._pickupMovePick===id)?null:id;S._pickupVanDriverPick=null;render();};
+window.pickupMoveToVan=function(id,vi){
+  if(!Array.isArray(S._pickupVans))return;
+  S._pickupVans=S._pickupVans.map(function(v){return v.filter(function(x){return x!==id;});});
+  if(!S._pickupVans[vi])S._pickupVans[vi]=[];
+  S._pickupVans[vi].push(id);
+  S._pickupMovePick=null;
+  if(window.pickupSave)window.pickupSave(true);render();
+};
+// Tap-to-reorder a stop within the driver's My-Pickups run (up/down, touch-friendly).
+window.myPkMove=function(vi,dep,id,dir){
+  var pickups=_rzPickups();
+  var grp=((S._pickupVans||[])[vi]||[]).map(function(pid){return _rzPickupById(pickups,pid);}).filter(function(p){return p&&(p.depart||'—')===dep;}).sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
+  grp=_rzApplyMyOrder(grp,vi,dep);
+  var ids=grp.map(function(p){return p.id;});
+  var from=ids.indexOf(id);if(from<0)return;
+  var to=from+(dir<0?-1:1);if(to<0||to>=ids.length)return;
+  ids.splice(from,1);ids.splice(to,0,id);
+  S._pickupOrder=S._pickupOrder||{};S._pickupOrder[vi+'|'+dep]=ids;
+  if(window.pickupSave)window.pickupSave(true);render();
+};
 window.pickupSetDepFilter=function(t){S._pickupDepFilter=(S._pickupDepFilter===t)?null:t;render();};
 // Everyone rostered ON for the day, grouped by role — for the "+" driver picker (anyone can drive).
 function _rzRosteredByRole(){
@@ -13637,6 +13683,34 @@ function _rzRosteredByRole(){
   return out;
 }
 window.pickupToggleDriverPicker=function(){S._pickupDriverPickerOpen=!S._pickupDriverPickerOpen;render();};
+// Driver picker list, split into ON-DUTY (can drive now) and DAY OFF (greyed — call them in if
+// needed). Maintenance + accounts are excluded entirely; marketing always sits in the Day-off list.
+function _rzDriverGroups(){
+  var ds=S.rezdyDate,roster=S.roster||{},off={rdo:1,off:1,leave:1,ul:1,sick:1};
+  var DRIVE_ROLES={ground_staff:1,desk:1,pilot:1,cx_manager:1,admin:1,superadmin:1};
+  var onDuty=[],dayOff=[];
+  (S.users||[]).forEach(function(u){
+    if(!u||u.inactive)return;var nm=(u.name||'').trim();if(!nm)return;
+    if(u.role==='marketing'){if(dayOff.indexOf(nm)<0)dayOff.push(nm);return;} // marketing → day-off only
+    if(!DRIVE_ROLES[u.role])return; // maintenance / accounts excluded
+    var st=(typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):((roster[ds]||{})[u.id]||'');
+    if(off[st]){if(dayOff.indexOf(nm)<0)dayOff.push(nm);}else{if(onDuty.indexOf(nm)<0)onDuty.push(nm);}
+  });
+  onDuty.sort();dayOff.sort();
+  return {onDuty:onDuty,dayOff:dayOff};
+}
+// Driver-picker dropdown rows (shared by the per-van tap picker), with a Clear + greyed Day-off list.
+function _rzDriverPickRows(onPickJs){
+  var g=_rzDriverGroups();
+  var rowS='padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:8px;min-height:40px';
+  var h='<div onclick="'+onPickJs.replace('%N%',"''")+'" style="'+rowS+';color:#f59e0b;font-weight:700">🚕 No driver (taxi)</div>';
+  g.onDuty.forEach(function(n){h+='<div onclick="'+onPickJs.replace('%N%',"'"+_rzEsc(n).replace(/'/g,"\\'")+"'")+'" style="'+rowS+';color:var(--text);font-weight:700">👤 '+_rzEsc(n)+'</div>';});
+  if(g.dayOff.length){
+    h+='<div style="padding:6px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800;background:var(--card)">Day off</div>';
+    g.dayOff.forEach(function(n){h+='<div onclick="'+onPickJs.replace('%N%',"'"+_rzEsc(n).replace(/'/g,"\\'")+"'")+'" title="On a day off — tap to call them in" style="'+rowS+';color:var(--text3);opacity:.7">😴 '+_rzEsc(n)+'</div>';});
+  }
+  return h;
+}
 window.pickupAddDriver=function(name){if(!name)return;S._pickupExtraDrivers=S._pickupExtraDrivers||[];if(S._pickupExtraDrivers.indexOf(name)<0)S._pickupExtraDrivers.push(name);S._pickupDriverPickerOpen=false;window.pickupSave(true);render();};
 window.pickupRemoveExtraDriver=function(name){S._pickupExtraDrivers=(S._pickupExtraDrivers||[]).filter(function(n){return n!==name;});window.pickupSave(true);render();};
 
@@ -13734,8 +13808,14 @@ function _rzRenderMyPickups(){
       var _isNew=!!_addedSet[p.id]; // added by dispatch since this driver last acknowledged
       h+='<div draggable="true" ondragstart="window.myPkDragStart(\''+_idD+'\',event)" ondragover="event.preventDefault()" ondrop="window.myPkDrop('+_viD+',\''+_depD+'\',\''+_idD+'\',event)" style="background:'+(_isNew?'rgba(34,197,94,.10)':'var(--card2)')+';border:'+(_isNew?'2px solid #22c55e':'1px solid var(--border2)')+';border-left:4px solid '+(_isNew?'#22c55e':col)+';border-radius:10px;padding:13px;margin-bottom:10px;cursor:grab;'+(collected?'opacity:.55':'')+'">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">'+
-          '<div style="font-weight:800;font-size:16px;color:var(--text1);'+(collected?'text-decoration:line-through':'')+'"><span style="color:var(--text3);font-weight:600;margin-right:6px;cursor:grab" title="Drag to reorder">≡</span>'+_rzEsc(p.customer||p.order)+(_isNew?' <span style="font-size:10px;font-weight:900;color:#06281a;background:#22c55e;padding:1px 6px;border-radius:10px;vertical-align:middle">NEW</span>':'')+'</div>'+
-          '<span style="flex-shrink:0;font-size:13px;font-weight:800;color:'+col+'">'+p.pax+' pax</span>'+
+          '<div style="font-weight:800;font-size:16px;color:var(--text1);min-width:0;'+(collected?'text-decoration:line-through':'')+'"><span style="color:var(--text3);font-weight:700;margin-right:8px;cursor:grab;font-size:20px;vertical-align:middle" title="Drag to reorder">≡</span>'+_rzEsc(p.customer||p.order)+(_isNew?' <span style="font-size:10px;font-weight:900;color:#06281a;background:#22c55e;padding:1px 6px;border-radius:10px;vertical-align:middle">NEW</span>':'')+'</div>'+
+          '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'+
+            '<span style="font-size:13px;font-weight:800;color:'+col+'">'+p.pax+' pax</span>'+
+            '<div style="display:flex;flex-direction:column;gap:3px">'+
+              '<button onclick="event.stopPropagation();window.myPkMove('+_viD+',\''+_depD+'\',\''+_idD+'\',-1)" title="Move up" style="width:42px;height:30px;border-radius:7px;border:1px solid var(--border2);background:var(--card);color:var(--text2);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">▲</button>'+
+              '<button onclick="event.stopPropagation();window.myPkMove('+_viD+',\''+_depD+'\',\''+_idD+'\',1)" title="Move down" style="width:42px;height:30px;border-radius:7px;border:1px solid var(--border2);background:var(--card);color:var(--text2);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">▼</button>'+
+            '</div>'+
+          '</div>'+
         '</div>'+
         (p.pickupTime?'<div style="font-size:15px;font-weight:700;color:var(--text1);margin-bottom:3px">🕑 Pickup '+_rzEsc(p.pickupTime)+'</div>':'')+
         '<div style="font-size:14px;color:var(--text2);margin-bottom:'+(p.phone?'8px':'10px')+'">📍 '+_rzEsc(p.location||'—')+'</div>'+
