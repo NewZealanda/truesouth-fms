@@ -819,10 +819,15 @@ function _rzCheckinModal(){
   if(isFinite(_ciBal)&&_ciBal>0){
     h+='<div style="display:flex;align-items:center;gap:8px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.5);border-radius:9px;padding:9px 12px;margin:0 0 12px"><span style="font-size:16px">💲</span><span style="font-size:12px;font-weight:700;color:#f87171">Outstanding balance of '+_rzEsc(_rzMoney(_ciBal,b.currency))+' — collect payment before checking in.</span></div>';
   }
-  // Lunch / meal extras — flagged prominently so they aren't missed at check-in.
+  // Lunch / meal extras — flagged prominently (this is where we hand out the lunch cards, so show
+  // the total card count + each type × qty so none are missed).
   var _ciLun=_rzBookingLunches(b);
   if(_ciLun.length){
-    h+='<div style="display:flex;align-items:center;gap:10px;background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:9px;padding:11px 13px;margin:0 0 12px"><span style="font-size:22px">🍱</span><div style="font-size:13.5px;font-weight:800;color:#fbbf24">Lunch ordered — '+_ciLun.map(function(e){return _rzEsc(e.name)+(e.quantity?(' ×'+e.quantity):'');}).join(', ')+'</div></div>';
+    var _lunTot=_ciLun.reduce(function(s,e){return s+(parseInt(e.quantity,10)||1);},0);
+    h+='<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:9px;padding:11px 13px;margin:0 0 12px">'+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:'+(_ciLun.length?'7px':'0')+'"><span style="font-size:22px">🍱</span><div style="font-size:13.5px;font-weight:800;color:#fbbf24">Lunch ordered — hand out '+_lunTot+' lunch card'+(_lunTot===1?'':'s')+'</div></div>'+
+      '<div style="display:flex;flex-direction:column;gap:5px">'+_ciLun.map(function(e){var q=parseInt(e.quantity,10)||1;return '<div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700;color:#fde68a"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;background:#f59e0b;color:#3a2c06;font-weight:900;border-radius:6px;font-size:13px">×'+q+'</span>'+_rzEsc(e.name)+'</div>';}).join('')+'</div>'+
+    '</div>';
   }
   d.rows.forEach(function(r,i){
     var isInf=r.type==='infant';
@@ -1631,7 +1636,6 @@ function _rzRenderPickups(){
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0"><span style="color:'+RZ_PK_COL+';font-weight:700">'+_nPk+' pickups</span> · <span style="color:'+RZ_DROP_COL+';font-weight:700">'+_nDrop+' drop-offs</span> · '+_rzVehicles().length+' vehicles'+(selfDrive.length?' · '+selfDrive.length+' self-drive':'')+'</p></div>'+
     '<div style="display:flex;gap:6px;flex-shrink:0">'+
       '<button class="btn btn-ghost" style="font-size:12px'+(S._rzTransByAc?';border-color:rgba(96,165,250,.6);color:#60a5fa':'')+'" onclick="window.rzTransToggleByAc()" title="Group each van\'s stops by the aircraft flown">'+(S._rzTransByAc?'✈ By aircraft ✓':'✈ By aircraft')+'</button>'+
-      '<button class="btn btn-ghost" style="font-size:12px" onclick="window.pickupAutoAllocate()">↺ Auto-allocate</button>'+
       '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.pickupSave()">💾 Save</button>'+
     '</div></div>';
 
@@ -1639,7 +1643,10 @@ function _rzRenderPickups(){
   // A Save button sits here too, right by where pickups are reordered/edited (changes auto-save,
   // but operators asked for a Save close to the action).
   let timeBar='<div class="card" style="padding:10px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700">Departure</div>'+
-    '<button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;border-color:rgba(74,222,128,.5);color:#4ade80;font-weight:700" onclick="window.pickupSave()" title="Save the pickup list & order">💾 Save pickups</button></div><div style="display:flex;flex-wrap:wrap;gap:6px">';
+    '<div style="display:flex;gap:6px;flex-shrink:0">'+
+      '<button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;font-weight:700" onclick="window.pickupAutoAllocate()" title="Re-allocate every van automatically (saves)">↺ Auto-allocate</button>'+
+      '<button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;border-color:rgba(74,222,128,.5);color:#4ade80;font-weight:700" onclick="window.pickupSave()" title="Save the transport list & order">💾 Save pickups</button>'+
+    '</div></div><div style="display:flex;flex-wrap:wrap;gap:6px">';
   var _ordJs=encodeURIComponent(JSON.stringify(times.slice()));
   times.forEach(function(t,ti){
     const grp=byTime[t];const pax=grp.reduce(function(s,p){return s+p.pax;},0);
@@ -1978,6 +1985,7 @@ window.rezdyLoadPickups=async function(){
 
 window.pickupAutoAllocate=function(){
   S._pickupVans=_rzAutoVans(_rzPickups());
+  if(window.pickupSave)window.pickupSave(true); // PERSIST — otherwise a live re-pull reverts it
   toast('Vans auto-allocated','ok');
   render();
 };
