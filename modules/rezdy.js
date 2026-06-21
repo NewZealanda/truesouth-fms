@@ -1508,7 +1508,7 @@ window.rezdySetDate=function(v){
   S.rezdyDate=v||_rzToday();
   try{sessionStorage.setItem('ts_rezdy_date',S.rezdyDate);}catch(e){} // survive a refresh on Bookings/Seatmap/Loadsheets
   // clear date-scoped caches so each tab reloads for the new date
-  S._rezdyBookings=null;S._rezdyOpen={};S._pickupVans=null;S._pickupCollected=null;S._schedBlocks=null;S._schedGroupKey=null;S._schedEdit=null;S._rzManLoaded=false;S._rzManPax=null;S._rzLsTabsLoaded=false;S._rzLsTabs=null;
+  S._rezdyBookings=null;S._rezdyOpen={};S._pickupVans=null;S._pickupCollected=null;S._schedBlocks=null;S._schedGroupKey=null;S._schedEdit=null;S._rzManLoaded=false;S._rzManPax=null;S._rzLsTabsLoaded=false;S._rzLsTabs=null;S._rzSchedUndo=null; // undo is per-day — start fresh on a date change
   // clear seatmap view-state that's scoped to a specific day (stale labels would mis-target Allocate/Create)
   S._rzManDepFilter=null;S._rzManShow=null;S._rzCombA=null;S._rzCombB=null;S._rzManCombineOpen=false;S._rzManCardOpen=null;S._rzManCoPic=null;
   // reset the calendar→seatmap PIC auto-fill tracking + the pickup-blob sync flag for the new day

@@ -239,13 +239,16 @@ window.bizPaxSyncRezdy=async function(ym){
   try{
     var rows=await sbF('ts_rezdy_bookings','&tour_date=gte.'+from+'&tour_date=lte.'+to);
     if(!Array.isArray(rows)){if(typeof toast==='function')toast('No bookings found for that month.','warn');return;}
+    // Count seats sold EXACTLY like the Bookings/Calendar page: map each row to a booking (drops
+    // supplier-duplicate rows), skip cancellations (status lives on the booking JSON, not the DB
+    // row), and sum adults + children (infants travel free, so excluded — matches "seats sold").
     var byDate={};
     rows.forEach(function(r){
-      if(/cancel/i.test(r.status||''))return;
       var ds=String(r.tour_date||'').slice(0,10);if(!ds)return;
-      var seats=0;
-      try{var b=(typeof _rzMapBookings==='function')?_rzMapBookings([r])[0]:null;if(b&&typeof _rzEffBreakdown==='function'){var e=_rzEffBreakdown(b);seats=(e.a||0)+(e.c||0);}}catch(e){}
-      if(!seats){((r.items)||[]).forEach(function(it){seats+=parseInt(it.quantity,10)||0;});}
+      var b=null;try{b=(typeof _rzMapBookings==='function')?_rzMapBookings([r])[0]:null;}catch(e){}
+      if(!b)return;
+      if(/cancel/i.test(b.status||''))return;
+      var seats=0;try{var e=_rzEffBreakdown(b);seats=(e.a||0)+(e.c||0);}catch(e){}
       byDate[ds]=(byDate[ds]||0)+seats;
     });
     var p=_bizState();var n=0;
