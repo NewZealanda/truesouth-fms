@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.48';
+const APP_VER='v24.49';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16271,7 +16271,19 @@ function _bizState(){
   if(!S._bizPlan.paxTargets||typeof S._bizPlan.paxTargets!=='object')S._bizPlan.paxTargets={};
   if(!S._bizPlan.paxData||typeof S._bizPlan.paxData!=='object')S._bizPlan.paxData={};
   if(!Array.isArray(S._bizPlan.budgets))S._bizPlan.budgets=JSON.parse(JSON.stringify(BIZ_DEFAULT.budgets));
+  if(!Array.isArray(S._bizPlan.pnls)&&typeof _bizPnlDefault==='function')S._bizPlan.pnls=_bizPnlDefault();
   return S._bizPlan;
+}
+// P&L computed columns from the line items.
+function _bizPnlCalc(pl){
+  var n=12,cos=[],opex=[],gross=[],ebitda=[],yld=[];
+  for(var m=0;m<n;m++){
+    var cs=0;(pl.cos||[]).forEach(function(l){cs+=(+l.vals[m]||0);});cos.push(cs);
+    var ox=0;(pl.opex||[]).forEach(function(l){ox+=(+l.vals[m]||0);});opex.push(ox);
+    var g=(+pl.ti[m]||0)-cs;gross.push(g);ebitda.push(g-ox);
+    yld.push((+pl.pax[m])?((+pl.ti[m]||0)/(+pl.pax[m])):0);
+  }
+  return {cos:cos,opex:opex,gross:gross,ebitda:ebitda,yld:yld};
 }
 // Per-aircraft cost-per-flight-hour breakdown.
 function _bizRunCalc(ac,fuel){
@@ -16355,6 +16367,9 @@ window.bizBudgetSel=function(id){S._bizBudget=id;render();};
 window.bizSetBudgetDriver=function(bid,field,m,value){var p=_bizState();var b=p.budgets.find(function(x){return x.id===bid;});if(!b||!b[field])return;b[field][m]=(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizSetBudgetParam=function(bid,grp,field,value){var p=_bizState();var b=p.budgets.find(function(x){return x.id===bid;});if(!b||!b[grp])return;b[grp][field]=(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizToggleBudgetAc=function(bid,ai,m){var p=_bizState();var b=p.budgets.find(function(x){return x.id===bid;});if(!b||!b.aircraft[ai])return;b.aircraft[ai].active[m]=b.aircraft[ai].active[m]?0:1;_bizSave();render();};
+window.bizPnlSel=function(id){S._bizPnl=id;render();};
+window.bizSetPnlHead=function(plid,field,m,value){var p=_bizState();var pl=p.pnls.find(function(x){return x.id===plid;});if(!pl||!pl[field])return;pl[field][m]=(value===''?0:(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizSetPnlCell=function(plid,sec,li,m,value){var p=_bizState();var pl=p.pnls.find(function(x){return x.id===plid;});if(!pl||!pl[sec]||!pl[sec][li])return;pl[sec][li].vals[m]=(value===''?0:(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizReset=function(){if(typeof confirm==='function'&&!confirm('Reset the Main Plan to the original spreadsheet values?'))return;S._bizPlan=JSON.parse(JSON.stringify(BIZ_DEFAULT));_bizSave();render();};
 
 // ── render ──
@@ -16367,8 +16382,58 @@ function renderBusinessPlan(){
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
     tabs.map(function(t){return '<button class="sub-tab '+(tab===t.id?'on':'')+'" onclick="window.bizSetTab(\''+t.id+'\')">'+t.lbl+'</button>';}).join('')+'</div>';
   var body=(tab==='mainplan')?_bizRenderMainPlan():(tab==='loans')?_bizRenderLoans():(tab==='running')?_bizRenderRunning()
-    :(tab==='timeline')?_bizRenderTimeline():(tab==='roster')?_bizRenderRoster():(tab==='pax')?_bizRenderPax():(tab==='budget')?_bizRenderBudget():_bizComingSoon(tabs.find(function(x){return x.id===tab;}));
+    :(tab==='timeline')?_bizRenderTimeline():(tab==='roster')?_bizRenderRoster():(tab==='pax')?_bizRenderPax():(tab==='budget')?_bizRenderBudget():(tab==='pnl')?_bizRenderPnl():_bizComingSoon(tabs.find(function(x){return x.id===tab;}));
   return '<div>'+bar+body+'</div>';
+}
+
+function _bizRenderPnl(){
+  var p=_bizState();var plid=S._bizPnl||(p.pnls[0]&&p.pnls[0].id);
+  var pl=p.pnls.find(function(x){return x.id===plid;})||p.pnls[0];
+  if(!pl)return '<div class="card" style="color:var(--text3)">No P&amp;L defined.</div>';
+  var c=_bizPnlCalc(pl);
+  var months=[];for(var m=0;m<12;m++)months.push(_bizMonLabel(_bizAddMonths(pl.startYM+'-01',m)));
+  var _ci='width:62px;font-size:10.5px;padding:2px 2px;border:1px solid var(--border2);border-radius:4px;background:var(--card);color:var(--text);text-align:right;box-sizing:border-box';
+  var sum=function(a){return a.reduce(function(s,v){return s+(+v||0);},0);};
+  var th='<th style="position:sticky;left:0;background:var(--card2);text-align:left;padding:4px 8px;font-size:10px;color:var(--text3);min-width:150px;z-index:1">';
+  var thd='<th style="position:sticky;left:0;background:var(--card);text-align:left;padding:3px 8px;font-size:10.5px;min-width:150px;z-index:1">';
+  var h='<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="flex:1"><div class="st" style="margin-bottom:0">Profit &amp; Loss</div><p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzEscSafe(pl.basis||'')+'. Gross profit, EBITDA &amp; totals computed; income/cost lines editable.</p></div>'+
+    p.pnls.map(function(x){return '<button class="sub-tab '+(x.id===pl.id?'on':'')+'" onclick="window.bizPnlSel(\''+x.id+'\')">'+_rzEscSafe(x.label)+'</button>';}).join('')+'</div>';
+  // headline
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
+    '<div style="flex:1 1 150px;border:1px solid var(--border2);border-top:3px solid #7c3aed;border-radius:10px;padding:12px 14px"><div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase">Trading income</div><div style="font-size:18px;font-weight:800">'+_bizMoney(sum(pl.ti))+'</div></div>'+
+    '<div style="flex:1 1 150px;border:1px solid var(--border2);border-top:3px solid #22c55e;border-radius:10px;padding:12px 14px"><div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase">Gross profit</div><div style="font-size:18px;font-weight:800">'+_bizMoney(sum(c.gross))+'</div></div>'+
+    '<div style="flex:1 1 150px;border:1px solid var(--border2);border-top:3px solid #f59e0b;border-radius:10px;padding:12px 14px"><div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase">EBITDA</div><div style="font-size:18px;font-weight:800;color:'+(sum(c.ebitda)>=0?'#22c55e':'#ef4444')+'">'+_bizMoney(sum(c.ebitda))+'</div></div>'+
+    '</div>';
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="border-collapse:collapse;font-size:10.5px;min-width:'+(150+12*66+80)+'px">';
+  h+='<thead><tr style="background:var(--card2)">'+th+'</th>'+months.map(function(mn){return '<th style="text-align:right;padding:4px 4px;font-size:9px;color:var(--text3);min-width:62px">'+mn+'</th>';}).join('')+'<th style="text-align:right;padding:4px 8px;font-size:9px;color:var(--text3)">Year</th></tr></thead><tbody>';
+  // editable head rows (TI, PAX) + computed yield
+  function headRow(lbl,field){var r='<tr style="border-top:1px solid var(--border2)">'+thd+'<b>'+lbl+'</b></th>';for(var m=0;m<12;m++){r+='<td style="padding:1px 2px"><input type="number" value="'+(pl[field][m]||'')+'" onchange="window.bizSetPnlHead(\''+pl.id+'\',\''+field+'\','+m+',this.value)" style="'+_ci+'"></td>';}r+='<td style="padding:2px 8px;text-align:right;font-weight:700">'+(field==='pax'?Math.round(sum(pl[field])):_bizMoney(sum(pl[field])))+'</td></tr>';return r;}
+  h+=headRow('Trading income','ti');
+  h+=headRow('PAX','pax');
+  var yr='<tr style="border-top:1px solid var(--border2)">'+thd+'Avg yield $/pax</th>';for(var m=0;m<12;m++){yr+='<td style="padding:2px 4px;text-align:right;color:var(--text3)">'+(c.yld[m]?Math.round(c.yld[m]):'')+'</td>';}yr+='<td style="padding:2px 8px;text-align:right;color:var(--text3)">'+(sum(pl.pax)?Math.round(sum(pl.ti)/sum(pl.pax)):'')+'</td></tr>';h+=yr;
+  // section helper
+  function section(title,sec,lines,totals){
+    var r='<tr style="background:rgba(124,58,237,.06)"><td colspan="14" style="padding:4px 8px;font-size:10px;font-weight:800;color:#c084fc;text-transform:uppercase;position:sticky;left:0;background:rgba(124,58,237,.06)">'+title+'</td></tr>';
+    lines.forEach(function(l,li){
+      r+='<tr style="border-top:1px solid var(--border2)">'+thd.replace('var(--card)','var(--card)')+_rzEscSafe(l.label)+'</th>';
+      for(var m=0;m<12;m++){r+='<td style="padding:1px 2px"><input type="number" value="'+(l.vals[m]||'')+'" onchange="window.bizSetPnlCell(\''+pl.id+'\',\''+sec+'\','+li+','+m+',this.value)" style="'+_ci+'"></td>';}
+      r+='<td style="padding:2px 8px;text-align:right;color:var(--text3)">'+_bizMoney(sum(l.vals))+'</td></tr>';
+    });
+    // total row
+    r+='<tr style="border-top:2px solid var(--border);background:var(--card2);font-weight:800">'+th+totals.lbl+'</th>';
+    for(var m=0;m<12;m++){r+='<td style="padding:3px 4px;text-align:right">'+_bizMoney(totals.arr[m])+'</td>';}
+    r+='<td style="padding:3px 8px;text-align:right;color:#f59e0b">'+_bizMoney(sum(totals.arr))+'</td></tr>';
+    return r;
+  }
+  h+=section('Cost of sales','cos',pl.cos,{lbl:'Total cost of sales',arr:c.cos});
+  // gross profit
+  var gr='<tr style="border-top:2px solid var(--border);background:rgba(34,197,94,.08);font-weight:800">'+th.replace('var(--card2)','transparent')+'Gross profit</th>';for(var m=0;m<12;m++){gr+='<td style="padding:3px 4px;text-align:right;color:'+(c.gross[m]>=0?'#22c55e':'#ef4444')+'">'+_bizMoney(c.gross[m])+'</td>';}gr+='<td style="padding:3px 8px;text-align:right;color:#22c55e">'+_bizMoney(sum(c.gross))+'</td></tr>';h+=gr;
+  h+=section('Operating expenses','opex',pl.opex,{lbl:'Total operating expenses',arr:c.opex});
+  // ebitda
+  var er='<tr style="border-top:2px solid var(--border);background:rgba(245,158,11,.10);font-weight:800">'+th.replace('var(--card2)','transparent')+'EBITDA</th>';for(var m=0;m<12;m++){er+='<td style="padding:3px 4px;text-align:right;color:'+(c.ebitda[m]>=0?'#22c55e':'#ef4444')+'">'+_bizMoney(c.ebitda[m])+'</td>';}er+='<td style="padding:3px 8px;text-align:right;color:'+(sum(c.ebitda)>=0?'#22c55e':'#ef4444')+'">'+_bizMoney(sum(c.ebitda))+'</td></tr>';h+=er;
+  h+='</tbody></table></div>';
+  h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px">Total cost of sales / operating expenses, gross profit (income − COS) and EBITDA (gross − OPEX) are computed live from the line items. Seeded from the workbook; edit any income or cost cell.</div>';
+  return h;
 }
 
 function _bizRenderBudget(){
@@ -16697,6 +16762,9 @@ function _bizRenderMainPlan(){
 }
 // Safe escape (mirrors flightduty.js).
 function _bizEscSafe(s){return _rzEscSafe(s);}
+
+// P&L seed (FY26 + FY25) extracted from the workbook — monthly Apr→Mar.
+function _bizPnlDefault(){return [{"id":"fy26pl","label":"FY26","startYM":"2024-04","basis":"Forecast \u2014 year ended 31 Mar 2026","ti":[522948.0,271435.0,410622.0,399975.0,402362.0,394459.0,606145.0,619369.0,748606.0,956269.0,806862.0,766519.0],"pax":[1064.0,548.0,821.0,822.0,822.0,821.0,1096.0,1125.0,1333.0,1689.0,1443.0,1370.0],"cos":[{"label":"Activity Costs","vals":[33942.0,17617.0,26651.0,25960.0,26115.0,25602.0,39341.0,40200.0,48588.0,62068.0,52369.0,49750.0]},{"label":"Agents Commission","vals":[3857.0,2002.0,3028.0,2950.0,2967.0,2909.0,4470.0,4568.0,5521.0,7053.0,5951.0,5653.0]},{"label":"Aircraft Tracking","vals":[1612.0,837.0,1266.0,1233.0,1240.0,1216.0,1868.0,1909.0,2308.0,2948.0,2487.0,2363.0]},{"label":"Aviation Fuel","vals":[58616.0,30424.0,46026.0,44832.0,45100.0,44214.0,67941.0,69424.0,83909.0,107189.0,90439.0,85917.0]},{"label":"Cash Commission","vals":[8420.0,4370.0,6611.0,6440.0,6478.0,6351.0,9759.0,9972.0,12053.0,15397.0,12991.0,12341.0]},{"label":"Credit Card Charges","vals":[7463.0,3874.0,5860.0,5708.0,5742.0,5630.0,8651.0,8839.0,10684.0,13648.0,11515.0,10939.0]},{"label":"Cruise Costs","vals":[62423.0,32400.0,49015.0,47744.0,48029.0,47085.0,72354.0,73932.0,89359.0,114150.0,96313.0,91497.0]},{"label":"Landing Fees","vals":[28801.0,14949.0,22615.0,22028.0,22160.0,21725.0,33383.0,34111.0,41229.0,52668.0,44438.0,42216.0]},{"label":"Lunch Purchases","vals":[475.0,247.0,373.0,363.0,366.0,358.0,551.0,563.0,680.0,869.0,733.0,697.0]},{"label":"Marketing","vals":[3488.0,1810.0,2739.0,2668.0,2684.0,2631.0,4043.0,4131.0,4993.0,6378.0,5381.0,5112.0]},{"label":"Subload Expense","vals":[8594.0,4461.0,6748.0,6573.0,6612.0,6482.0,9961.0,10179.0,12302.0,15715.0,13260.0,12597.0]},{"label":"Taxi","vals":[2077.0,1078.0,1631.0,1589.0,1598.0,1567.0,2408.0,2461.0,2974.0,3799.0,3205.0,3045.0]}],"opex":[{"label":"ACC Levy","vals":[0,0,0,17277.0,10769.0,0,0,0,0,0,0,0]},{"label":"Accountancy Fees","vals":[0,0,71.0,142.0,755.0,74.0,0,80.0,0,3000.0,0,0]},{"label":"Advertising","vals":[3165.0,14640.0,594.0,3094.0,1474.0,1718.0,2034.0,976.0,1473.0,1890.0,1890.0,1890.0]},{"label":"Bank Charges","vals":[126.0,107.0,69.0,69.0,69.0,82.0,69.0,74.0,69.0,72.0,72.0,72.0]},{"label":"CAA","vals":[0,6040.0,0,1690.0,1941.0,0,0,2806.0,0,0,0,0]},{"label":"Computer Expenses","vals":[0,0,0,0,0,0,416.0,0,923.0,0,0,0]},{"label":"Donations","vals":[3000.0,0,0,0,0,0,0,0,0,0,0,0]},{"label":"Eftpos Fees","vals":[65.0,65.0,65.0,65.0,65.0,65.0,65.0,65.0,65.0,65.0,65.0,65.0]},{"label":"Exchange Rate Variation","vals":[0,0,8.0,0,0,0,0,0,0,0,0,0]},{"label":"General Expenses","vals":[1063.0,263.0,1913.0,490.0,225.0,195.0,280.0,50.0,1398.0,434.0,434.0,434.0]},{"label":"Insurance","vals":[4549.0,4549.0,4549.0,3923.0,0,0,0,2861.0,2861.0,2861.0,2861.0,2861.0]},{"label":"Licenses & Registrations","vals":[746.0,724.0,134.0,0,0,1885.0,13325.0,0,639.0,0,0,0]},{"label":"Light, Power & Heating","vals":[69.0,64.0,86.0,52.0,62.0,56.0,767.0,61.0,1037.0,675.0,675.0,675.0]},{"label":"Medicals","vals":[0,0,374.0,0,336.0,0,2860.0,0,0,0,0,0]},{"label":"Met Service","vals":[150.0,85.0,85.0,150.0,150.0,150.0,0,150.0,150.0,150.0,150.0,150.0]},{"label":"Motor Vehicle Expenses","vals":[0,0,1042.0,-1042.0,1042.0,0,150.0,0,0,0,0,0]},{"label":"Plant & Equipment Hire","vals":[657.0,679.0,657.0,679.0,679.0,657.0,679.0,657.0,0,0,0,0]},{"label":"Printing & Stationery","vals":[1062.0,0,305.0,275.0,297.0,129.0,253.0,98.0,85.0,250.0,250.0,200.0]},{"label":"Rent","vals":[6137.0,6137.0,10477.0,8222.0,9070.0,13568.0,10448.0,10448.0,10448.0,10448.0,10448.0,10448.0]},{"label":"Repairs & Maintenance","vals":[0,870.0,0,659.0,1240.0,1139.0,165.0,0,270.0,200.0,200.0,200.0]},{"label":"Repairs & Maintenance - Aircraft","vals":[56226.0,33343.0,28180.0,4885.0,47080.0,23384.0,4715.0,7536.0,92331.0,45651.0,30000.0,30000.0]},{"label":"Staff Training","vals":[0,0,0,0,0,1870.0,0,815.0,211.0,0,0,0]},{"label":"Subcontractors","vals":[0,0,0,0,0,3598.0,6596.0,7995.0,7396.0,10000.0,4000.0,3000.0]},{"label":"Subscriptions","vals":[2190.0,8648.0,330.0,5366.0,3455.0,629.0,1630.0,793.0,320.0,609.0,609.0,609.0]},{"label":"Telephone, Tolls & Internet","vals":[1449.0,302.0,1126.0,1006.0,905.0,924.0,1445.0,1291.0,1246.0,1283.0,1283.0,1283.0]},{"label":"Travel Local","vals":[0,0,0,0,0,115.0,0,0,0,0,0,0]},{"label":"Uniform","vals":[361.0,2068.0,0,0,342.0,0,1837.0,0,0,0,0,0]},{"label":"Vehicle Expenses","vals":[766.0,944.0,732.0,536.0,1118.0,466.0,662.0,1117.0,1119.0,744.0,744.0,744.0]},{"label":"Wages & Salaries","vals":[80269.6,103295.0,60779.0,73046.0,103897.0,58368.0,75910.0,61555.0,64687.0,85021.0,78349.0,78349.0]},{"label":"Website Adwords","vals":[2000.0,1000.0,2569.0,2906.0,2460.0,1112.0,1955.0,1996.0,1751.0,0,1000.0,3507.0]},{"label":"Website exepenses","vals":[4302.6,3390.0,1199.0,5376.0,5332.0,4188.0,4137.0,757.0,3742.0,5857.0,5672.0,5800.0]}]},{"id":"fy25pl","label":"FY25","startYM":"2024-04","basis":"Year ended 31 Mar 2025","ti":[252250.0,256697.0,274565.0,365492.0,222828.0,192258.0,315454.0,494179.0,607581.0,832038.0,630720.0,714816.0],"pax":[568.0,548.0,528.0,677.0,441.0,441.0,536.0,1018.0,1221.0,1624.0,1209.0,1370.0],"cos":[{"label":"Activity Costs","vals":[9403.0,15634.0,14751.0,52583.0,9982.0,13026.0,22443.0,30285.0,25391.0,54003.0,40936.0,46395.0]},{"label":"Agents Commission","vals":[854.0,337.0,1611.0,1266.0,3367.0,4405.0,665.0,6714.0,6278.0,1040.0,5394.0,6114.0]},{"label":"Aircraft Lease - Caravan","vals":[0,0,0,0,0,0,0,0,0,0,31821.0,60460.0]},{"label":"Aircraft Tracking","vals":[1273.0,1247.0,1256.0,1291.4,1218.0,322.9,636.0,929.0,1017.0,2565.0,1944.0,2203.0]},{"label":"Aviation Fuel","vals":[32845.0,43345.0,25374.0,50090.4,32636.0,16914.6,37019.0,43097.0,52847.0,93261.0,70696.0,80122.0]},{"label":"Cash Commission","vals":[3000.0,3000.0,6000.0,9000.4,3000.0,2999.6,11000.0,7000.0,3000.0,13396.0,10155.0,11509.0]},{"label":"Credit Card Charges","vals":[3564.0,2526.0,3487.0,4958.0,3633.0,4629.6,6638.0,7219.0,5892.0,11874.0,9001.0,10202.0]},{"label":"Cruise Costs","vals":[10045.0,47954.0,31260.0,39264.4,23119.0,18017.6,29118.0,65392.0,91699.0,99318.0,75287.0,85325.0]},{"label":"Landing Fees","vals":[13526.0,16365.0,14713.0,10817.4,13904.0,9548.0,20679.0,28871.0,35771.0,45824.0,34737.0,39368.0]},{"label":"Lunch Purchases","vals":[0,341.0,22.0,219.0,5.0,2002.0,0,0,121.0,756.0,573.0,650.0]},{"label":"Marketing","vals":[109.0,245.0,0,82.0,2403.0,0,5042.0,7973.0,4030.0,5549.0,4207.0,4767.0]},{"label":"Subload Expense","vals":[13209.0,6304.0,0,5348.0,2557.4,3737.0,2190.6,5005.0,10643.4,13673.4,10365.0,11746.7]},{"label":"Taxi","vals":[498.0,656.0,1367.0,2292.0,643.4,837.0,495.6,1810.0,3246.4,3305.4,2506.0,2839.7]}],"opex":[{"label":"ACC Levy","vals":[0,0,0,17277.0,10769.0,0,0,0,0,0,0,0]},{"label":"Accountancy Fees","vals":[0,0,71.0,142.0,755.0,74.0,0,80.0,0,3000.0,0,0]},{"label":"Advertising","vals":[3165.0,14640.0,594.0,3094.0,1474.0,1718.0,2034.0,976.0,1473.0,1890.0,1890.0,1890.0]},{"label":"Bank Charges","vals":[126.0,107.0,69.0,69.0,69.0,82.0,69.0,74.0,69.0,72.0,72.0,72.0]},{"label":"CAA","vals":[0,6040.0,0,1690.0,1941.0,0,0,2806.0,0,0,0,0]},{"label":"Computer Expenses","vals":[0,0,0,0,0,0,416.0,0,923.0,0,0,0]},{"label":"Donations","vals":[3000.0,0,0,0,0,0,0,0,0,0,0,0]},{"label":"EFTPOS Fees","vals":[65.0,65.0,65.0,65.0,65.0,65.0,65.0,65.0,65.0,65.0,65.0,65.0]},{"label":"Exchange Rate Variation","vals":[0,0,8.0,0,0,0,0,0,0,0,0,0]},{"label":"General Expenses","vals":[1063.0,263.0,1913.0,490.0,225.0,195.0,280.0,50.0,1398.0,434.0,434.0,434.0]},{"label":"Insurance","vals":[4549.0,4549.0,4549.0,3923.0,0,0,13325.0,2861.0,2861.0,2861.0,2861.0,2861.0]},{"label":"Licenses & Registrations","vals":[746.0,724.0,134.0,0,0,1885.0,767.0,0,639.0,0,0,0]},{"label":"Light, Power & Heating","vals":[69.0,64.0,86.0,52.0,62.0,56.0,2860.0,61.0,1037.0,675.0,675.0,675.0]},{"label":"Medicals","vals":[0,0,374.0,0,366.0,0,0,0,0,0,0,0]},{"label":"Met Service","vals":[150.0,85.0,85.0,150.0,150.0,150.0,150.0,150.0,150.0,150.0,150.0,150.0]},{"label":"Motor Vehicle Expenses","vals":[0,0,1042.0,-1042.0,1042.0,0,0,0,0,0,0,0]},{"label":"Plant & Equipment Hire","vals":[657.0,679.0,657.0,679.0,679.0,657.0,679.0,657.0,0,0,0,0]},{"label":"Printing & Stationery","vals":[1062.0,0,305.0,275.0,297.0,129.0,253.0,98.0,85.0,250.0,250.0,200.0]},{"label":"Rent","vals":[6137.0,6137.0,10477.0,8222.0,9070.0,13568.0,10448.0,10448.0,10448.0,10448.0,10448.0,10448.0]},{"label":"Repairs & Maintenance","vals":[0,870.0,0,659.0,1240.0,1139.0,165.0,0,270.0,200.0,200.0,200.0]},{"label":"Repairs & Maintenance - Aircraft","vals":[56226.0,33343.0,28180.0,4885.0,47080.0,23384.0,4715.0,7536.0,92331.0,45651.0,30000.0,30000.0]},{"label":"Staff Training","vals":[0,0,0,0,0,1870.0,0,815.0,211.0,0,0,0]},{"label":"Subcontractors","vals":[0,0,0,0,0,3598.0,6596.0,7995.0,7396.0,10000.0,4000.0,3000.0]},{"label":"Subscriptions","vals":[2190.0,8648.0,330.0,5366.0,3455.0,629.0,1630.0,793.0,320.0,609.0,609.0,609.0]},{"label":"Telephone, Tolls & Internet","vals":[1449.0,302.0,1126.0,1006.0,905.0,924.0,1445.0,1291.0,1246.0,1283.0,1283.0,1283.0]},{"label":"Tracel Local","vals":[0,0,0,0,0,115.0,0,0,0,0,0,0]},{"label":"Uniform","vals":[361.0,2068.0,0,0,342.0,0,1837.0,0,0,0,0,0]},{"label":"Vehicle Expenses","vals":[766.0,944.0,732.0,536.0,1118.0,466.0,662.0,1117.0,1119.0,744.0,744.0,744.0]},{"label":"Wages & Salaries","vals":[80270.0,103295.0,60779.0,73046.0,103897.0,58368.0,75910.0,61555.0,64687.0,85021.0,78349.0,78349.0]},{"label":"Website Adwords","vals":[2000.0,1000.0,2569.0,2906.0,2460.0,1112.0,1955.0,1996.0,1751.0,0,1000.0,3507.0]},{"label":"Website Expenses","vals":[4303.0,3390.0,1199.0,5376.0,5332.0,4188.0,4137.0,757.0,3742.0,5857.0,5672.0,5800.0]}]}];}
 </script>
 </body>
 </html>

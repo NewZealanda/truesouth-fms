@@ -116,8 +116,11 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
   **v24.44 — Loan schedules tab (`_bizRenderLoans`):** reusable amortisation engine `_bizLoanSchedule`
   — each loan = principal/rate/term/start + editable **interest-only months** + **lump-sum paydowns**
   (re-amortises after each); month-by-month schedule + summary; seeded KBC1/KBC2/SHD/Vendor;
-  engine unit-tested. Still "coming" tabs: FY budgets (per-month drivers → departures → capacity → pax
-  → revenue), P&L (FY25/26), Running costs, Pax tracker, Timeline cashflow, Roster pay rates.
+  engine unit-tested. **v24.46–v24.49 — ALL workbook tabs now built & interactive:** Running costs
+  (per-aircraft cost/hr), Loan timeline (consolidated monthly cashflow), Pay rates, Pax tracker (daily
+  vs target/last-year), FY Budgets (FY26/27 pax+revenue forecast — drivers→departures→pax=Σeffseats×dep
+  →revenue, verified vs sheet), and P&L (FY26/FY25 — line items→Total COS/Gross/EBITDA, seeded via
+  `_bizPnlDefault()`, totals verified vs sheet). All seeded from the .xlsx and persisted to ts_settings.
 - **Flight & Duty (v24.37–v24.40) — `modules/flightduty.js`.** Advisory NZ flight-and-duty +
   currency tracker (now live). See below for the engine; v24.39 added the look-ahead headroom panel
   + running Duty-30d column; v24.40 added 15-min time dropdowns/steppers + a "now" button.
