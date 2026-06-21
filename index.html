@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.56';
+const APP_VER='v24.57';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -15915,6 +15915,9 @@ window.fdShiftMonth=function(dir){
 };
 window.fdSetPilot=function(uid){S._fdPilot=uid;render();};
 window.fdSetTab=function(t){S._fdTab=t;render();};
+window.fdToggleLA=function(){S._fdLA=!S._fdLA;render();};          // look-ahead collapse toggle
+window.fdEditRow=function(ds){S._fdEditRow=ds;render();};          // open a day's row for editing
+window.fdEditDone=function(){S._fdEditRow=null;render();};         // close the editing row
 
 // Prefill landings for a day from the calendar PIC allocation (best-effort, only for the loaded date).
 window.fdPrefillLandings=function(uid,ds){
@@ -15975,9 +15978,8 @@ function _fdRenderRecord(canManage){
   var L=_fdLimits();
   var h='';
 
-  // header: pilot picker (managers) + month nav
-  h+='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">';
-  h+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">';
+  // header: pilot picker (managers) / pilot name. Month nav now sits just above the day list.
+  h+='<div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">';
   if(canManage){
     h+='<select class="fi" style="font-size:13px;max-width:200px" onchange="window.fdSetPilot(this.value)"><option value="">— select pilot —</option>'+
       _fdPilots().map(function(p){return '<option value="'+_rzEscSafe(p.id)+'"'+(p.id===S._fdPilot?' selected':'')+'>'+_rzEscSafe(p.name)+'</option>';}).join('')+'</select>';
@@ -15985,11 +15987,6 @@ function _fdRenderRecord(canManage){
     h+='<div style="font-weight:800;font-size:16px">'+_rzEscSafe((u&&u.name)||'My record')+'</div>';
   }
   h+='</div>';
-  h+='<div style="display:flex;align-items:center;gap:6px">'+
-    '<button class="btn btn-ghost" style="font-size:13px;padding:4px 10px" onclick="window.fdShiftMonth(-1)">◁</button>'+
-    '<span style="font-weight:700;font-size:13px;min-width:120px;text-align:center">'+_rzEscSafe(_fdMonthLabel(month))+'</span>'+
-    '<button class="btn btn-ghost" style="font-size:13px;padding:4px 10px" onclick="window.fdShiftMonth(1)">▶</button>'+
-    '</div></div>';
 
   if(canManage&&!S._fdPilot){
     return h+'<div class="card" style="text-align:center;padding:30px;color:var(--text3);font-size:13px">Select a pilot to view their flight &amp; duty record.</div>';
@@ -16061,25 +16058,32 @@ function _fdRenderRecord(canManage){
   function _r1(x){return Math.round(x*100)/100;}
   function _fdShort(d){var o=_fdDateObj(d);return o?o.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'}):d;}
   var _laTh=function(t,al){return '<th style="text-align:'+(al||'center')+';padding:6px 6px;font-size:10px;color:var(--text3);font-weight:700">'+t+'</th>';};
-  h+='<div class="card"><div class="st">Look ahead — how much you can still work <span style="font-weight:400;font-size:11px;color:var(--text3)">— if no further duty is added before then</span></div>';
-  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:440px;table-layout:fixed">';
-  h+='<colgroup><col style="width:118px"><col style="width:62px"><col style="width:64px"><col style="width:64px"><col style="width:64px"><col style="width:64px"></colgroup>';
-  h+='<thead><tr style="background:var(--card2)">'+_laTh('Date','left')+_laTh('Rolls off')+_laTh('Duty/30')+_laTh('Can work')+_laTh('Flight/30')+_laTh('Can fly')+'</tr></thead><tbody>';
-  for(var k=0;k<14;k++){
-    var fd=_fdAddDays(asOf,k);
-    var pd=_fdValueFor(uid,'duty_30',fd),pf=_fdValueFor(uid,'flt_30',fd);   // existing entries only → declines
-    var rollOff=_fdDutyHours(_fdRow(uid,_fdAddDays(fd,-30))||{});
-    var dCol=_FD_COL[_fdStatus(pd,L.duty_30)],fCol=_FD_COL[_fdStatus(pf,L.flt_30)];
-    h+='<tr style="border-top:1px solid var(--border2)'+(k===0?';background:rgba(124,58,237,.06)':'')+'">'+
-      '<td style="padding:4px 8px;white-space:nowrap">'+(k===0?'<b>Today</b> · ':'')+_rzEscSafe(_fdShort(fd))+'</td>'+
-      '<td style="padding:4px;text-align:center;color:var(--text3)">'+(rollOff?'−'+_r1(rollOff):'')+'</td>'+
-      '<td style="padding:4px;text-align:center;font-weight:700;color:'+dCol+'">'+_r1(pd)+'</td>'+
-      '<td style="padding:4px;text-align:center;font-weight:800;color:'+dCol+'">'+_r1(Math.max(0,L.duty_30.val-pd))+'h</td>'+
-      '<td style="padding:4px;text-align:center;font-weight:700;color:'+fCol+'">'+_r1(pf)+'</td>'+
-      '<td style="padding:4px;text-align:center;font-weight:800;color:'+fCol+'">'+_r1(Math.max(0,L.flt_30.val-pf))+'h</td>'+
-      '</tr>';
+  var laOpen=!!S._fdLA;
+  h+='<div class="card">';
+  h+='<div onclick="window.fdToggleLA()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:800;font-size:13px">'+
+     '<span>Look ahead <span style="font-weight:400;font-size:11px;color:var(--text3)">— how much you can still work</span></span>'+
+     '<span style="font-size:11px;color:var(--text3);font-weight:700">'+(laOpen?'▲ Hide':'▼ Show')+'</span></div>';
+  if(laOpen){
+    h+='<div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:440px;table-layout:fixed">';
+    h+='<colgroup><col style="width:118px"><col style="width:62px"><col style="width:64px"><col style="width:64px"><col style="width:64px"><col style="width:64px"></colgroup>';
+    h+='<thead><tr style="background:var(--card2)">'+_laTh('Date','left')+_laTh('Rolls off')+_laTh('Duty/30')+_laTh('Can work')+_laTh('Flight/30')+_laTh('Can fly')+'</tr></thead><tbody>';
+    for(var k=0;k<14;k++){
+      var fd=_fdAddDays(asOf,k);
+      var pd=_fdValueFor(uid,'duty_30',fd),pf=_fdValueFor(uid,'flt_30',fd);   // existing entries only → declines
+      var rollOff=_fdDutyHours(_fdRow(uid,_fdAddDays(fd,-30))||{});
+      var dCol=_FD_COL[_fdStatus(pd,L.duty_30)],fCol=_FD_COL[_fdStatus(pf,L.flt_30)];
+      h+='<tr style="border-top:1px solid var(--border2)'+(k===0?';background:rgba(124,58,237,.06)':'')+'">'+
+        '<td style="padding:4px 8px;white-space:nowrap">'+(k===0?'<b>Today</b> · ':'')+_rzEscSafe(_fdShort(fd))+'</td>'+
+        '<td style="padding:4px;text-align:center;color:var(--text3)">'+(rollOff?'−'+_r1(rollOff):'')+'</td>'+
+        '<td style="padding:4px;text-align:center;font-weight:700;color:'+dCol+'">'+_r1(pd)+'</td>'+
+        '<td style="padding:4px;text-align:center;font-weight:800;color:'+dCol+'">'+_r1(Math.max(0,L.duty_30.val-pd))+'h</td>'+
+        '<td style="padding:4px;text-align:center;font-weight:700;color:'+fCol+'">'+_r1(pf)+'</td>'+
+        '<td style="padding:4px;text-align:center;font-weight:800;color:'+fCol+'">'+_r1(Math.max(0,L.flt_30.val-pf))+'h</td>'+
+        '</tr>';
+    }
+    h+='</tbody></table></div><div style="font-size:11px;color:var(--text3);padding:6px 2px">"Rolls off" = duty that leaves the 30-day window that day. "Can work / fly" = hours left to your 30-day limit ('+L.duty_30.val+'h duty / '+L.flt_30.val+'h flight) if nothing more is added before then.</div>';
   }
-  h+='</tbody></table></div><div style="font-size:11px;color:var(--text3);padding:6px 2px">"Rolls off" = duty that leaves the 30-day window that day. "Can work / fly" = hours left to your 30-day limit ('+L.duty_30.val+'h duty / '+L.flt_30.val+'h flight) if nothing more is added before then.</div></div>';
+  h+='</div>';
 
   // ── daily grid for the month ──
   var _gTh=function(t,c){return '<th style="text-align:center;padding:7px 4px;font-size:10px;color:'+(c||'var(--text3)')+';font-weight:700">'+t+'</th>';};
@@ -16100,6 +16104,13 @@ function _fdRenderRecord(canManage){
   }
   // Landing-entry columns appear ONLY for the types the pilot is rated on (derived from endorsements).
   var showC=types.indexOf('c208b')>=0, showG=types.indexOf('ga8')>=0;
+  // Month selector sits directly above the day list (was up in the header).
+  h+='<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin:6px 0 8px">'+
+    '<button class="btn btn-ghost" style="font-size:14px;padding:5px 14px" onclick="window.fdShiftMonth(-1)">◁</button>'+
+    '<span style="font-weight:800;font-size:15px;min-width:160px;text-align:center">'+_rzEscSafe(_fdMonthLabel(month))+'</span>'+
+    '<button class="btn btn-ghost" style="font-size:14px;padding:5px 14px" onclick="window.fdShiftMonth(1)">▶</button>'+
+    '</div>';
+  h+='<div style="font-size:11px;color:var(--text3);padding:0 2px 6px">Tap a day to enter or edit its times, flight hours and landings.</div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:'+(580+(showC?60:0)+(showG?60:0))+'px;table-layout:fixed">';
   h+='<colgroup><col style="width:94px"><col style="width:120px"><col style="width:146px"><col style="width:52px"><col style="width:62px"><col style="width:60px">'+(showC?'<col style="width:58px">':'')+(showG?'<col style="width:58px">':'')+'<col style="width:40px"></colgroup>';
   h+='<thead><tr style="background:var(--card2)">'+
@@ -16110,6 +16121,9 @@ function _fdRenderRecord(canManage){
   var mDate=_fdDateObj(month+'-01');var y=mDate.getFullYear(),mo=mDate.getMonth();
   var daysIn=new Date(y,mo+1,0).getDate();
   var today=_fdToday();
+  // Default the open row to TODAY in the current month (so it's ready to fill); otherwise display-only.
+  var editRow=(S._fdEditRow!==undefined)?S._fdEditRow:(month===_fdMonth(today)?today:null);
+  var _dim='color:var(--text3)';
   for(var dd=1;dd<=daysIn;dd++){
     var ds=y+'-'+String(mo+1).padStart(2,'0')+'-'+String(dd).padStart(2,'0');
     var r=_fdRow(uid,ds)||{};
@@ -16119,17 +16133,38 @@ function _fdRenderRecord(canManage){
     var d30=_fdValueFor(uid,'duty_30',ds);var d30col=_FD_COL[_fdStatus(d30,L.duty_30)];
     var dow=_fdDateObj(ds).toLocaleDateString('en-NZ',{weekday:'short'});
     var isToday=ds===today;var future=ds>today;var off=!future&&_fdIsOffDay(uid,ds);
-    h+='<tr style="border-top:1px solid var(--border2);'+(isToday?'background:rgba(124,58,237,.06)':off?'background:rgba(100,116,139,.05)':'')+(future?'opacity:.55;':'')+'">'+
-      '<td style="padding:4px 8px;white-space:nowrap"><b>'+dd+'</b> <span style="color:var(--text3)">'+dow+'</span>'+(off?' <span style="font-size:9px;color:#94a3b8">off</span>':'')+'</td>'+
-      _timeCell(ds,'ds',r.ds,false)+
-      _timeCell(ds,'de',r.de,true)+
-      '<td style="padding:3px 4px;text-align:center;font-weight:700;color:'+dHotCol+'">'+(dh?Math.round(dh*10)/10:'')+'</td>'+
-      '<td style="padding:3px 4px;text-align:center;font-weight:700;color:'+(d30?d30col:'var(--text3)')+'">'+(d30?Math.round(d30*10)/10:'')+'</td>'+
-      '<td style="padding:3px 4px"><input type="number" step="0.1" min="0" value="'+(r.ft!=null&&r.ft!==''?r.ft:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'ft\',this.value)" style="'+_inS+'"></td>'+
-      (showC?'<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lc!=null&&r.lc!==''?r.lc:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lc\',this.value)" style="'+_inS+'"></td>':'')+
-      (showG?'<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lg!=null&&r.lg!==''?r.lg:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lg\',this.value)" style="'+_inS+'"></td>':'')+
-      '<td style="padding:3px 4px;text-align:center"><input type="checkbox" '+(r.ext?'checked':'')+' onchange="window.fdToggle(\''+uid+'\',\''+ds+'\',\'ext\')"></td>'+
-      '</tr>';
+    var editing=(ds===editRow);
+    var dhTxt=dh?(''+(Math.round(dh*100)/100)):'';     // duty hrs to 0.25 precision
+    var d30Txt=d30?(''+(Math.round(d30*10)/10)):'';
+    var rowBg=isToday?'background:rgba(124,58,237,.16);':(editing?'background:rgba(96,165,250,.10);':(off?'background:rgba(100,116,139,.05);':''));
+    var rowStyle='border-top:1px solid var(--border2);'+(isToday?'box-shadow:inset 3px 0 0 #7c3aed;':'')+rowBg+(future&&!editing?'opacity:.55;':'');
+    var dateCell='<b>'+dd+'</b> <span style="color:var(--text3)">'+dow+'</span>'+
+      (isToday?' <span style="font-size:9px;color:#a78bfa;font-weight:800">TODAY</span>':off?' <span style="font-size:9px;color:#94a3b8">off</span>':'');
+    if(editing){
+      h+='<tr style="'+rowStyle+'">'+
+        '<td style="padding:4px 8px;white-space:nowrap">'+dateCell+' <button title="Done" onclick="window.fdEditDone()" style="border:none;background:none;color:#4ade80;font-weight:800;cursor:pointer;font-size:14px;padding:0 2px">✓</button></td>'+
+        _timeCell(ds,'ds',r.ds,false)+
+        _timeCell(ds,'de',r.de,true)+
+        '<td style="padding:3px 4px;text-align:center;font-weight:700;color:'+dHotCol+'">'+dhTxt+'</td>'+
+        '<td style="padding:3px 4px;text-align:center;font-weight:700;color:'+(d30?d30col:'var(--text3)')+'">'+d30Txt+'</td>'+
+        '<td style="padding:3px 4px"><input type="number" step="0.1" min="0" value="'+(r.ft!=null&&r.ft!==''?r.ft:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'ft\',this.value)" style="'+_inS+'"></td>'+
+        (showC?'<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lc!=null&&r.lc!==''?r.lc:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lc\',this.value)" style="'+_inS+'"></td>':'')+
+        (showG?'<td style="padding:3px 4px"><input type="number" min="0" value="'+(r.lg!=null&&r.lg!==''?r.lg:'')+'" onchange="window.fdEditField(\''+uid+'\',\''+ds+'\',\'lg\',this.value)" style="'+_inS+'"></td>':'')+
+        '<td style="padding:3px 4px;text-align:center"><input type="checkbox" '+(r.ext?'checked':'')+' onchange="window.fdToggle(\''+uid+'\',\''+ds+'\',\'ext\')"></td>'+
+        '</tr>';
+    } else {
+      h+='<tr onclick="window.fdEditRow(\''+ds+'\')" style="cursor:pointer;'+rowStyle+'">'+
+        '<td style="padding:7px 8px;white-space:nowrap">'+dateCell+'</td>'+
+        '<td style="padding:7px 4px;text-align:center;'+(r.ds?'':_dim)+'">'+(r.ds||'·')+'</td>'+
+        '<td style="padding:7px 4px;text-align:center;'+(r.de?'':_dim)+'">'+(r.de||'·')+'</td>'+
+        '<td style="padding:7px 4px;text-align:center;font-weight:700;color:'+(dh?dHotCol:'var(--text3)')+'">'+(dh?dhTxt:'·')+'</td>'+
+        '<td style="padding:7px 4px;text-align:center;font-weight:700;color:'+(d30?d30col:'var(--text3)')+'">'+(d30?d30Txt:'·')+'</td>'+
+        '<td style="padding:7px 4px;text-align:center;'+((r.ft!=null&&r.ft!=='')?'':_dim)+'">'+((r.ft!=null&&r.ft!=='')?r.ft:'·')+'</td>'+
+        (showC?'<td style="padding:7px 4px;text-align:center;'+((r.lc!=null&&r.lc!=='')?'color:#22c55e;font-weight:700':_dim)+'">'+((r.lc!=null&&r.lc!=='')?r.lc:'·')+'</td>':'')+
+        (showG?'<td style="padding:7px 4px;text-align:center;'+((r.lg!=null&&r.lg!=='')?'color:#60a5fa;font-weight:700':_dim)+'">'+((r.lg!=null&&r.lg!=='')?r.lg:'·')+'</td>':'')+
+        '<td style="padding:7px 4px;text-align:center">'+(r.ext?'<span style="color:#f59e0b;font-weight:800">✓</span>':'<span style="color:var(--text3)">·</span>')+'</td>'+
+        '</tr>';
+    }
   }
   h+='</tbody></table></div>';
   h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px"><b>Duty&nbsp;30d</b> = rolling duty over the previous 30 days (towards the '+L.duty_30.val+'h limit). <b>Ext</b> = tick when a commenced duty ran past 11h to 12h to finish a disrupted schedule. Start/end times are locked to 15-minute blocks. Advisory only — your printed &amp; signed monthly record is the controlled document; limits in Settings ▸ Operations ▸ Flight &amp; Duty.</div>';
