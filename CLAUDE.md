@@ -90,7 +90,27 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v24.29** — built+verified, ready to commit. See `HANDOFF.md` for the full log.
+- Latest version: **v24.31** — built+verified, ready to commit. See `HANDOFF.md` for the full log.
+- **Transport (pickups + drop-offs) (v24.31):** the Ground ▸ **Pickups** sub-tab is renamed **Transport**
+  (id still `pickups`). `_rzPickups` now emits, for every non-flyback non-self-drive pickup, a SECOND
+  "drop-off" entry (`id+'|D'`, `depart=_rzDropDep(pdep)` = `'↩'+dep`, `dropoff:true`) duplicating the
+  pax for the tour's return; flybacks stay a single drop-off under `'Flybacks'`; self-drive pax get no
+  drop-off. Every entry carries `ac=_rzBookingAc(b,order)` (aircraft flown). New helpers near
+  `RZ_FLYBACK_DEP`: `RZ_DROP_PREFIX '↩'`, `RZ_PK_COL`(green)/`RZ_DROP_COL`(amber), `_rzDropDep`,
+  `_rzIsDropDep`, `_rzDropDepBase`, `_rzTransDepLabel`, `_rzTransDepSort`, `_rzAcPill`. Drop-off
+  departures are first-class (flow through the per-dep van/driver/ack model). The board: departure
+  chips are colour-coded (pickup green / drop-off amber) with ◀▶ **reorder** controls (persisted in
+  `S._rzDepOrder` → blob field `depOrder`), a **✈ By aircraft** toggle (`S._rzTransByAc`) that groups
+  each van's stops under aircraft sub-headers, and an aircraft pill on every drop-off card (dispatch +
+  My Pickups). NOT YET: auto-merging a tour's drop-off with the flyback run into one combined return
+  (they're separate reorderable departures for now; combine by assigning the same driver/van to both).
+  No fixed return times (operator reorders the list). ⚠️ NEEDS a real-device pass.
+- **Flyback drop-offs (v24.30):** flyback items (FLB/CCF) in `_rzPickups` now get `depart=RZ_FLYBACK_DEP`
+  (`'Flybacks'`) + a `dropoff:true` flag instead of inheriting the held outbound time — so they form
+  their own **Flybacks** departure on the Pickups board / My Pickups. Dropoff cards/labels swap
+  "Pickup"→"Drop-off", 📍→📦, "Mark collected"→"Mark dropped off", show a 🛬 FLYBACK DROP-OFF tag,
+  and the dep chips/tabs read "Flybacks ⬇ / 🛬 Flybacks" with a "drop" unit. (pickupTime is still
+  whatever Rezdy supplies — afternoon dropoff time refinement TBD.)
 - **Calendar (v24.29):** (a) FLB/CCF held in a **1200** Rezdy slot now render as a 1-hour block
   **15:30–16:30** (the actual flyback time), not the held outbound slot — in the bkBlocks map:
   `if(_rzIsFlyback(g.product)&&sm===720){g.start='15:30';g.end='16:30';}` (key/grouping unchanged,

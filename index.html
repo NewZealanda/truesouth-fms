@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.29';
+const APP_VER='v24.31';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -11990,6 +11990,23 @@ function _rzRenderPickupLocs(){
 // "Flybacks" group (a single 1530 return for now; summer's multiple flyback runs come later).
 var RZ_FLYBACK_DEP='Flybacks';
 function _rzBookingIsFlyback(b){return ((b&&b.items)||[]).some(function(it){return _rzIsFlyback(_rzProduct(it&&it.product));});}
+// ── Drop-offs (Transport) ─────────────────────────────────────────────────────
+// Every picked-up passenger also needs DROPPING OFF on the tour's return. We model the return as a
+// separate "drop-off" departure derived from the pickup departure, prefixed with '↩' (e.g. the
+// 0930 pickup run → the '↩0930' drop-off run). Flybacks (FLB/CCF) are return-only, so they're
+// drop-offs too (their own 'Flybacks' departure). No fixed return times — the list is reorderable.
+var RZ_DROP_PREFIX='↩';
+var RZ_PK_COL='#4ade80';   // pickups → green
+var RZ_DROP_COL='#f59e0b'; // drop-offs → amber
+function _rzDropDep(dep){return RZ_DROP_PREFIX+String(dep||'');}
+function _rzIsDropDep(dep){dep=String(dep||'');return dep.charAt(0)===RZ_DROP_PREFIX||dep===RZ_FLYBACK_DEP;}
+function _rzDropDepBase(dep){dep=String(dep||'');return dep.charAt(0)===RZ_DROP_PREFIX?dep.slice(1):dep;}
+// Small "what aircraft did they fly on" pill for a drop-off card.
+function _rzAcPill(ac){if(!ac||ac==='__none__')return '';var c=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';return '<span title="Flew on '+_rzEsc(ac)+'" style="display:inline-flex;align-items:center;font-size:10px;font-weight:800;color:#fff;background:'+c+';border-radius:10px;padding:1px 7px;white-space:nowrap">✈ '+_rzEsc(String(ac).replace('ZK-',''))+'</span>';}
+// Chip/heading label for a Transport departure (pickup time, '<time> ⬇' drop-off, or 'Flybacks').
+function _rzTransDepLabel(dep){if(dep===RZ_FLYBACK_DEP)return 'Flybacks';if(_rzIsDropDep(dep))return _rzDropDepBase(dep)+' ⬇';return String(dep||'');}
+// Default ordering value: pickups first (by time), then drop-offs (by base time +1000m), flybacks last.
+function _rzTransDepSort(dep){if(dep===RZ_FLYBACK_DEP)return 100000;if(_rzIsDropDep(dep))return 10000+_rzDepMin(_rzDropDepBase(dep));return _rzDepMin(dep);}
 // Sort key for a departure: real "HHMM" → minutes; the Flyback group sits at its 1530 slot.
 function _rzDepSortMin(dep){if(dep===RZ_FLYBACK_DEP)return 15*60+30;return _rzDepMin(dep);}
 function _rzDepCmp(a,b){var d=_rzDepSortMin(a)-_rzDepSortMin(b);return d!==0?d:String(a).localeCompare(String(b));}
@@ -12071,22 +12088,26 @@ function _rzPickups(){
   const out=[];const ov=S._pickupLocOverride||{};const tov=S._pickupTimeOverride||{};
   (S._rezdyBookings||[]).forEach(function(b){
     if(/cancel/i.test(b.status||''))return; // don't send drivers to collect cancelled customers
+    const _ac=_rzBookingAc(b,String(b.orderNumber||'')); // the aircraft they're flying on (for the drop-off pill)
     (b.items||[]).forEach(function(it,ii){
       if(!it.pickup)return;
       // include the item index so two same-product/same-time items in one order don't collide
       const id=String(b.orderNumber||'')+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;
       const loc=(ov[id]!=null&&ov[id]!=='')?ov[id]:(it.pickup||'');
-      out.push({
-        id:id,
-        order:b.orderNumber||'',
-        customer:b.customerName||'',
-        pax:parseInt(it.quantity,10)||1,
-        location:loc,
-        phone:b.phone||'',
-        depart:_rzDepTime(it.startTimeLocal||''),
-        pickupTime:(tov[id]!=null&&tov[id]!=='')?tov[id]:_rzDepTime(it.pickupTime||''),
-        selfDrive:_rzIsSelfDrive(loc)
-      });
+      const pdep=_rzDepTime(it.startTimeLocal||'');
+      const sd=_rzIsSelfDrive(loc);
+      const ptime=(tov[id]!=null&&tov[id]!=='')?tov[id]:_rzDepTime(it.pickupTime||'');
+      const base={order:b.orderNumber||'',customer:b.customerName||'',pax:parseInt(it.quantity,10)||1,location:loc,phone:b.phone||'',ac:_ac,selfDrive:sd};
+      // Flybacks (FLB/CCF) ride the RETURN leg — there's no morning pickup, they're a DROP-OFF only
+      // (fly Milford→Queenstown, then drive pax to their accommodation) under the "Flybacks" run.
+      if(_rzIsFlyback(_rzProduct(it.product))){
+        out.push(Object.assign({},base,{id:id,depart:RZ_FLYBACK_DEP,pickupTime:ptime,dropoff:true}));
+        return;
+      }
+      // Morning pickup …
+      out.push(Object.assign({},base,{id:id,depart:pdep,pickupTime:ptime,dropoff:false}));
+      // … and the matching RETURN drop-off (self-drive pax collect their own car, so skip them).
+      if(!sd)out.push(Object.assign({},base,{id:id+'|D',depart:_rzDropDep(pdep),pickupTime:'',dropoff:true}));
     });
   });
   return out;
@@ -12208,7 +12229,7 @@ function renderGround(){
   var gt=(S._groundTab==='mypickups')?'mypickups':'pickups';S._groundTab=gt;
   S._rzPrevSub=gt;
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    [{id:'pickups',lbl:'Pickups'},{id:'mypickups',lbl:'My Pickups'}].map(function(t){
+    [{id:'pickups',lbl:'Transport'},{id:'mypickups',lbl:'My Pickups'}].map(function(t){
       return '<button class="sub-tab '+(gt===t.id?'on':'')+'" onclick="S._groundTab=\''+t.id+'\';render()">'+t.lbl+'</button>';
     }).join('')+'</div>';
   var body=(gt==='mypickups')?_rzRenderMyPickups():_rzRenderPickups();
@@ -13225,7 +13246,9 @@ function _rzRenderPickups(){
   // Resolve the SELECTED departure up-front — drivers, the active/parked van set and ack are all
   // PER DEPARTURE now, so the spare bin and driver slots need to know which run we're looking at.
   const byTime={};vanPickups.forEach(function(p){(byTime[p.depart||'—']=byTime[p.depart||'—']||[]).push(p);});
-  const times=Object.keys(byTime).sort();
+  // Default order = pickups (by time) → drop-offs → flybacks; then apply the operator's manual order.
+  const times=Object.keys(byTime).sort(function(a,b){return _rzTransDepSort(a)-_rzTransDepSort(b);});
+  (function(){var ord=S._rzDepOrder||[];if(ord.length)times.sort(function(a,b){var ia=ord.indexOf(a),ib=ord.indexOf(b);if(ia<0&&ib<0)return _rzTransDepSort(a)-_rzTransDepSort(b);if(ia<0)return 1;if(ib<0)return -1;return ia-ib;});})();
   if((!depFilter||times.indexOf(depFilter)<0)&&times.length){
     if(S.rezdyDate===_rzToday()){var _now=new Date(),_nm=_now.getHours()*60+_now.getMinutes();depFilter=null;for(var _ti=0;_ti<times.length;_ti++){if(_rzDepMin(times[_ti])>=_nm){depFilter=times[_ti];break;}}if(!depFilter)depFilter=times[times.length-1];}
     else depFilter=times[0];
@@ -13273,10 +13296,13 @@ function _rzRenderPickups(){
   driversBar+='</div></div>';
   driversBar+='</div>';
 
+  var _nPk=vanPickups.filter(function(p){return !p.dropoff;}).length;
+  var _nDrop=vanPickups.filter(function(p){return p.dropoff;}).length;
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
-    '<div><div class="st" style="margin-bottom:0">Pickup Summary</div>'+
-      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+vanPickups.length+' pickups · '+vanPickups.reduce(function(s,p){return s+p.pax;},0)+' pax · '+_rzVehicles().length+' vehicles'+(selfDrive.length?' · '+selfDrive.length+' self-drive':'')+'</p></div>'+
+    '<div><div class="st" style="margin-bottom:0">Transport Summary</div>'+
+      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0"><span style="color:'+RZ_PK_COL+';font-weight:700">'+_nPk+' pickups</span> · <span style="color:'+RZ_DROP_COL+';font-weight:700">'+_nDrop+' drop-offs</span> · '+_rzVehicles().length+' vehicles'+(selfDrive.length?' · '+selfDrive.length+' self-drive':'')+'</p></div>'+
     '<div style="display:flex;gap:6px;flex-shrink:0">'+
+      '<button class="btn btn-ghost" style="font-size:12px'+(S._rzTransByAc?';border-color:rgba(96,165,250,.6);color:#60a5fa':'')+'" onclick="window.rzTransToggleByAc()" title="Group each van\'s stops by the aircraft flown">'+(S._rzTransByAc?'✈ By aircraft ✓':'✈ By aircraft')+'</button>'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.pickupAutoAllocate()">↺ Auto-allocate</button>'+
       '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.pickupSave()">💾 Save</button>'+
     '</div></div>';
@@ -13286,10 +13312,19 @@ function _rzRenderPickups(){
   // but operators asked for a Save close to the action).
   let timeBar='<div class="card" style="padding:10px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700">Departure</div>'+
     '<button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;border-color:rgba(74,222,128,.5);color:#4ade80;font-weight:700" onclick="window.pickupSave()" title="Save the pickup list & order">💾 Save pickups</button></div><div style="display:flex;flex-wrap:wrap;gap:6px">';
-  times.forEach(function(t){
+  var _ordJs=encodeURIComponent(JSON.stringify(times.slice()));
+  times.forEach(function(t,ti){
     const grp=byTime[t];const pax=grp.reduce(function(s,p){return s+p.pax;},0);
     const on=depFilter===t;
-    timeBar+='<button onclick="window.pickupSetDepFilter(\''+_rzEsc(t).replace(/'/g,"\\'")+'\')" style="padding:4px 10px;border-radius:12px;background:'+(on?'rgba(124,58,237,.25)':'var(--card2)')+';border:1px solid '+(on?'#7c3aed':'var(--border2)')+';font-size:11px;color:'+(on?'#c4b5fd':'var(--text2)')+';cursor:pointer;font-weight:'+(on?'700':'400')+'"><b>'+_rzEsc(t)+'</b> · '+grp.length+' pk / '+pax+' pax</button>';
+    const _drop=_rzIsDropDep(t);
+    const _lbl=_rzTransDepLabel(t);const _unit=_drop?'drop':'pk';
+    const _accent=_drop?RZ_DROP_COL:RZ_PK_COL; // pickups vs drop-offs colour-coded
+    const _tEsc=_rzEsc(t).replace(/'/g,"\\'");
+    timeBar+='<div style="display:inline-flex;align-items:center;border-radius:12px;background:'+(on?_accent+'33':'var(--card2)')+';border:1px solid '+(on?_accent:'var(--border2)')+';overflow:hidden">'+
+      '<button onclick="window.rzTransMoveDep(\''+_tEsc+'\',-1,\''+_ordJs+'\')" title="Move earlier in the list" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:5px 5px 5px 7px"'+(ti===0?' disabled':'')+'>◀</button>'+
+      '<button onclick="window.pickupSetDepFilter(\''+_tEsc+'\')" title="'+(_drop?'Return drop-off run':'Pickup run')+'" style="background:none;border:none;border-left:3px solid '+_accent+';padding:4px 8px;font-size:11px;color:'+(on?'var(--text1)':'var(--text2)')+';cursor:pointer;font-weight:'+(on?'700':'400')+'"><b>'+_lbl+'</b> · '+grp.length+' '+_unit+' / '+pax+' pax</button>'+
+      '<button onclick="window.rzTransMoveDep(\''+_tEsc+'\',1,\''+_ordJs+'\')" title="Move later in the list" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:5px 7px 5px 5px"'+(ti===times.length-1?' disabled':'')+'>▶</button>'+
+    '</div>';
   });
   timeBar+='</div></div>';
 
@@ -13328,19 +13363,23 @@ function _rzRenderPickups(){
     // Honour the manual run order (same S._pickupOrder the driver uses) so reordering here sticks.
     var _grp0=vanIds.map(function(id){return _rzPickupById(pickups,id);}).filter(function(p){return p&&(!depFilter||p.depart===depFilter);}).sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
     if(depFilter)_grp0=_rzApplyMyOrder(_grp0,vi,depFilter);
+    if(S._rzTransByAc)_grp0=_grp0.slice().sort(function(a,b){return String(a.ac||'~~').localeCompare(String(b.ac||'~~'));}); // group by aircraft when the toggle is on
     var _vlist=_grp0.map(function(p){return p.id;});
+    var _lastAc=null;
     if(!vanIds.length){
       vansH+='<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px;border:1px dashed var(--border2);border-radius:8px">Drop pickups here</div>';
     }else if(!_vlist.length){
-      vansH+='<div style="text-align:center;padding:14px;color:var(--text3);font-size:12px">No pickups at '+_rzEsc(depFilter)+'</div>';
+      vansH+='<div style="text-align:center;padding:14px;color:var(--text3);font-size:12px">Nothing on the '+_rzEsc(_rzTransDepLabel(depFilter))+' run</div>';
     }else{
       _vlist.forEach(function(id){
         const p=_rzPickupById(pickups,id);if(!p)return;
         const collected=!!S._pickupCollected[id];
+        const _pc=p.dropoff?RZ_DROP_COL:RZ_PK_COL;
+        if(S._rzTransByAc){var _ac=p.ac||'__none__';if(_ac!==_lastAc){_lastAc=_ac;vansH+='<div style="margin:6px 0 4px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);display:flex;align-items:center;gap:6px">'+(_rzAcPill(p.ac)||'<span style="color:var(--text3)">Unallocated</span>')+'</div>';}}
         vansH+='<div draggable="true" ondragstart="window.pickupDragStart(\''+_rzEsc(id).replace(/'/g,"\\'")+'\',event)" '+
-          'style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:10px;margin-bottom:8px;cursor:grab;'+(collected?'opacity:.55':'')+'">'+
+          'style="background:var(--card2);border:1px solid var(--border2);border-left:3px solid '+_pc+';border-radius:8px;padding:10px;margin-bottom:8px;cursor:grab;'+(collected?'opacity:.55':'')+'">'+
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">'+
-            '<div style="font-weight:700;font-size:13px;color:var(--text);min-width:0;'+(collected?'text-decoration:line-through':'')+'"><span style="color:var(--text3);font-weight:700;margin-right:6px;cursor:grab;font-size:17px;vertical-align:middle" title="Drag to reorder">≡</span>'+_rzEsc(p.customer||p.order)+'</div>'+
+            '<div style="font-weight:700;font-size:13px;color:var(--text);min-width:0;'+(collected?'text-decoration:line-through':'')+'"><span style="color:var(--text3);font-weight:700;margin-right:6px;cursor:grab;font-size:17px;vertical-align:middle" title="Drag to reorder">≡</span>'+_rzEsc(p.customer||p.order)+(p.dropoff&&p.ac?' '+_rzAcPill(p.ac):'')+'</div>'+
             '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">'+
               '<span style="font-size:11px;font-weight:700;color:'+col+'">'+p.pax+' pax</span>'+
               (depFilter?'<div style="display:flex;flex-direction:column;gap:2px">'+
@@ -13349,13 +13388,13 @@ function _rzRenderPickups(){
               '</div>':'')+
             '</div>'+
           '</div>'+
-          '<div style="display:flex;align-items:center;gap:5px;margin-top:4px"><span style="font-size:12px">📍</span>'+_rzLocSelect(p.id,p.location)+'</div>'+
-          (p.pickupTime?'<div style="font-size:11px;color:var(--text2);margin-top:3px;font-weight:700">🕑 Pickup '+_rzEsc(p.pickupTime)+'</div>':'')+
-          (p.depart?'<div style="font-size:11px;color:var(--text3);margin-top:2px">🛫 Dep '+_rzEsc(p.depart)+'</div>':'')+
+          '<div style="display:flex;align-items:center;gap:5px;margin-top:4px"><span style="font-size:12px">'+(p.dropoff?'📦':'📍')+'</span>'+_rzLocSelect(p.id,p.location)+'</div>'+
+          (p.pickupTime?'<div style="font-size:11px;color:var(--text2);margin-top:3px;font-weight:700">🕑 '+(p.dropoff?'Drop-off':'Pickup')+' '+_rzEsc(p.pickupTime)+'</div>':'')+
+          (p.dropoff?'<div style="font-size:11px;color:#f59e0b;margin-top:2px;font-weight:700">🛬 Flyback drop-off</div>':(p.depart?'<div style="font-size:11px;color:var(--text3);margin-top:2px">🛫 Dep '+_rzEsc(p.depart)+'</div>':''))+
           (p.phone?'<div style="font-size:12px;margin-top:4px"><a href="tel:'+_rzEsc(p.phone)+'" style="color:'+col+';text-decoration:none">📞 '+_rzEsc(p.phone)+'</a></div>':'')+
           '<button onclick="window.pickupToggleCollected(\''+_rzEsc(id).replace(/'/g,"\\'")+'\')" '+
             'style="margin-top:8px;width:100%;padding:9px;border-radius:7px;border:1px solid '+(collected?'#166534':'var(--border2)')+';background:'+(collected?'var(--ok-bg)':'transparent')+';color:'+(collected?'var(--ok-text)':'var(--text2)')+';font-size:13px;font-weight:700;cursor:pointer">'+
-            (collected?'✓ Collected':'Mark collected')+'</button>'+
+            (collected?(p.dropoff?'✓ Dropped off':'✓ Collected'):(p.dropoff?'Mark dropped off':'Mark collected'))+'</button>'+
           (function(){ // tap-to-move (iPhone: drag pickup→van doesn\'t work)
             var idE=_rzEsc(id).replace(/'/g,"\\'");var open=(S._pickupMovePick===id);
             var btn='<button onclick="event.stopPropagation();window.pickupMovePickOpen(\''+idE+'\')" style="margin-top:6px;width:100%;padding:8px;border-radius:7px;border:1px dashed var(--border2);background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">⇄ Move to another van '+(open?'▴':'▾')+'</button>';
@@ -13480,9 +13519,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -13504,6 +13543,7 @@ function _pkApplyBlob(d){
   S._rzSchedAttach=(d.schedAttach&&typeof d.schedAttach==='object')?d.schedAttach:{};
   S._rzCheckin=(d.checkin&&typeof d.checkin==='object')?d.checkin:{};
   S._pickupAck=(d.ack&&typeof d.ack==='object')?d.ack:{};
+  S._rzDepOrder=Array.isArray(d.depOrder)?d.depOrder:[];
 }
 function _pkSnapshot(d){try{return JSON.parse(JSON.stringify(d));}catch(e){return null;}}
 function _pkEq(a,b){try{return JSON.stringify(a===undefined?null:a)===JSON.stringify(b===undefined?null:b);}catch(e){return false;}}
@@ -13768,6 +13808,18 @@ window.myPkMove=function(vi,dep,id,dir){
   if(window.pickupSave)window.pickupSave(true);render();
 };
 window.pickupSetDepFilter=function(t){S._pickupDepFilter=(S._pickupDepFilter===t)?null:t;render();};
+// Reorder the Transport departure chips as the operator sees fit (persisted). `order` is the array
+// of dep keys in current display order; we splice the chosen one left/right and save.
+window.rzTransMoveDep=function(dep,dir,order){
+  try{order=JSON.parse(decodeURIComponent(order));}catch(e){order=[];}
+  if(!Array.isArray(order))return;
+  var i=order.indexOf(dep);if(i<0)return;var j=i+(dir<0?-1:1);if(j<0||j>=order.length)return;
+  var tmp=order[i];order[i]=order[j];order[j]=tmp;
+  S._rzDepOrder=order;
+  if(window.pickupSave)window.pickupSave(true);render();
+};
+// Toggle the "split by aircraft" visualisation on the Transport board.
+window.rzTransToggleByAc=function(){S._rzTransByAc=!S._rzTransByAc;render();};
 // Everyone rostered ON for the day, grouped by role — for the "+" driver picker (anyone can drive).
 function _rzRosteredByRole(){
   var ds=S.rezdyDate,roster=S.roster||{},off={rdo:1,off:1,leave:1,ul:1,sick:1};
@@ -13878,14 +13930,15 @@ function _rzRenderMyPickups(){
     '</div>';
   }
   // Departure tabs across my runs.
-  var myDeps=[];myRuns.forEach(function(r){if(myDeps.indexOf(r.dep)<0)myDeps.push(r.dep);});myDeps.sort();
+  var myDeps=[];myRuns.forEach(function(r){if(myDeps.indexOf(r.dep)<0)myDeps.push(r.dep);});myDeps.sort(function(a,b){return _rzTransDepSort(a)-_rzTransDepSort(b);});
   var selDep=(S._myPkDep&&myDeps.indexOf(S._myPkDep)>=0)?S._myPkDep:(myDeps[0]||null);
   var tabs='';
   if(myDeps.length){
     tabs='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px;-webkit-overflow-scrolling:touch;scrollbar-width:none">';
     myDeps.forEach(function(d){
       var cnt=0;myRuns.filter(function(r){return r.dep===d;}).forEach(function(r){_rzVanDepIds(r.vi,d).forEach(function(id){var p=_rzPickupById(pickups,id);if(p)cnt+=(p.pax||0);});});
-      tabs+='<button onclick="S._myPkDep=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" class="sub-tab '+(selDep===d?'on':'')+'" style="white-space:nowrap;flex-shrink:0">🛫 '+_rzEsc(_rzDepDisplay(d))+' <span style="opacity:.6">('+cnt+')</span></button>';
+      var _dropTab=_rzIsDropDep(d);
+      tabs+='<button onclick="S._myPkDep=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" class="sub-tab '+(selDep===d?'on':'')+'" style="white-space:nowrap;flex-shrink:0">'+(_dropTab?'🛬 '+_rzEsc(_rzTransDepLabel(d)):'🛫 '+_rzEsc(_rzDepDisplay(d)))+' <span style="opacity:.6">('+cnt+')</span></button>';
     });
     tabs+='</div>';
   }
@@ -13906,7 +13959,7 @@ function _rzRenderMyPickups(){
       var _isNew=!!_addedSet[p.id]; // added by dispatch since this driver last acknowledged
       h+='<div draggable="true" ondragstart="window.myPkDragStart(\''+_idD+'\',event)" ondragover="event.preventDefault()" ondrop="window.myPkDrop('+_viD+',\''+_depD+'\',\''+_idD+'\',event)" style="background:'+(_isNew?'rgba(34,197,94,.10)':'var(--card2)')+';border:'+(_isNew?'2px solid #22c55e':'1px solid var(--border2)')+';border-left:4px solid '+(_isNew?'#22c55e':col)+';border-radius:10px;padding:13px;margin-bottom:10px;cursor:grab;'+(collected?'opacity:.55':'')+'">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">'+
-          '<div style="font-weight:800;font-size:16px;color:var(--text1);min-width:0;'+(collected?'text-decoration:line-through':'')+'"><span style="color:var(--text3);font-weight:700;margin-right:8px;cursor:grab;font-size:20px;vertical-align:middle" title="Drag to reorder">≡</span>'+_rzEsc(p.customer||p.order)+(_isNew?' <span style="font-size:10px;font-weight:900;color:#06281a;background:#22c55e;padding:1px 6px;border-radius:10px;vertical-align:middle">NEW</span>':'')+'</div>'+
+          '<div style="font-weight:800;font-size:16px;color:var(--text1);min-width:0;'+(collected?'text-decoration:line-through':'')+'"><span style="color:var(--text3);font-weight:700;margin-right:8px;cursor:grab;font-size:20px;vertical-align:middle" title="Drag to reorder">≡</span>'+_rzEsc(p.customer||p.order)+(p.dropoff&&p.ac?' '+_rzAcPill(p.ac):'')+(_isNew?' <span style="font-size:10px;font-weight:900;color:#06281a;background:#22c55e;padding:1px 6px;border-radius:10px;vertical-align:middle">NEW</span>':'')+'</div>'+
           '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'+
             '<span style="font-size:13px;font-weight:800;color:'+col+'">'+p.pax+' pax</span>'+
             '<div style="display:flex;flex-direction:column;gap:3px">'+
@@ -13915,10 +13968,11 @@ function _rzRenderMyPickups(){
             '</div>'+
           '</div>'+
         '</div>'+
-        (p.pickupTime?'<div style="font-size:15px;font-weight:700;color:var(--text1);margin-bottom:3px">🕑 Pickup '+_rzEsc(p.pickupTime)+'</div>':'')+
-        '<div style="font-size:14px;color:var(--text2);margin-bottom:'+(p.phone?'8px':'10px')+'">📍 '+_rzEsc(p.location||'—')+'</div>'+
+        (p.pickupTime?'<div style="font-size:15px;font-weight:700;color:var(--text1);margin-bottom:3px">🕑 '+(p.dropoff?'Drop-off':'Pickup')+' '+_rzEsc(p.pickupTime)+'</div>':'')+
+        (p.dropoff?'<div style="font-size:11px;font-weight:800;color:'+RZ_DROP_COL+';margin-bottom:3px">🛬 '+(p.depart===RZ_FLYBACK_DEP?'FLYBACK ':'')+'DROP-OFF</div>':'')+
+        '<div style="font-size:14px;color:var(--text2);margin-bottom:'+(p.phone?'8px':'10px')+'">'+(p.dropoff?'📦':'📍')+' '+_rzEsc(p.location||'—')+'</div>'+
         (p.phone?'<div style="margin-bottom:10px"><a href="tel:'+_rzEsc(p.phone)+'" style="font-size:15px;font-weight:700;color:'+col+';text-decoration:none">📞 '+_rzEsc(p.phone)+'</a></div>':'')+
-        '<button onclick="window.pickupToggleCollected(\''+_rzEsc(p.id).replace(/'/g,"\\'")+'\')" style="width:100%;padding:14px;border-radius:9px;border:1px solid '+(collected?'#166534':'var(--border2)')+';background:'+(collected?'var(--ok-bg)':'transparent')+';color:'+(collected?'var(--ok-text)':'var(--text2)')+';font-size:15px;font-weight:800;cursor:pointer">'+(collected?'✓ Collected':'Mark collected')+'</button>'+
+        '<button onclick="window.pickupToggleCollected(\''+_rzEsc(p.id).replace(/'/g,"\\'")+'\')" style="width:100%;padding:14px;border-radius:9px;border:1px solid '+(collected?'#166534':'var(--border2)')+';background:'+(collected?'var(--ok-bg)':'transparent')+';color:'+(collected?'var(--ok-text)':'var(--text2)')+';font-size:15px;font-weight:800;cursor:pointer">'+(collected?(p.dropoff?'✓ Dropped off':'✓ Collected'):(p.dropoff?'Mark dropped off':'Mark collected'))+'</button>'+
       '</div>';
     });
     h+='</div>';
