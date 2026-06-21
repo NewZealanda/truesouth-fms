@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.42';
+const APP_VER='v24.43';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -4091,11 +4091,13 @@ function renderLoadsheet(){
     // -- Compute ground burn (use form override if set)
     const gndBurnKg=parseFloat(f.gndBurn!=null?f.gndBurn:a.gndBurn)||0;
     const gndBurnDisplay=String(Math.round(fromKg(gndBurnKg,f.ac)));
-    const fuelRemKg=fuelKgVal-gndBurnKg-burnKgVal;
+    // SINGLE SOURCE OF TRUTH: consume calcFormWB's fuel-at-dest / reserve so this banner can never
+    // disagree with the submit-gate (was a duplicated reserve calc with a different burn default).
+    const fuelRemKg=(r&&r.fuelRemKg!=null)?r.fuelRemKg:(fuelKgVal-gndBurnKg-burnKgVal);
     const flightMin=a?.layout==='ga8'?(parseFloat(burnVal||a?.burnDef||35)/58*60).toFixed(0):(burnKgVal/136.1*60).toFixed(0);
     // Final-reserve check: fuel remaining at destination must be ≥ 30 min at cruise burn.
-    const _resKg=(typeof _finalReserveKg==='function')?_finalReserveKg(f.ac):0;
-    const _belowRes=_resKg>0&&fuelRemKg<_resKg;
+    const _resKg=(r&&r.finalReserveKg!=null)?r.finalReserveKg:((typeof _finalReserveKg==='function')?_finalReserveKg(f.ac):0);
+    const _belowRes=(r&&typeof r.reserveOk==='boolean')?!r.reserveOk:(_resKg>0&&fuelRemKg<_resKg);
     const _resMin=a?.layout==='ga8'?((fuelRemKg/AVGAS)/58*60):(fuelRemKg/136.1*60); // min of fuel at dest (airvan rate is L/hr → kg→L first)
     // -- Build cargo section
     let cargoSection='';
@@ -11473,8 +11475,12 @@ window.approveLeave=async function(id){
   if(_clashNames.length>0){
     if(!confirm('Warning: '+_clashNames.join(', ')+' also have leave overlapping these dates. Approve anyway?'))return;
   }
+  // Recompute the leave-day total against the CURRENT roster (RDOs excluded) so the stored value
+  // reflects reality at approval, not a possibly-stale roster from submit time.
+  if((!S.roster||!Object.keys(S.roster).length)&&typeof window.loadRosterFromCloud==='function'){try{await window.loadRosterFromCloud();}catch(e){}}
+  var _approveDays=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,req.start_date,req.end_date):(req.total_days||1);
   var ok=await sbPatch('ts_leave_requests',id,{
-    status:'approved',reviewed_at:new Date().toISOString(),
+    status:'approved',reviewed_at:new Date().toISOString(),total_days:_approveDays,
     reviewed_by:me?.id,reviewed_by_name:me?.name||me?.email
   });
   if(ok){

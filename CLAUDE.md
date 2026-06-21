@@ -102,8 +102,11 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
   through it: `saveRosterToCloud` (draft = delta), `_rDoApplyBuild` pattern-push (now async, toast gated
   on save result), and leave `_lvStampRoster`/`_lvUnstampRoster`. Also F7 (leave "today" uses local
   `_rIso` not UTC) + F8 (guard `submitted_at`). ⚠️ still wants a two-device real test.
-  **OPEN (lower):** F5 (loadsheet below-reserve banner duplicates `calcFormWB`'s reserve calc — latent,
-  agrees for the current fleet), F6 (leave `total_days` frozen at submit from a possibly-stale roster).
+- **v24.43 — F5 + F6 fixed (audit backlog cleared).** F5: the loadsheet "Fuel at Dest" / below-reserve
+  banner now consumes `calcFormWB`'s `fuelRemKg`/`finalReserveKg`/`reserveOk` (single source of truth, can
+  no longer disagree with the submit gate). F6: leave `total_days` is recomputed against the current
+  roster on **approve** (RDOs excluded), not frozen from a stale submit-time roster. All audit items from
+  `ARCHITECTURE_REVIEW_v24.41.md` are now addressed.
 - **TSF Business Plan (v24.41) — NEW MODULE `modules/businessplan.js`.** Admin/superadmin section
   gated by the new **`businessplan`** perm. v1 = the interactive **Acquisition (Main Plan)** model:
   editable finance tranches (amount/rate/type io|pi/term) → live interest, monthly/annual repayments

@@ -578,8 +578,12 @@ window.approveLeave=async function(id){
   if(_clashNames.length>0){
     if(!confirm('Warning: '+_clashNames.join(', ')+' also have leave overlapping these dates. Approve anyway?'))return;
   }
+  // Recompute the leave-day total against the CURRENT roster (RDOs excluded) so the stored value
+  // reflects reality at approval, not a possibly-stale roster from submit time.
+  if((!S.roster||!Object.keys(S.roster).length)&&typeof window.loadRosterFromCloud==='function'){try{await window.loadRosterFromCloud();}catch(e){}}
+  var _approveDays=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,req.start_date,req.end_date):(req.total_days||1);
   var ok=await sbPatch('ts_leave_requests',id,{
-    status:'approved',reviewed_at:new Date().toISOString(),
+    status:'approved',reviewed_at:new Date().toISOString(),total_days:_approveDays,
     reviewed_by:me?.id,reviewed_by_name:me?.name||me?.email
   });
   if(ok){

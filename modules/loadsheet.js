@@ -387,11 +387,13 @@ function renderLoadsheet(){
     // -- Compute ground burn (use form override if set)
     const gndBurnKg=parseFloat(f.gndBurn!=null?f.gndBurn:a.gndBurn)||0;
     const gndBurnDisplay=String(Math.round(fromKg(gndBurnKg,f.ac)));
-    const fuelRemKg=fuelKgVal-gndBurnKg-burnKgVal;
+    // SINGLE SOURCE OF TRUTH: consume calcFormWB's fuel-at-dest / reserve so this banner can never
+    // disagree with the submit-gate (was a duplicated reserve calc with a different burn default).
+    const fuelRemKg=(r&&r.fuelRemKg!=null)?r.fuelRemKg:(fuelKgVal-gndBurnKg-burnKgVal);
     const flightMin=a?.layout==='ga8'?(parseFloat(burnVal||a?.burnDef||35)/58*60).toFixed(0):(burnKgVal/136.1*60).toFixed(0);
     // Final-reserve check: fuel remaining at destination must be ≥ 30 min at cruise burn.
-    const _resKg=(typeof _finalReserveKg==='function')?_finalReserveKg(f.ac):0;
-    const _belowRes=_resKg>0&&fuelRemKg<_resKg;
+    const _resKg=(r&&r.finalReserveKg!=null)?r.finalReserveKg:((typeof _finalReserveKg==='function')?_finalReserveKg(f.ac):0);
+    const _belowRes=(r&&typeof r.reserveOk==='boolean')?!r.reserveOk:(_resKg>0&&fuelRemKg<_resKg);
     const _resMin=a?.layout==='ga8'?((fuelRemKg/AVGAS)/58*60):(fuelRemKg/136.1*60); // min of fuel at dest (airvan rate is L/hr → kg→L first)
     // -- Build cargo section
     let cargoSection='';
