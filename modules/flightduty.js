@@ -266,7 +266,7 @@ function _fdRenderRecord(canManage){
   h+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">';
   if(canManage){
     h+='<select class="fi" style="font-size:13px;max-width:200px" onchange="window.fdSetPilot(this.value)"><option value="">— select pilot —</option>'+
-      _fdPilots().map(function(p){return '<option value="'+_rzEscSafe(p.id)+'"'+(p.id===uid?' selected':'')+'>'+_rzEscSafe(p.name)+'</option>';}).join('')+'</select>';
+      _fdPilots().map(function(p){return '<option value="'+_rzEscSafe(p.id)+'"'+(p.id===S._fdPilot?' selected':'')+'>'+_rzEscSafe(p.name)+'</option>';}).join('')+'</select>';
   } else {
     h+='<div style="font-weight:800;font-size:16px">'+_rzEscSafe((u&&u.name)||'My record')+'</div>';
   }
@@ -434,7 +434,10 @@ function _fdRenderSummary(){
     '</tr></thead><tbody>';
   function cell(val,key){var lim=L[key];var st=_fdStatus(val,lim);var col=_FD_COL[st];return '<td style="padding:5px 6px;text-align:center;font-weight:700;color:'+col+'">'+(Math.round(val*10)/10)+'<span style="font-size:10px;color:var(--text3);font-weight:500"> /'+lim.val+'</span></td>';}
   function currCell(uid,type){
-    var rated=_fdTypeRatings(uid).indexOf(type)>=0;
+    var _trs=_fdTypeRatings(uid);
+    // No type ratings set on the profile → show BOTH types (matches My Record's default), so an
+    // un-rated-but-flying pilot still sees a not-current flag rather than a blank dash.
+    var rated=_trs.length?(_trs.indexOf(type)>=0):true;
     var c=_fdCurrency(uid,type,asOf);
     if(!rated&&!c.everCurrent)return '<td style="padding:5px 6px;text-align:center;color:var(--text3)">—</td>';
     if(!c.everCurrent)return '<td style="padding:5px 6px;text-align:center;font-weight:700;color:#ef4444" title="Fewer than '+FD_CURRENCY_LDG+' landings on record">'+c.recent+'/'+FD_CURRENCY_LDG+'</td>';
