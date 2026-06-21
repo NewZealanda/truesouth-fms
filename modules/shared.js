@@ -412,7 +412,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.55';
+const APP_VER='v24.56';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1915,7 +1915,13 @@ async function reloadTable(table){
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
           if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
           if(row.key==='maintenance'&&row.value){
-            try{const m=JSON.parse(row.value);if(m&&m.hist){S.maintenance=m;lsSet('ts_maintenance',m);changed=true;}}catch(e){}
+            // Merge the broadcast in (keeping any unsaved local edit) rather than clobbering it.
+            try{const m=JSON.parse(row.value);if(m&&m.hist){
+              var _ob=S._maintBase?JSON.parse(S._maintBase):m;
+              S.maintenance=(typeof _maintMerge==='function')?_maintMerge(m,_ob,S.maintenance||m):m;
+              if(typeof _maintSetBase==='function')_maintSetBase(m);else S._maintBase=JSON.stringify(m);
+              lsSet('ts_maintenance',S.maintenance);changed=true;
+            }}catch(e){}
           }
         });
         return changed;
