@@ -248,6 +248,9 @@ window.bizPaxSyncRezdy=async function(ym){
       var b=null;try{b=(typeof _rzMapBookings==='function')?_rzMapBookings([r])[0]:null;}catch(e){}
       if(!b)return;
       if(/cancel/i.test(b.status||''))return;
+      // Flyback (FLB/CCF) bookings are the RETURN leg for passengers already counted on their
+      // outbound flight — counting them again double-counts seats sold, so skip them.
+      if(typeof _rzBookingIsFlyback==='function'&&_rzBookingIsFlyback(b))return;
       var seats=0;try{var e=_rzEffBreakdown(b);seats=(e.a||0)+(e.c||0);}catch(e){}
       byDate[ds]=(byDate[ds]||0)+seats;
     });
