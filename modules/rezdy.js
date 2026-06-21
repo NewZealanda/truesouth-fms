@@ -974,6 +974,7 @@ window.rezdySchedDropBlockToAc=function(ac,e){
   if(!src||!ac)return;
   var srcAc=String(src).indexOf('|')>=0?String(src).split('|')[0]:null;
   if(srcAc===ac)return; // already on this aircraft
+  _rzSchedPushUndo();
   var n=_rzReassignBlockToAc(src,ac);if(!n)return;
   if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();_rzReassignToast(n,ac);
 };
@@ -988,11 +989,12 @@ window.rezdySchedDropPilot=function(key,e){
     var srcProd=String(src).indexOf('|')>=0?(String(src).split('|')[2]||''):'';
     if(_rzIsFlyback(srcProd)&&tgtAc&&tgtAc!=='__unalloc__'){
       var orders=_rzOrdersForBlockKey(src);
+      _rzSchedPushUndo();
       S._rzSchedAttach=S._rzSchedAttach||{};
       orders.forEach(function(o){S._rzSchedAttach[o]=key;S._rzBookingAc=S._rzBookingAc||{};S._rzBookingAc[o]=tgtAc;});
       if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();return;
     }
-    if(tgtAc){var nn=_rzReassignBlockToAc(src,tgtAc);if(nn){if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();_rzReassignToast(nn,tgtAc);}}
+    if(tgtAc){_rzSchedPushUndo();var nn=_rzReassignBlockToAc(src,tgtAc);if(nn){if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();_rzReassignToast(nn,tgtAc);}}
     return;
   }
   var code=S._schedPilotDrag;S._schedPilotDrag=null;if(!code||!key)return;
@@ -1009,7 +1011,31 @@ window.rezdySchedDropPilot=function(key,e){
 };
 window.rezdySchedClearPilot=function(key){if(S._schedPilots)delete S._schedPilots[String(key)];if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();};
 // Detach a flyback booking from a flight (revert the combine).
-window.rezdySchedDetach=function(order){order=String(order);if(S._rzSchedAttach)delete S._rzSchedAttach[order];if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();};
+window.rezdySchedDetach=function(order){order=String(order);_rzSchedPushUndo();if(S._rzSchedAttach)delete S._rzSchedAttach[order];if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();};
+
+// ── Calendar combine: UNDO + RESET TO REZDY ────────────────────────────────────
+// Snapshot the aircraft-override + flyback-attach maps before any combine/move so it can be undone.
+function _rzSchedPushUndo(){
+  S._rzSchedUndo=S._rzSchedUndo||[];
+  try{S._rzSchedUndo.push({ac:JSON.parse(JSON.stringify(S._rzBookingAc||{})),at:JSON.parse(JSON.stringify(S._rzSchedAttach||{}))});}catch(_){}
+  if(S._rzSchedUndo.length>40)S._rzSchedUndo.shift();
+}
+window.rezdySchedUndo=function(){
+  if(!(S._rzSchedUndo&&S._rzSchedUndo.length)){if(typeof toast==='function')toast('Nothing to undo','warn');return;}
+  var s=S._rzSchedUndo.pop();
+  S._rzBookingAc=s.ac||{};S._rzSchedAttach=s.at||{};
+  if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
+  if(typeof toast==='function')toast('Undone ✓','ok');
+};
+// Reset every booking on THIS day back to Rezdy/comments (clears manual combines + aircraft moves).
+window.rezdySchedResetRezdy=function(){
+  if(typeof confirm==='function'&&!confirm('Reset all aircraft allocations for this day back to Rezdy (from booking comments)? This clears every manual combine and move on the day.'))return;
+  _rzSchedPushUndo();
+  var orders=(S._rezdyBookings||[]).map(function(b){return String(b.orderNumber||'');});
+  orders.forEach(function(o){if(S._rzBookingAc)delete S._rzBookingAc[o];if(S._rzSchedAttach)delete S._rzSchedAttach[o];});
+  if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
+  if(typeof toast==='function')toast('Reset to Rezdy ✓','ok');
+};
 // Passenger "bubbles" for a booking — loadsheet style: white card, group-colour left border,
 // C (child) / i (infant) corner badges, TO PAY banner. opts.drag enables in-booking dragging:
 // drop one bubble on another to make it that passenger's lap infant; tap toggles child.
@@ -3594,7 +3620,11 @@ function _rzRenderSchedule(){
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
     '<div><div class="st" style="margin-bottom:0">Calendar</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzDowLabel(S.rezdyDate)+' · '+_totBk+' booking'+(_totBk===1?'':'s')+(blocks.length?' · '+blocks.length+' manual block'+(blocks.length===1?'':'s'):'')+'</p>'+_calBd+'</div>'+
-    '<button class="btn btn-ghost" style="font-size:12px" onclick="window.schedNewBlock()">+ Add block</button></div>';
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start">'+
+      '<button class="btn btn-ghost" style="font-size:12px'+((S._rzSchedUndo&&S._rzSchedUndo.length)?'':';opacity:.4')+'" '+((S._rzSchedUndo&&S._rzSchedUndo.length)?'':'disabled ')+'onclick="window.rezdySchedUndo()" title="Undo the last combine / move">↶ Undo</button>'+
+      '<button class="btn btn-ghost" style="font-size:12px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.rezdySchedResetRezdy()" title="Clear manual combines/moves and revert to Rezdy">⟲ Reset to Rezdy</button>'+
+      '<button class="btn btn-ghost" style="font-size:12px" onclick="window.schedNewBlock()">+ Add block</button>'+
+    '</div></div>';
   // Click-through detail for a stacked block: every booking in the group + a link back to it.
   let detailH='';
   if(S._schedGroupKey){
@@ -3610,12 +3640,26 @@ function _rzRenderSchedule(){
             (_grp.pilot?'<span class="pill" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.5);color:#60a5fa;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">✈ '+_rzEsc(_grp.pilot)+' <span onclick="event.stopPropagation();window.rezdySchedClearPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
-      _grp.bookings.forEach(function(bk){
-        var b=bk.b;var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
+      // Full product title(s) at the top — the real Rezdy product name, not just the short code.
+      var _allBk=_grp.bookings.concat(_grp._fb||[]);
+      var _titles=[];_allBk.forEach(function(bk){var t=String((bk.it&&bk.it.product)||'').trim();if(t&&_titles.indexOf(t)<0)_titles.push(t);});
+      if(_titles.length)detailH+='<div style="font-size:12px;color:var(--text2);font-weight:600;margin:-2px 0 2px;line-height:1.45">'+_titles.map(function(t){return '<div>'+_rzEsc(t)+'</div>';}).join('')+'</div>';
+      // Each booking (including folded flybacks) shows pax + product code, e.g. "2A FCF" / "2A FLB".
+      _allBk.forEach(function(bk){
+        var b=bk.b;var ord=String(b.orderNumber||'');var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
+        var _e=_rzEffBreakdown(b);var _code=_rzProduct((bk.it&&bk.it.product)||'');var _isFb=_rzIsFlyback(_code);
+        var _bc=_isFb?'#f59e0b':'#60a5fa';
         detailH+='<div style="border-top:1px solid var(--border2);padding-top:8px;margin-top:8px">'+
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
-            '<div style="font-weight:700;font-size:13px;color:var(--text1)">'+_rzEsc(b.customerName||b.orderNumber)+(owing?' <span style="color:#ef4444;font-weight:800">$ TO PAY</span>':'')+'</div>'+
-            '<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px" onclick="window.rezdyGotoBooking(\''+_rzEsc(String(b.orderNumber||'')).replace(/'/g,"\\'")+'\')">View booking →</button>'+
+            '<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">'+
+              '<span style="font-weight:700;font-size:13px;color:var(--text1)">'+_rzEsc(b.customerName||ord)+'</span>'+
+              '<span style="font-size:11px;font-weight:800;padding:1px 8px;border-radius:10px;background:'+_bc+'22;border:1px solid '+_bc+'66;color:'+_bc+'">'+_rzBdCompact(_e)+' '+_rzEsc(_code)+'</span>'+
+              (owing?'<span style="color:#ef4444;font-weight:800;font-size:11px">$ TO PAY</span>':'')+
+            '</div>'+
+            '<div style="display:flex;gap:6px;flex-shrink:0">'+
+              (_isFb?'<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.rezdySchedDetach(\''+_rzEsc(ord).replace(/'/g,"\\'")+'\')" title="Un-combine this flyback">↩ Detach</button>':'')+
+              '<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px" onclick="window.rezdyGotoBooking(\''+_rzEsc(ord).replace(/'/g,"\\'")+'\')">View booking →</button>'+
+            '</div>'+
           '</div>'+
           _rzPaxBubbles(b,{drag:true})+
         '</div>';
