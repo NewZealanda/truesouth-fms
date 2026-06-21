@@ -333,20 +333,6 @@ function _fdRenderRecord(canManage){
     h+='<div class="card" style="font-size:12px;color:var(--text3)">'+(canManage?'No type ratings on this pilot’s profile':'No type ratings on your profile')+' — set C208B / GA8 in the crew profile so currency can be tracked.</div>';
   }
 
-  // ── monthly cert banner ──
-  var cert=_fdCert(uid,month);
-  var monthEnded=month<_fdMonth(_fdToday());
-  if(cert){
-    h+='<div class="card" style="border-left:3px solid #22c55e;font-size:12px;color:var(--text2)">✓ '+_rzEscSafe(_fdMonthLabel(month))+' certified by '+_rzEscSafe(cert.by)+' on '+_rzEscSafe(_fdFmt(cert.at.slice(0,10)))+'.</div>';
-  } else {
-    h+='<div class="card" style="border-left:3px solid '+(monthEnded?'#f59e0b':'var(--border2)')+';display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
-      '<div style="font-size:12px;color:var(--text2)">'+(monthEnded?'<b style="color:#f59e0b">This period needs certifying.</b> ':'')+'Print, check, then certify the record for '+_rzEscSafe(_fdMonthLabel(month))+'.</div>'+
-      '<div style="display:flex;gap:6px;flex-shrink:0">'+
-        '<button class="btn btn-ghost" style="font-size:12px" onclick="window.fdPrint(\''+uid+'\',\''+month+'\')">🖨 Print</button>'+
-        '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.fdCertify(\''+uid+'\',\''+month+'\')">✓ Certify &amp; sign</button>'+
-      '</div></div>';
-  }
-
   // ── look-ahead: how much you can still work as past days roll off the 30-day window ──
   // 2 dp so quarter-hour figures read true (e.g. 0.25 = 15 min, not rounded to 0.3).
   function _r1(x){return Math.round(x*100)/100;}
@@ -382,7 +368,7 @@ function _fdRenderRecord(canManage){
   // ── daily grid for the month ──
   var _gTh=function(t,c){return '<th style="text-align:center;padding:7px 4px;font-size:10px;color:'+(c||'var(--text3)')+';font-weight:700">'+t+'</th>';};
   var _inS='width:100%;font-size:12px;padding:4px 3px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:center;box-sizing:border-box';
-  var _stepBtn='width:20px;height:26px;border:1px solid var(--border2);border-radius:5px;background:var(--card2);color:var(--text2);font-size:13px;font-weight:800;cursor:pointer;padding:0;line-height:1;flex-shrink:0';
+  var _stepBtn='width:18px;height:26px;border:1px solid var(--border2);border-radius:5px;background:var(--card2);color:var(--text2);font-size:13px;font-weight:800;cursor:pointer;padding:0;line-height:1;flex-shrink:0';
   // a 15-min time picker (select) + −/+ steppers (+ a "now" button on the end time)
   function _timeCell(ds,field,val,withNow){
     var a="'"+uid+"','"+ds+"','"+field+"'";
@@ -390,10 +376,10 @@ function _fdRenderRecord(canManage){
     for(var i=0;i<_FD_TIMES.length;i++){var t=_FD_TIMES[i];if(t===val)found=true;opts+='<option value="'+t+'"'+(t===val?' selected':'')+'>'+t+'</option>';}
     if(val&&!found)opts+='<option value="'+_rzEscSafe(val)+'" selected>'+_rzEscSafe(val)+'</option>';
     return '<td style="padding:3px 2px"><div style="display:flex;align-items:center;gap:2px;justify-content:center">'+
-      '<button title="−15 min" onclick="window.fdTimeAdj('+a+',-15)" style="'+_stepBtn+'">–</button>'+
-      '<select onchange="window.fdEditField('+a+',this.value)" style="width:66px;font-size:12px;padding:3px 1px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);box-sizing:border-box">'+opts+'</select>'+
+      '<button title="&minus;15 min" onclick="window.fdTimeAdj('+a+',-15)" style="'+_stepBtn+'">&minus;</button>'+
+      '<select onchange="window.fdEditField('+a+',this.value)" style="width:46px;font-size:11px;padding:3px 0;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);box-sizing:border-box">'+opts+'</select>'+
       '<button title="+15 min" onclick="window.fdTimeAdj('+a+',15)" style="'+_stepBtn+'">+</button>'+
-      (withNow?'<button title="Set to now (nearest 15 min)" onclick="window.fdTimeNow('+a+')" style="'+_stepBtn+';width:24px;color:#4ade80">⏱</button>':'')+
+      (withNow?'<button title="Set to now (nearest 15 min)" onclick="window.fdTimeNow('+a+')" style="'+_stepBtn+';width:22px;color:#4ade80">⏱</button>':'')+
     '</div></td>';
   }
   // Landing-entry columns appear ONLY for the types the pilot is rated on (derived from endorsements).
@@ -405,8 +391,8 @@ function _fdRenderRecord(canManage){
     '<button class="btn btn-ghost" style="font-size:14px;padding:5px 14px" onclick="window.fdShiftMonth(1)">▶</button>'+
     '</div>';
   h+='<div style="font-size:11px;color:var(--text3);padding:0 2px 6px">Tap a day to enter or edit its times, flight hours and landings.</div>';
-  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:'+(580+(showC?60:0)+(showG?60:0))+'px;table-layout:fixed">';
-  h+='<colgroup><col style="width:94px"><col style="width:120px"><col style="width:146px"><col style="width:52px"><col style="width:62px"><col style="width:60px">'+(showC?'<col style="width:58px">':'')+(showG?'<col style="width:58px">':'')+'<col style="width:40px"></colgroup>';
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:'+(516+(showC?58:0)+(showG?58:0))+'px;table-layout:fixed">';
+  h+='<colgroup><col style="width:90px"><col style="width:92px"><col style="width:112px"><col style="width:52px"><col style="width:62px"><col style="width:60px">'+(showC?'<col style="width:58px">':'')+(showG?'<col style="width:58px">':'')+'<col style="width:40px"></colgroup>';
   h+='<thead><tr style="background:var(--card2)">'+
     '<th style="text-align:left;padding:7px 8px;font-size:10px;color:var(--text3);font-weight:700">Date</th>'+
     _gTh('Start')+_gTh('End')+_gTh('Duty&nbsp;h')+_gTh('Duty&nbsp;30d')+_gTh('Flight&nbsp;h')+(showC?_gTh('C208B','#22c55e'):'')+(showG?_gTh('GA8','#60a5fa'):'')+
@@ -462,6 +448,20 @@ function _fdRenderRecord(canManage){
   }
   h+='</tbody></table></div>';
   h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px"><b>Duty&nbsp;30d</b> = rolling duty over the previous 30 days (towards the '+L.duty_30.val+'h limit). <b>Ext</b> = tick when a commenced duty ran past 11h to 12h to finish a disrupted schedule. Start/end times are locked to 15-minute blocks. Advisory only — your printed &amp; signed monthly record is the controlled document; limits in Settings ▸ Operations ▸ Flight &amp; Duty.</div>';
+
+  // ── monthly print + certify/sign — at the BOTTOM, so it's signed once the month's entries are done ──
+  var cert=_fdCert(uid,month);
+  var monthEnded=month<_fdMonth(_fdToday());
+  if(cert){
+    h+='<div class="card" style="border-left:3px solid #22c55e;font-size:12px;color:var(--text2)">✓ '+_rzEscSafe(_fdMonthLabel(month))+' certified by '+_rzEscSafe(cert.by)+' on '+_rzEscSafe(_fdFmt(cert.at.slice(0,10)))+'.</div>';
+  } else {
+    h+='<div class="card" style="border-left:3px solid '+(monthEnded?'#f59e0b':'var(--border2)')+';display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+      '<div style="font-size:12px;color:var(--text2)">'+(monthEnded?'<b style="color:#f59e0b">This period needs certifying.</b> ':'')+'When '+_rzEscSafe(_fdMonthLabel(month))+' is complete, print, check, then certify the record.</div>'+
+      '<div style="display:flex;gap:6px;flex-shrink:0">'+
+        '<button class="btn btn-ghost" style="font-size:12px" onclick="window.fdPrint(\''+uid+'\',\''+month+'\')">🖨 Print</button>'+
+        '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.fdCertify(\''+uid+'\',\''+month+'\')">✓ Certify &amp; sign</button>'+
+      '</div></div>';
+  }
   return h;
 }
 
