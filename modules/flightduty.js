@@ -120,7 +120,15 @@ function _fdTypeRatings(uid){
   var tr=(cr&&cr.typeRatings)||[];
   return Array.isArray(tr)?tr:[];
 }
-function _fdIsPilot(u){if(!u||u.inactive)return false;if(u.role==='pilot'||u.isPilot)return true;return _fdTypeRatings(u.id).length>0;}
+// A tracked "pilot" = anyone who can act as PIC: role pilot, the isPilot flag, has type ratings,
+// or holds at least one aircraft approval (endorsement) — i.e. is PIC-eligible.
+function _fdIsPilot(u){
+  if(!u||u.inactive)return false;
+  if(u.role==='pilot'||u.isPilot)return true;
+  if(_fdTypeRatings(u.id).length>0)return true;
+  var cr=(typeof _crewForUser==='function')?_crewForUser(u):null;
+  return !!(cr&&cr.endorse&&cr.endorse.length);
+}
 function _fdPilots(){return (S.users||[]).filter(_fdIsPilot).sort(function(a,b){return (a.name||'').localeCompare(b.name||'');});}
 function _fdCanManage(){return (typeof hasRolePerm==='function'&&hasRolePerm('flightduty_manage'))||(S.user&&S.user.superAdmin);}
 function _fdSelfUid(){return S.user&&S.user.id;}
