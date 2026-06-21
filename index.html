@@ -616,8 +616,8 @@ const sbPatch=async(t,id,data)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true},
-  admin:       {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true},
+  superadmin:  {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true},
+  admin:       {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true},
   cx_manager:  {operations:true,calendar:true, charter:false,maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
   pilot:       {operations:true,calendar:true, charter:false,maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true, rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
   desk:        {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.40';
+const APP_VER='v24.41';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -868,6 +868,7 @@ function calcAcWB(acId,paxList,fuelKgOverride){
 
 function calcFormWB(form){
   const a=S.aircraft[form.ac];if(!a)return null;
+  if(!a.seats||!a.seats.length||!a.seats[0]||!a.cargo)return null; // partial/corrupt aircraft record → no W&B (don't crash)
   const cW=parseFloat(form.seats[0]||0);
   // Co-pilot (seat 1) weight counts as crew when a co-pilot is assigned
   const cpW=form.coPilot?(parseFloat(form.seats[1]||0))+(parseFloat(form.bags[1]||0)):0;
@@ -2200,6 +2201,7 @@ async function reloadTable(table){
         code:c.code||'',dlNum:c.dl_num||'',caaNum:c.caa_license||'',
         medExpiry:c.medical_expiry||'',ocaDue:c.oca_due||'',
         firstAid:c.first_aid||'',avsecExpiry:c.avsec_expiry||'',
+        dob:c.dob||'',typeRatings:(function(){try{return c.type_ratings?JSON.parse(c.type_ratings):[];}catch(e){return [];}})(),
         photo:lsGet('ts_crew_photo_'+c.id)||''};});
       lsSet('ts_crew_cache',S.crew);return true;
     }
@@ -3043,7 +3045,7 @@ function _sectionAllowed(sec){
     case 'settings':    return hasRolePerm('admin_users')||hasRolePerm('admin_crew');
     case 'operations':  return hasRolePerm('operations');
     case 'flightduty':  return (hasRolePerm('flightduty'))||!!(S.user&&S.user.superAdmin);
-    case 'businessplan':return !!(S.user&&S.user.superAdmin); // placeholder — superadmin only for now
+    case 'businessplan':return (hasRolePerm('businessplan'))||!!(S.user&&S.user.superAdmin);
     default:            return true;
   }
 }
@@ -3488,16 +3490,17 @@ function renderDrawer(){
     }
    }
   }
-  // Flight & Duty (live) for anyone with the permission; TSF Business Plan placeholder (superadmin).
+  // Flight & Duty + TSF Business Plan — each shown to anyone holding its permission.
   {var _canFD=hasRolePerm('flightduty')||(S.user&&S.user.superAdmin);
-   if(_canFD||(S.user&&S.user.superAdmin)){
-    var _fdNavBtn=function(label,section,icon,soon){
+   var _canBP=hasRolePerm('businessplan')||(S.user&&S.user.superAdmin);
+   if(_canFD||_canBP){
+    var _fdNavBtn=function(label,section,icon){
       var on=sec===section;
-      return '<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+section+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(on?'rgba(124,58,237,.22)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(on?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+icon+'</span><span style="flex:1">'+label+'</span>'+(soon?'<span style="font-size:9px;font-weight:800;letter-spacing:.04em;color:rgba(255,255,255,.35);background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px">SOON</span>':'')+'</button>';
+      return '<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+section+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(on?'rgba(124,58,237,.22)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(on?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+icon+'</span><span style="flex:1">'+label+'</span></button>';
     };
     h+='<div style="margin:8px 6px 4px;border-top:1px solid rgba(255,255,255,.06)"></div>';
-    if(_canFD)h+=_fdNavBtn('Flight & Duty','flightduty','🕓',false);
-    if(S.user&&S.user.superAdmin)h+=_fdNavBtn('TSF Business Plan','businessplan','📈',true);
+    if(_canFD)h+=_fdNavBtn('Flight & Duty','flightduty','🕓');
+    if(_canBP)h+=_fdNavBtn('TSF Business Plan','businessplan','📈');
   }}
   h+='</nav>';
   h+='<div style="padding:10px 16px;font-size:10px;color:rgba(255,255,255,.18);font-family:monospace;border-top:1px solid rgba(255,255,255,.06)">'+APP_VER+'</div>';
@@ -3641,8 +3644,8 @@ function renderApp(){
           return '<div id="flash-flightduty">'+renderFlightDuty()+'</div>';
         }
         if(_sec==='businessplan'){
-          if(!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
-          return _renderPlaceholderSection('TSF Business Plan','📈','The TrueSouth Flights business plan and targets will live here.');
+          if(!(hasRolePerm('businessplan')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-businessplan">'+renderBusinessPlan()+'</div>';
         }
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
@@ -8674,7 +8677,8 @@ function renderAdminPerms(){
     {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'},
     {k:'calendar',      lbl:'Calendar',       tip:'Access the Calendar tab'},
     {k:'flightduty',    lbl:'F&D',            tip:'Access Flight & Duty — own record + team summary'},
-    {k:'flightduty_manage',lbl:'F&D Mgr',     tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'}
+    {k:'flightduty_manage',lbl:'F&D Mgr',     tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'},
+    {k:'businessplan',  lbl:'Biz Plan',       tip:'View the confidential TSF Business Plan'}
     // (the old 'rezdy' column was retired in v24.16 — the Rezdy section no longer exists; Calendar
     //  has its own perm and Pickups live under Operations ▸ Ground gated by 'operations'.)
   ];
@@ -12179,7 +12183,9 @@ function _rzPickups(){
       // Morning pickup …
       out.push(Object.assign({},base,{id:id,depart:pdep,pickupTime:ptime,dropoff:false}));
       // … and the matching RETURN drop-off (self-drive pax collect their own car, so skip them).
-      if(!sd)out.push(Object.assign({},base,{id:id+'|D',depart:_rzDropDep(pdep),pickupTime:'',dropoff:true}));
+      // The drop-off resolves its OWN location/time overrides (keyed by the '|D' id) so editing a
+      // drop-off's location/time on the board sticks instead of reverting to the pickup's.
+      if(!sd){var did=id+'|D';var dloc=(ov[did]!=null&&ov[did]!=='')?ov[did]:loc;var dtime=(tov[did]!=null&&tov[did]!=='')?tov[did]:'';out.push(Object.assign({},base,{id:did,location:dloc,depart:_rzDropDep(pdep),pickupTime:dtime,dropoff:true}));}
     });
   });
   return out;
@@ -12199,7 +12205,7 @@ function _rzAutoVans(pickups){
   const vans=[];for(let i=0;i<N;i++)vans.push([]);
   // Pickups run by DEPARTURE: a whole departure is collected together. The ACTIVE vehicle set is
   // PER DEPARTURE (a van parked for the 0800 run can still drive 1200). Hilton gets its own vehicle.
-  const byDep={};pickups.forEach(function(p){(byDep[p.depart||'~']=byDep[p.depart||'~']||[]).push(p);});
+  const byDep={};pickups.forEach(function(p){(byDep[p.depart||'—']=byDep[p.depart||'—']||[]).push(p);});
   Object.keys(byDep).sort().forEach(function(dep){
     var act=[];for(let i=0;i<N;i++)if(!_rzVanParked(i,dep))act.push(i);if(!act.length)act=[0];
     const grp=byDep[dep];
@@ -12224,7 +12230,7 @@ function _rzVanPax(vanIds,pickups){return vanIds.reduce(function(s,id){const p=_
 function _rzEnsureVans(){
   const pickups=_rzPickups();
   const ids=pickups.map(function(p){return p.id;});
-  const depOf={};pickups.forEach(function(p){depOf[p.id]=(p.depart||'~');});
+  const depOf={};pickups.forEach(function(p){depOf[p.id]=(p.depart||'—');});
   let vans=S._pickupVans;
   const valid=Array.isArray(vans)&&vans.length===_rzVehicles().length&&vans.every(Array.isArray);
   // First ACTIVE (non-parked) van FOR A DEPARTURE — catches new/displaced pickups of that run.
@@ -12237,7 +12243,7 @@ function _rzEnsureVans(){
     const sd={};pickups.forEach(function(p){if(p.selfDrive)sd[p.id]=1;});
     const placed={};
     S._pickupVans=vans.map(function(v){return v.filter(function(id){if(placed[id]||sd[id]||ids.indexOf(id)<0)return false;placed[id]=1;return true;});});
-    ids.forEach(function(id){if(!placed[id]&&!sd[id]){var dep=depOf[id]||'~';var fa=_firstActiveVan(dep);if(fa<0)fa=0;S._pickupVans[fa].push(id);}});
+    ids.forEach(function(id){if(!placed[id]&&!sd[id]){var dep=depOf[id]||'—';var fa=_firstActiveVan(dep);if(fa<0)fa=0;S._pickupVans[fa].push(id);}});
   }
   // Move any pickup whose van is parked FOR ITS departure into that departure's first active van.
   S._pickupVans.forEach(function(vanIds,vi){
@@ -12245,7 +12251,7 @@ function _rzEnsureVans(){
     vanIds.forEach(function(id){var dep=depOf[id];if(dep!=null&&_rzVanParked(vi,dep))move.push(id);else keep.push(id);});
     if(move.length){
       S._pickupVans[vi]=keep;
-      move.forEach(function(id){var dep=depOf[id]||'~';var fa=_firstActiveVan(dep);if(fa>=0&&fa!==vi&&S._pickupVans[fa])S._pickupVans[fa].push(id);else S._pickupVans[vi].push(id);});
+      move.forEach(function(id){var dep=depOf[id]||'—';var fa=_firstActiveVan(dep);if(fa>=0&&fa!==vi&&S._pickupVans[fa])S._pickupVans[fa].push(id);else S._pickupVans[vi].push(id);});
     }
   });
   if(!S._pickupCollected||typeof S._pickupCollected!=='object')S._pickupCollected={};
@@ -13412,7 +13418,7 @@ function _rzRenderPickups(){
   S._pickupVans.forEach(function(vanIds,vi){
     if(_rzVanParked(vi,depFilter))return; // parked for THIS departure → shown in the spare bin, not on the board
     // Capacity is per departure run (each ≤11), so size the warning by the busiest departure.
-    var _byDepLoad={};vanIds.forEach(function(id){var pp=_rzPickupById(pickups,id);if(pp)_byDepLoad[pp.depart||'~']=(_byDepLoad[pp.depart||'~']||0)+pp.pax;});
+    var _byDepLoad={};vanIds.forEach(function(id){var pp=_rzPickupById(pickups,id);if(pp)_byDepLoad[pp.depart||'—']=(_byDepLoad[pp.depart||'—']||0)+pp.pax;});
     var _maxDep=0;Object.keys(_byDepLoad).forEach(function(k){if(_byDepLoad[k]>_maxDep)_maxDep=_byDepLoad[k];});
     const seats=_rzVehSeats(vi);
     const pax=depFilter?(_byDepLoad[depFilter]||0):_rzVanPax(vanIds,pickups);
@@ -15706,8 +15712,10 @@ function _fdCurrency(uid,type,asOf){
 // rule floors (2 off / any 14 days; 2 CONSECUTIVE off / any 30 days) looking back from asOf.
 function _fdIsOffDay(uid,ds){var r=_fdRow(uid,ds);return !(r&&((r.ds&&r.de)||(+r.ft||0)>0));}
 function _fdDaysOff(uid,asOf){
-  var off14=0,maxConsec30=0,run=0;
-  for(var i=0;i<30;i++){var ds=_fdAddDays(asOf,-i);var off=_fdIsOffDay(uid,ds);
+  var off14=0,maxConsec30=0,run=0,today=_fdToday();
+  for(var i=0;i<30;i++){var ds=_fdAddDays(asOf,-i);
+    // only a PAST day with no entry is a confirmed day off — today/future blanks are "unknown", not off
+    var off=(ds<today)&&_fdIsOffDay(uid,ds);
     if(i<14&&off)off14++;
     if(off){run++;if(run>maxConsec30)maxConsec30=run;}else run=0;
   }
@@ -15743,14 +15751,26 @@ window.fdSaveRow=function(uid,ds,patch){
   S._fdData=S._fdData||{};var k=_fdKey(uid,ds);
   var cur=S._fdData[k]||{};
   var row=Object.assign({},cur,patch,{by:(S.user&&S.user.name)||'',at:new Date().toISOString()});
-  // prune an all-empty row
+  // An all-empty row is removed (locally + in the DB) so it doesn't orphan a zero row or wrongly
+  // count as a logged day.
   var empty=!row.ds&&!row.de&&!(+row.ft)&&!(+row.lc)&&!(+row.lg)&&!row.ext&&!row.note;
+  if(empty){
+    delete S._fdData[k];
+    try{lsSet&&lsSet('ts_flightduty_cache',S._fdData);}catch(e){}
+    try{if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flightduty?id=eq.'+encodeURIComponent(k),{method:'DELETE',headers:SH}).catch(function(){});}catch(e){}
+    if(typeof safeRender==='function')safeRender();return;
+  }
   S._fdData[k]=row;
   try{lsSet&&lsSet('ts_flightduty_cache',S._fdData);}catch(e){}
   if(typeof sbU==='function')sbU('ts_flightduty',[{id:k,user_id:uid,fd_date:ds,duty_start:row.ds||null,duty_end:row.de||null,flight_time:+row.ft||0,ldg_c208:+row.lc||0,ldg_ga8:+row.lg||0,extended:!!row.ext,override:!!row.ov,override_reason:row.ovr||null,note:row.note||null,updated_at:row.at,updated_by:row.by}]).catch(function(){});
   if(typeof safeRender==='function')safeRender();
 };
-window.fdEditField=function(uid,ds,field,value){var p={};p[field]=value;window.fdSaveRow(uid,ds,p);};
+window.fdEditField=function(uid,ds,field,value){
+  if(value===''||value==null){/* keep blank */}
+  else if(field==='lc'||field==='lg')value=Math.max(0,Math.round(+value)||0);   // landings = non-negative integer
+  else if(field==='ft')value=Math.max(0,+value||0);                            // flight hours = non-negative
+  var p={};p[field]=value;window.fdSaveRow(uid,ds,p);
+};
 // Duty start/end are locked to 15-minute blocks — round the entered time to the nearest quarter hour.
 function _fdHM(t){t=Math.round(t/15)*15;if(t<0)t=0;if(t>=1440)t=1425;return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');}
 window.fdSetTime=function(uid,ds,field,value){
@@ -15804,9 +15824,11 @@ window.loadFlightDuty=async function(){
   try{var c=lsGet&&lsGet('ts_flightduty_cache');if(c&&typeof c==='object')S._fdData=c;}catch(e){}
   if(typeof sbF!=='function'){if(typeof render==='function')render();return;}
   try{
-    var rows=await sbF('ts_flightduty','','fd_date');
+    // non-managers only pull their own rows (defence-in-depth alongside RLS)
+    var _scope=_fdCanManage()?'':'&user_id=eq.'+encodeURIComponent((S.user&&S.user.id)||'');
+    var rows=await sbF('ts_flightduty',_scope,'fd_date');
     if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.user_id+'|'+r.fd_date]={ds:r.duty_start||'',de:r.duty_end||'',ft:r.flight_time||0,lc:r.ldg_c208||0,lg:r.ldg_ga8||0,ext:!!r.extended,ov:!!r.override,ovr:r.override_reason||'',note:r.note||'',by:r.updated_by||'',at:r.updated_at||''};});S._fdData=d;try{lsSet&&lsSet('ts_flightduty_cache',d);}catch(e){}}
-    var certs=await sbF('ts_fd_certs','','certified_at');
+    var certs=await sbF('ts_fd_certs',_scope,'certified_at');
     if(Array.isArray(certs)){var cc={};certs.forEach(function(r){cc[r.user_id+'|'+r.period]={at:r.certified_at,by:r.certified_by||''};});S._fdCerts=cc;}
     fetch(SB+'/rest/v1/ts_settings?key=eq.fd_limits&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value)S._fdLimits=JSON.parse(s[0].value);}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});
   }catch(e){}
@@ -15815,7 +15837,7 @@ window.loadFlightDuty=async function(){
 // Save one limit's value / amber / red buffer (Settings ▸ Operations ▸ Flight & Duty).
 window.fdSetLimit=function(key,field,value){
   S._fdLimits=S._fdLimits||{};S._fdLimits[key]=S._fdLimits[key]||{};
-  S._fdLimits[key][field]=(value===''||value==null)?'':(+value);
+  S._fdLimits[key][field]=(value===''||value==null||isNaN(+value))?'':(+value); // NaN → revert to default
   if(typeof sbU==='function')sbU('ts_settings',[{key:'fd_limits',value:JSON.stringify(S._fdLimits)}]).catch(function(){});
   if(typeof safeRender==='function')safeRender();
 };
@@ -16048,7 +16070,10 @@ window.fdPrint=function(uid,month){
     var ds=y+'-'+String(mo+1).padStart(2,'0')+'-'+String(dd).padStart(2,'0');var r=_fdRow(uid,ds)||{};var dh=_fdDutyHours(r);totF+=+(r.ft||0);totD+=dh;
     rows+='<tr><td>'+dd+'</td><td>'+(r.ds||'')+'</td><td>'+(r.de||'')+'</td><td class="c">'+(dh?Math.round(dh*10)/10:'')+(r.ext?'<sup>+</sup>':'')+'</td><td class="c">'+(r.ft||'')+'</td><td class="c">'+(r.lc||'')+'</td><td class="c">'+(r.lg||'')+'</td></tr>';
   }
-  var d30=_fdValueFor(uid,'duty_30',_fdToday()),f30=_fdValueFor(uid,'flt_30',_fdToday());
+  // rolling figures are computed as at the END of the printed period (not "today"), so a printed
+  // past month shows that month's rolling totals, not the current window's.
+  var _pEnd=(month<_fdMonth(_fdToday()))?(y+'-'+String(mo+1).padStart(2,'0')+'-'+String(daysIn).padStart(2,'0')):_fdToday();
+  var d30=_fdValueFor(uid,'duty_30',_pEnd),f30=_fdValueFor(uid,'flt_30',_pEnd);
   var w=window.open('','_blank','width=820,height=900');if(!w){if(typeof toast==='function')toast('Allow pop-ups to print.','warn');return;}
   w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Flight & Duty — '+_rzEscSafe(nm)+' — '+_fdMonthLabel(month)+'</title><style>'+
     '*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:14mm;font-size:12px}'+
@@ -16093,6 +16118,163 @@ function renderFDLimits(){
 
 // Safe escape that works whether or not esc/_rzEsc is in scope at call time.
 function _rzEscSafe(s){if(typeof _rzEsc==='function')return _rzEsc(s);if(typeof esc==='function')return esc(s);return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+// ─────────────────────────────────────────────────────────────────────────────
+//  TSF BUSINESS PLAN  (admin / superadmin — gated by the 'businessplan' permission)
+//  v1: the "Main Plan" acquisition-finance model, fully interactive (edit inputs → interest,
+//  monthly/annual repayments and totals recompute live). Persisted to ts_settings key
+//  'business_plan'. The other workbook sheets (loan schedules, FY budgets, P&Ls, running costs)
+//  are scaffolded as tabs and will be built out once the formulas are confirmed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Defaults seeded from "TSF Business Plan.xlsx → Main Plan" (Scenario 1).
+var BIZ_DEFAULT={
+  tranches:[
+    {name:'Bank Finance',   amount:8003000, rate:6.68, type:'io', term:10},
+    {name:'Bank Finance 2', amount:1000000, rate:6.68, type:'io', term:10},
+    {name:'Vendor Finance', amount:1000000, rate:10.0, type:'io', term:2},
+    {name:'Deposit',        amount:1200000, rate:10.0, type:'pi', term:7}
+  ],
+  assets:[
+    {name:'VVL1377', value:607161.11},
+    {name:'VVL1379', value:922208.85},
+    {name:'K12583',  value:4712780.52},
+    {name:'K12584',  value:3355408.13}
+  ],
+  notes:'Interest only for the portion of vendor finance — this would be paid down over 2 years and that number decreases yearly.'
+};
+
+function _bizState(){
+  if(!S._bizPlan||typeof S._bizPlan!=='object')S._bizPlan=JSON.parse(JSON.stringify(BIZ_DEFAULT));
+  if(!Array.isArray(S._bizPlan.tranches))S._bizPlan.tranches=JSON.parse(JSON.stringify(BIZ_DEFAULT.tranches));
+  if(!Array.isArray(S._bizPlan.assets))S._bizPlan.assets=[];
+  return S._bizPlan;
+}
+function _bizMoney(n){n=+n||0;return '$'+n.toLocaleString('en-NZ',{minimumFractionDigits:0,maximumFractionDigits:0});}
+function _bizMoney2(n){n=+n||0;return '$'+n.toLocaleString('en-NZ',{minimumFractionDigits:2,maximumFractionDigits:2});}
+// Monthly repayment for a tranche: interest-only = amount×rate/12; P&I = standard amortising PMT.
+function _bizMonthly(t){
+  var amt=+t.amount||0,r=(+t.rate||0)/100/12;
+  var interest=amt*r;
+  if(t.type==='io'||!t.term)return {interest:interest,principal:0,monthly:interest};
+  var n=(+t.term||1)*12;
+  var pmt=r>0?(amt*r/(1-Math.pow(1+r,-n))):(amt/n);
+  return {interest:interest,principal:pmt-interest,monthly:pmt};
+}
+
+// ── persistence ──
+window.loadBusinessPlan=function(){
+  try{var c=lsGet&&lsGet('ts_business_plan');if(c&&typeof c==='object')S._bizPlan=c;}catch(e){}
+  try{fetch(SB+'/rest/v1/ts_settings?key=eq.business_plan&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){try{if(rows&&rows[0]&&rows[0].value)S._bizPlan=JSON.parse(rows[0].value);}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});}catch(e){}
+};
+function _bizSave(){
+  var p=_bizState();
+  try{lsSet&&lsSet('ts_business_plan',p);}catch(e){}
+  if(typeof sbU==='function')sbU('ts_settings',[{key:'business_plan',value:JSON.stringify(p)}]).then(function(r){if(r===null&&typeof toast==='function')toast('Business plan did not save to the server — check connection','warn');}).catch(function(){});
+}
+window.bizSetTranche=function(i,field,value){var p=_bizState();if(!p.tranches[i])return;p.tranches[i][field]=(field==='name'||field==='type')?value:(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizAddTranche=function(){_bizState().tranches.push({name:'New facility',amount:0,rate:0,type:'io',term:10});_bizSave();render();};
+window.bizDelTranche=function(i){var p=_bizState();p.tranches.splice(i,1);_bizSave();render();};
+window.bizSetAsset=function(i,field,value){var p=_bizState();if(!p.assets[i])return;p.assets[i][field]=(field==='name')?value:(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizAddAsset=function(){_bizState().assets.push({name:'New asset',value:0});_bizSave();render();};
+window.bizDelAsset=function(i){var p=_bizState();p.assets.splice(i,1);_bizSave();render();};
+window.bizSetNotes=function(v){_bizState().notes=v;_bizSave();};
+window.bizSetTab=function(t){S._bizTab=t;render();};
+window.bizReset=function(){if(typeof confirm==='function'&&!confirm('Reset the Main Plan to the original spreadsheet values?'))return;S._bizPlan=JSON.parse(JSON.stringify(BIZ_DEFAULT));_bizSave();render();};
+
+// ── render ──
+function renderBusinessPlan(){
+  if(!S._bizLoaded){S._bizLoaded=true;if(window.loadBusinessPlan)window.loadBusinessPlan();}
+  if(!(typeof hasRolePerm==='function'&&hasRolePerm('businessplan'))&&!(S.user&&S.user.superAdmin))
+    return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+  var tab=S._bizTab||'mainplan';
+  var tabs=[{id:'mainplan',lbl:'Acquisition'},{id:'loans',lbl:'Loan schedules'},{id:'budget',lbl:'FY Budgets'},{id:'pnl',lbl:'P&L'},{id:'running',lbl:'Running costs'}];
+  var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
+    tabs.map(function(t){return '<button class="sub-tab '+(tab===t.id?'on':'')+'" onclick="window.bizSetTab(\''+t.id+'\')">'+t.lbl+'</button>';}).join('')+'</div>';
+  var body=(tab==='mainplan')?_bizRenderMainPlan():_bizComingSoon(tabs.find(function(x){return x.id===tab;}));
+  return '<div>'+bar+body+'</div>';
+}
+
+function _bizComingSoon(t){
+  return '<div class="card" style="text-align:center;padding:48px 24px;color:var(--text3)">'+
+    '<div style="font-size:34px;margin-bottom:8px">📊</div>'+
+    '<div style="font-size:16px;font-weight:700;color:var(--text2);margin-bottom:6px">'+_rzEscSafe((t&&t.lbl)||'')+'</div>'+
+    '<div style="font-size:13px;max-width:460px;margin:0 auto;line-height:1.5">This sheet from the workbook will be built out next. A few formulas need confirming first (e.g. the loan schedule’s interest-only period &amp; lump-sum paydowns, the budget’s per-aircraft departure allocation, and the P&amp;L line detail).</div>'+
+  '</div>';
+}
+
+function _bizRenderMainPlan(){
+  var p=_bizState();
+  var totAmt=0,totInt=0,totPrin=0,totMon=0,totAnn=0;
+  p.tranches.forEach(function(t){var c=_bizMonthly(t);totAmt+=+t.amount||0;totInt+=c.interest;totPrin+=c.principal;totMon+=c.monthly;totAnn+=c.monthly*12;});
+  var assetTot=p.assets.reduce(function(s,a){return s+(+a.value||0);},0);
+
+  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><div><div class="st" style="margin-bottom:0">TSF Acquisition — Scenario 1</div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">Edit any input (amount, rate, type, term) and the interest, repayments and totals recompute live.</p></div>'+
+    '<button class="btn btn-ghost" style="font-size:12px" onclick="window.bizReset()">↺ Reset to spreadsheet</button></div></div>';
+
+  // headline tiles
+  function tile(lbl,val,col){return '<div style="flex:1 1 150px;border:1px solid var(--border2);border-top:3px solid '+(col||'var(--accent)')+';border-radius:10px;padding:12px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700">'+lbl+'</div><div style="font-size:20px;font-weight:800;color:var(--text1);margin-top:2px">'+val+'</div></div>';}
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
+    tile('Total financed',_bizMoney(totAmt),'#7c3aed')+
+    tile('Monthly repayments',_bizMoney(totMon),'#f59e0b')+
+    tile('Annual repayments',_bizMoney(totAnn),'#ef4444')+
+    tile('Asset value',_bizMoney(assetTot),'#22c55e')+
+    '</div>';
+
+  // financing table
+  var _inS='width:100%;font-size:12px;padding:5px 6px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);box-sizing:border-box';
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:720px">';
+  h+='<thead><tr style="background:var(--card2)">'+
+    ['Facility','Financed amount','Rate %','Type','Term (yr)','Interest /mo','Principal /mo','Monthly','Annual',''].map(function(t,i){return '<th style="text-align:'+(i===0?'left':'center')+';padding:8px 8px;font-size:10px;color:var(--text3);font-weight:700">'+t+'</th>';}).join('')+
+    '</tr></thead><tbody>';
+  p.tranches.forEach(function(t,i){
+    var c=_bizMonthly(t);
+    h+='<tr style="border-top:1px solid var(--border2)">'+
+      '<td style="padding:4px 6px"><input value="'+_rzEscSafe(t.name||'')+'" onchange="window.bizSetTranche('+i+',\'name\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:4px 6px"><input type="number" step="1000" value="'+(t.amount!==''?t.amount:'')+'" onchange="window.bizSetTranche('+i+',\'amount\',this.value)" style="'+_inS+';text-align:right"></td>'+
+      '<td style="padding:4px 6px"><input type="number" step="0.01" value="'+(t.rate!==''?t.rate:'')+'" onchange="window.bizSetTranche('+i+',\'rate\',this.value)" style="'+_inS+';text-align:center"></td>'+
+      '<td style="padding:4px 6px"><select onchange="window.bizSetTranche('+i+',\'type\',this.value)" style="'+_inS+'"><option value="io"'+(t.type==='io'?' selected':'')+'>Interest only</option><option value="pi"'+(t.type==='pi'?' selected':'')+'>P &amp; I</option></select></td>'+
+      '<td style="padding:4px 6px"><input type="number" step="1" value="'+(t.term!==''?t.term:'')+'" onchange="window.bizSetTranche('+i+',\'term\',this.value)" style="'+_inS+';text-align:center"'+(t.type==='io'?' title="Used for the amortising P&I calc"':'')+'></td>'+
+      '<td style="padding:4px 6px;text-align:right;color:var(--text2)">'+_bizMoney2(c.interest)+'</td>'+
+      '<td style="padding:4px 6px;text-align:right;color:var(--text2)">'+(c.principal?_bizMoney2(c.principal):'—')+'</td>'+
+      '<td style="padding:4px 6px;text-align:right;font-weight:700;color:#f59e0b">'+_bizMoney2(c.monthly)+'</td>'+
+      '<td style="padding:4px 6px;text-align:right;font-weight:700;color:var(--text1)">'+_bizMoney(c.monthly*12)+'</td>'+
+      '<td style="padding:4px 6px;text-align:center"><button onclick="window.bizDelTranche('+i+')" title="Remove" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px">✕</button></td>'+
+      '</tr>';
+  });
+  h+='<tr style="border-top:2px solid var(--border);background:var(--card2);font-weight:800">'+
+    '<td style="padding:7px 8px">Total</td>'+
+    '<td style="padding:7px 6px;text-align:right">'+_bizMoney(totAmt)+'</td><td></td><td></td><td></td>'+
+    '<td style="padding:7px 6px;text-align:right">'+_bizMoney2(totInt)+'</td>'+
+    '<td style="padding:7px 6px;text-align:right">'+(totPrin?_bizMoney2(totPrin):'—')+'</td>'+
+    '<td style="padding:7px 6px;text-align:right;color:#f59e0b">'+_bizMoney2(totMon)+'</td>'+
+    '<td style="padding:7px 6px;text-align:right;color:#ef4444">'+_bizMoney(totAnn)+'</td><td></td>'+
+    '</tr>';
+  h+='</tbody></table></div>';
+  h+='<div style="margin:6px 0 14px"><button class="btn btn-ghost" style="font-size:12px" onclick="window.bizAddTranche()">+ Add facility</button></div>';
+
+  // asset register
+  h+='<div class="card"><div class="st">Asset valuation</div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:340px;max-width:520px">';
+  h+='<thead><tr style="background:var(--card2)"><th style="text-align:left;padding:7px 8px;font-size:10px;color:var(--text3);font-weight:700">Asset</th><th style="text-align:right;padding:7px 8px;font-size:10px;color:var(--text3);font-weight:700">Value</th><th></th></tr></thead><tbody>';
+  p.assets.forEach(function(a,i){
+    h+='<tr style="border-top:1px solid var(--border2)">'+
+      '<td style="padding:4px 6px"><input value="'+_rzEscSafe(a.name||'')+'" onchange="window.bizSetAsset('+i+',\'name\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:4px 6px"><input type="number" step="0.01" value="'+(a.value!==''?a.value:'')+'" onchange="window.bizSetAsset('+i+',\'value\',this.value)" style="'+_inS+';text-align:right"></td>'+
+      '<td style="padding:4px 6px;text-align:center"><button onclick="window.bizDelAsset('+i+')" title="Remove" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px">✕</button></td>'+
+      '</tr>';
+  });
+  h+='<tr style="border-top:2px solid var(--border);background:var(--card2);font-weight:800"><td style="padding:7px 8px">Total</td><td style="padding:7px 8px;text-align:right;color:#22c55e">'+_bizMoney2(assetTot)+'</td><td></td></tr>';
+  h+='</tbody></table></div><div style="margin-top:8px"><button class="btn btn-ghost" style="font-size:12px" onclick="window.bizAddAsset()">+ Add asset</button></div></div>';
+
+  // notes
+  h+='<div class="card"><div class="st">Notes</div><textarea onchange="window.bizSetNotes(this.value)" style="width:100%;min-height:70px;font-size:13px;padding:8px;border:1px solid var(--border2);border-radius:7px;background:var(--card);color:var(--text);box-sizing:border-box;resize:vertical">'+_rzEscSafe(p.notes||'')+'</textarea></div>';
+
+  h+='<div style="font-size:11px;color:var(--text3);padding:4px 2px">Confidential — visible only to those with the Business Plan permission. Interest only = amount × rate ÷ 12; P&amp;I = standard amortising payment over the term.</div>';
+  return h;
+}
+// Safe escape (mirrors flightduty.js).
+function _bizEscSafe(s){return _rzEscSafe(s);}
 </script>
 </body>
 </html>

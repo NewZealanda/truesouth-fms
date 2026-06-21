@@ -435,7 +435,9 @@ function _rzPickups(){
       // Morning pickup …
       out.push(Object.assign({},base,{id:id,depart:pdep,pickupTime:ptime,dropoff:false}));
       // … and the matching RETURN drop-off (self-drive pax collect their own car, so skip them).
-      if(!sd)out.push(Object.assign({},base,{id:id+'|D',depart:_rzDropDep(pdep),pickupTime:'',dropoff:true}));
+      // The drop-off resolves its OWN location/time overrides (keyed by the '|D' id) so editing a
+      // drop-off's location/time on the board sticks instead of reverting to the pickup's.
+      if(!sd){var did=id+'|D';var dloc=(ov[did]!=null&&ov[did]!=='')?ov[did]:loc;var dtime=(tov[did]!=null&&tov[did]!=='')?tov[did]:'';out.push(Object.assign({},base,{id:did,location:dloc,depart:_rzDropDep(pdep),pickupTime:dtime,dropoff:true}));}
     });
   });
   return out;
@@ -455,7 +457,7 @@ function _rzAutoVans(pickups){
   const vans=[];for(let i=0;i<N;i++)vans.push([]);
   // Pickups run by DEPARTURE: a whole departure is collected together. The ACTIVE vehicle set is
   // PER DEPARTURE (a van parked for the 0800 run can still drive 1200). Hilton gets its own vehicle.
-  const byDep={};pickups.forEach(function(p){(byDep[p.depart||'~']=byDep[p.depart||'~']||[]).push(p);});
+  const byDep={};pickups.forEach(function(p){(byDep[p.depart||'—']=byDep[p.depart||'—']||[]).push(p);});
   Object.keys(byDep).sort().forEach(function(dep){
     var act=[];for(let i=0;i<N;i++)if(!_rzVanParked(i,dep))act.push(i);if(!act.length)act=[0];
     const grp=byDep[dep];
@@ -480,7 +482,7 @@ function _rzVanPax(vanIds,pickups){return vanIds.reduce(function(s,id){const p=_
 function _rzEnsureVans(){
   const pickups=_rzPickups();
   const ids=pickups.map(function(p){return p.id;});
-  const depOf={};pickups.forEach(function(p){depOf[p.id]=(p.depart||'~');});
+  const depOf={};pickups.forEach(function(p){depOf[p.id]=(p.depart||'—');});
   let vans=S._pickupVans;
   const valid=Array.isArray(vans)&&vans.length===_rzVehicles().length&&vans.every(Array.isArray);
   // First ACTIVE (non-parked) van FOR A DEPARTURE — catches new/displaced pickups of that run.
@@ -493,7 +495,7 @@ function _rzEnsureVans(){
     const sd={};pickups.forEach(function(p){if(p.selfDrive)sd[p.id]=1;});
     const placed={};
     S._pickupVans=vans.map(function(v){return v.filter(function(id){if(placed[id]||sd[id]||ids.indexOf(id)<0)return false;placed[id]=1;return true;});});
-    ids.forEach(function(id){if(!placed[id]&&!sd[id]){var dep=depOf[id]||'~';var fa=_firstActiveVan(dep);if(fa<0)fa=0;S._pickupVans[fa].push(id);}});
+    ids.forEach(function(id){if(!placed[id]&&!sd[id]){var dep=depOf[id]||'—';var fa=_firstActiveVan(dep);if(fa<0)fa=0;S._pickupVans[fa].push(id);}});
   }
   // Move any pickup whose van is parked FOR ITS departure into that departure's first active van.
   S._pickupVans.forEach(function(vanIds,vi){
@@ -501,7 +503,7 @@ function _rzEnsureVans(){
     vanIds.forEach(function(id){var dep=depOf[id];if(dep!=null&&_rzVanParked(vi,dep))move.push(id);else keep.push(id);});
     if(move.length){
       S._pickupVans[vi]=keep;
-      move.forEach(function(id){var dep=depOf[id]||'~';var fa=_firstActiveVan(dep);if(fa>=0&&fa!==vi&&S._pickupVans[fa])S._pickupVans[fa].push(id);else S._pickupVans[vi].push(id);});
+      move.forEach(function(id){var dep=depOf[id]||'—';var fa=_firstActiveVan(dep);if(fa>=0&&fa!==vi&&S._pickupVans[fa])S._pickupVans[fa].push(id);else S._pickupVans[vi].push(id);});
     }
   });
   if(!S._pickupCollected||typeof S._pickupCollected!=='object')S._pickupCollected={};
@@ -1668,7 +1670,7 @@ function _rzRenderPickups(){
   S._pickupVans.forEach(function(vanIds,vi){
     if(_rzVanParked(vi,depFilter))return; // parked for THIS departure → shown in the spare bin, not on the board
     // Capacity is per departure run (each ≤11), so size the warning by the busiest departure.
-    var _byDepLoad={};vanIds.forEach(function(id){var pp=_rzPickupById(pickups,id);if(pp)_byDepLoad[pp.depart||'~']=(_byDepLoad[pp.depart||'~']||0)+pp.pax;});
+    var _byDepLoad={};vanIds.forEach(function(id){var pp=_rzPickupById(pickups,id);if(pp)_byDepLoad[pp.depart||'—']=(_byDepLoad[pp.depart||'—']||0)+pp.pax;});
     var _maxDep=0;Object.keys(_byDepLoad).forEach(function(k){if(_byDepLoad[k]>_maxDep)_maxDep=_byDepLoad[k];});
     const seats=_rzVehSeats(vi);
     const pax=depFilter?(_byDepLoad[depFilter]||0):_rzVanPax(vanIds,pickups);

@@ -38,6 +38,7 @@ ORDER = [
     ('leave',       'js'),
     ('rezdy',       'js'),
     ('flightduty',  'js'),
+    ('businessplan','js'),
     ('tail',        'html'),
 ]
 

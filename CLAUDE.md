@@ -90,7 +90,25 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v24.37** — built+verified. See `HANDOFF.md` for the full log.
+- Latest version: **v24.41** — built+verified. See `HANDOFF.md` for the full log.
+- **`ARCHITECTURE_REVIEW_v24.41.md` is the latest full bug-sweep** (3-reviewer audit of F&D +
+  Transport + core). Fixed in v24.41: F1 crew `reloadTable` dropped `dob`/`typeRatings`; transport
+  drop-off location/time override id; `'~'`→`'—'` dep sentinel; F&D orphan empty rows, days-off
+  counting today, landing int-coercion, `fdSetLimit` NaN guard, non-manager query scope, printed
+  rolling figures at period-end; W&B `calcFormWB` null-guard. **OPEN (top):** F2/F3 roster/leave
+  whole-blob save is last-writer-wins (needs merge-before-write + two-device test).
+- **TSF Business Plan (v24.41) — NEW MODULE `modules/businessplan.js`.** Admin/superadmin section
+  gated by the new **`businessplan`** perm. v1 = the interactive **Acquisition (Main Plan)** model:
+  editable finance tranches (amount/rate/type io|pi/term) → live interest, monthly/annual repayments
+  (`_bizMonthly`: io = amount×rate/12, pi = amortising PMT) + totals; editable asset-valuation table;
+  notes. Persisted to `ts_settings` key `business_plan` (cache `ts_business_plan`), lazy-loaded via
+  `window.loadBusinessPlan`. Seeded from the spreadsheet (`BIZ_DEFAULT`). Other workbook sheets
+  (loan schedules, FY budgets, P&L, running costs) are scaffolded as "coming" tabs — need formula
+  confirmation (interest-only periods/lump-sum paydowns, per-aircraft departure allocation, P&L
+  line detail). CSV holds only one sheet; full build needs the `.xlsx`.
+- **Flight & Duty (v24.37–v24.40) — `modules/flightduty.js`.** Advisory NZ flight-and-duty +
+  currency tracker (now live). See below for the engine; v24.39 added the look-ahead headroom panel
+  + running Duty-30d column; v24.40 added 15-min time dropdowns/steppers + a "now" button.
 - **Flight & Duty (v24.37) — NEW MODULE `modules/flightduty.js`.** Advisory NZ flight-and-duty +
   currency tracker for the superadmin "Flight & Duty" nav section (now live, gated by the new
   `flightduty` perm; `flightduty_manage` = see/certify all pilots). Single-pilot VFR, AC119-2 /

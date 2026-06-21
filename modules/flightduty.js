@@ -105,8 +105,10 @@ function _fdCurrency(uid,type,asOf){
 // rule floors (2 off / any 14 days; 2 CONSECUTIVE off / any 30 days) looking back from asOf.
 function _fdIsOffDay(uid,ds){var r=_fdRow(uid,ds);return !(r&&((r.ds&&r.de)||(+r.ft||0)>0));}
 function _fdDaysOff(uid,asOf){
-  var off14=0,maxConsec30=0,run=0;
-  for(var i=0;i<30;i++){var ds=_fdAddDays(asOf,-i);var off=_fdIsOffDay(uid,ds);
+  var off14=0,maxConsec30=0,run=0,today=_fdToday();
+  for(var i=0;i<30;i++){var ds=_fdAddDays(asOf,-i);
+    // only a PAST day with no entry is a confirmed day off — today/future blanks are "unknown", not off
+    var off=(ds<today)&&_fdIsOffDay(uid,ds);
     if(i<14&&off)off14++;
     if(off){run++;if(run>maxConsec30)maxConsec30=run;}else run=0;
   }
@@ -142,14 +144,26 @@ window.fdSaveRow=function(uid,ds,patch){
   S._fdData=S._fdData||{};var k=_fdKey(uid,ds);
   var cur=S._fdData[k]||{};
   var row=Object.assign({},cur,patch,{by:(S.user&&S.user.name)||'',at:new Date().toISOString()});
-  // prune an all-empty row
+  // An all-empty row is removed (locally + in the DB) so it doesn't orphan a zero row or wrongly
+  // count as a logged day.
   var empty=!row.ds&&!row.de&&!(+row.ft)&&!(+row.lc)&&!(+row.lg)&&!row.ext&&!row.note;
+  if(empty){
+    delete S._fdData[k];
+    try{lsSet&&lsSet('ts_flightduty_cache',S._fdData);}catch(e){}
+    try{if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flightduty?id=eq.'+encodeURIComponent(k),{method:'DELETE',headers:SH}).catch(function(){});}catch(e){}
+    if(typeof safeRender==='function')safeRender();return;
+  }
   S._fdData[k]=row;
   try{lsSet&&lsSet('ts_flightduty_cache',S._fdData);}catch(e){}
   if(typeof sbU==='function')sbU('ts_flightduty',[{id:k,user_id:uid,fd_date:ds,duty_start:row.ds||null,duty_end:row.de||null,flight_time:+row.ft||0,ldg_c208:+row.lc||0,ldg_ga8:+row.lg||0,extended:!!row.ext,override:!!row.ov,override_reason:row.ovr||null,note:row.note||null,updated_at:row.at,updated_by:row.by}]).catch(function(){});
   if(typeof safeRender==='function')safeRender();
 };
-window.fdEditField=function(uid,ds,field,value){var p={};p[field]=value;window.fdSaveRow(uid,ds,p);};
+window.fdEditField=function(uid,ds,field,value){
+  if(value===''||value==null){/* keep blank */}
+  else if(field==='lc'||field==='lg')value=Math.max(0,Math.round(+value)||0);   // landings = non-negative integer
+  else if(field==='ft')value=Math.max(0,+value||0);                            // flight hours = non-negative
+  var p={};p[field]=value;window.fdSaveRow(uid,ds,p);
+};
 // Duty start/end are locked to 15-minute blocks — round the entered time to the nearest quarter hour.
 function _fdHM(t){t=Math.round(t/15)*15;if(t<0)t=0;if(t>=1440)t=1425;return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');}
 window.fdSetTime=function(uid,ds,field,value){
@@ -203,9 +217,11 @@ window.loadFlightDuty=async function(){
   try{var c=lsGet&&lsGet('ts_flightduty_cache');if(c&&typeof c==='object')S._fdData=c;}catch(e){}
   if(typeof sbF!=='function'){if(typeof render==='function')render();return;}
   try{
-    var rows=await sbF('ts_flightduty','','fd_date');
+    // non-managers only pull their own rows (defence-in-depth alongside RLS)
+    var _scope=_fdCanManage()?'':'&user_id=eq.'+encodeURIComponent((S.user&&S.user.id)||'');
+    var rows=await sbF('ts_flightduty',_scope,'fd_date');
     if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.user_id+'|'+r.fd_date]={ds:r.duty_start||'',de:r.duty_end||'',ft:r.flight_time||0,lc:r.ldg_c208||0,lg:r.ldg_ga8||0,ext:!!r.extended,ov:!!r.override,ovr:r.override_reason||'',note:r.note||'',by:r.updated_by||'',at:r.updated_at||''};});S._fdData=d;try{lsSet&&lsSet('ts_flightduty_cache',d);}catch(e){}}
-    var certs=await sbF('ts_fd_certs','','certified_at');
+    var certs=await sbF('ts_fd_certs',_scope,'certified_at');
     if(Array.isArray(certs)){var cc={};certs.forEach(function(r){cc[r.user_id+'|'+r.period]={at:r.certified_at,by:r.certified_by||''};});S._fdCerts=cc;}
     fetch(SB+'/rest/v1/ts_settings?key=eq.fd_limits&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value)S._fdLimits=JSON.parse(s[0].value);}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});
   }catch(e){}
@@ -214,7 +230,7 @@ window.loadFlightDuty=async function(){
 // Save one limit's value / amber / red buffer (Settings ▸ Operations ▸ Flight & Duty).
 window.fdSetLimit=function(key,field,value){
   S._fdLimits=S._fdLimits||{};S._fdLimits[key]=S._fdLimits[key]||{};
-  S._fdLimits[key][field]=(value===''||value==null)?'':(+value);
+  S._fdLimits[key][field]=(value===''||value==null||isNaN(+value))?'':(+value); // NaN → revert to default
   if(typeof sbU==='function')sbU('ts_settings',[{key:'fd_limits',value:JSON.stringify(S._fdLimits)}]).catch(function(){});
   if(typeof safeRender==='function')safeRender();
 };
@@ -447,7 +463,10 @@ window.fdPrint=function(uid,month){
     var ds=y+'-'+String(mo+1).padStart(2,'0')+'-'+String(dd).padStart(2,'0');var r=_fdRow(uid,ds)||{};var dh=_fdDutyHours(r);totF+=+(r.ft||0);totD+=dh;
     rows+='<tr><td>'+dd+'</td><td>'+(r.ds||'')+'</td><td>'+(r.de||'')+'</td><td class="c">'+(dh?Math.round(dh*10)/10:'')+(r.ext?'<sup>+</sup>':'')+'</td><td class="c">'+(r.ft||'')+'</td><td class="c">'+(r.lc||'')+'</td><td class="c">'+(r.lg||'')+'</td></tr>';
   }
-  var d30=_fdValueFor(uid,'duty_30',_fdToday()),f30=_fdValueFor(uid,'flt_30',_fdToday());
+  // rolling figures are computed as at the END of the printed period (not "today"), so a printed
+  // past month shows that month's rolling totals, not the current window's.
+  var _pEnd=(month<_fdMonth(_fdToday()))?(y+'-'+String(mo+1).padStart(2,'0')+'-'+String(daysIn).padStart(2,'0')):_fdToday();
+  var d30=_fdValueFor(uid,'duty_30',_pEnd),f30=_fdValueFor(uid,'flt_30',_pEnd);
   var w=window.open('','_blank','width=820,height=900');if(!w){if(typeof toast==='function')toast('Allow pop-ups to print.','warn');return;}
   w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Flight & Duty — '+_rzEscSafe(nm)+' — '+_fdMonthLabel(month)+'</title><style>'+
     '*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:14mm;font-size:12px}'+

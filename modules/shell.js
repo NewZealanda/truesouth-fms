@@ -142,7 +142,7 @@ function _sectionAllowed(sec){
     case 'settings':    return hasRolePerm('admin_users')||hasRolePerm('admin_crew');
     case 'operations':  return hasRolePerm('operations');
     case 'flightduty':  return (hasRolePerm('flightduty'))||!!(S.user&&S.user.superAdmin);
-    case 'businessplan':return !!(S.user&&S.user.superAdmin); // placeholder — superadmin only for now
+    case 'businessplan':return (hasRolePerm('businessplan'))||!!(S.user&&S.user.superAdmin);
     default:            return true;
   }
 }
@@ -587,16 +587,17 @@ function renderDrawer(){
     }
    }
   }
-  // Flight & Duty (live) for anyone with the permission; TSF Business Plan placeholder (superadmin).
+  // Flight & Duty + TSF Business Plan — each shown to anyone holding its permission.
   {var _canFD=hasRolePerm('flightduty')||(S.user&&S.user.superAdmin);
-   if(_canFD||(S.user&&S.user.superAdmin)){
-    var _fdNavBtn=function(label,section,icon,soon){
+   var _canBP=hasRolePerm('businessplan')||(S.user&&S.user.superAdmin);
+   if(_canFD||_canBP){
+    var _fdNavBtn=function(label,section,icon){
       var on=sec===section;
-      return '<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+section+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(on?'rgba(124,58,237,.22)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(on?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+icon+'</span><span style="flex:1">'+label+'</span>'+(soon?'<span style="font-size:9px;font-weight:800;letter-spacing:.04em;color:rgba(255,255,255,.35);background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px">SOON</span>':'')+'</button>';
+      return '<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+section+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(on?'rgba(124,58,237,.22)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(on?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+icon+'</span><span style="flex:1">'+label+'</span></button>';
     };
     h+='<div style="margin:8px 6px 4px;border-top:1px solid rgba(255,255,255,.06)"></div>';
-    if(_canFD)h+=_fdNavBtn('Flight & Duty','flightduty','🕓',false);
-    if(S.user&&S.user.superAdmin)h+=_fdNavBtn('TSF Business Plan','businessplan','📈',true);
+    if(_canFD)h+=_fdNavBtn('Flight & Duty','flightduty','🕓');
+    if(_canBP)h+=_fdNavBtn('TSF Business Plan','businessplan','📈');
   }}
   h+='</nav>';
   h+='<div style="padding:10px 16px;font-size:10px;color:rgba(255,255,255,.18);font-family:monospace;border-top:1px solid rgba(255,255,255,.06)">'+APP_VER+'</div>';
@@ -740,8 +741,8 @@ function renderApp(){
           return '<div id="flash-flightduty">'+renderFlightDuty()+'</div>';
         }
         if(_sec==='businessplan'){
-          if(!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
-          return _renderPlaceholderSection('TSF Business Plan','📈','The TrueSouth Flights business plan and targets will live here.');
+          if(!(hasRolePerm('businessplan')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-businessplan">'+renderBusinessPlan()+'</div>';
         }
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
