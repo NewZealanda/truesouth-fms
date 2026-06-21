@@ -725,7 +725,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.22';
+const APP_VER='v24.23';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -13255,7 +13255,9 @@ function _rzRenderPickups(){
     var drv=(S._pickupDrivers||[])[vi]||null;
     vansH+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding:5px 9px;border-radius:8px;border:1px dashed '+(drv?col+'99':(vanIds.length?'#f59e0b88':'var(--border2)'))+';background:'+(drv?col+'14':(vanIds.length?'rgba(245,158,11,.08)':'transparent'))+'">'+
       (drv
-        ?'<span style="font-size:12px;font-weight:700;color:'+col+'">👤 '+_rzEsc(drv)+'</span><button onclick="window.pickupClearDriver('+vi+')" style="margin-left:auto;background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;line-height:1" title="Clear driver">✕</button>'
+        ?'<span style="font-size:12px;font-weight:700;color:'+col+'">👤 '+_rzEsc(drv)+'</span>'+
+          (function(){var a=_rzVanAck(vi);if(_rzVanAcked(vi)){var t='';try{t=new Date(a.at).toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});}catch(e){}return '<span title="Driver acknowledged this list" style="font-size:10px;font-weight:800;color:#22c55e;background:rgba(34,197,94,.14);padding:2px 7px;border-radius:10px;margin-left:6px;white-space:nowrap">✓ acked'+(t?' '+t:'')+'</span>';}return '<span title="The list changed since the driver last acknowledged" style="font-size:10px;font-weight:800;color:#f59e0b;background:rgba(245,158,11,.14);padding:2px 7px;border-radius:10px;margin-left:6px;white-space:nowrap">⚠ awaiting ack</span>';})()+
+          '<button onclick="window.pickupClearDriver('+vi+')" style="margin-left:auto;background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;line-height:1" title="Clear driver">✕</button>'
         :(vanIds.length
           ?'<span style="font-size:12px;font-weight:700;color:#f59e0b">🚕 Taxi — drop a driver to assign</span>'
           :'<span style="font-size:11px;color:var(--text3)">Drop a driver here</span>'))+
@@ -13398,9 +13400,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -13420,10 +13422,61 @@ function _pkApplyBlob(d){
   S._rzBookingCheckedIn=(d.bookingCheckedIn&&typeof d.bookingCheckedIn==='object')?d.bookingCheckedIn:{};
   S._rzSchedAttach=(d.schedAttach&&typeof d.schedAttach==='object')?d.schedAttach:{};
   S._rzCheckin=(d.checkin&&typeof d.checkin==='object')?d.checkin:{};
+  S._pickupAck=(d.ack&&typeof d.ack==='object')?d.ack:{};
 }
 function _pkSnapshot(d){try{return JSON.parse(JSON.stringify(d));}catch(e){return null;}}
 function _pkEq(a,b){try{return JSON.stringify(a===undefined?null:a)===JSON.stringify(b===undefined?null:b);}catch(e){return false;}}
 function _pkSetBaseline(){S._pickupBaseline=_pkSnapshot(_pkBlobFromState());} // remember the as-loaded blob
+
+// ── Driver pickup-list acknowledgement ─────────────────────────────────────────
+// A van's "list signature" = its pickups' membership + location + pickup time (NOT order, so a
+// driver reordering their own run doesn't ask them to re-acknowledge). When dispatch adds/removes/
+// relocates a pickup the sig changes; if it differs from what the driver last acknowledged, they
+// get a banner + the changes highlighted, and dispatch sees "awaiting ack".
+function _rzVanSig(vi){
+  var pickups=_rzPickups();
+  var ids=((S._pickupVans||[])[vi]||[]);
+  var parts=ids.map(function(id){var p=_rzPickupById(pickups,id);return id+'@'+((p&&p.location)||'')+'@'+((p&&p.pickupTime)||'');}).sort();
+  return parts.join('|');
+}
+function _rzVanAck(vi){var a=(S._pickupAck||{})[vi];return (a&&typeof a==='object')?a:null;}
+function _rzVanAcked(vi){var a=_rzVanAck(vi);return !!(a&&a.sig===_rzVanSig(vi));}
+// ids currently in the van but NOT in the last-acknowledged set = newly added since last ack.
+function _rzVanAddedIds(vi){var a=_rzVanAck(vi);if(!a||!Array.isArray(a.ids))return {};var was={};a.ids.forEach(function(id){was[id]=1;});var out={};((S._pickupVans||[])[vi]||[]).forEach(function(id){if(!was[id])out[id]=1;});return out;}
+// acknowledged ids no longer in the van = removed since last ack (for a "removed" note).
+function _rzVanRemovedIds(vi){var a=_rzVanAck(vi);if(!a||!Array.isArray(a.ids))return [];var now={};((S._pickupVans||[])[vi]||[]).forEach(function(id){now[id]=1;});return a.ids.filter(function(id){return !now[id];});}
+// Record the driver's acknowledgement of a van's current list (+ broadcast so dispatch sees it).
+window.pickupAckRun=function(vi){
+  vi=parseInt(vi,10);if(isNaN(vi))return;
+  S._pickupAck=S._pickupAck||{};
+  S._pickupAck[vi]={sig:_rzVanSig(vi),ids:((S._pickupVans||[])[vi]||[]).slice(),at:new Date().toISOString(),by:((S.user&&S.user.name)||'').trim()};
+  if(window.pickupSave)window.pickupSave(true);
+  if(typeof toast==='function')toast('Pickup list acknowledged ✓','ok');
+  render();
+};
+// Acknowledge ALL of the signed-in driver's vans at once (the My-Pickups banner button).
+window.pickupAckRunAll=function(){
+  var me=((S.user&&S.user.name)||'').trim();if(!me)return;
+  S._pickupAck=S._pickupAck||{};
+  (S._pickupVans||[]).forEach(function(ids,vi){
+    if(((S._pickupDrivers||[])[vi]||'').trim()===me){
+      S._pickupAck[vi]={sig:_rzVanSig(vi),ids:(ids||[]).slice(),at:new Date().toISOString(),by:me};
+    }
+  });
+  S._myPkNotifiedSig=''; // we've acked → reset the notify guard for the next change
+  if(window.pickupSave)window.pickupSave(true);
+  if(typeof toast==='function')toast('Pickup list acknowledged ✓','ok');
+  render();
+};
+// Keep the Pickups / My-Pickups pages LIVE even if a realtime broadcast was missed (mobile
+// networks drop them): re-pull the day's pickup blob every 15s while viewing them. Guarded against
+// clobbering a local edit (focused input / within 7s of a local save) inside rezdyReloadPickupLive.
+setInterval(function(){
+  try{
+    if(typeof S==='undefined'||!S.user||document.visibilityState!=='visible')return;
+    if(S.section==='operations'&&S.tab==='ground'&&typeof window.rezdyReloadPickupLive==='function')window.rezdyReloadPickupLive();
+  }catch(e){}
+},15000);
 
 window.rezdyLoadPickups=async function(){
   S._pickupLoading=true;safeRender();
@@ -13602,6 +13655,25 @@ function _rzRenderMyPickups(){
   if(!myVans.length){
     return '<div style="max-width:560px;margin:0 auto"><div class="card" style="text-align:center;padding:40px 20px;color:var(--text3)"><div style="font-size:30px;margin-bottom:8px">🚐</div><div style="font-size:15px;font-weight:700;color:var(--text2);margin-bottom:4px">No pickups assigned to you</div><div style="font-size:13px">You\'re not on a van for '+_rzDowLabel(S.rezdyDate)+'. Use the arrows above to check another day.</div></div></div>';
   }
+  // ── Acknowledgement: has dispatch changed this driver's run since they last acknowledged? ──
+  var _unackedVans=myVans.filter(function(v){return !_rzVanAcked(v.vi);}).map(function(v){return v.vi;});
+  var _addedSet={},_removedCount=0,_hadPriorAck=false;
+  _unackedVans.forEach(function(vi){var ad=_rzVanAddedIds(vi);Object.keys(ad).forEach(function(id){_addedSet[id]=1;});_removedCount+=_rzVanRemovedIds(vi).length;if(_rzVanAck(vi))_hadPriorAck=true;});
+  // OS pop-up the first time a given change appears (once per distinct change set).
+  var _ackSig=_unackedVans.map(function(vi){return vi+':'+_rzVanSig(vi);}).join('||');
+  if(S._myPkNotifiedSig===undefined){S._myPkNotifiedSig=_ackSig;}
+  else if(_ackSig!==S._myPkNotifiedSig){S._myPkNotifiedSig=_ackSig;if(_ackSig&&typeof _osNotify==='function')_osNotify({message:'Your pickup run changed — review & acknowledge',id:'mypk-'+Date.now()});}
+  var ackBanner='';
+  if(_unackedVans.length){
+    var _addedN=Object.keys(_addedSet).length;
+    var _msg=_hadPriorAck
+      ? ('A pickup '+((_addedN&&_removedCount)?'was added & removed':(_addedN?'was added':(_removedCount?'was removed':'changed')))+' on your run'+((_addedN||_removedCount)?(' — '+(_addedN?_addedN+' new':'')+((_addedN&&_removedCount)?', ':'')+(_removedCount?_removedCount+' removed':'')):'')+'.')
+      : 'Please review and acknowledge your pickup run.';
+    ackBanner='<div style="position:sticky;top:0;z-index:40;background:linear-gradient(135deg,#7c2d12,#92400e);border:1px solid #f59e0b;border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;box-shadow:0 6px 18px rgba(0,0,0,.35)">'+
+      '<div style="font-size:13.5px;font-weight:700;color:#fde68a;flex:1;min-width:160px">⚠ '+_msg+(_addedN?' New stops are highlighted in green below.':'')+'</div>'+
+      '<button onclick="window.pickupAckRunAll()" style="flex-shrink:0;padding:10px 18px;border-radius:8px;border:none;background:#22c55e;color:#06281a;font-size:13px;font-weight:800;cursor:pointer">OK, got it ✓</button>'+
+    '</div>';
+  }
   // Departures across all of my vans — show ONE at a time via a selector (bookings-style).
   var allStops=[];
   myVans.forEach(function(v){v.ids.forEach(function(id){var p=_rzPickupById(pickups,id);if(p)allStops.push({vi:v.vi,p:p});});});
@@ -13617,7 +13689,7 @@ function _rzRenderMyPickups(){
     });
     tabs+='</div>';
   }
-  var h=tabs;
+  var h=ackBanner+tabs;
   myVans.forEach(function(v){
     var col=_rzVehColor(v.vi);
     var grp=v.ids.map(function(id){return _rzPickupById(pickups,id);})
@@ -13633,9 +13705,10 @@ function _rzRenderMyPickups(){
     grp.forEach(function(p){
       var collected=!!(S._pickupCollected||{})[p.id];
       var _idD=_rzEsc(p.id).replace(/'/g,"\\'");
-      h+='<div draggable="true" ondragstart="window.myPkDragStart(\''+_idD+'\',event)" ondragover="event.preventDefault()" ondrop="window.myPkDrop('+_viD+',\''+_depD+'\',\''+_idD+'\',event)" style="background:var(--card2);border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:10px;padding:13px;margin-bottom:10px;cursor:grab;'+(collected?'opacity:.55':'')+'">'+
+      var _isNew=!!_addedSet[p.id]; // added by dispatch since this driver last acknowledged
+      h+='<div draggable="true" ondragstart="window.myPkDragStart(\''+_idD+'\',event)" ondragover="event.preventDefault()" ondrop="window.myPkDrop('+_viD+',\''+_depD+'\',\''+_idD+'\',event)" style="background:'+(_isNew?'rgba(34,197,94,.10)':'var(--card2)')+';border:'+(_isNew?'2px solid #22c55e':'1px solid var(--border2)')+';border-left:4px solid '+(_isNew?'#22c55e':col)+';border-radius:10px;padding:13px;margin-bottom:10px;cursor:grab;'+(collected?'opacity:.55':'')+'">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">'+
-          '<div style="font-weight:800;font-size:16px;color:var(--text1);'+(collected?'text-decoration:line-through':'')+'"><span style="color:var(--text3);font-weight:600;margin-right:6px;cursor:grab" title="Drag to reorder">≡</span>'+_rzEsc(p.customer||p.order)+'</div>'+
+          '<div style="font-weight:800;font-size:16px;color:var(--text1);'+(collected?'text-decoration:line-through':'')+'"><span style="color:var(--text3);font-weight:600;margin-right:6px;cursor:grab" title="Drag to reorder">≡</span>'+_rzEsc(p.customer||p.order)+(_isNew?' <span style="font-size:10px;font-weight:900;color:#06281a;background:#22c55e;padding:1px 6px;border-radius:10px;vertical-align:middle">NEW</span>':'')+'</div>'+
           '<span style="flex-shrink:0;font-size:13px;font-weight:800;color:'+col+'">'+p.pax+' pax</span>'+
         '</div>'+
         (p.pickupTime?'<div style="font-size:15px;font-weight:700;color:var(--text1);margin-bottom:3px">🕑 Pickup '+_rzEsc(p.pickupTime)+'</div>':'')+
