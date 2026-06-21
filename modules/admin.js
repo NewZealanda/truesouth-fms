@@ -375,7 +375,15 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
         +expiryRows+'</div>'
         +'<div><label style="font-size:11px;color:var(--text3)">AIRCRAFT APPROVALS</label>'
         +'<div style="font-size:10px;color:var(--text3);margin-top:2px;opacity:.8">Anyone approved on at least one aircraft is PIC-eligible and appears in the manifest pilot list.</div>'
-        +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'+endorseButtons+'</div></div>';
+        +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'+endorseButtons+'</div></div>'
+        +'<div style="display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:start;margin-top:4px">'
+        +'<div><label style="font-size:11px;color:var(--text3)">DATE OF BIRTH</label>'
+        +'<input class="fi" type="date" value="'+esc(d.dob||'')+'" style="font-size:13px" onchange="S.admin.personModal.draft.dob=this.value"></div>'
+        +'<div><label style="font-size:11px;color:var(--text3)">TYPE RATINGS</label>'
+        +'<div style="font-size:10px;color:var(--text3);margin-top:2px;opacity:.8">Drives Flight &amp; Duty 90-day currency tracking.</div>'
+        +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'
+        +[['c208b','C208B'],['ga8','GA8']].map(function(t){var on=(d.typeRatings||[]).indexOf(t[0])>=0;return '<button onclick="(function(){var tr=S.admin.personModal.draft.typeRatings||[];var ix=tr.indexOf(\''+t[0]+'\');if(ix>=0)tr.splice(ix,1);else tr.push(\''+t[0]+'\');S.admin.personModal.draft.typeRatings=tr;render();})()" style="padding:5px 14px;border-radius:20px;font-size:11px;cursor:pointer;font-weight:700;border:1.5px solid '+(on?'#7c3aed':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.18)':'transparent')+';color:'+(on?'#c4b5fd':'var(--text3)')+'">'+t[1]+'</button>';}).join('')
+        +'</div></div></div>';
     } else if(tab==='login'){
       const isOwnAccount=m.userId===S.user?.id;
       bodyHtml='<div style="display:flex;flex-direction:column;gap:12px">'
@@ -2706,6 +2714,8 @@ window.openPersonModal=async function(crewId,userId){
       ocaDue:cr?cr.ocaDue||'':'',
       firstAid:cr?cr.firstAid||'':'',
       avsecExpiry:cr?cr.avsecExpiry||'':'',
+      dob:cr?cr.dob||'':'',
+      typeRatings:cr?JSON.parse(JSON.stringify(cr.typeRatings||[])):[],
       endorse:cr?JSON.parse(JSON.stringify(cr.endorse||[])):[],
       photo:cr?cr.photo||'':'',
       email:u?u.email||'':'',
@@ -2788,7 +2798,8 @@ window.savePerson=async function(){
       const fullR=await sbU('ts_crew',[{id:crewId,name:finalName,weight:parseFloat(d.w)||null,
         endorsements:JSON.stringify(d.endorse||[]),code:d.code||'',dl_num:d.dlNum||'',
         caa_license:d.caaNum||'',medical_expiry:d.medExpiry||null,oca_due:d.ocaDue||null,
-        first_aid:d.firstAid||null,avsec_expiry:d.avsecExpiry||null,photo:d.photo||''}]);
+        first_aid:d.firstAid||null,avsec_expiry:d.avsecExpiry||null,
+        dob:d.dob||null,type_ratings:JSON.stringify(d.typeRatings||[]),photo:d.photo||''}]);
       if(!fullR){
         // Full upsert failed (likely missing columns) — retry with minimal safe payload
         const minR=await sbU('ts_crew',[{id:crewId,name:finalName,weight:parseFloat(d.w)||null,
@@ -3225,7 +3236,9 @@ function renderAdminPerms(){
     {k:'maint_bookings',lbl:'Bookings',       tip:'Manage maintenance bookings'},
     {k:'audit',         lbl:'Audit',          tip:'View the system audit log'},
     {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'},
-    {k:'calendar',      lbl:'Calendar',       tip:'Access the Calendar tab'}
+    {k:'calendar',      lbl:'Calendar',       tip:'Access the Calendar tab'},
+    {k:'flightduty',    lbl:'F&D',            tip:'Access Flight & Duty — own record + team summary'},
+    {k:'flightduty_manage',lbl:'F&D Mgr',     tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'}
     // (the old 'rezdy' column was retired in v24.16 — the Rezdy section no longer exists; Calendar
     //  has its own perm and Pickups live under Operations ▸ Ground gated by 'operations'.)
   ];

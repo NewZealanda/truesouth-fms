@@ -565,7 +565,7 @@ function renderGround(){
 }
 // SETTINGS ▸ OPERATIONS — tier-3 operations settings (Pickup Locations for now; more to come).
 function renderAdminOperations(){
-  var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'vehicles',lbl:'🚐 Vehicles'},{id:'aerodromes',lbl:'🛬 Aerodromes'},{id:'fuels',lbl:'⛽ Fuels'}];
+  var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'vehicles',lbl:'🚐 Vehicles'},{id:'aerodromes',lbl:'🛬 Aerodromes'},{id:'fuels',lbl:'⛽ Fuels'},{id:'flightduty',lbl:'🕓 Flight & Duty'}];
   var ids=tabs.map(function(t){return t.id;});
   var sub=(ids.indexOf(S._opsSettingsTab)>=0)?S._opsSettingsTab:'pickuplocs';S._opsSettingsTab=sub;
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
@@ -574,6 +574,7 @@ function renderAdminOperations(){
   if(sub==='vehicles')body='<div class="card" style="margin-bottom:0"><div class="st">Vehicles (pickup vans)</div><p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Name, colour and seat count for each pickup vehicle. These are the vans you allocate pickups to on Operations ▸ Ground ▸ Pickups.</p></div>'+((typeof _rzVehiclePanel==='function')?_rzVehiclePanel():'');
   else if(sub==='aerodromes')body=(typeof renderAerodromes==='function')?renderAerodromes():'';
   else if(sub==='fuels')body=(typeof renderAdminFuels==='function')?renderAdminFuels():'';
+  else if(sub==='flightduty')body=(typeof renderFDLimits==='function')?renderFDLimits():'';
   else body=_rzRenderPickupLocs();
   return bar+body;
 }

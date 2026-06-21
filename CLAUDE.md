@@ -90,7 +90,23 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v24.36** — built+verified. See `HANDOFF.md` for the full log.
+- Latest version: **v24.37** — built+verified. See `HANDOFF.md` for the full log.
+- **Flight & Duty (v24.37) — NEW MODULE `modules/flightduty.js`.** Advisory NZ flight-and-duty +
+  currency tracker for the superadmin "Flight & Duty" nav section (now live, gated by the new
+  `flightduty` perm; `flightduty_manage` = see/certify all pilots). Single-pilot VFR, AC119-2 /
+  SLA Exposition §4.8, **ATO+CTO combined envelope**. Engine: configurable limits (`FD_LIMITS_DEFAULT`
+  overlaid by `S._fdLimits` from `ts_settings` key `fd_limits`; per-limit amber/red %), rolling-window
+  sums (flight 7/28/30/90/365; duty daily+30), 90-day day-currency per type (C208B/GA8), days-off from
+  the roster (RDO/leave → 2/14 + 2-consec/30). Data: per-pilot/day rows in **`ts_flightduty`** (keyed
+  `user_id|YYYY-MM-DD`, cached `ts_flightduty_cache`) + monthly certifications in **`ts_fd_certs`**
+  (`user_id|YYYY-MM`); lazy-loaded via `window.loadFlightDuty`. Screens: **Pilot/My Record** (month
+  grid, one row/day: duty start/end → duty h, flight h, landings by type, 12h-extended flag; live
+  limit panel green/amber/red; currency panel; monthly **print & certify/sign**) and **Team Summary**
+  (all pilots vs 30-day duty/flight + currency, for rostering). Limits editor in **Settings ▸ Operations
+  ▸ Flight & Duty** (`renderFDLimits`). Profile gains **DOB + type ratings (C208B/GA8)** (crew cols
+  `dob`,`type_ratings`). ⚠️ **Andrew must apply `flightduty.sql`** (new tables + 2 crew columns + RLS)
+  — until then the page works in-session but does NOT persist. Self-entry now; auto-fill of landings
+  from calendar PIC allocation is the next step. NOT a controlled record until printed & signed.
 - **v24.36 (misc):** (a) theme now DEFAULTS TO LIGHT — head.html boot applies `data-theme=light`
   unless `ts_theme==='dark'` (was: dark default, light opt-in); toggle still persists choice. (b)
   Maintenance **estimator** next-check/engine/prop dates show the full date "14 Aug 2026" (`fmtEst`
