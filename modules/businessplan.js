@@ -254,7 +254,11 @@ window.bizPaxSyncRezdy=async function(ym){
       var seats=0;try{var e=_rzEffBreakdown(b);seats=(e.a||0)+(e.c||0);}catch(e){}
       byDate[ds]=(byDate[ds]||0)+seats;
     });
-    var p=_bizState();var n=0;
+    var p=_bizState();
+    // Wipe THIS month's 26-Pax first so a day that now has no bookings resets to blank — otherwise a
+    // stale value from an earlier sync lingers on days that should read 0.
+    Object.keys(p.paxData).forEach(function(ds){if(ds.slice(0,7)===ym&&p.paxData[ds]){delete p.paxData[ds].p26;if(p.paxData[ds].p25==null)delete p.paxData[ds];}});
+    var n=0;
     Object.keys(byDate).forEach(function(ds){p.paxData[ds]=p.paxData[ds]||{};p.paxData[ds].p26=byDate[ds];n++;});
     _bizSave();render();
     if(typeof toast==='function')toast('Updated '+n+' day'+(n===1?'':'s')+' from Rezdy seats sold ✓','ok');
