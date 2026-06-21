@@ -112,10 +112,12 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
   editable finance tranches (amount/rate/type io|pi/term) → live interest, monthly/annual repayments
   (`_bizMonthly`: io = amount×rate/12, pi = amortising PMT) + totals; editable asset-valuation table;
   notes. Persisted to `ts_settings` key `business_plan` (cache `ts_business_plan`), lazy-loaded via
-  `window.loadBusinessPlan`. Seeded from the spreadsheet (`BIZ_DEFAULT`). Other workbook sheets
-  (loan schedules, FY budgets, P&L, running costs) are scaffolded as "coming" tabs — need formula
-  confirmation (interest-only periods/lump-sum paydowns, per-aircraft departure allocation, P&L
-  line detail). CSV holds only one sheet; full build needs the `.xlsx`.
+  `window.loadBusinessPlan`. Seeded from the spreadsheet (`BIZ_DEFAULT`).
+  **v24.44 — Loan schedules tab (`_bizRenderLoans`):** reusable amortisation engine `_bizLoanSchedule`
+  — each loan = principal/rate/term/start + editable **interest-only months** + **lump-sum paydowns**
+  (re-amortises after each); month-by-month schedule + summary; seeded KBC1/KBC2/SHD/Vendor;
+  engine unit-tested. Still "coming" tabs: FY budgets (per-month drivers → departures → capacity → pax
+  → revenue), P&L (FY25/26), Running costs, Pax tracker, Timeline cashflow, Roster pay rates.
 - **Flight & Duty (v24.37–v24.40) — `modules/flightduty.js`.** Advisory NZ flight-and-duty +
   currency tracker (now live). See below for the engine; v24.39 added the look-ahead headroom panel
   + running Duty-30d column; v24.40 added 15-min time dropdowns/steppers + a "now" button.
