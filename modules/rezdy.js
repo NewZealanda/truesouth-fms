@@ -62,15 +62,20 @@ window.pickupToggleVehicles=function(){S._pickupVehPanel=!S._pickupVehPanel;rend
 window.pickupVehSet=function(i,field,val){var veh=_rzVehicles();if(!veh[i])return;if(field==='seats')veh[i].seats=Math.max(1,parseInt(val)||11);else veh[i][field]=val;_rzVehSave();render();};
 window.pickupVehAdd=function(){var veh=_rzVehicles();var pal=['#4a99d2','#48925f','#e3683e','#a855f7','#f59e0b','#ec4899','#14b8a6','#ef4444'];veh.push({name:'Van '+(veh.length+1),seats:11,color:pal[veh.length%pal.length]});S._pickupVans=null;_rzVehSave();render();};
 window.pickupVehRemove=function(i){var veh=_rzVehicles();if(veh.length<=1)return;veh.splice(i,1);S._pickupVans=null;_rzVehSave();render();};
-// ── Active vs spare (parked) vehicles ──
-// A parked vehicle is a spare resource: it isn't a van on the board and takes no pickups until
-// it's dragged back in. Keyed by vehicle index in S._pickupSpare.
-function _rzVanParked(vi){return !!(S._pickupSpare||{})[vi];}
-function _rzActiveVanCount(){var n=_rzVehicles().length,sp=S._pickupSpare||{},c=0;for(var i=0;i<n;i++)if(!sp[i])c++;return c;}
+// ── Active vs spare (parked) vehicles — PER DEPARTURE ──
+// Drivers, the active/parked van set, and acknowledgement are all tracked per (vehicle, departure)
+// so the same van/driver can change between the 0800 and 1200 runs. Keys are "vi|dep".
+//   S._pickupSpare:   {"vi|dep":1}    van parked (a spare) for THAT departure
+//   S._pickupDrivers: {"vi|dep":name} who drives van vi for THAT departure
+//   S._pickupAck:     {"vi|dep":{sig,ids,at,by}} driver's acknowledgement of THAT run
+function _pkKey(vi,dep){return vi+'|'+(dep==null?'':dep);}
+function _rzVanParked(vi,dep){return !!(S._pickupSpare||{})[_pkKey(vi,dep)];}
+function _rzActiveVanCount(dep){var n=_rzVehicles().length,c=0;for(var i=0;i<n;i++)if(!_rzVanParked(i,dep))c++;return c;}
+function _rzVanDriver(vi,dep){var d=(S._pickupDrivers||{})[_pkKey(vi,dep)];d=(d==null?'':String(d)).trim();return d||null;}
 window.pickupVehParkDragStart=function(vi,e){S._pickupVehDrag=vi;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','veh:'+vi);}catch(_){}};
-window.pickupActivateVehicle=function(vi){S._pickupSpare=S._pickupSpare||{};delete S._pickupSpare[vi];if(window.pickupSave)window.pickupSave(true);render();};
-window.pickupParkVehicle=function(vi){if(_rzActiveVanCount()<=1){if(typeof toast==='function')toast('Keep at least one active vehicle.','warn');return;}S._pickupSpare=S._pickupSpare||{};S._pickupSpare[vi]=1;if(window.pickupSave)window.pickupSave(true);render();};
-window.pickupDropActivateVehicle=function(e){if(e&&e.preventDefault)e.preventDefault();var vi=S._pickupVehDrag;S._pickupVehDrag=null;if(vi==null||vi==='')return;window.pickupActivateVehicle(parseInt(vi,10));};
+window.pickupActivateVehicle=function(vi,dep){S._pickupSpare=S._pickupSpare||{};delete S._pickupSpare[_pkKey(vi,dep)];if(window.pickupSave)window.pickupSave(true);render();};
+window.pickupParkVehicle=function(vi,dep){if(_rzActiveVanCount(dep)<=1){if(typeof toast==='function')toast('Keep at least one active vehicle for this departure.','warn');return;}S._pickupSpare=S._pickupSpare||{};S._pickupSpare[_pkKey(vi,dep)]=1;if(window.pickupSave)window.pickupSave(true);render();};
+window.pickupDropActivateVehicle=function(e,dep){if(e&&e.preventDefault)e.preventDefault();var vi=S._pickupVehDrag;S._pickupVehDrag=null;if(vi==null||vi==='')return;window.pickupActivateVehicle(parseInt(vi,10),dep);};
 function _rzVehSeats(vi){var v=_rzVehicles()[vi];return (v&&v.seats)||11;}
 function _rzVehColor(vi){var v=_rzVehicles()[vi];return (v&&v.color)||'#64748b';}
 function _rzVehName(vi){var v=_rzVehicles()[vi];return (v&&v.name)||('Van '+(vi+1));}
@@ -425,27 +430,24 @@ function _rzIsHilton(loc){return /hilton/i.test(String(loc||''));}
 function _rzAutoVans(pickups){
   pickups=(pickups||[]).filter(function(p){return !p.selfDrive;}); // self-drive never goes in a van
   var N=_rzVehicles().length;
-  // Only ACTIVE (non-parked) vehicles take pickups; parked vehicles stay as spare resources.
-  var spare=S._pickupSpare||{};var act=[];for(let i=0;i<N;i++)if(!spare[i])act.push(i);
-  if(!act.length)act=[0];
   const byTime=function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);};
   const vans=[];for(let i=0;i<N;i++)vans.push([]);
-  // Pickups run by DEPARTURE: a whole departure is collected together (active vans by capacity),
-  // then the next departure reuses the same vans. Hilton always gets its own vehicle. Earliest first.
+  // Pickups run by DEPARTURE: a whole departure is collected together. The ACTIVE vehicle set is
+  // PER DEPARTURE (a van parked for the 0800 run can still drive 1200). Hilton gets its own vehicle.
   const byDep={};pickups.forEach(function(p){(byDep[p.depart||'~']=byDep[p.depart||'~']||[]).push(p);});
   Object.keys(byDep).sort().forEach(function(dep){
+    var act=[];for(let i=0;i<N;i++)if(!_rzVanParked(i,dep))act.push(i);if(!act.length)act=[0];
     const grp=byDep[dep];
     const hilton=grp.filter(function(p){return _rzIsHilton(p.location);}).sort(byTime);
     const others=grp.filter(function(p){return !_rzIsHilton(p.location);}).sort(byTime);
     const load=[];for(let i=0;i<N;i++)load.push(0);
-    let ai=0; // pointer into the active-vehicle list
+    let ai=0; // pointer into this departure's active-vehicle list
     const place=function(p){
       var vi=act[ai];
       if(load[vi]>0 && load[vi]+p.pax>_rzVehSeats(vi) && ai<act.length-1){ai++;vi=act[ai];}
       vans[vi].push(p.id);load[vi]+=p.pax;
     };
     others.forEach(place);
-    // Hilton starts a fresh vehicle within this departure (opposite direction).
     if(hilton.length){ if(load[act[ai]]>0 && ai<act.length-1)ai++; hilton.forEach(place); }
   });
   return vans;
@@ -457,23 +459,30 @@ function _rzVanPax(vanIds,pickups){return vanIds.reduce(function(s,id){const p=_
 function _rzEnsureVans(){
   const pickups=_rzPickups();
   const ids=pickups.map(function(p){return p.id;});
+  const depOf={};pickups.forEach(function(p){depOf[p.id]=(p.depart||'~');});
   let vans=S._pickupVans;
   const valid=Array.isArray(vans)&&vans.length===_rzVehicles().length&&vans.every(Array.isArray);
+  // First ACTIVE (non-parked) van FOR A DEPARTURE — catches new/displaced pickups of that run.
+  var _faCache={};
+  function _firstActiveVan(dep){if(_faCache[dep]!=null)return _faCache[dep];var fa=-1,n=_rzVehicles().length;for(var i=0;i<n;i++){if(!_rzVanParked(i,dep)){fa=i;break;}}_faCache[dep]=fa;return fa;}
   if(!valid){
     S._pickupVans=_rzAutoVans(pickups);
   }else{
-    // keep saved placement, drop stale + self-drive ids, append any new ids to van 1
+    // keep saved placement, drop stale + self-drive ids, append any new ids to their departure's first active van
     const sd={};pickups.forEach(function(p){if(p.selfDrive)sd[p.id]=1;});
     const placed={};
     S._pickupVans=vans.map(function(v){return v.filter(function(id){if(placed[id]||sd[id]||ids.indexOf(id)<0)return false;placed[id]=1;return true;});});
-    // First active (non-parked) vehicle catches new + displaced pickups.
-    var spare0=S._pickupSpare||{};var firstAct=0;for(var _fa=0;_fa<S._pickupVans.length;_fa++){if(!spare0[_fa]){firstAct=_fa;break;}}
-    ids.forEach(function(id){if(!placed[id]&&!sd[id])S._pickupVans[firstAct].push(id);});
+    ids.forEach(function(id){if(!placed[id]&&!sd[id]){var dep=depOf[id]||'~';var fa=_firstActiveVan(dep);if(fa<0)fa=0;S._pickupVans[fa].push(id);}});
   }
-  // Move any pickups parked in a spare vehicle into the first active vehicle.
-  var spare=S._pickupSpare||{};var firstActive=-1;
-  for(var _vi=0;_vi<S._pickupVans.length;_vi++){if(!spare[_vi]){firstActive=_vi;break;}}
-  if(firstActive>=0){for(var _vj=0;_vj<S._pickupVans.length;_vj++){if(spare[_vj]&&S._pickupVans[_vj]&&S._pickupVans[_vj].length){S._pickupVans[firstActive]=S._pickupVans[firstActive].concat(S._pickupVans[_vj]);S._pickupVans[_vj]=[];}}}
+  // Move any pickup whose van is parked FOR ITS departure into that departure's first active van.
+  S._pickupVans.forEach(function(vanIds,vi){
+    var keep=[],move=[];
+    vanIds.forEach(function(id){var dep=depOf[id];if(dep!=null&&_rzVanParked(vi,dep))move.push(id);else keep.push(id);});
+    if(move.length){
+      S._pickupVans[vi]=keep;
+      move.forEach(function(id){var dep=depOf[id]||'~';var fa=_firstActiveVan(dep);if(fa>=0&&fa!==vi&&S._pickupVans[fa])S._pickupVans[fa].push(id);else S._pickupVans[vi].push(id);});
+    }
+  });
   if(!S._pickupCollected||typeof S._pickupCollected!=='object')S._pickupCollected={};
   return pickups;
 }
@@ -1512,9 +1521,18 @@ function _rzRenderPickups(){
   if(!S._rosterLoaded&&window.loadRosterFromCloud){S._rosterLoaded=true;window.loadRosterFromCloud();}
   const _avail=_rzAvailableDrivers();
   const _extra=(S._pickupExtraDrivers||[]);
-  const assigned=(S._pickupDrivers||[]).filter(Boolean);
+  const assigned=Object.values(S._pickupDrivers||{}).filter(Boolean);
   let depFilter=S._pickupDepFilter||null;
   const displayDrivers=[];[].concat(_avail,_extra,assigned).forEach(function(n){if(n&&displayDrivers.indexOf(n)<0)displayDrivers.push(n);});
+  // Resolve the SELECTED departure up-front — drivers, the active/parked van set and ack are all
+  // PER DEPARTURE now, so the spare bin and driver slots need to know which run we're looking at.
+  const byTime={};vanPickups.forEach(function(p){(byTime[p.depart||'—']=byTime[p.depart||'—']||[]).push(p);});
+  const times=Object.keys(byTime).sort();
+  if((!depFilter||times.indexOf(depFilter)<0)&&times.length){
+    if(S.rezdyDate===_rzToday()){var _now=new Date(),_nm=_now.getHours()*60+_now.getMinutes();depFilter=null;for(var _ti=0;_ti<times.length;_ti++){if(_rzDepMin(times[_ti])>=_nm){depFilter=times[_ti];break;}}if(!depFilter)depFilter=times[times.length-1];}
+    else depFilter=times[0];
+  }
+  const _depJs=_rzEsc(depFilter||'').replace(/'/g,"\\'");
   let driversBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:8px">Drivers <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(drag onto a van)</span></div>';
   driversBar+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
   displayDrivers.forEach(function(nm){
@@ -1545,31 +1563,17 @@ function _rzRenderPickups(){
   }
   // Spare vehicles — parked resources sitting next to the drivers. Drag (or tap) one to add it
   // to the run; an active van can be parked back here from its card.
-  var _spareV=[];_rzVehicles().forEach(function(v,vi){if(_rzVanParked(vi))_spareV.push({v:v,vi:vi});});
+  var _spareV=[];_rzVehicles().forEach(function(v,vi){if(_rzVanParked(vi,depFilter))_spareV.push({v:v,vi:vi});});
   driversBar+='<div style="margin-top:10px;border-top:1px solid var(--border2);padding-top:8px">'+
-    '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:6px">Spare vehicles <span style="font-weight:400;text-transform:none;letter-spacing:0">(drag below / tap to add)</span></div>'+
+    '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:6px">Spare vehicles'+(depFilter?' · '+_rzEsc(_rzDepDisplay(depFilter)):'')+' <span style="font-weight:400;text-transform:none;letter-spacing:0">(drag below / tap to add)</span></div>'+
     '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
   if(!_spareV.length){driversBar+='<span style="font-size:12px;color:var(--text3)">None — all vehicles are in use.</span>';}
   else _spareV.forEach(function(o){var col=o.v.color||'#64748b';
-    driversBar+='<div draggable="true" ondragstart="window.pickupVehParkDragStart('+o.vi+',event)" onclick="window.pickupActivateVehicle('+o.vi+')" title="Parked — tap or drag onto the run to use" style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:14px;border:2px solid '+col+';background:var(--card2);color:var(--text);cursor:grab;font-size:13px;font-weight:800;box-shadow:inset 0 0 0 1px var(--border2)"><span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:#0057B8;color:#fff;font-weight:900;font-size:15px;border-radius:5px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.35)">P</span>'+_rzEsc(o.v.name||('Van '+(o.vi+1)))+' <span style="opacity:.6;font-weight:600;color:var(--text2)">'+(o.v.seats||11)+'p</span></div>';
+    driversBar+='<div draggable="true" ondragstart="window.pickupVehParkDragStart('+o.vi+',event)" onclick="window.pickupActivateVehicle('+o.vi+',\''+_depJs+'\')" title="Parked for this departure — tap or drag onto the run to use" style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:14px;border:2px solid '+col+';background:var(--card2);color:var(--text);cursor:grab;font-size:13px;font-weight:800;box-shadow:inset 0 0 0 1px var(--border2)"><span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:#0057B8;color:#fff;font-weight:900;font-size:15px;border-radius:5px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.35)">P</span>'+_rzEsc(o.v.name||('Van '+(o.vi+1)))+' <span style="opacity:.6;font-weight:600;color:var(--text2)">'+(o.v.seats||11)+'p</span></div>';
   });
   driversBar+='<button onclick="window.pickupVehAdd()" title="Create a new vehicle" style="padding:5px 10px;border-radius:14px;border:1px dashed var(--border2);background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">+ New</button>';
   driversBar+='</div></div>';
   driversBar+='</div>';
-
-  // group van pickups by departure time for the summary
-  const byTime={};
-  vanPickups.forEach(function(p){(byTime[p.depart||'—']=byTime[p.depart||'—']||[]).push(p);});
-  const times=Object.keys(byTime).sort();
-  // One departure at a time. Default to the NEXT departure due today (e.g. at 11am show 1200),
-  // else the first departure. The user can switch with the time chips.
-  if((!depFilter||times.indexOf(depFilter)<0)&&times.length){
-    if(S.rezdyDate===_rzToday()){
-      var _now=new Date(),_nm=_now.getHours()*60+_now.getMinutes();depFilter=null;
-      for(var _ti=0;_ti<times.length;_ti++){if(_rzDepMin(times[_ti])>=_nm){depFilter=times[_ti];break;}}
-      if(!depFilter)depFilter=times[times.length-1];
-    } else depFilter=times[0];
-  }
 
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
     '<div><div class="st" style="margin-bottom:0">Pickup Summary</div>'+
@@ -1594,7 +1598,7 @@ function _rzRenderPickups(){
   // van cards/columns (stack vertically on narrow screens via flex-wrap + min-width)
   let vansH='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">';
   S._pickupVans.forEach(function(vanIds,vi){
-    if(_rzVanParked(vi))return; // parked vehicles are spares, shown by the drivers, not on the board
+    if(_rzVanParked(vi,depFilter))return; // parked for THIS departure → shown in the spare bin, not on the board
     // Capacity is per departure run (each ≤11), so size the warning by the busiest departure.
     var _byDepLoad={};vanIds.forEach(function(id){var pp=_rzPickupById(pickups,id);if(pp)_byDepLoad[pp.depart||'~']=(_byDepLoad[pp.depart||'~']||0)+pp.pax;});
     var _maxDep=0;Object.keys(_byDepLoad).forEach(function(k){if(_byDepLoad[k]>_maxDep)_maxDep=_byDepLoad[k];});
@@ -1602,28 +1606,27 @@ function _rzRenderPickups(){
     const pax=depFilter?(_byDepLoad[depFilter]||0):_rzVanPax(vanIds,pickups);
     const over=depFilter?(pax>seats):(_maxDep>seats);
     const col=_rzVehColor(vi);
-    vansH+='<div ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="window.pickupDropOnVan('+vi+',event);this.style.outline=\'\'" '+
+    vansH+='<div ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="window.pickupDropOnVan('+vi+',event,\''+_depJs+'\');this.style.outline=\'\'" '+
       'style="flex:1 1 260px;min-width:240px;background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px">';
     vansH+='<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">'+
       '<div style="font-weight:800;font-size:14px;color:'+col+'">'+_rzEsc(_rzVehName(vi))+'</div>'+
       '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:700;color:'+(over?'#ef4444':'var(--text2)')+'">'+pax+' / '+seats+' pax'+(over?' ⚠':'')+'</span>'+
-      '<button onclick="window.pickupParkVehicle('+vi+')" title="Park this vehicle (move it to spares)" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:10px;font-weight:700;padding:3px 8px">Park</button></div></div>';
-    // Driver / taxi slot — drop a driver bubble anywhere on the van to assign; no driver = taxi.
-    var drv=(S._pickupDrivers||[])[vi]||null;
-    var _dpOpen=(S._pickupVanDriverPick===vi);
+      '<button onclick="window.pickupParkVehicle('+vi+',\''+_depJs+'\')" title="Park this vehicle for this departure (move it to spares)" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:10px;font-weight:700;padding:3px 8px">Park</button></div></div>';
+    // Driver / taxi slot — PER DEPARTURE. Tap to assign; drop a driver bubble; no driver = taxi.
+    var drv=_rzVanDriver(vi,depFilter);
+    var _dpOpen=(S._pickupVanDriverPick===_pkKey(vi,depFilter));
     vansH+='<div style="margin-bottom:10px">'+
-      '<div onclick="window.pickupVanDriverPickOpen('+vi+')" title="Tap to assign / change the driver" style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;cursor:pointer;min-height:40px;border:1px dashed '+(drv?col+'99':(vanIds.length?'#f59e0b88':'var(--border2)'))+';background:'+(drv?col+'14':(vanIds.length?'rgba(245,158,11,.08)':'transparent'))+'">'+
+      '<div onclick="window.pickupVanDriverPickOpen('+vi+',\''+_depJs+'\')" title="Tap to assign / change the driver for this departure" style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;cursor:pointer;min-height:40px;border:1px dashed '+(drv?col+'99':(vanIds.length?'#f59e0b88':'var(--border2)'))+';background:'+(drv?col+'14':(vanIds.length?'rgba(245,158,11,.08)':'transparent'))+'">'+
       (drv
         ?'<span style="font-size:12px;font-weight:700;color:'+col+'">👤 '+_rzEsc(drv)+'</span>'+
-          (function(){var a=_rzVanAck(vi);if(_rzVanAcked(vi)){var t='';try{t=new Date(a.at).toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});}catch(e){}return '<span title="Driver acknowledged this list" style="font-size:10px;font-weight:800;color:#22c55e;background:rgba(34,197,94,.14);padding:2px 7px;border-radius:10px;margin-left:6px;white-space:nowrap">✓ acked'+(t?' '+t:'')+'</span>';}return '<span title="The list changed since the driver last acknowledged" style="font-size:10px;font-weight:800;color:#f59e0b;background:rgba(245,158,11,.14);padding:2px 7px;border-radius:10px;margin-left:6px;white-space:nowrap">⚠ awaiting ack</span>';})()
+          (function(){var a=_rzVanAck(vi,depFilter);if(_rzVanAcked(vi,depFilter)){var t='';try{t=new Date(a.at).toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});}catch(e){}return '<span title="Driver acknowledged this run" style="font-size:10px;font-weight:800;color:#22c55e;background:rgba(34,197,94,.14);padding:2px 7px;border-radius:10px;margin-left:6px;white-space:nowrap">✓ acked'+(t?' '+t:'')+'</span>';}return '<span title="The run changed since the driver last acknowledged" style="font-size:10px;font-weight:800;color:#f59e0b;background:rgba(245,158,11,.14);padding:2px 7px;border-radius:10px;margin-left:6px;white-space:nowrap">⚠ awaiting ack</span>';})()
         :(vanIds.length
           ?'<span style="font-size:12px;font-weight:700;color:#f59e0b">🚕 Tap to assign a driver</span>'
           :'<span style="font-size:11px;color:var(--text3)">Tap to assign a driver</span>'))+
       '<span style="margin-left:auto;color:var(--text3);font-size:12px;flex-shrink:0">'+(_dpOpen?'▴':'▾')+'</span>'+
       '</div>'+
-      (_dpOpen?'<div style="position:relative;z-index:30;margin-top:4px;border:1px solid var(--acc);border-radius:8px;background:var(--card);max-height:280px;overflow-y:auto;box-shadow:0 10px 28px rgba(0,0,0,.45)">'+_rzDriverPickRows('window.pickupSetVanDriver('+vi+',%N%)')+'</div>':'')+
+      (_dpOpen?'<div style="position:relative;z-index:30;margin-top:4px;border:1px solid var(--acc);border-radius:8px;background:var(--card);max-height:280px;overflow-y:auto;box-shadow:0 10px 28px rgba(0,0,0,.45)">'+_rzDriverPickRows('window.pickupSetVanDriver('+vi+',\''+_depJs+'\',%N%)')+'</div>':'')+
       '</div>';
-    var _depJs=_rzEsc(depFilter||'').replace(/'/g,"\\'");
     // Honour the manual run order (same S._pickupOrder the driver uses) so reordering here sticks.
     var _grp0=vanIds.map(function(id){return _rzPickupById(pickups,id);}).filter(function(p){return p&&(!depFilter||p.depart===depFilter);}).sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
     if(depFilter)_grp0=_rzApplyMyOrder(_grp0,vi,depFilter);
@@ -1659,7 +1662,7 @@ function _rzRenderPickups(){
             var idE=_rzEsc(id).replace(/'/g,"\\'");var open=(S._pickupMovePick===id);
             var btn='<button onclick="event.stopPropagation();window.pickupMovePickOpen(\''+idE+'\')" style="margin-top:6px;width:100%;padding:8px;border-radius:7px;border:1px dashed var(--border2);background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">⇄ Move to another van '+(open?'▴':'▾')+'</button>';
             if(!open)return btn;
-            var rows='';(S._pickupVans||[]).forEach(function(vv,vj){if(vj===vi||_rzVanParked(vj))return;rows+='<div onclick="window.pickupMoveToVan(\''+idE+'\','+vj+')" style="padding:9px 10px;cursor:pointer;font-size:12.5px;font-weight:700;border-bottom:1px solid var(--border2);min-height:40px;display:flex;align-items:center;gap:7px;color:'+_rzVehColor(vj)+'">🚐 '+_rzEsc(_rzVehName(vj))+'</div>';});
+            var rows='';(S._pickupVans||[]).forEach(function(vv,vj){if(vj===vi||_rzVanParked(vj,depFilter))return;rows+='<div onclick="window.pickupMoveToVan(\''+idE+'\','+vj+')" style="padding:9px 10px;cursor:pointer;font-size:12.5px;font-weight:700;border-bottom:1px solid var(--border2);min-height:40px;display:flex;align-items:center;gap:7px;color:'+_rzVehColor(vj)+'">🚐 '+_rzEsc(_rzVehName(vj))+'</div>';});
             if(!rows)rows='<div style="padding:10px;font-size:12px;color:var(--text3)">No other active van — activate a spare first.</div>';
             return btn+'<div style="margin-top:4px;border:1px solid var(--acc);border-radius:8px;background:var(--card);overflow:hidden">'+rows+'</div>';
           })()+
@@ -1668,9 +1671,9 @@ function _rzRenderPickups(){
     }
     vansH+='</div>';
   });
-  // Drop zone to add a spare vehicle to the run.
-  if(_rzVehicles().some(function(v,vi){return _rzVanParked(vi);})){
-    vansH+='<div ondragover="event.preventDefault();this.style.borderColor=\'var(--acc)\';this.style.color=\'var(--text2)\'" ondragleave="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\'" ondrop="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\';window.pickupDropActivateVehicle(event)" style="flex:1 1 200px;min-width:180px;align-self:stretch;min-height:90px;display:flex;align-items:center;justify-content:center;text-align:center;border:2px dashed var(--border2);border-radius:10px;color:var(--text3);font-size:12px;font-weight:700;padding:12px">🚐 Drop a spare vehicle here to add it</div>';
+  // Drop zone to add a spare vehicle to THIS departure's run.
+  if(_rzVehicles().some(function(v,vi){return _rzVanParked(vi,depFilter);})){
+    vansH+='<div ondragover="event.preventDefault();this.style.borderColor=\'var(--acc)\';this.style.color=\'var(--text2)\'" ondragleave="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\'" ondrop="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\';window.pickupDropActivateVehicle(event,\''+_depJs+'\')" style="flex:1 1 200px;min-width:180px;align-self:stretch;min-height:90px;display:flex;align-items:center;justify-content:center;text-align:center;border:2px dashed var(--border2);border-radius:10px;color:var(--text3);font-size:12px;font-weight:700;padding:12px">🚐 Drop a spare vehicle here to add it</div>';
   }
   vansH+='</div>';
 
@@ -1781,7 +1784,7 @@ window.pickupSetLocation=function(id,val){
 // value. So Device A's van reorder and Device B's check-in both survive.
 var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||[],extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -1789,7 +1792,8 @@ function _pkApplyBlob(d){
   S._pickupCollected=(d.collected&&typeof d.collected==='object')?d.collected:{};
   S._pickupLocOverride=(d.locOverride&&typeof d.locOverride==='object')?d.locOverride:{};
   S._pickupTimeOverride=(d.timeOverride&&typeof d.timeOverride==='object')?d.timeOverride:{};
-  S._pickupDrivers=Array.isArray(d.drivers)?d.drivers:[];
+  // drivers are now an object keyed "vi|dep" (per departure). Old array form → start fresh ({}).
+  S._pickupDrivers=(d.drivers&&typeof d.drivers==='object'&&!Array.isArray(d.drivers))?d.drivers:{};
   S._pickupExtraDrivers=Array.isArray(d.extraDrivers)?d.extraDrivers:[];
   S._pickupSpare=(d.spare&&typeof d.spare==='object')?d.spare:{};
   S._pickupOrder=(d.order&&typeof d.order==='object')?d.order:{};
@@ -1812,35 +1816,41 @@ function _pkSetBaseline(){S._pickupBaseline=_pkSnapshot(_pkBlobFromState());} //
 // driver reordering their own run doesn't ask them to re-acknowledge). When dispatch adds/removes/
 // relocates a pickup the sig changes; if it differs from what the driver last acknowledged, they
 // get a banner + the changes highlighted, and dispatch sees "awaiting ack".
-function _rzVanSig(vi){
+// All departures that have any pickup loaded.
+function _rzAllDeps(){var o={};(_rzPickups()||[]).forEach(function(p){if(p.depart)o[p.depart]=1;});return Object.keys(o);}
+// A van's pickup ids FOR ONE departure (the unit a driver acknowledges).
+function _rzVanDepIds(vi,dep){var pickups=_rzPickups();return ((S._pickupVans||[])[vi]||[]).filter(function(id){var p=_rzPickupById(pickups,id);return p&&(p.depart||'—')===dep;});}
+function _rzVanSig(vi,dep){
   var pickups=_rzPickups();
-  var ids=((S._pickupVans||[])[vi]||[]);
-  var parts=ids.map(function(id){var p=_rzPickupById(pickups,id);return id+'@'+((p&&p.location)||'')+'@'+((p&&p.pickupTime)||'');}).sort();
+  var parts=_rzVanDepIds(vi,dep).map(function(id){var p=_rzPickupById(pickups,id);return id+'@'+((p&&p.location)||'')+'@'+((p&&p.pickupTime)||'');}).sort();
   return parts.join('|');
 }
-function _rzVanAck(vi){var a=(S._pickupAck||{})[vi];return (a&&typeof a==='object')?a:null;}
-function _rzVanAcked(vi){var a=_rzVanAck(vi);return !!(a&&a.sig===_rzVanSig(vi));}
-// ids currently in the van but NOT in the last-acknowledged set = newly added since last ack.
-function _rzVanAddedIds(vi){var a=_rzVanAck(vi);if(!a||!Array.isArray(a.ids))return {};var was={};a.ids.forEach(function(id){was[id]=1;});var out={};((S._pickupVans||[])[vi]||[]).forEach(function(id){if(!was[id])out[id]=1;});return out;}
-// acknowledged ids no longer in the van = removed since last ack (for a "removed" note).
-function _rzVanRemovedIds(vi){var a=_rzVanAck(vi);if(!a||!Array.isArray(a.ids))return [];var now={};((S._pickupVans||[])[vi]||[]).forEach(function(id){now[id]=1;});return a.ids.filter(function(id){return !now[id];});}
-// Record the driver's acknowledgement of a van's current list (+ broadcast so dispatch sees it).
-window.pickupAckRun=function(vi){
+function _rzVanAck(vi,dep){var a=(S._pickupAck||{})[_pkKey(vi,dep)];return (a&&typeof a==='object')?a:null;}
+function _rzVanAcked(vi,dep){var a=_rzVanAck(vi,dep);return !!(a&&a.sig===_rzVanSig(vi,dep));}
+// ids currently on this (van,dep) run but NOT in the last-acknowledged set = newly added.
+function _rzVanAddedIds(vi,dep){var a=_rzVanAck(vi,dep);if(!a||!Array.isArray(a.ids))return {};var was={};a.ids.forEach(function(id){was[id]=1;});var out={};_rzVanDepIds(vi,dep).forEach(function(id){if(!was[id])out[id]=1;});return out;}
+// acknowledged ids no longer on this run = removed since last ack (for a "removed" note).
+function _rzVanRemovedIds(vi,dep){var a=_rzVanAck(vi,dep);if(!a||!Array.isArray(a.ids))return [];var now={};_rzVanDepIds(vi,dep).forEach(function(id){now[id]=1;});return a.ids.filter(function(id){return !now[id];});}
+// Record the driver's acknowledgement of one (van,departure) run (+ broadcast so dispatch sees it).
+window.pickupAckRun=function(vi,dep){
   vi=parseInt(vi,10);if(isNaN(vi))return;
   S._pickupAck=S._pickupAck||{};
-  S._pickupAck[vi]={sig:_rzVanSig(vi),ids:((S._pickupVans||[])[vi]||[]).slice(),at:new Date().toISOString(),by:((S.user&&S.user.name)||'').trim()};
+  S._pickupAck[_pkKey(vi,dep)]={sig:_rzVanSig(vi,dep),ids:_rzVanDepIds(vi,dep),at:new Date().toISOString(),by:((S.user&&S.user.name)||'').trim()};
   if(window.pickupSave)window.pickupSave(true);
   if(typeof toast==='function')toast('Pickup list acknowledged ✓','ok');
   render();
 };
-// Acknowledge ALL of the signed-in driver's vans at once (the My-Pickups banner button).
+// Acknowledge EVERY (van,departure) run the signed-in driver is on (the My-Pickups banner button).
 window.pickupAckRunAll=function(){
   var me=((S.user&&S.user.name)||'').trim();if(!me)return;
   S._pickupAck=S._pickupAck||{};
+  var deps=_rzAllDeps();
   (S._pickupVans||[]).forEach(function(ids,vi){
-    if(((S._pickupDrivers||[])[vi]||'').trim()===me){
-      S._pickupAck[vi]={sig:_rzVanSig(vi),ids:(ids||[]).slice(),at:new Date().toISOString(),by:me};
-    }
+    deps.forEach(function(dep){
+      if(_rzVanDriver(vi,dep)===me){
+        S._pickupAck[_pkKey(vi,dep)]={sig:_rzVanSig(vi,dep),ids:_rzVanDepIds(vi,dep),at:new Date().toISOString(),by:me};
+      }
+    });
   });
   S._myPkNotifiedSig=''; // we've acked → reset the notify guard for the next change
   if(window.pickupSave)window.pickupSave(true);
@@ -1877,7 +1887,8 @@ function _rzChimeBeep(){
 }
 function _rzDriverHasUnacked(){
   var me=((S.user&&S.user.name)||'').trim();if(!me)return false;
-  var has=false;(S._pickupVans||[]).forEach(function(ids,vi){if(((S._pickupDrivers||[])[vi]||'').trim()===me&&!_rzVanAcked(vi))has=true;});
+  var has=false,deps=_rzAllDeps();
+  (S._pickupVans||[]).forEach(function(ids,vi){deps.forEach(function(dep){if(_rzVanDriver(vi,dep)===me&&!_rzVanAcked(vi,dep))has=true;});});
   return has;
 }
 setInterval(function(){
@@ -1916,12 +1927,12 @@ window.pickupDragStart=function(id,e){
   S._rezdyDragId=id;
   try{e.dataTransfer.setData('text/plain',id);e.dataTransfer.effectAllowed='move';}catch(_){}
 };
-window.pickupDropOnVan=function(vi,e){
+window.pickupDropOnVan=function(vi,e,dep){
   if(e&&e.preventDefault)e.preventDefault();
-  // A driver bubble dropped on a van assigns that driver to it.
+  // A driver bubble dropped on a van assigns that driver to it FOR THIS DEPARTURE.
   if(S._rezdyDragDriver){
     var _dn=S._rezdyDragDriver;S._rezdyDragDriver=null;
-    window.pickupSetVanDriver(vi,_dn); // resets the van's ack + notifies the new driver, then saves
+    window.pickupSetVanDriver(vi,dep,_dn); // resets that run's ack + notifies the new driver, then saves
     return;
   }
   let id=S._rezdyDragId;
@@ -2003,33 +2014,35 @@ function _rzAvailableDrivers(){
   }).map(function(u){return (u.name||'').trim();}).filter(Boolean);
 }
 window.pickupDriverDragStart=function(name,e){S._rezdyDragDriver=name;try{e.dataTransfer.setData('text/plain','driver:'+name);e.dataTransfer.effectAllowed='copy';}catch(_){}};
-window.pickupClearDriver=function(vi){if(S._pickupDrivers)S._pickupDrivers[vi]=null;if(S._pickupAck&&S._pickupAck[vi]!=null)delete S._pickupAck[vi];window.pickupSave(true);render();};
+window.pickupClearDriver=function(vi,dep){var k=_pkKey(vi,dep);if(S._pickupDrivers)delete S._pickupDrivers[k];if(S._pickupAck&&S._pickupAck[k]!=null)delete S._pickupAck[k];window.pickupSave(true);render();};
 // ── Tap-based controls (iOS Safari has no HTML5 touch drag-and-drop) ──
 // Combined driver list = rostered ground staff + anyone added via "＋" + anyone already assigned.
 function _rzAllDriverNames(){
-  var out=[];[].concat(_rzAvailableDrivers(),(S._pickupExtraDrivers||[]),(S._pickupDrivers||[]).filter(Boolean)).forEach(function(n){n=(n||'').trim();if(n&&out.indexOf(n)<0)out.push(n);});
+  var out=[];[].concat(_rzAvailableDrivers(),(S._pickupExtraDrivers||[]),Object.values(S._pickupDrivers||{}).filter(Boolean)).forEach(function(n){n=(n||'').trim();if(n&&out.indexOf(n)<0)out.push(n);});
   return out;
 }
-// Tap-to-assign a driver to a van (the drag-driver-onto-van path doesn't work on iPhone).
-window.pickupVanDriverPickOpen=function(vi){S._pickupVanDriverPick=(S._pickupVanDriverPick===vi)?null:vi;S._pickupMovePick=null;render();};
-// Notify the newly-assigned driver (persistent ts_notifications row → bell + OS pop-up via the
-// notification poll, even if they aren't on the pickups page). Skips notifying yourself.
-function _rzNotifyDriverAssigned(vi,name){
+// Tap-to-assign a driver to a van for a departure (drag-driver-onto-van doesn't work on iPhone).
+// The open-picker state is keyed by "vi|dep".
+window.pickupVanDriverPickOpen=function(vi,dep){var k=_pkKey(vi,dep);S._pickupVanDriverPick=(S._pickupVanDriverPick===k)?null:k;S._pickupMovePick=null;render();};
+// Notify the newly-assigned driver of a specific departure run (persistent ts_notifications row →
+// bell + OS pop-up via the notification poll, even off the pickups page). Skips notifying yourself.
+function _rzNotifyDriverAssigned(vi,dep,name){
   name=(name||'').trim();if(!name)return;
   if(name===((S.user&&S.user.name)||'').trim())return;
   var u=(S.users||[]).find(function(x){return x&&(x.name||'').trim()===name;});
   if(!u||!u.id)return;
-  var msg='🚐 You\'re driving '+_rzVehName(vi)+' for '+_rzDowLabel(S.rezdyDate)+' pickups — open My Pickups to review & acknowledge your run.';
+  var msg='🚐 You\'re driving '+_rzVehName(vi)+' on the '+_rzEsc(_rzDepDisplay(dep))+' run for '+_rzDowLabel(S.rezdyDate)+' — open My Pickups to review & acknowledge.';
   try{if(typeof sbU==='function')sbU('ts_notifications',[{user_id:u.id,type:'pickup_assigned',message:msg,read:false,created_at:new Date().toISOString()}]).catch(function(){});}catch(e){}
 }
-window.pickupSetVanDriver=function(vi,name){
-  S._pickupDrivers=S._pickupDrivers||[];
-  var prev=(S._pickupDrivers[vi]||'').trim();
+window.pickupSetVanDriver=function(vi,dep,name){
+  S._pickupDrivers=S._pickupDrivers||{};
+  var k=_pkKey(vi,dep);
+  var prev=(S._pickupDrivers[k]||'').trim();
   var next=(name||'').trim()||null;
-  S._pickupDrivers[vi]=next;
-  if((prev||'')!==(next||'')){ // driver changed → reset this van's ack; notify the new driver
-    if(S._pickupAck&&S._pickupAck[vi]!=null)delete S._pickupAck[vi];
-    if(next)_rzNotifyDriverAssigned(vi,next);
+  if(next)S._pickupDrivers[k]=next; else delete S._pickupDrivers[k];
+  if((prev||'')!==(next||'')){ // driver changed for this departure → reset this run's ack; notify
+    if(S._pickupAck&&S._pickupAck[k]!=null)delete S._pickupAck[k];
+    if(next)_rzNotifyDriverAssigned(vi,dep,next);
   }
   S._pickupVanDriverPick=null;
   if(window.pickupSave)window.pickupSave(true);render();
@@ -2140,21 +2153,23 @@ function _rzRenderMyPickups(){
   var pickups=_rzPickups();
   var me=((S.user&&S.user.name)||'').trim();
   if(!me)return '<div class="card" style="text-align:center;padding:30px;color:var(--text3)">Sign in to see your pickups.</div>';
-  var myVans=[];
-  (S._pickupVans||[]).forEach(function(vanIds,vi){ if(((S._pickupDrivers||[])[vi]||'').trim()===me) myVans.push({vi:vi,ids:vanIds}); });
-  if(!myVans.length){
-    return '<div style="max-width:560px;margin:0 auto"><div class="card" style="text-align:center;padding:40px 20px;color:var(--text3)"><div style="font-size:30px;margin-bottom:8px">🚐</div><div style="font-size:15px;font-weight:700;color:var(--text2);margin-bottom:4px">No pickups assigned to you</div><div style="font-size:13px">You\'re not on a van for '+_rzDowLabel(S.rezdyDate)+'. Use the arrows above to check another day.</div></div></div>';
+  // My runs = (van, departure) where I'm the assigned driver for that departure (drivers are
+  // per-departure now, so I might drive van 1 at 0800 and van 2 at 1200).
+  var _deps0=_rzAllDeps();
+  var myRuns=[];
+  (S._pickupVans||[]).forEach(function(vanIds,vi){ _deps0.forEach(function(dep){ if(_rzVanDriver(vi,dep)===me) myRuns.push({vi:vi,dep:dep}); }); });
+  if(!myRuns.length){
+    return '<div style="max-width:560px;margin:0 auto"><div class="card" style="text-align:center;padding:40px 20px;color:var(--text3)"><div style="font-size:30px;margin-bottom:8px">🚐</div><div style="font-size:15px;font-weight:700;color:var(--text2);margin-bottom:4px">No pickups assigned to you</div><div style="font-size:13px">You\'re not driving a van for '+_rzDowLabel(S.rezdyDate)+'. Use the arrows above to check another day.</div></div></div>';
   }
-  // ── Acknowledgement: has dispatch changed this driver's run since they last acknowledged? ──
-  var _unackedVans=myVans.filter(function(v){return !_rzVanAcked(v.vi);}).map(function(v){return v.vi;});
+  // ── Acknowledgement: has dispatch changed any of MY runs since I last acknowledged? (per run) ──
+  var _unacked=myRuns.filter(function(r){return !_rzVanAcked(r.vi,r.dep);});
   var _addedSet={},_removedCount=0,_hadPriorAck=false;
-  _unackedVans.forEach(function(vi){var ad=_rzVanAddedIds(vi);Object.keys(ad).forEach(function(id){_addedSet[id]=1;});_removedCount+=_rzVanRemovedIds(vi).length;if(_rzVanAck(vi))_hadPriorAck=true;});
-  // OS pop-up the first time a given change appears (once per distinct change set).
-  var _ackSig=_unackedVans.map(function(vi){return vi+':'+_rzVanSig(vi);}).join('||');
+  _unacked.forEach(function(r){var ad=_rzVanAddedIds(r.vi,r.dep);Object.keys(ad).forEach(function(id){_addedSet[id]=1;});_removedCount+=_rzVanRemovedIds(r.vi,r.dep).length;if(_rzVanAck(r.vi,r.dep))_hadPriorAck=true;});
+  var _ackSig=_unacked.map(function(r){return r.vi+'|'+r.dep+':'+_rzVanSig(r.vi,r.dep);}).join('||');
   if(S._myPkNotifiedSig===undefined){S._myPkNotifiedSig=_ackSig;}
   else if(_ackSig!==S._myPkNotifiedSig){S._myPkNotifiedSig=_ackSig;if(_ackSig&&typeof _osNotify==='function')_osNotify({message:'Your pickup run changed — review & acknowledge',id:'mypk-'+Date.now()});}
   var ackBanner='';
-  if(_unackedVans.length){
+  if(_unacked.length){
     var _addedN=Object.keys(_addedSet).length;
     var _msg=_hadPriorAck
       ? ('A pickup '+((_addedN&&_removedCount)?'was added & removed':(_addedN?'was added':(_removedCount?'was removed':'changed')))+' on your run'+((_addedN||_removedCount)?(' — '+(_addedN?_addedN+' new':'')+((_addedN&&_removedCount)?', ':'')+(_removedCount?_removedCount+' removed':'')):'')+'.')
@@ -2164,33 +2179,28 @@ function _rzRenderMyPickups(){
       '<button onclick="window.pickupAckRunAll()" style="flex-shrink:0;padding:10px 18px;border-radius:8px;border:none;background:#22c55e;color:#06281a;font-size:13px;font-weight:800;cursor:pointer">OK, got it ✓</button>'+
     '</div>';
   }
-  // Departures across all of my vans — show ONE at a time via a selector (bookings-style).
-  var allStops=[];
-  myVans.forEach(function(v){v.ids.forEach(function(id){var p=_rzPickupById(pickups,id);if(p)allStops.push({vi:v.vi,p:p});});});
-  var deps=[];allStops.forEach(function(s){var d=s.p.depart||'—';if(deps.indexOf(d)<0)deps.push(d);});
-  deps.sort();
-  var selDep=(S._myPkDep&&deps.indexOf(S._myPkDep)>=0)?S._myPkDep:(deps[0]||null);
+  // Departure tabs across my runs.
+  var myDeps=[];myRuns.forEach(function(r){if(myDeps.indexOf(r.dep)<0)myDeps.push(r.dep);});myDeps.sort();
+  var selDep=(S._myPkDep&&myDeps.indexOf(S._myPkDep)>=0)?S._myPkDep:(myDeps[0]||null);
   var tabs='';
-  if(deps.length){
+  if(myDeps.length){
     tabs='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px;-webkit-overflow-scrolling:touch;scrollbar-width:none">';
-    deps.forEach(function(d){
-      var cnt=allStops.filter(function(s){return (s.p.depart||'—')===d;}).reduce(function(a,s){return a+(s.p.pax||0);},0);
-      tabs+='<button onclick="S._myPkDep=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" class="sub-tab '+(selDep===d?'on':'')+'" style="white-space:nowrap;flex-shrink:0">🛫 '+_rzEsc(d)+' <span style="opacity:.6">('+cnt+')</span></button>';
+    myDeps.forEach(function(d){
+      var cnt=0;myRuns.filter(function(r){return r.dep===d;}).forEach(function(r){_rzVanDepIds(r.vi,d).forEach(function(id){var p=_rzPickupById(pickups,id);if(p)cnt+=(p.pax||0);});});
+      tabs+='<button onclick="S._myPkDep=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" class="sub-tab '+(selDep===d?'on':'')+'" style="white-space:nowrap;flex-shrink:0">🛫 '+_rzEsc(_rzDepDisplay(d))+' <span style="opacity:.6">('+cnt+')</span></button>';
     });
     tabs+='</div>';
   }
   var h=ackBanner+tabs;
-  myVans.forEach(function(v){
-    var col=_rzVehColor(v.vi);
-    var grp=v.ids.map(function(id){return _rzPickupById(pickups,id);})
-                 .filter(function(p){return p&&(p.depart||'—')===selDep;})
-                 .sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
-    if(!grp.length)return; // this van has nothing for the selected departure
-    grp=_rzApplyMyOrder(grp,v.vi,selDep); // honour the driver's manual reorder
-    var _viD=v.vi,_depD=_rzEsc(selDep).replace(/'/g,"\\'");
+  myRuns.filter(function(r){return r.dep===selDep;}).forEach(function(r){
+    var vi=r.vi,col=_rzVehColor(vi);
+    var grp=_rzVanDepIds(vi,selDep).map(function(id){return _rzPickupById(pickups,id);}).filter(Boolean).sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
+    if(!grp.length)return;
+    grp=_rzApplyMyOrder(grp,vi,selDep); // honour the driver's manual reorder
+    var _viD=vi,_depD=_rzEsc(selDep).replace(/'/g,"\\'");
     var depPax=grp.reduce(function(s,p){return s+(p.pax||0);},0);
     h+='<div class="card" style="border-top:4px solid '+col+';padding:14px;margin-bottom:14px">';
-    h+='<div style="font-weight:800;font-size:18px;color:'+col+'">'+_rzEsc(_rzVehName(v.vi))+'</div>';
+    h+='<div style="font-weight:800;font-size:18px;color:'+col+'">'+_rzEsc(_rzVehName(vi))+'</div>';
     h+='<div style="font-size:12px;color:var(--text3);margin-bottom:10px">'+grp.length+' stop'+(grp.length===1?'':'s')+' · '+depPax+' pax</div>';
     grp.forEach(function(p){
       var collected=!!(S._pickupCollected||{})[p.id];

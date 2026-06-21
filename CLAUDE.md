@@ -90,8 +90,19 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v24.16** (v24.15 committed `bcad457`; **v24.16 built+verified but commit is
-  BLOCKED on a stale `.git/HEAD.lock` — clear it then commit**). See `HANDOFF.md` for the full log.
+- Latest version: **v24.28** — built+verified, ready to commit. See `HANDOFF.md` for the full log.
+- **Pickups are now PER DEPARTURE (v24.28).** Drivers, the active/parked van set, and driver
+  acknowledgement are all tracked per `(vehicle, departure)`, keyed `"vi|dep"`:
+  `S._pickupDrivers`, `S._pickupSpare`, `S._pickupAck` are now OBJECTS keyed `_pkKey(vi,dep)`
+  (were arrays/vi-keyed). Old blobs START FRESH (array `drivers` / vi-keyed `spare`/`ack` → `{}`).
+  Helpers: `_pkKey`, `_rzVanParked(vi,dep)`, `_rzActiveVanCount(dep)`, `_rzVanDriver(vi,dep)`,
+  `_rzAllDeps()`, `_rzVanDepIds(vi,dep)`, and per-`(vi,dep)` ack (`_rzVanSig/Ack/Acked/AddedIds/
+  RemovedIds`). `_rzAutoVans`/`_rzEnsureVans` compute the active set + new-pickup placement per
+  departure. The dispatch board resolves `depFilter` BEFORE the driver/spare bins; My Pickups is
+  built from `myRuns` = `(vi,dep)` where I'm the assigned driver. Manual run order stays keyed
+  `vi|dep` (shared by dispatch + driver). ⚠️ NEEDS a two-departure / two-driver real-device test.
+- Earlier: **v24.27** dispatch pickup reordering (▲▼ `myPkMove`) + ongoing mobile unacked chime;
+  **v24.26** change-driver resets that run's ack + notifies the new driver.
 - **`ARCHITECTURE_REVIEW_v24.14.md` is the latest full bug-sweep** (6-reviewer audit) — what was
   fixed in v24.15/v24.16 + the prioritised OPEN backlog (roster pattern-push data loss, roster
   whole-blob save merge, leave L-A/L-B/L-C, cross-aircraft seat-swap, dep|acId fuel/crew keying,

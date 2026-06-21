@@ -4,10 +4,11 @@ Read this first in a new chat, alongside `CLAUDE.md` (auto-loaded). This is the 
 "how we work + where we are + what's next" note. `CLAUDE.md` has the architecture; this has the
 workflow, the recent history, and the gotchas.
 
-Current version: **v24.16**. Committed up to **v24.15** (`bcad457`). ⚠️ **v24.16 is built + verified
-but NOT committed** — the commit hit a stale `.git/HEAD.lock` (you clear these). Clear the lock and
-commit; the same commit will pick up `ARCHITECTURE_REVIEW_v24.14.md` + the `HANDOFF.md`/`CLAUDE.md`
-updates that are also waiting on it. **The latest full bug-sweep is `ARCHITECTURE_REVIEW_v24.14.md`**
+Current version: **v24.28** — pickups are now PER DEPARTURE (drivers + active/parked vans + driver
+acknowledgement all keyed `(vehicle, departure)` = `"vi|dep"`; `S._pickupDrivers/_pickupSpare/
+_pickupAck` are objects now, old blobs start fresh). Built + verified (build clean, `blocks=4
+errors=0`, 16/16 per-dep logic unit tests pass). ⚠️ **Still needs a two-departure / two-driver
+real-device test** before production. **The latest full bug-sweep is `ARCHITECTURE_REVIEW_v24.14.md`**
 — read it for the prioritised OPEN backlog (what was deliberately left for a runtime-tested pass).
 
 ---
