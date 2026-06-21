@@ -28,7 +28,18 @@ var BIZ_DEFAULT={
     {id:'kbc2',name:'Kiwibank Loan 2',principal:1000000,rate:6.68,term:10,start:'2025-06-01',ioMonths:0,paydowns:[]},
     {id:'shd', name:'Shareholder Deposit',principal:1200000,rate:10,term:7,start:'2025-06-01',ioMonths:0,paydowns:[{date:'2028-03-01',amount:600000}]},
     {id:'vf',  name:'Vendor Finance',principal:1000000,rate:10,term:5,start:'2025-06-01',ioMonths:10,paydowns:[{date:'2026-04-01',amount:500000}]}
-  ]
+  ],
+  // Running cost: per-aircraft cost per flight hour. fuel price $/L, burn L/hr by type; maintenance
+  // $/hr = annual maint ÷ hours; engine/prop overhaul reserves = cost ÷ interval hours.
+  running:{
+    fuel:{avgas:4.35,jeta1:3.05},
+    aircraft:[
+      {code:'SLA',type:'C208',burn:170,fuelType:'jeta1',hours:529.3,maint:114000,eoCost:1000000,eoInt:3600,propCost:20000,propInt:2400},
+      {code:'SLB',type:'C208',burn:170,fuelType:'jeta1',hours:477,  maint:181000,eoCost:1000000,eoInt:3600,propCost:20000,propInt:2400},
+      {code:'SLD',type:'GA8', burn:70, fuelType:'avgas',hours:503.8,maint:95000, eoCost:210000, eoInt:2000,propCost:20000,propInt:2400},
+      {code:'SLQ',type:'GA8', burn:70, fuelType:'avgas',hours:524.3,maint:152000,eoCost:210000, eoInt:2000,propCost:20000,propInt:2400}
+    ]
+  }
 };
 
 function _bizState(){
@@ -36,7 +47,20 @@ function _bizState(){
   if(!Array.isArray(S._bizPlan.tranches))S._bizPlan.tranches=JSON.parse(JSON.stringify(BIZ_DEFAULT.tranches));
   if(!Array.isArray(S._bizPlan.assets))S._bizPlan.assets=[];
   if(!Array.isArray(S._bizPlan.loans))S._bizPlan.loans=JSON.parse(JSON.stringify(BIZ_DEFAULT.loans));
+  if(!S._bizPlan.running||typeof S._bizPlan.running!=='object')S._bizPlan.running=JSON.parse(JSON.stringify(BIZ_DEFAULT.running));
+  if(!S._bizPlan.running.fuel)S._bizPlan.running.fuel=JSON.parse(JSON.stringify(BIZ_DEFAULT.running.fuel));
+  if(!Array.isArray(S._bizPlan.running.aircraft))S._bizPlan.running.aircraft=[];
   return S._bizPlan;
+}
+// Per-aircraft cost-per-flight-hour breakdown.
+function _bizRunCalc(ac,fuel){
+  var fp=(ac.fuelType==='avgas')?(+fuel.avgas||0):(+fuel.jeta1||0);
+  var fuelHr=(+ac.burn||0)*fp;
+  var mHr=(+ac.hours>0)?((+ac.maint||0)/(+ac.hours)):0;
+  var eoHr=(+ac.eoInt>0)?((+ac.eoCost||0)/(+ac.eoInt)):0;
+  var propHr=(+ac.propInt>0)?((+ac.propCost||0)/(+ac.propInt)):0;
+  var maintHr=mHr+eoHr+propHr;
+  return {fuelHr:fuelHr,mHr:mHr,eoHr:eoHr,propHr:propHr,maintHr:maintHr,totalHr:fuelHr+maintHr};
 }
 function _bizAddMonths(ds,n){var m=/(\d{4})-(\d{2})/.exec(String(ds||''));if(!m)return ds;var d=new Date(+m[1],+m[2]-1+n,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01';}
 function _bizMonLabel(ds){var m=/(\d{4})-(\d{2})/.exec(String(ds||''));if(!m)return ds;return new Date(+m[1],+m[2]-1,1).toLocaleDateString('en-NZ',{month:'short',year:'2-digit'});}
@@ -96,6 +120,10 @@ window.bizToggleSched=function(id){S._bizSchedOpen=(S._bizSchedOpen===id)?null:i
 window.bizAddPaydown=function(i){var p=_bizState();if(!p.loans[i])return;(p.loans[i].paydowns=p.loans[i].paydowns||[]).push({date:p.loans[i].start||'2025-06-01',amount:0});_bizSave();render();};
 window.bizSetPaydown=function(i,j,field,value){var p=_bizState();if(!p.loans[i]||!p.loans[i].paydowns[j])return;p.loans[i].paydowns[j][field]=(field==='date')?value:(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizDelPaydown=function(i,j){var p=_bizState();if(!p.loans[i])return;p.loans[i].paydowns.splice(j,1);_bizSave();render();};
+window.bizSetFuel=function(k,value){var p=_bizState();p.running.fuel[k]=(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizSetRunAc=function(i,field,value){var p=_bizState();if(!p.running.aircraft[i])return;p.running.aircraft[i][field]=(field==='code'||field==='type'||field==='fuelType')?value:(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizAddRunAc=function(){_bizState().running.aircraft.push({code:'NEW',type:'C208',burn:170,fuelType:'jeta1',hours:500,maint:0,eoCost:1000000,eoInt:3600,propCost:20000,propInt:2400});_bizSave();render();};
+window.bizDelRunAc=function(i){var p=_bizState();p.running.aircraft.splice(i,1);_bizSave();render();};
 window.bizReset=function(){if(typeof confirm==='function'&&!confirm('Reset the Main Plan to the original spreadsheet values?'))return;S._bizPlan=JSON.parse(JSON.stringify(BIZ_DEFAULT));_bizSave();render();};
 
 // ── render ──
@@ -107,8 +135,49 @@ function renderBusinessPlan(){
   var tabs=[{id:'mainplan',lbl:'Acquisition'},{id:'loans',lbl:'Loan schedules'},{id:'budget',lbl:'FY Budgets'},{id:'pnl',lbl:'P&L'},{id:'running',lbl:'Running costs'}];
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
     tabs.map(function(t){return '<button class="sub-tab '+(tab===t.id?'on':'')+'" onclick="window.bizSetTab(\''+t.id+'\')">'+t.lbl+'</button>';}).join('')+'</div>';
-  var body=(tab==='mainplan')?_bizRenderMainPlan():(tab==='loans')?_bizRenderLoans():_bizComingSoon(tabs.find(function(x){return x.id===tab;}));
+  var body=(tab==='mainplan')?_bizRenderMainPlan():(tab==='loans')?_bizRenderLoans():(tab==='running')?_bizRenderRunning():_bizComingSoon(tabs.find(function(x){return x.id===tab;}));
   return '<div>'+bar+body+'</div>';
+}
+
+function _bizRenderRunning(){
+  var p=_bizState();var fuel=p.running.fuel;
+  var _inS='width:100%;font-size:12px;padding:4px 5px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);box-sizing:border-box';
+  function _ph(n){return '$'+(+n||0).toLocaleString('en-NZ',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  var h='<div class="card"><div class="st">Running cost — cost per flight hour</div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:0 0 10px">Fuel $/hr = burn (L/hr) × fuel price. Maintenance $/hr = annual maintenance ÷ hours flown, plus engine &amp; prop overhaul reserves (cost ÷ interval hours).</p>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'+
+      '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">AvGas $/L</label><input type="number" step="0.01" value="'+(fuel.avgas!==''?fuel.avgas:'')+'" onchange="window.bizSetFuel(\'avgas\',this.value)" style="'+_inS+';width:90px;text-align:right"></div>'+
+      '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">Jet A1 $/L</label><input type="number" step="0.01" value="'+(fuel.jeta1!==''?fuel.jeta1:'')+'" onchange="window.bizSetFuel(\'jeta1\',this.value)" style="'+_inS+';width:90px;text-align:right"></div>'+
+    '</div></div>';
+
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:860px">';
+  h+='<thead><tr style="background:var(--card2)">'+
+    ['AC','Type','Burn L/hr','Fuel','Hours/yr','Maint $/yr','Eng OH $','Eng int hr','Prop OH $','Prop int hr','Fuel/hr','Maint/hr','Total $/hr',''].map(function(t,i){return '<th style="text-align:'+(i<2?'left':'center')+';padding:6px 5px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+
+    '</tr></thead><tbody>';
+  p.running.aircraft.forEach(function(ac,i){
+    var c=_bizRunCalc(ac,fuel);
+    var num=function(field,step,w){return '<td style="padding:2px 3px"><input type="number" step="'+(step||'1')+'" value="'+(ac[field]!==''&&ac[field]!=null?ac[field]:'')+'" onchange="window.bizSetRunAc('+i+',\''+field+'\',this.value)" style="'+_inS+';width:'+(w||56)+'px;text-align:right"></td>';};
+    h+='<tr style="border-top:1px solid var(--border2)">'+
+      '<td style="padding:2px 4px"><input value="'+_rzEscSafe(ac.code||'')+'" onchange="window.bizSetRunAc('+i+',\'code\',this.value)" style="'+_inS+';width:54px;font-weight:700"></td>'+
+      '<td style="padding:2px 3px"><select onchange="window.bizSetRunAc('+i+',\'type\',this.value)" style="'+_inS+';width:64px"><option'+(ac.type==='C208'?' selected':'')+'>C208</option><option'+(ac.type==='GA8'?' selected':'')+'>GA8</option></select></td>'+
+      num('burn','1',54)+
+      '<td style="padding:2px 3px"><select onchange="window.bizSetRunAc('+i+',\'fuelType\',this.value)" style="'+_inS+';width:66px"><option value="jeta1"'+(ac.fuelType==='jeta1'?' selected':'')+'>Jet A1</option><option value="avgas"'+(ac.fuelType==='avgas'?' selected':'')+'>AvGas</option></select></td>'+
+      num('hours','0.1',58)+num('maint','1000',74)+num('eoCost','1000',80)+num('eoInt','100',64)+num('propCost','1000',74)+num('propInt','100',64)+
+      '<td style="padding:2px 5px;text-align:right;color:var(--text2)">'+_ph(c.fuelHr)+'</td>'+
+      '<td style="padding:2px 5px;text-align:right;color:var(--text2)">'+_ph(c.maintHr)+'</td>'+
+      '<td style="padding:2px 5px;text-align:right;font-weight:800;color:#f59e0b">'+_ph(c.totalHr)+'</td>'+
+      '<td style="padding:2px 4px;text-align:center"><button onclick="window.bizDelRunAc('+i+')" title="Remove" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button></td>'+
+      '</tr>';
+  });
+  h+='</tbody></table></div>';
+  h+='<div style="margin:4px 0 12px"><button class="btn btn-ghost" style="font-size:12px" onclick="window.bizAddRunAc()">+ Add aircraft</button></div>';
+
+  // type averages
+  function avg(type,key){var list=p.running.aircraft.filter(function(a){return a.type===type;});if(!list.length)return 0;return list.reduce(function(s,a){return s+_bizRunCalc(a,fuel)[key];},0)/list.length;}
+  function avgCard(type){var t=avg(type,'totalHr');if(!t)return '';return '<div style="flex:1 1 200px;border:1px solid var(--border2);border-top:3px solid #22c55e;border-radius:10px;padding:12px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700">Average '+type+' cost/hr</div><div style="font-size:20px;font-weight:800;color:#22c55e;margin-top:2px">'+_ph(t)+'</div><div style="font-size:10px;color:var(--text3);margin-top:2px">fuel '+_ph(avg(type,'fuelHr'))+' + maint '+_ph(avg(type,'maintHr'))+'</div></div>';}
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap">'+avgCard('C208')+avgCard('GA8')+'</div>';
+  h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px">Total $/hr is the direct cost of flying that aircraft one hour (fuel + maintenance + overhaul reserves) — the basis for tour pricing. Insurance, finance, pilot &amp; training costs sit in the P&amp;L, not here.</div>';
+  return h;
 }
 
 function _bizRenderLoans(){
