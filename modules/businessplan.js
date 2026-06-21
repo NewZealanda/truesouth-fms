@@ -49,8 +49,58 @@ var BIZ_DEFAULT={
   ],
   // Pax tracker: monthly targets + daily pax (this year / prior year), keyed by date.
   paxTargets:{'2025-06':828},
-  paxData:{}  // 'YYYY-MM-DD' -> {p26, p25}
+  paxData:{},  // 'YYYY-MM-DD' -> {p26, p25}
+  // FY budgets — pax & revenue forecast. Drivers per month → Total Departures → Pax Carried
+  // (= Σ effective seats of ACTIVE aircraft × departures) → revenue by channel (Milford + Other).
+  budgets:[
+    {id:'fy26',label:'FY26 Budget',startYM:'2025-04',
+     days:[30,31,30,31,31,30,31,30,31,31,28,31],
+     flyPct:[0.55,0.55,0.55,0.55,0.55,0.55,0.55,0.55,0.55,0.55,0.55,0.55],
+     downtime:[0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.08],
+     avgDep:[1.75,1.5,1.25,1.25,1.25,1.25,1.5,2.0,2.5,2.5,2.15,2.25],
+     aircraft:[
+       {code:'SLA C208B',seats:13,loading:0.85,active:[1,1,1,1,1,1,1,1,1,1,1,1]},
+       {code:'SLB C208B',seats:13,loading:0.86,active:[0,0,1,1,1,1,1,1,1,1,1,1]},
+       {code:'SLD GA8',seats:7,loading:0.86,active:[1,1,1,1,1,1,1,1,1,1,1,1]},
+       {code:'SLQ GA8',seats:7,loading:0.86,active:[1,1,1,1,1,1,1,1,1,1,1,1]},
+       {code:'SDB C208B',seats:11,loading:0.85,active:[1,1,1,1,1,1,0,0,0,0,1,1]}
+     ],
+     fy25:[568,548,528,677,441,441,536,1018,1221,1624,1407,1221],
+     pctAgents:[0.81,0.78,0.75,0.85,0.83,0.89,0.78,0.80,0.73,0.70,0.74,0.74],
+     milford:{factor:0.92,agentRate:440,directRate:600,uplift:0.1342,upliftFrom:6},
+     other:{factor:0.08,agentRate:1000,directRate:1200,uplift:0.0589,upliftFrom:6}},
+    {id:'fy27',label:'FY27 Budget',startYM:'2026-04',
+     days:[30,31,30,31,31,30,31,30,31,31,28,31],
+     flyPct:[0.55,0.55,0.55,0.55,0.55,0.40,0.40,0.55,0.60,0.65,0.65,0.60],
+     downtime:[0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.08],
+     avgDep:[1.5,1.0,1.0,1.25,1.25,1.25,1.5,2.0,2.5,2.5,2.5,2.25],
+     aircraft:[
+       {code:'SLA C208B',seats:13,loading:0.85,active:[1,1,1,1,1,1,1,1,1,1,1,1]},
+       {code:'SLB C208B',seats:13,loading:0.86,active:[1,1,1,1,1,1,1,1,1,1,1,1]},
+       {code:'SLD GA8',seats:7,loading:0.86,active:[1,1,1,1,1,1,1,1,1,1,1,1]},
+       {code:'SLQ GA8',seats:7,loading:0.86,active:[1,1,1,1,1,1,1,1,1,1,1,1]},
+       {code:'SDB C208B',seats:11,loading:0.85,active:[1,1,1,1,1,1,0,0,0,0,1,1]}
+     ],
+     fy25:null,
+     pctAgents:[0.8,0.8,0.75,0.75,0.75,0.75,0.75,0.8,0.85,0.85,0.85,0.85],
+     milford:{factor:0.92,agentRate:520,directRate:640,uplift:0.1074,upliftFrom:6},
+     other:{factor:0.08,agentRate:1250,directRate:1460,uplift:0.1154,upliftFrom:6}}
+  ]
 };
+// Compute a budget's 12-month forecast arrays.
+function _bizBudgetCalc(b){
+  var n=12,dep=[],eff=[],pax=[],rev=[],mil=[],oth=[];
+  for(var m=0;m<n;m++){
+    var d=(+b.days[m]||0)*(+b.flyPct[m]||0)*(+b.avgDep[m]||0)*(1-(+b.downtime[m]||0));dep.push(d);
+    var es=0;(b.aircraft||[]).forEach(function(a){if((a.active||[])[m])es+=(+a.seats||0)*(+a.loading||0);});eff.push(es);
+    var px=es*d;pax.push(px);
+    var pa=(+b.pctAgents[m]||0),pd=1-pa;
+    var mp=px*(+b.milford.factor||0),mr=mp*(pa*(+b.milford.agentRate||0)+pd*(+b.milford.directRate||0));if(m>=(b.milford.upliftFrom||99))mr+=mr*(+b.milford.uplift||0);mil.push(mr);
+    var op=px*(+b.other.factor||0),or=op*(pa*(+b.other.agentRate||0)+pd*(+b.other.directRate||0));if(m>=(b.other.upliftFrom||99))or+=or*(+b.other.uplift||0);oth.push(or);
+    rev.push(mr+or);
+  }
+  return {dep:dep,eff:eff,pax:pax,mil:mil,oth:oth,rev:rev};
+}
 // Consolidated loan cashflow: total payment (incl. paydowns) per calendar month across all loans.
 function _bizTimeline(){
   var p=_bizState();var byMonth={};
@@ -69,6 +119,7 @@ function _bizState(){
   if(!Array.isArray(S._bizPlan.payRates))S._bizPlan.payRates=JSON.parse(JSON.stringify(BIZ_DEFAULT.payRates));
   if(!S._bizPlan.paxTargets||typeof S._bizPlan.paxTargets!=='object')S._bizPlan.paxTargets={};
   if(!S._bizPlan.paxData||typeof S._bizPlan.paxData!=='object')S._bizPlan.paxData={};
+  if(!Array.isArray(S._bizPlan.budgets))S._bizPlan.budgets=JSON.parse(JSON.stringify(BIZ_DEFAULT.budgets));
   return S._bizPlan;
 }
 // Per-aircraft cost-per-flight-hour breakdown.
@@ -149,6 +200,10 @@ window.bizDelPay=function(i){var p=_bizState();p.payRates.splice(i,1);_bizSave()
 window.bizPaxMonth=function(dir){var m=S._bizPaxMonth||'2025-06';var d=new Date(+m.slice(0,4),+m.slice(5,7)-1+dir,1);S._bizPaxMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');render();};
 window.bizSetPaxTarget=function(ym,value){var p=_bizState();p.paxTargets[ym]=(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizSetPax=function(ds,field,value){var p=_bizState();p.paxData[ds]=p.paxData[ds]||{};if(value===''||value==null)delete p.paxData[ds][field];else p.paxData[ds][field]=Math.max(0,Math.round(+value)||0);if(!p.paxData[ds].p26&&!p.paxData[ds].p25)delete p.paxData[ds];_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizBudgetSel=function(id){S._bizBudget=id;render();};
+window.bizSetBudgetDriver=function(bid,field,m,value){var p=_bizState();var b=p.budgets.find(function(x){return x.id===bid;});if(!b||!b[field])return;b[field][m]=(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizSetBudgetParam=function(bid,grp,field,value){var p=_bizState();var b=p.budgets.find(function(x){return x.id===bid;});if(!b||!b[grp])return;b[grp][field]=(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizToggleBudgetAc=function(bid,ai,m){var p=_bizState();var b=p.budgets.find(function(x){return x.id===bid;});if(!b||!b.aircraft[ai])return;b.aircraft[ai].active[m]=b.aircraft[ai].active[m]?0:1;_bizSave();render();};
 window.bizReset=function(){if(typeof confirm==='function'&&!confirm('Reset the Main Plan to the original spreadsheet values?'))return;S._bizPlan=JSON.parse(JSON.stringify(BIZ_DEFAULT));_bizSave();render();};
 
 // ── render ──
@@ -161,9 +216,64 @@ function renderBusinessPlan(){
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
     tabs.map(function(t){return '<button class="sub-tab '+(tab===t.id?'on':'')+'" onclick="window.bizSetTab(\''+t.id+'\')">'+t.lbl+'</button>';}).join('')+'</div>';
   var body=(tab==='mainplan')?_bizRenderMainPlan():(tab==='loans')?_bizRenderLoans():(tab==='running')?_bizRenderRunning()
-    :(tab==='timeline')?_bizRenderTimeline():(tab==='roster')?_bizRenderRoster():(tab==='pax')?_bizRenderPax():_bizComingSoon(tabs.find(function(x){return x.id===tab;}));
+    :(tab==='timeline')?_bizRenderTimeline():(tab==='roster')?_bizRenderRoster():(tab==='pax')?_bizRenderPax():(tab==='budget')?_bizRenderBudget():_bizComingSoon(tabs.find(function(x){return x.id===tab;}));
   return '<div>'+bar+body+'</div>';
 }
+
+function _bizRenderBudget(){
+  var p=_bizState();var bid=S._bizBudget||(p.budgets[0]&&p.budgets[0].id);
+  var b=p.budgets.find(function(x){return x.id===bid;})||p.budgets[0];
+  if(!b)return '<div class="card" style="color:var(--text3);padding:24px">No budget defined.</div>';
+  var c=_bizBudgetCalc(b);
+  var months=[];for(var m=0;m<12;m++)months.push(_bizMonLabel(_bizAddMonths(b.startYM+'-01',m)));
+  var _ci='width:52px;font-size:11px;padding:2px 3px;border:1px solid var(--border2);border-radius:4px;background:var(--card);color:var(--text);text-align:center;box-sizing:border-box';
+  var sum=function(a){return a.reduce(function(s,v){return s+(+v||0);},0);};
+  // selector
+  var h='<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div class="st" style="margin-bottom:0;flex:1">FY Budget — pax &amp; revenue forecast</div>'+
+    p.budgets.map(function(x){return '<button class="sub-tab '+(x.id===b.id?'on':'')+'" onclick="window.bizBudgetSel(\''+x.id+'\')">'+_rzEscSafe(x.label)+'</button>';}).join('')+'</div>';
+  // headline tiles
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
+    '<div style="flex:1 1 150px;border:1px solid var(--border2);border-top:3px solid #7c3aed;border-radius:10px;padding:12px 14px"><div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase">Departures /yr</div><div style="font-size:19px;font-weight:800">'+Math.round(sum(c.dep))+'</div></div>'+
+    '<div style="flex:1 1 150px;border:1px solid var(--border2);border-top:3px solid #22c55e;border-radius:10px;padding:12px 14px"><div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase">Pax carried /yr</div><div style="font-size:19px;font-weight:800">'+Math.round(sum(c.pax)).toLocaleString('en-NZ')+'</div></div>'+
+    '<div style="flex:1 1 150px;border:1px solid var(--border2);border-top:3px solid #f59e0b;border-radius:10px;padding:12px 14px"><div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase">Revenue /yr</div><div style="font-size:19px;font-weight:800">'+_bizMoney(sum(c.rev))+'</div></div>'+
+    '</div>';
+  // grid
+  var th='<th style="position:sticky;left:0;background:var(--card2);text-align:left;padding:5px 8px;font-size:10px;color:var(--text3);min-width:140px;z-index:1">';
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="border-collapse:collapse;font-size:11px;min-width:'+(140+12*58+70)+'px">';
+  h+='<thead><tr style="background:var(--card2)">'+th+'</th>'+months.map(function(mn){return '<th style="text-align:center;padding:5px 4px;font-size:9px;color:var(--text3);min-width:54px">'+mn+'</th>';}).join('')+'<th style="text-align:right;padding:5px 8px;font-size:9px;color:var(--text3)">Year</th></tr></thead><tbody>';
+  // editable driver rows
+  function drow(lbl,field,step,fmt){var r='<tr style="border-top:1px solid var(--border2)">'+th.replace('var(--card2)','var(--card)')+lbl+'</th>';for(var m=0;m<12;m++){r+='<td style="padding:1px 2px"><input type="number" step="'+step+'" value="'+(b[field][m]!==''?b[field][m]:'')+'" onchange="window.bizSetBudgetDriver(\''+b.id+'\',\''+field+'\','+m+',this.value)" style="'+_ci+'"></td>';}r+='<td></td></tr>';return r;}
+  h+=drow('Days','days','1');
+  h+=drow('Flying days %','flyPct','0.01');
+  h+=drow('Maint downtime','downtime','0.01');
+  h+=drow('Avg daily departures','avgDep','0.25');
+  // computed: total departures
+  function crow(lbl,arr,money,strong){var r='<tr style="border-top:1px solid var(--border2)'+(strong?';background:var(--card2);font-weight:800':'')+'">'+th.replace('var(--card2)',strong?'var(--card2)':'var(--card)')+lbl+'</th>';for(var m=0;m<12;m++){var v=arr[m];r+='<td style="padding:3px 4px;text-align:center;color:'+(strong?'var(--text1)':'var(--text2)')+'">'+(money?_bizMoney(v):(Math.round(v*10)/10))+'</td>';}r+='<td style="padding:3px 8px;text-align:right;font-weight:800;color:'+(money?'#f59e0b':'var(--text1)')+'">'+(money?_bizMoney(sum(arr)):Math.round(sum(arr)))+'</td></tr>';return r;}
+  h+=crow('Total departures',c.dep,false,true);
+  // aircraft effective-seat active toggles
+  b.aircraft.forEach(function(a,ai){
+    var r='<tr style="border-top:1px solid var(--border2)">'+th.replace('var(--card2)','var(--card)')+'<span style="font-size:10px">'+_rzEscSafe(a.code)+' <span style="color:var(--text3)">'+(Math.round(a.seats*a.loading*100)/100)+'</span></span></th>';
+    for(var m=0;m<12;m++){var on=(a.active||[])[m];r+='<td style="padding:1px 2px;text-align:center"><button onclick="window.bizToggleBudgetAc(\''+b.id+'\','+ai+','+m+')" title="Toggle in-service" style="width:46px;height:20px;border:1px solid var(--border2);border-radius:4px;background:'+(on?'rgba(34,197,94,.18)':'transparent')+';color:'+(on?'#22c55e':'var(--text3)')+';cursor:pointer;font-size:10px;font-weight:700">'+(on?(Math.round(a.seats*a.loading*100)/100):'—')+'</button></td>';}
+    r+='<td></td></tr>';h+=r;
+  });
+  h+=crow('Pax carried',c.pax,false,true);
+  if(b.fy25){var r='<tr style="border-top:1px solid var(--border2)">'+th.replace('var(--card2)','var(--card)')+'FY25 actual</th>';for(var m=0;m<12;m++){r+='<td style="padding:3px 4px;text-align:center;color:var(--text3)">'+(b.fy25[m]||'')+'</td>';}r+='<td style="padding:3px 8px;text-align:right;color:var(--text3)">'+sum(b.fy25)+'</td></tr>';h+=r;}
+  h+=crow('Revenue',c.rev,true,true);
+  h+='</tbody></table></div>';
+  // revenue params
+  function pgrp(lbl,grp){var g=b[grp];return '<div style="flex:1 1 260px;border:1px solid var(--border2);border-radius:9px;padding:10px"><div style="font-size:11px;font-weight:800;margin-bottom:6px">'+lbl+'</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">'+
+    _bizFld('Tour factor','<input type="number" step="0.01" value="'+g.factor+'" onchange="window.bizSetBudgetParam(\''+b.id+'\',\''+grp+'\',\'factor\',this.value)" style="'+_ci+';width:100%">')+
+    _bizFld('Uplift (Oct+)','<input type="number" step="0.001" value="'+g.uplift+'" onchange="window.bizSetBudgetParam(\''+b.id+'\',\''+grp+'\',\'uplift\',this.value)" style="'+_ci+';width:100%">')+
+    _bizFld('Agent rate','<input type="number" step="10" value="'+g.agentRate+'" onchange="window.bizSetBudgetParam(\''+b.id+'\',\''+grp+'\',\'agentRate\',this.value)" style="'+_ci+';width:100%">')+
+    _bizFld('Direct rate','<input type="number" step="10" value="'+g.directRate+'" onchange="window.bizSetBudgetParam(\''+b.id+'\',\''+grp+'\',\'directRate\',this.value)" style="'+_ci+';width:100%">')+
+    '</div></div>';}
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+pgrp('Milford tours',milGrp(b))+pgrp('Other tours',othGrp(b))+'</div>';
+  h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px">Total departures = days × flying-day % × avg daily departures × (1−downtime). Pax carried = (sum of in-service aircraft effective seats) × departures. Tap an aircraft cell to toggle it in/out of service that month. Revenue = pax × tour factor × (% agent×agent rate + % direct×direct rate), + uplift from October.</div>';
+  return h;
+}
+function milGrp(){return 'milford';}
+function othGrp(){return 'other';}
 
 function _bizRenderPax(){
   var p=_bizState();var ym=S._bizPaxMonth||'2025-06';
