@@ -2887,14 +2887,15 @@ function _rzBkPrintRow(b){
   var prod=_rzProduct((((b.items||[])[0]||{}).product)||'');
   var pk='';(b.items||[]).some(function(it,ii){if(!it.pickup)return false;var id=String(b.orderNumber||'')+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;var ov=(S._pickupLocOverride||{});var loc=(ov[id]!=null&&ov[id]!=='')?ov[id]:it.pickup;var pt=_rzDepTime(it.pickupTime||'');pk=(pt?pt+' · ':'')+loc;return true;});
   var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
-  var ci=(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')]?'✓':'';
+  var ac=_rzBookingAc(b,String(b.orderNumber||''));
+  var acCell=ac?('<span style="display:inline-block;border:1.5px solid '+_rzAcCol(ac)+';color:'+_rzAcCol(ac)+';border-radius:10px;padding:1px 7px;font-weight:bold;font-size:10px;white-space:nowrap">'+_rzEsc(String(ac).replace('ZK-',''))+'</span>'):'—';
   return '<tr><td>'+_rzEsc(b.customerName||'')+(b.phone?'<div class="ph">'+_rzEsc(b.phone)+'</div>':'')+'</td>'
     +'<td>'+_rzEsc(b.orderNumber||'')+'</td>'
     +'<td class="c">'+_rzEsc(px)+'</td>'
     +'<td>'+_rzEsc(prod||'')+'</td>'
+    +'<td class="c">'+acCell+'</td>'
     +'<td>'+_rzEsc(pk||'—')+'</td>'
-    +'<td class="r">'+(owing?_rzEsc(_rzMoney(bal,b.currency))+' owing':'Paid')+'</td>'
-    +'<td class="c">'+ci+'</td></tr>';
+    +'<td class="r">'+(owing?_rzEsc(_rzMoney(bal,b.currency))+' owing':'Paid')+'</td></tr>';
 }
 window.rezdyBookingsPrint=function(){
   var allRows=(S._rezdyBookings||[]).slice();
@@ -2909,7 +2910,7 @@ window.rezdyBookingsPrint=function(){
     var rows=grp.slice().sort(function(a,b){return String(a.customerName||'').localeCompare(String(b.customerName||''));});
     return '<div class="dep"><div class="dh">'+_rzEsc(_rzDepDisplay(d))+(prod?' '+_rzEsc(prod):'')
       +' <span class="dc">'+rows.length+' bkg · '+gbd.a+'A'+(gbd.c?' '+gbd.c+'C':'')+(gbd.i?' '+gbd.i+'i':'')+'</span></div>'
-      +'<table class="bk"><thead><tr><th>Customer</th><th>Order</th><th class="c">Pax</th><th>Product</th><th>Pickup</th><th class="r">Balance</th><th class="c">In</th></tr></thead><tbody>'
+      +'<table class="bk"><thead><tr><th>Customer</th><th>Order</th><th class="c">Pax</th><th>Product</th><th class="c">Aircraft</th><th>Pickup</th><th class="r">Balance</th></tr></thead><tbody>'
       +rows.map(_rzBkPrintRow).join('')+'</tbody></table></div>';
   };
   var bodyH=deps.map(function(d){return section(d,byDep[d]);}).join('');

@@ -412,7 +412,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.33';
+const APP_VER='v24.35';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1837,7 +1837,10 @@ async function reloadTable(table){
   if(table==='ts_loadsheets'){
     const ls=await sbF('ts_loadsheets',Q_LOADSHEETS());
     if(ls){
-      var _fresh=ls.map(function(r){return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete'};});
+      // Keep drive_uploaded from the row (else archived sheets revert to "signed" on a realtime
+      // reload/reconnect); preserve the local uploadedBy/uploadedAt (not stored in the DB).
+      var _prevLs={};(S.saved||[]).forEach(function(s){if(s&&s.id)_prevLs[s.id]=s;});
+      var _fresh=ls.map(function(r){var _p=_prevLs[r.id]||{};return{id:r.id,savedAt:r.saved_at,form:r.form,status:r.status||'complete',driveUploaded:!!r.drive_uploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''};});
       // Preserve any currently-open loadsheet tabs whose saved row falls outside the
       // fetch window, so a realtime refresh can't drop a tab the user still has open.
       var _freshIds={};_fresh.forEach(function(s){_freshIds[s.id]=1;});
