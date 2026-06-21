@@ -671,14 +671,14 @@ window.rosterApplyPattern=async function(){
   if(conflicts.length){S._rBuildLeave=leaveLookup;_rShowBuildLeavePrompt(conflicts);return;}
   _rDoApplyBuild('skip',leaveLookup);
 };
-function _rDoApplyBuild(mode,leaveLookup){
+async function _rDoApplyBuild(mode,leaveLookup){
   var bs=S.rosterBuild||{};var tpl=bs.template||{};var enabled=bs.enabled||{};
   var startStr=bs.startDate;var weeks=bs.weeks||4;
   var startD=new Date(startStr+'T00:00:00');
   var PROTECTED=new Set(['leave','sick']);
   if(!S.roster)S.roster={};
   leaveLookup=leaveLookup||{};
-  var count=0,skipped=0;
+  var count=0,skipped=0,changes={};
   for(var w=0;w<weeks;w++){
     for(var di=0;di<7;di++){
       var d=new Date(startD);d.setDate(d.getDate()+w*7+di);
@@ -692,13 +692,15 @@ function _rDoApplyBuild(mode,leaveLookup){
         var exRaw=ex.indexOf('other:')===0?'other':ex;
         if(PROTECTED.has(exRaw))return;
         if(mode==='skip'&&leaveLookup[ds]&&leaveLookup[ds][uid]){skipped++;return;}
-        S.roster[ds][uid]=newSt;count++;
+        S.roster[ds][uid]=newSt;(changes[ds]=changes[ds]||{})[uid]=newSt;count++;
       });
     }
   }
   lsSet('ts_roster',S.roster);
-  window.saveRosterToCloud();
-  toast('Pushed '+count+' cells'+(skipped?' · skipped '+skipped+' approved-leave day'+(skipped!==1?'s':''):'')+' across '+weeks+' week'+(weeks!==1?'s':'')+'.','success');
+  // Merge onto the latest cloud roster so a concurrent edit isn't lost; only report success if it saved.
+  var ok=await window._rosterApplyAndSave(changes);
+  if(ok)toast('Pushed '+count+' cells'+(skipped?' · skipped '+skipped+' approved-leave day'+(skipped!==1?'s':''):'')+' across '+weeks+' week'+(weeks!==1?'s':'')+'.','success');
+  else toast('Pattern push didn’t save to the server — changes kept locally, please try again.','err');
   S.rosterTab='view';S.rosterWeek=startStr;render();
 }
 function _rShowBuildLeavePrompt(conflicts){
@@ -730,19 +732,37 @@ window._rBuildChoose=function(c){
   S._rBuildLeave=null;
 };
 
+// Sentinel: a change that DELETES a roster cell (vs setting it to a value).
+var _RDEL=' __rdel__';
+// Merge-before-write: re-GET the latest cloud roster and apply ONLY the given changed cells onto
+// it, so a concurrent device's edits to OTHER cells survive (was: blind whole-blob last-writer-wins).
+// `changes` shape: { 'YYYY-MM-DD': { userId: newValue | _RDEL } }. Returns true on a confirmed save.
+window._rosterApplyAndSave=async function(changes){
+  var fresh=null;
+  try{
+    var r=await _sbFetch(SB+'/rest/v1/ts_settings?key=eq.roster&select=value',{headers:{...SH}});
+    if(r.ok){var rows=await r.json();if(rows&&rows.length){var v=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;if(v&&typeof v==='object')fresh=v;}}
+  }catch(e){}
+  if(!fresh)fresh=JSON.parse(JSON.stringify(S.roster||{})); // offline / fetch failed → best-effort onto local
+  Object.keys(changes||{}).forEach(function(ds){
+    var day=changes[ds]||{};Object.keys(day).forEach(function(uid){
+      if(day[uid]===_RDEL){if(fresh[ds])delete fresh[ds][uid];}
+      else{if(!fresh[ds])fresh[ds]={};fresh[ds][uid]=day[uid];}
+    });
+  });
+  var res=await sbU('ts_settings',[{key:'roster',value:JSON.stringify(fresh)}]);
+  if(res===null)return false;
+  S.roster=fresh;lsSet('ts_roster',fresh);
+  return true;
+};
 window.saveRosterToCloud=async function(){
-  // Merge draft into roster locally, but DON'T discard the draft/undo stack until the
-  // cloud write is CONFIRMED. sbU returns null on failure (it does not throw), so a
-  // denied/failed save must not be reported as success or wipe the operator's edits.
+  // The draft IS this device's delta — apply only those cells onto the latest cloud roster, so a
+  // failed save doesn't wipe edits and a concurrent device's other cells aren't overwritten.
   var draft=S._rosterDraft||{};
   if(!S.roster)S.roster={};
-  Object.keys(draft).forEach(function(ds){
-    if(!S.roster[ds])S.roster[ds]={};
-    Object.assign(S.roster[ds],draft[ds]);
-  });
-  lsSet('ts_roster',S.roster);
-  var res=await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
-  if(res===null){toast('Roster save failed — your changes are kept locally, please try again','err');return;}
+  var changes={};Object.keys(draft).forEach(function(ds){changes[ds]={};Object.keys(draft[ds]).forEach(function(u){changes[ds][u]=draft[ds][u];});});
+  var ok=await window._rosterApplyAndSave(changes);
+  if(!ok){toast('Roster save failed — your changes are kept locally, please try again','err');return;}
   S._rosterDraft={};
   S._rosterUndoStack=[];
   toast('Roster saved!','success');

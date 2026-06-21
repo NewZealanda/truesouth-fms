@@ -69,19 +69,20 @@ async function _lvStampRoster(req){
   var code=_lvMap[req.leave_type]||'leave';
   if(!S.roster)S.roster={};
   var off={rdo:1,off:1};
-  var cur=new Date(req.start_date+'T00:00:00'),end=new Date(req.end_date+'T00:00:00'),guard=0,changed=false;
+  var cur=new Date(req.start_date+'T00:00:00'),end=new Date(req.end_date+'T00:00:00'),guard=0,changed=false,changes={};
   while(cur<=end&&guard++<3660){
     var ds=(typeof _rIso==='function')?_rIso(cur):cur.toISOString().slice(0,10);
     if(!S.roster[ds])S.roster[ds]={};
     var ex=S.roster[ds][req.user_id]||'';
     if(typeof ex==='string'&&ex.indexOf('other:')===0)ex='other';
-    if(!off[ex]&&ex!==code){S.roster[ds][req.user_id]=code;changed=true;}
+    if(!off[ex]&&ex!==code){S.roster[ds][req.user_id]=code;(changes[ds]=changes[ds]||{})[req.user_id]=code;changed=true;}
     cur.setDate(cur.getDate()+1);
   }
   if(changed){
     lsSet('ts_roster',S.roster);
-    var res=await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
-    if(res===null)toast('Leave approved, but the roster auto-stamp didn’t save — add it on the roster manually.','warn');
+    // Merge only these leave cells onto the latest cloud roster (don't clobber concurrent edits).
+    var ok=(typeof window._rosterApplyAndSave==='function')?await window._rosterApplyAndSave(changes):(await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}])!==null);
+    if(!ok)toast('Leave approved, but the roster auto-stamp didn’t save — add it on the roster manually.','warn');
   }
 }
 // Reverse an auto-stamp: clear the leave code from the roster for this request's days/user,
@@ -95,16 +96,16 @@ async function _lvUnstampRoster(req){
   if(!S.roster)return;
   var _lvMap={annual:'leave',sick:'sick',unpaid:'leave',other:'training'};
   var code=_lvMap[req.leave_type]||'leave';
-  var cur=new Date(req.start_date+'T00:00:00'),end=new Date(req.end_date+'T00:00:00'),guard=0,changed=false;
+  var cur=new Date(req.start_date+'T00:00:00'),end=new Date(req.end_date+'T00:00:00'),guard=0,changed=false,changes={};
   while(cur<=end&&guard++<3660){
     var ds=(typeof _rIso==='function')?_rIso(cur):cur.toISOString().slice(0,10);
-    if(S.roster[ds]&&S.roster[ds][req.user_id]===code){delete S.roster[ds][req.user_id];changed=true;}
+    if(S.roster[ds]&&S.roster[ds][req.user_id]===code){delete S.roster[ds][req.user_id];(changes[ds]=changes[ds]||{})[req.user_id]=_RDEL;changed=true;}
     cur.setDate(cur.getDate()+1);
   }
   if(changed){
     lsSet('ts_roster',S.roster);
-    var res=await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}]);
-    if(res===null)toast('Leave removed, but the roster un-stamp didn’t save — adjust the roster manually.','warn');
+    var ok=(typeof window._rosterApplyAndSave==='function')?await window._rosterApplyAndSave(changes):(await sbU('ts_settings',[{key:'roster',value:JSON.stringify(S.roster||{})}])!==null);
+    if(!ok)toast('Leave removed, but the roster un-stamp didn’t save — adjust the roster manually.','warn');
   }
 }
 function _lvFmt(ds){if(!ds)return '';var d=new Date(ds+'T00:00:00');return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'});}
@@ -246,7 +247,7 @@ function _renderMyLeave(lv){
     return h+'<div style="background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:40px;text-align:center;color:var(--text3);font-size:13px">No leave requests yet.</div>';
   }
 
-  var today=new Date().toISOString().slice(0,10);
+  var today=(typeof _rIso==='function')?_rIso(new Date()):new Date().toISOString().slice(0,10); // local date (NZ), not UTC
   var upcoming=reqs.filter(function(r){return r.end_date>=today&&(r.status==='approved'||r.status==='pending');});
   var history=reqs.filter(function(r){return upcoming.indexOf(r)===-1;});
 
@@ -398,7 +399,7 @@ function _renderApprovals(lv,role){
     }
 
     // Submitted time + reviewed by
-    h+='<div style="font-size:11px;color:var(--text3);margin-top:8px">Submitted '+new Date(r.submitted_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})+'</div>';
+    h+='<div style="font-size:11px;color:var(--text3);margin-top:8px">Submitted '+(r.submitted_at?new Date(r.submitted_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—')+'</div>';
     if(r.admin_comment){h+='<div style="margin-top:8px;font-size:12px;color:#f87171;background:rgba(239,68,68,.08);border-radius:7px;padding:7px 10px">💬 '+_lvEsc(r.admin_comment)+'</div>';}
     if(r.status!=='pending'&&r.reviewed_by_name){
       h+='<div style="font-size:11px;color:var(--text3);margin-top:4px">'+sc.lbl+' by '+_lvEsc(r.reviewed_by_name)+' · '+new Date(r.reviewed_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short'})+'</div>';

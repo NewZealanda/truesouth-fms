@@ -90,13 +90,20 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v24.41** — built+verified. See `HANDOFF.md` for the full log.
+- Latest version: **v24.42** — built+verified. See `HANDOFF.md` for the full log.
 - **`ARCHITECTURE_REVIEW_v24.41.md` is the latest full bug-sweep** (3-reviewer audit of F&D +
   Transport + core). Fixed in v24.41: F1 crew `reloadTable` dropped `dob`/`typeRatings`; transport
   drop-off location/time override id; `'~'`→`'—'` dep sentinel; F&D orphan empty rows, days-off
   counting today, landing int-coercion, `fdSetLimit` NaN guard, non-manager query scope, printed
-  rolling figures at period-end; W&B `calcFormWB` null-guard. **OPEN (top):** F2/F3 roster/leave
-  whole-blob save is last-writer-wins (needs merge-before-write + two-device test).
+  rolling figures at period-end; W&B `calcFormWB` null-guard.
+- **v24.42 — F2/F3 roster/leave blob save FIXED (merge-before-write).** New `window._rosterApplyAndSave(changes)`
+  in roster.js re-GETs the latest cloud roster and applies ONLY the changed cells (`{ds:{uid:val|_RDEL}}`)
+  onto it, so a concurrent device's other cells survive (was last-writer-wins). All three writers route
+  through it: `saveRosterToCloud` (draft = delta), `_rDoApplyBuild` pattern-push (now async, toast gated
+  on save result), and leave `_lvStampRoster`/`_lvUnstampRoster`. Also F7 (leave "today" uses local
+  `_rIso` not UTC) + F8 (guard `submitted_at`). ⚠️ still wants a two-device real test.
+  **OPEN (lower):** F5 (loadsheet below-reserve banner duplicates `calcFormWB`'s reserve calc — latent,
+  agrees for the current fleet), F6 (leave `total_days` frozen at submit from a possibly-stale roster).
 - **TSF Business Plan (v24.41) — NEW MODULE `modules/businessplan.js`.** Admin/superadmin section
   gated by the new **`businessplan`** perm. v1 = the interactive **Acquisition (Main Plan)** model:
   editable finance tranches (amount/rate/type io|pi/term) → live interest, monthly/annual repayments
