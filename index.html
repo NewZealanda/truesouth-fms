@@ -743,7 +743,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.92';
+const APP_VER='v24.93';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16573,9 +16573,19 @@ function _frRenderTodayRecord(uid){
     '<div style="font-weight:800;font-size:15px;margin-left:4px">'+_frEsc(dlbl)+(isToday?' <span style="font-size:11px;color:#16a34a;font-weight:700">• today</span>':'')+'</div>'+
   '</div>';
   // Real recorded flights only (a pure manual logbook row with no times/TTIS shouldn't inflate Maintenance).
-  var recs=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.fr_date===date&&r.done&&(r.endHours!=null||r.off))recs.push(r);});
-  var h=nav;
+  var recsAll=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.fr_date===date&&r.done&&(r.endHours!=null||r.off))recsAll.push(r);});
+  // Aircraft selector — split the day's records by aircraft (persists as you page through dates).
+  var acsOnDay=[];recsAll.forEach(function(r){if(acsOnDay.indexOf(r.aircraft)<0)acsOnDay.push(r.aircraft);});acsOnDay.sort();
+  var selAc=S._frRecAc||'';if(selAc&&acsOnDay.indexOf(selAc)<0&&acsOnDay.length===0){/* keep filter even if no flights that day */}
+  var chip=function(lbl,on,onclick,col){var c=col||'#7c3aed';return '<button onclick="'+onclick+'" style="padding:7px 13px;border-radius:9px;border:2px solid '+(on?c:(col?c+'66':'var(--border2)'))+';background:'+(on?(col?c+'22':'rgba(124,58,237,.14)'):'transparent')+';color:'+(on?(col?c:'#a78bfa'):(col||'var(--text2)'))+';font-size:13px;font-weight:800;cursor:pointer">'+lbl+'</button>';};
+  var sel='<div class="card" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-right:2px">Aircraft</span>'+
+    chip('All',selAc==='',"S._frRecAc=null;render()")+
+    _frAcList().map(function(ac){return chip(_frAcShort(ac),selAc===ac,"S._frRecAc='"+_frJs(ac)+"';render()",_frAcCol(ac));}).join('')+
+  '</div>';
+  var recs=selAc?recsAll.filter(function(r){return r.aircraft===selAc;}):recsAll;
+  var h=nav+sel;
   if(S._frEditId&&(S._frData||{})[S._frEditId]&&S._frData[S._frEditId].fr_date===date){h+=_frRenderEdit(S._frData[S._frEditId]);}
+  if(selAc&&!recs.length)return h+'<div class="card" style="color:var(--text3);padding:24px;font-size:13px">No '+_frEsc(_frAcShort(selAc))+' flights recorded for this day.</div>';
   return h+_frTodayBody(recs,date);
 }
 function _frTodayBody(recs,today){
