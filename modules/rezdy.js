@@ -1260,8 +1260,6 @@ function _rzBookingCard(b){
     h+=_rzCheckBtn('Checked in',ci,'window.rezdyCheckinClick(\''+oE+'\')','Check in: enter names + actual weights');
     // No-show toggle (red when on) — shows red + excluded from the seatmap push.
     h+='<button onclick="window.rezdyBookingNoShow(\''+oE+'\')" title="No-show — shows red, excluded from pickups AND the seatmap push, and notifies the desk" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid '+(noShow?'#ef4444':'var(--border2)')+';background:'+(noShow?'rgba(239,68,68,.15)':'transparent')+';color:'+(noShow?'#f87171':'var(--text3)')+'">'+(noShow?'✕':'○')+' No-show</button>';
-    h+='<button onclick="window.rezdyBookingSelfDrive(\''+oE+'\')" title="Self-drive — no pickup needed, but stays on the flight/seatmap" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid '+(selfDrive?'#f59e0b':'var(--border2)')+';background:'+(selfDrive?'rgba(245,158,11,.15)':'transparent')+';color:'+(selfDrive?'#fbbf24':'var(--text3)')+'">'+(selfDrive?'✓':'○')+' Self-drive</button>';
-    h+='<button onclick="window.rezdyBookingCancel(\''+oE+'\')" title="Cancel this booking (records a reason; does not cancel it in Rezdy)" style="font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid rgba(239,68,68,.4);background:transparent;color:#ef4444">Cancel</button>';
   }
   if(localCancel){
     h+='<span style="font-size:11px;font-weight:800;color:#ef4444">✕ CANCELLED</span>'+
@@ -1276,7 +1274,9 @@ function _rzBookingCard(b){
   // Aircraft — collapsed shows only the selected one; the full pill selector moves into the dropdown.
   if(!cancelled&&!open)h+=_rzBookingAcBadge(b,ono);
   // Passenger bubbles + aircraft selector live inside the expanded detail (dropdown).
-  if(open)h+='<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:10px">'+(!cancelled?_rzBookingAcPills(b,ono):'')+_rzBookingDetail(b)+'</div>';
+  if(open)h+='<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:10px">'+(!cancelled?_rzBookingAcPills(b,ono):'')+_rzBookingDetail(b)+
+    (!cancelled?'<div style="margin-top:10px;text-align:right"><button onclick="window.rezdyBookingCancel(\''+oE+'\')" title="Cancel this booking (records a reason; does not cancel it in Rezdy)" style="font-size:12px;font-weight:700;padding:6px 14px;border-radius:9px;cursor:pointer;border:1.5px solid rgba(239,68,68,.4);background:transparent;color:#ef4444">✕ Cancel booking</button></div>':'')+
+  '</div>';
   h+='</div>';
   return h;
 }
