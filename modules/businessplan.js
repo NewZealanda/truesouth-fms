@@ -34,10 +34,12 @@ var BIZ_DEFAULT={
   running:{
     fuel:{avgas:3.75,jeta1:2.76},   // ex-GST $/L
     aircraft:[
-      {code:'SLA',type:'C208',burn:170,fuelType:'jeta1',hours:529.3,maint:114000,eoCost:1000000,eoInt:3600,propCost:20000,propInt:2400},
-      {code:'SLB',type:'C208',burn:170,fuelType:'jeta1',hours:477,  maint:181000,eoCost:1000000,eoInt:3600,propCost:20000,propInt:2400},
-      {code:'SLD',type:'GA8', burn:70, fuelType:'avgas',hours:503.8,maint:95000, eoCost:210000, eoInt:2000,propCost:20000,propInt:2400},
-      {code:'SLQ',type:'GA8', burn:70, fuelType:'avgas',hours:524.3,maint:152000,eoCost:210000, eoInt:2000,propCost:20000,propInt:2400}
+      {code:'SLA',type:'C208',burn:170,fuelType:'jeta1',hours:529.3,maint:114000,eoCost:1000000,eoInt:3600,propCost:20000,propInt:2400,lease:0},
+      {code:'SLB',type:'C208',burn:170,fuelType:'jeta1',hours:477,  maint:181000,eoCost:1000000,eoInt:3600,propCost:20000,propInt:2400,lease:0},
+      {code:'SLD',type:'GA8', burn:70, fuelType:'avgas',hours:503.8,maint:95000, eoCost:210000, eoInt:2000,propCost:20000,propInt:2400,lease:0},
+      {code:'SLQ',type:'GA8', burn:70, fuelType:'avgas',hours:524.3,maint:152000,eoCost:210000, eoInt:2000,propCost:20000,propInt:2400,lease:0},
+      // SDB is leased — flat $1500/hr lease (in place of maintenance reserves) + fuel; excluded from the owned-fleet averages.
+      {code:'SDB',type:'C208',burn:170,fuelType:'jeta1',hours:500,  maint:0,     eoCost:0,      eoInt:1,   propCost:0,    propInt:1,   lease:1500}
     ],
     // Per-location charges by aircraft type (all ex-GST), split into landing + concession + airways
     // so each is visible/verifiable. The calculator adds all three at each place the flight LANDS
@@ -163,24 +165,35 @@ function _bizRunCalc(ac,fuel){
   var mHr=(+ac.hours>0)?((+ac.maint||0)/(+ac.hours)):0;
   var eoHr=(+ac.eoInt>0)?((+ac.eoCost||0)/(+ac.eoInt)):0;
   var propHr=(+ac.propInt>0)?((+ac.propCost||0)/(+ac.propInt)):0;
-  var maintHr=mHr+eoHr+propHr;
-  return {fuelHr:fuelHr,mHr:mHr,eoHr:eoHr,propHr:propHr,maintHr:maintHr,totalHr:fuelHr+maintHr};
+  var leaseHr=+ac.lease||0;
+  // A leased aircraft (e.g. SDB) carries a flat lease $/hr INSTEAD of maintenance reserves.
+  var maintHr=leaseHr>0?leaseHr:(mHr+eoHr+propHr);
+  return {fuelHr:fuelHr,mHr:mHr,eoHr:eoHr,propHr:propHr,leaseHr:leaseHr,isLease:leaseHr>0,maintHr:maintHr,totalHr:fuelHr+maintHr};
 }
 // Landing + concession + airways for a location, for an aircraft type ('C208'|'GA8'). All ex-GST.
 function _bizLocFees(loc,type){var g=(type==='GA8');return {ldg:(+(g?loc.ldgGA8:loc.ldgC208)||0),conc:(+(g?loc.concGA8:loc.concC208)||0),aw:(+(g?loc.awGA8:loc.awC208)||0)};}
-// Cost of a single flight: aircraft × flight time (fuel + maintenance per hr) plus the landing,
-// concession + airways fees at every place it LANDS — the destination, and the departure again on
-// a round trip.
-function _bizFlightCost(ac,hrs,depIdx,destIdx,round){
-  var p=_bizState();var c=_bizRunCalc(ac,p.running.fuel);
-  hrs=+hrs||0;var flight=c.totalHr*hrs;
+// Average fuel/hr + maintenance/hr across all aircraft of a type — the figures the calculator uses.
+function _bizTypeAvg(type){
+  var p=_bizState();var fuel=p.running.fuel;
+  var list=(p.running.aircraft||[]).filter(function(a){return a.type===type&&!(+a.lease>0);}); // owned only — leases excluded
+  if(!list.length)return {fuelHr:0,maintHr:0,totalHr:0,n:0};
+  var f=0,m=0;list.forEach(function(a){var c=_bizRunCalc(a,fuel);f+=c.fuelHr;m+=c.maintHr;});
+  f/=list.length;m/=list.length;
+  return {fuelHr:f,maintHr:m,totalHr:f+m,n:list.length};
+}
+// Cost of a single flight. rc = running cost source {fuelHr,maintHr,totalHr,...}; type drives the
+// per-place fees. Running cost × flight time, plus landing/concession/airways at every place it
+// LANDS — destination, and departure again on a round trip.
+function _bizFlightCost(rc,type,hrs,depIdx,destIdx,round){
+  var p=_bizState();
+  hrs=+hrs||0;var flight=(rc.totalHr||0)*hrs;
   var locs=p.running.locations||[];
   var arrivals=[];                          // indices of locations the flight lands at
   if(locs[destIdx])arrivals.push(destIdx);
   if(round&&locs[depIdx]&&depIdx!=null)arrivals.push(depIdx);
   var stops=[],ldgTot=0,concTot=0,awTot=0;
-  arrivals.forEach(function(li){var f=_bizLocFees(locs[li],ac.type);ldgTot+=f.ldg;concTot+=f.conc;awTot+=f.aw;stops.push({name:locs[li].name,ldg:f.ldg,conc:f.conc,aw:f.aw});});
-  return {fuelHr:c.fuelHr,maintHr:c.maintHr,runHr:c.totalHr,hrs:hrs,flight:flight,ldg:ldgTot,conc:concTot,aw:awTot,stops:stops,total:flight+ldgTot+concTot+awTot};
+  arrivals.forEach(function(li){var f=_bizLocFees(locs[li],type);ldgTot+=f.ldg;concTot+=f.conc;awTot+=f.aw;stops.push({name:locs[li].name,ldg:f.ldg,conc:f.conc,aw:f.aw});});
+  return {fuelHr:rc.fuelHr||0,maintHr:rc.maintHr||0,runHr:rc.totalHr||0,isLease:!!rc.isLease,n:rc.n||0,hrs:hrs,flight:flight,ldg:ldgTot,conc:concTot,aw:awTot,stops:stops,total:flight+ldgTot+concTot+awTot};
 }
 window.bizRunTab=function(t){S._bizRunTab=t;render();};
 window.bizSetLoc=function(i,field,value){var p=_bizState();if(!p.running.locations[i])return;p.running.locations[i][field]=(field==='name')?value:(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
@@ -598,28 +611,36 @@ function _bizRenderRunning(){
 function _bizRunCalcView(){
   var p=_bizState();var acs=p.running.aircraft,locs=p.running.locations,cal=S._bizCalc||{};
   if(!acs.length)return '<div class="card" style="color:var(--text3);padding:20px;font-size:13px">Add an aircraft on the Maintenance tab first.</div>';
-  var acIdx=(cal.ac!=null&&acs[+cal.ac])?+cal.ac:0;var ac=acs[acIdx];
+  // Sources: the two owned-fleet type averages, plus each leased aircraft individually (lease + fuel).
+  var srcs=[{key:'C208',lbl:'C208B (owned avg)',type:'C208'},{key:'GA8',lbl:'GA8 (owned avg)',type:'GA8'}];
+  acs.forEach(function(a,i){if(+a.lease>0)srcs.push({key:'ac'+i,lbl:(a.code||'?')+' (lease)',type:a.type,acIdx:i});});
+  var srcKey=(srcs.some(function(s){return s.key===cal.src;}))?cal.src:'C208';
+  var sel=srcs.find(function(s){return s.key===srcKey;})||srcs[0];
+  var rc,srcLbl;
+  if(sel.acIdx!=null){var c=_bizRunCalc(acs[sel.acIdx],p.running.fuel);rc={fuelHr:c.fuelHr,maintHr:c.maintHr,totalHr:c.totalHr,isLease:c.isLease,n:1};srcLbl=sel.lbl;}
+  else{var av=_bizTypeAvg(sel.type);rc={fuelHr:av.fuelHr,maintHr:av.maintHr,totalHr:av.totalHr,isLease:false,n:av.n};srcLbl=sel.lbl;}
   var hrs=(cal.hrs!=null)?cal.hrs:'';
   var depIdx=(cal.dep!=null&&locs[+cal.dep])?+cal.dep:0;
   var destIdx=(cal.dest!=null&&locs[+cal.dest])?+cal.dest:(locs.length>1?1:0);
   var round=(cal.round===undefined)?true:!!cal.round;
   var opt=function(list,sel,lbl){return list.map(function(x,i){return '<option value="'+i+'"'+(i===sel?' selected':'')+'>'+_rzEscSafe(lbl(x,i))+'</option>';}).join('');};
-  var h='<div class="card"><div class="st">Flight cost calculator <span style="font-weight:400;font-size:11px;color:var(--text3)">— ex GST</span></div>'+
+  var h='<div class="card"><div class="st">Flight cost calculator <span style="font-weight:400;font-size:11px;color:var(--text3)">— owned fleet uses the type-average running cost · ex GST</span></div>'+
     '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">'+
-      '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">AIRCRAFT</label><select onchange="window.bizSetCalc(\'ac\',this.value)" style="'+_bizInS+';width:130px">'+opt(acs,acIdx,function(a){return (a.code||'?')+' ('+a.type+')';})+'</select></div>'+
+      '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">AIRCRAFT</label><select onchange="window.bizSetCalc(\'src\',this.value)" style="'+_bizInS+';width:160px">'+srcs.map(function(s){return '<option value="'+s.key+'"'+(s.key===srcKey?' selected':'')+'>'+_rzEscSafe(s.lbl)+'</option>';}).join('')+'</select></div>'+
       '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">FLIGHT TIME (hr)</label><input type="number" step="0.1" min="0" value="'+(hrs!==''?hrs:'')+'" onchange="window.bizSetCalc(\'hrs\',this.value)" style="'+_bizInS+';width:100px;text-align:right" placeholder="e.g. 2.2"></div>'+
       '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">DEPART</label><select onchange="window.bizSetCalc(\'dep\',this.value)" style="'+_bizInS+';width:140px">'+opt(locs,depIdx,function(l){return l.name;})+'</select></div>'+
       '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">DESTINATION</label><select onchange="window.bizSetCalc(\'dest\',this.value)" style="'+_bizInS+';width:140px">'+opt(locs,destIdx,function(l){return l.name;})+'</select></div>'+
       '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);padding-bottom:6px"><input type="checkbox" '+(round?'checked':'')+' onchange="window.bizSetCalc(\'round\',this.checked)"> Round trip</label>'+
     '</div></div>';
-  if(ac){
-    var r=_bizFlightCost(ac,hrs,depIdx,destIdx,round);
+  {
+    var r=_bizFlightCost(rc,sel.type,hrs,depIdx,destIdx,round);
     // right-side value is a pre-formatted string so we can show "$X / hr", "N hr", money, etc.
     var row=function(lbl,right,strong,big){return '<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px solid var(--border2)'+(strong?';font-weight:800':'')+'"><span style="color:'+(strong?'var(--text1)':'var(--text2)')+'">'+lbl+'</span><span style="'+(big?'font-size:18px;font-weight:800;color:#f59e0b':strong?'font-weight:800;color:var(--text1)':'color:var(--text1)')+'">'+right+'</span></div>';};
-    // ── Running cost (the aircraft itself) — per hour and for the flight ──
-    h+='<div class="card"><div class="st">Running cost — '+_rzEscSafe(ac.code||'')+' <span style="font-weight:400;font-size:11px;color:var(--text3)">('+_rzEscSafe(ac.type)+', ex GST)</span></div><div style="font-size:13px">';
+    // ── Running cost (type average, or lease for a leased aircraft) — per hour and for the flight ──
+    var _sub=r.isLease?'(lease + fuel, ex GST)':('(average of '+(r.n||0)+' aircraft, ex GST)');
+    h+='<div class="card"><div class="st">Running cost — '+_rzEscSafe(srcLbl)+' <span style="font-weight:400;font-size:11px;color:var(--text3)">'+_sub+'</span></div><div style="font-size:13px">';
     h+=row('Fuel',_bizPh(r.fuelHr)+' <span style="color:var(--text3);font-size:11px">/ hr</span>');
-    h+=row('Maintenance',_bizPh(r.maintHr)+' <span style="color:var(--text3);font-size:11px">/ hr</span>');
+    h+=row(r.isLease?'Lease':'Maintenance',_bizPh(r.maintHr)+' <span style="color:var(--text3);font-size:11px">/ hr</span>');
     h+=row('Running cost',_bizPh(r.runHr)+' <span style="color:var(--text3);font-size:11px">/ hr</span>',true);
     h+=row('Flight time','<span style="color:var(--text1)">'+(r.hrs||0)+' hr</span>');
     h+=row('Running cost for flight',_bizPh(r.flight),true);
@@ -644,20 +665,29 @@ function _bizRunMaint(){
   var h='<div class="card"><div class="st">Maintenance — cost per flight hour <span style="font-weight:400;font-size:11px;color:var(--text3)">(ex GST)</span></div>'+
     '<p style="font-size:12px;color:var(--text3);margin:0 0 10px">Maintenance $/hr = annual maintenance ÷ hours flown, plus engine &amp; prop overhaul reserves (overhaul cost ÷ interval hours).</p></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:720px">';
-  h+='<thead><tr style="background:var(--card2)">'+['AC','Type','Hours/yr','Maint $/yr','Eng OH $','Eng int hr','Prop OH $','Prop int hr','Maint/hr',''].map(function(t,i){return '<th style="text-align:'+(i<2?'left':'center')+';padding:6px 5px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+  h+='<thead><tr style="background:var(--card2)">'+['AC','Type','Hours/yr','Maint $/yr','Eng OH $','Eng int hr','Prop OH $','Prop int hr','Lease $/hr','Maint/hr',''].map(function(t,i){return '<th style="text-align:'+(i<2?'left':'center')+';padding:6px 5px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
   p.running.aircraft.forEach(function(ac,i){
     var c=_bizRunCalc(ac,fuel);
     var num=function(field,step,w){return '<td style="padding:2px 3px"><input type="number" step="'+(step||'1')+'" value="'+(ac[field]!==''&&ac[field]!=null?ac[field]:'')+'" onchange="window.bizSetRunAc('+i+',\''+field+'\',this.value)" style="'+_bizInS+';width:'+(w||56)+'px;text-align:right"></td>';};
     h+='<tr style="border-top:1px solid var(--border2)">'+
       '<td style="padding:2px 4px"><input value="'+_rzEscSafe(ac.code||'')+'" onchange="window.bizSetRunAc('+i+',\'code\',this.value)" style="'+_bizInS+';width:54px;font-weight:700"></td>'+
       '<td style="padding:2px 3px"><select onchange="window.bizSetRunAc('+i+',\'type\',this.value)" style="'+_bizInS+';width:64px"><option'+(ac.type==='C208'?' selected':'')+'>C208</option><option'+(ac.type==='GA8'?' selected':'')+'>GA8</option></select></td>'+
-      num('hours','0.1',58)+num('maint','1000',74)+num('eoCost','1000',82)+num('eoInt','100',64)+num('propCost','1000',74)+num('propInt','100',64)+
-      '<td style="padding:2px 6px;text-align:right;font-weight:800;color:#f59e0b">'+_bizPh(c.maintHr)+'</td>'+
+      num('hours','0.1',58)+num('maint','1000',74)+num('eoCost','1000',82)+num('eoInt','100',64)+num('propCost','1000',74)+num('propInt','100',64)+num('lease','50',66)+
+      '<td style="padding:2px 6px;text-align:right;font-weight:800;color:'+(c.isLease?'#60a5fa':'#f59e0b')+'">'+_bizPh(c.maintHr)+(c.isLease?' <span style="font-size:9px;color:var(--text3);font-weight:600">lease</span>':'')+'</td>'+
       '<td style="padding:2px 4px;text-align:center"><button onclick="window.bizDelRunAc('+i+')" title="Remove" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button></td>'+
       '</tr>';
   });
   h+='</tbody></table></div>';
   h+='<div style="margin:4px 0 12px"><button class="btn btn-ghost" style="font-size:12px" onclick="window.bizAddRunAc()">+ Add aircraft</button></div>';
+  // ── Type averages — these are the figures the flight calculator uses ──
+  function avgCard(type,lbl){var a=_bizTypeAvg(type);if(!a.n)return '';
+    return '<div style="flex:1 1 240px;border:1px solid var(--border2);border-top:3px solid #22c55e;border-radius:10px;padding:12px 14px">'+
+      '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700">Average '+lbl+' <span style="text-transform:none">('+a.n+' aircraft)</span></div>'+
+      '<div style="font-size:20px;font-weight:800;color:#22c55e;margin-top:2px">'+_bizPh(a.maintHr)+' <span style="font-size:11px;color:var(--text3);font-weight:600">maintenance / hr</span></div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-top:3px">running cost / hr '+_bizPh(a.totalHr)+' <span style="color:var(--text3)">(fuel '+_bizPh(a.fuelHr)+' + maint '+_bizPh(a.maintHr)+')</span></div>'+
+      '</div>';}
+  h+='<div class="card"><div class="st">Type averages <span style="font-weight:400;font-size:11px;color:var(--text3)">— used by the flight cost calculator</span></div>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap">'+avgCard('C208','C208B')+avgCard('GA8','GA8')+'</div></div>';
   return h;
 }
 
