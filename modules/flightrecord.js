@@ -292,7 +292,7 @@ function _frTodayBody(recs,today){
     h+='</tbody></table>';
     h+='<div style="padding:12px 14px">';
     if(submitted){h+='<div style="font-size:13px;color:#16a34a;font-weight:700">✓ Uploaded to Maintenance'+(subBy?' by '+_frEsc(subBy):'')+'</div>';}
-    else{h+='<button onclick="window.frSubmitAircraft(\''+ac+'\')" style="width:100%;min-height:62px;border-radius:14px;border:none;background:#16a34a;color:#fff;font-size:18px;font-weight:800;cursor:pointer">✓ Information correct — upload '+_frEsc(_frAcShort(ac))+' to Maintenance</button><div style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">Writes the day’s TTIS, landings'+(isC208?' &amp; starts':'')+' to the maintenance log. Tap a row to fix anything first.</div>';}
+    else{h+='<button onclick="window.frSubmitAircraft(\''+ac+'\')" style="width:100%;min-height:62px;border-radius:14px;border:none;background:#16a34a;color:#fff;font-size:18px;font-weight:800;cursor:pointer">✓ Information correct — submit '+_frEsc(_frAcShort(ac))+'</button><div style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">Writes the day’s TTIS, landings'+(isC208?' &amp; starts':'')+' to Maintenance, and each pilot’s flight time + landings to Flight &amp; Duty. Tap a row to fix anything first.</div>';}
     h+='</div></div>';
   });
   return h;
@@ -319,10 +319,36 @@ window.frSubmitAircraft=function(ac){
     }catch(err){console.error('[fr submit]',err);}
     var who=(S.user&&S.user.name)||'';
     list.forEach(function(r){r.submitted=true;r.submittedBy=who;_frSave(r);});
-    if(typeof toast==='function')toast(_frAcShort(ac)+' uploaded to Maintenance ✓','ok');
-    render();
+    // Also push each pilot's flight time + landings (by type) to Flight & Duty for the day.
+    var uids={};list.forEach(function(r){if(r.user_id)uids[r.user_id]=1;});
+    _frPushToFD(today,Object.keys(uids)).then(function(){
+      if(typeof toast==='function')toast(_frAcShort(ac)+' → Maintenance ✓ · Flight & Duty updated','ok');
+      render();
+    });
   });
 };
+// Push flight time + landings (split by aircraft type) to each pilot's Flight & Duty row for the day.
+// Recomputed from ALL that pilot's flight cards that day (set, not add) so it's idempotent and stays
+// correct no matter how many aircraft they flew or how often this runs. Duty start/end the pilot
+// entered are preserved (fdSaveRow merges). Loads F&D first so an existing row isn't wiped.
+function _frPushToFD(date,uids){
+  if(typeof window.fdSaveRow!=='function'||!uids||!uids.length)return Promise.resolve();
+  var doPush=function(){
+    uids.forEach(function(uid){
+      var ft=0,lc=0,lg=0;
+      Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];
+        if(!r||r.fr_date!==date||r.user_id!==uid||!r.done)return;
+        if(!(r.endHours!=null||r.off))return;                 // real flights only
+        ft+=(+r.flightTime||0);
+        if(_frAcType(r.aircraft)==='GA8')lg+=(+r.landings||0); else lc+=(+r.landings||0);
+      });
+      window.fdSaveRow(uid,date,{ft:Math.round(ft*10)/10,lc:lc,lg:lg});
+    });
+  };
+  // Ensure existing F&D rows are loaded (so duty times survive the merge), then push.
+  if(!S._fdData&&typeof window.loadFlightDuty==='function'){return Promise.resolve(window.loadFlightDuty()).then(doPush);}
+  doPush();return Promise.resolve();
+}
 function _frRenderEdit(r){
   var h='<div class="card" style="border-left:4px solid #60a5fa">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:16px;font-weight:800">Edit flight — '+_frEsc(_frAcShort(r.aircraft))+'</div><button onclick="window.frEditCancel()" style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer">✕ Close</button></div>';
