@@ -743,7 +743,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.93';
+const APP_VER='v24.94';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -8468,7 +8468,7 @@ function _maintMerge(base,oldL,newL){
   return base;
 }
 function _maintSetBase(m){try{S._maintBase=JSON.stringify(m||S.maintenance||{});}catch(e){S._maintBase=null;}}
-let _maintSaving=false,_maintResave=false;
+let _maintSaving=false,_maintResave=false,_maintRetryTimer=null;
 function saveMaintenance(){lsSet('ts_maintenance',S.maintenance);_maintMergeSave();}
 async function _maintMergeSave(){
   if(_maintSaving){_maintResave=true;return;}   // coalesce rapid saves; one re-run picks up the rest
@@ -8476,9 +8476,16 @@ async function _maintMergeSave(){
   try{
     var oldBase=S._maintBase?JSON.parse(S._maintBase):null;
     var fresh=null;try{fresh=await loadMaintenanceFromCloud();}catch(e){}
-    // If the base snapshot is somehow missing, fall back to current state as the base (→ no spurious
-    // deletes; we just adopt the server copy) rather than diffing against the server itself.
-    var merged=(fresh&&fresh.hist)?_maintMerge(fresh,oldBase||S.maintenance,S.maintenance):_mShape(_mClone(S.maintenance));
+    // CRITICAL: only write if we could read the current server copy. If the GET failed (or the row is
+    // unexpectedly empty), writing our local state would CLOBBER the real server data with a possibly
+    // thin/partial copy (this is how history got wiped). Abort and retry on the next save instead.
+    if(!(fresh&&fresh.hist&&fresh.hist.length)){
+      if(typeof toast==='function')toast('Maintenance not saved — could not read the latest from the server. Will retry.','warn');
+      _maintSaving=false;_maintResave=false;
+      if(!_maintRetryTimer)_maintRetryTimer=setTimeout(function(){_maintRetryTimer=null;_maintMergeSave();},2000); // single retry timer; base NOT advanced so the edit is preserved
+      return;
+    }
+    var merged=_maintMerge(fresh,oldBase||S.maintenance,S.maintenance);
     S.maintenance=merged;lsSet('ts_maintenance',merged);
     var r=await sbU('ts_settings',[{key:'maintenance',value:JSON.stringify(merged)}]);
     // Only advance the base AFTER the write is confirmed — otherwise a failed save leaves the base
@@ -16637,10 +16644,11 @@ window.frSubmitAircraft=function(ac){
   if(typeof confirm==='function'&&!confirm('Confirm '+_frAcShort(ac)+'’s '+list.length+' flight'+(list.length===1?'':'s')+' are correct and upload to the maintenance log?'))return;
   var totLdg=0,totSt=0,maxEnd=null;list.forEach(function(r){totLdg+=(+r.landings||0);totSt+=(+r.starts||0);if(r.endHours!=null&&(maxEnd==null||+r.endHours>maxEnd))maxEnd=+r.endHours;});
   if(typeof window.ensureMaintenance!=='function'||typeof saveMaintenance!=='function'){if(typeof toast==='function')toast('Maintenance not available.','warn');return;}
-  Promise.resolve(window.ensureMaintenance()).then(function(){
+  // Force a fresh maintenance load so we write onto the FULL log (never a thin/empty default) — and
+  // bail if the load didn't bring real data, so we can't push onto an empty blob.
+  Promise.resolve(window.ensureMaintenance(true)).then(function(){
+    if(!(S.maintenance&&Array.isArray(S.maintenance.hist)&&S.maintenance.hist.length)){if(typeof toast==='function')toast('Couldn’t load the maintenance log — not uploaded. Open Maintenance once, then retry.','warn');return;}
     try{
-      if(!S.maintenance||typeof S.maintenance!=='object')S.maintenance={hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{}};
-      if(!Array.isArray(S.maintenance.hist))S.maintenance.hist=[];
       var e=S.maintenance.hist.find(function(x){return x.date===today;});
       if(!e){e={date:today};S.maintenance.hist.push(e);S.maintenance.hist.sort(function(a,b){return String(a.date).localeCompare(String(b.date));});}
       if(maxEnd!=null)e[ac]=Math.round(maxEnd*10)/10;     // end-of-day TTIS

@@ -2987,7 +2987,7 @@ function _maintMerge(base,oldL,newL){
   return base;
 }
 function _maintSetBase(m){try{S._maintBase=JSON.stringify(m||S.maintenance||{});}catch(e){S._maintBase=null;}}
-let _maintSaving=false,_maintResave=false;
+let _maintSaving=false,_maintResave=false,_maintRetryTimer=null;
 function saveMaintenance(){lsSet('ts_maintenance',S.maintenance);_maintMergeSave();}
 async function _maintMergeSave(){
   if(_maintSaving){_maintResave=true;return;}   // coalesce rapid saves; one re-run picks up the rest
@@ -2995,9 +2995,16 @@ async function _maintMergeSave(){
   try{
     var oldBase=S._maintBase?JSON.parse(S._maintBase):null;
     var fresh=null;try{fresh=await loadMaintenanceFromCloud();}catch(e){}
-    // If the base snapshot is somehow missing, fall back to current state as the base (→ no spurious
-    // deletes; we just adopt the server copy) rather than diffing against the server itself.
-    var merged=(fresh&&fresh.hist)?_maintMerge(fresh,oldBase||S.maintenance,S.maintenance):_mShape(_mClone(S.maintenance));
+    // CRITICAL: only write if we could read the current server copy. If the GET failed (or the row is
+    // unexpectedly empty), writing our local state would CLOBBER the real server data with a possibly
+    // thin/partial copy (this is how history got wiped). Abort and retry on the next save instead.
+    if(!(fresh&&fresh.hist&&fresh.hist.length)){
+      if(typeof toast==='function')toast('Maintenance not saved — could not read the latest from the server. Will retry.','warn');
+      _maintSaving=false;_maintResave=false;
+      if(!_maintRetryTimer)_maintRetryTimer=setTimeout(function(){_maintRetryTimer=null;_maintMergeSave();},2000); // single retry timer; base NOT advanced so the edit is preserved
+      return;
+    }
+    var merged=_maintMerge(fresh,oldBase||S.maintenance,S.maintenance);
     S.maintenance=merged;lsSet('ts_maintenance',merged);
     var r=await sbU('ts_settings',[{key:'maintenance',value:JSON.stringify(merged)}]);
     // Only advance the base AFTER the write is confirmed — otherwise a failed save leaves the base

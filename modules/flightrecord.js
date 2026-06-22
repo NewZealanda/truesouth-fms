@@ -270,10 +270,11 @@ window.frSubmitAircraft=function(ac){
   if(typeof confirm==='function'&&!confirm('Confirm '+_frAcShort(ac)+'’s '+list.length+' flight'+(list.length===1?'':'s')+' are correct and upload to the maintenance log?'))return;
   var totLdg=0,totSt=0,maxEnd=null;list.forEach(function(r){totLdg+=(+r.landings||0);totSt+=(+r.starts||0);if(r.endHours!=null&&(maxEnd==null||+r.endHours>maxEnd))maxEnd=+r.endHours;});
   if(typeof window.ensureMaintenance!=='function'||typeof saveMaintenance!=='function'){if(typeof toast==='function')toast('Maintenance not available.','warn');return;}
-  Promise.resolve(window.ensureMaintenance()).then(function(){
+  // Force a fresh maintenance load so we write onto the FULL log (never a thin/empty default) — and
+  // bail if the load didn't bring real data, so we can't push onto an empty blob.
+  Promise.resolve(window.ensureMaintenance(true)).then(function(){
+    if(!(S.maintenance&&Array.isArray(S.maintenance.hist)&&S.maintenance.hist.length)){if(typeof toast==='function')toast('Couldn’t load the maintenance log — not uploaded. Open Maintenance once, then retry.','warn');return;}
     try{
-      if(!S.maintenance||typeof S.maintenance!=='object')S.maintenance={hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{}};
-      if(!Array.isArray(S.maintenance.hist))S.maintenance.hist=[];
       var e=S.maintenance.hist.find(function(x){return x.date===today;});
       if(!e){e={date:today};S.maintenance.hist.push(e);S.maintenance.hist.sort(function(a,b){return String(a.date).localeCompare(String(b.date));});}
       if(maxEnd!=null)e[ac]=Math.round(maxEnd*10)/10;     // end-of-day TTIS
