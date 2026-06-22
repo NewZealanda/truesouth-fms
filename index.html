@@ -743,7 +743,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.91';
+const APP_VER='v24.92';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16473,7 +16473,10 @@ function _frAutoPick(flights){
 function _frNewId(){return 'fr_'+Date.now()+'_'+Math.floor(Math.random()*1e4);}
 window.frTab=function(t){S._frTab=t;render();};
 window.frUseFlight=function(ac,prod,from,to,pob,manual){
-  var hrs=_frAcHours(ac);
+  var prev=S._frDraft||{};
+  // Keep an already-entered start TTIS when re-selecting the SAME aircraft; only pull the
+  // maintenance latest when the aircraft actually changes (different airframe).
+  var hrs=(prev.ac===ac&&prev.startHours!=null&&prev.startHours!=='')?prev.startHours:_frAcHours(ac);
   S._frDraft={ac:ac||'',product:prod||'',from:from||'',to:to||'',pob:(pob!=null?+pob:1),startHours:(hrs!=null?hrs:''),manual:!!manual};
   render();
 };
@@ -16503,7 +16506,7 @@ window.frSetEndHours=function(id,val){var r=(S._frData||{})[id];if(!r)return;if(
 window.frAdjEndHours=function(id,delta){var r=(S._frData||{})[id];if(!r)return;var v=(parseFloat(r.endHours)||(+r.startHours||0))+delta;v=Math.round(v*10)/10;if(v<(+r.startHours||0))v=(+r.startHours||0);r.endHours=v;r.tacho=Math.round((v-(+r.startHours||0))*10)/10;_frSave(r);render();};
 // Finalise the flight into Today's Record. It is NOT pushed to Maintenance yet — that happens once,
 // at end of day, when the last PIC reviews the per-aircraft record and uploads.
-window.frFinish=function(id){var r=(S._frData||{})[id];if(!r)return;if(r.endHours==null){if(typeof toast==='function')toast('Confirm the TTIS hours first.','warn');return;}r.done=true;_frSave(r);if(typeof toast==='function')toast('Flight saved to Today’s Record ✓','ok');S._frPage='record';render();};
+window.frFinish=function(id){var r=(S._frData||{})[id];if(!r)return;if(r.endHours==null){if(typeof toast==='function')toast('Confirm the TTIS hours first.','warn');return;}r.done=true;_frSave(r);if(typeof toast==='function')toast('Flight saved to Today’s Record ✓','ok');S._frPage='record';S._frRecDate=null;render();};
 // ── editing a recorded flight (via Today's flights) ──
 window.frEdit=function(id){S._frEditId=id;render();};
 window.frEditCancel=function(){S._frEditId=null;render();};
@@ -16569,7 +16572,8 @@ function _frRenderTodayRecord(uid){
     (isToday?'':'<button onclick="S._frRecDate=null;render()" style="height:42px;padding:0 14px;border-radius:10px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:13px;font-weight:700;cursor:pointer">Today</button>')+
     '<div style="font-weight:800;font-size:15px;margin-left:4px">'+_frEsc(dlbl)+(isToday?' <span style="font-size:11px;color:#16a34a;font-weight:700">• today</span>':'')+'</div>'+
   '</div>';
-  var recs=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.fr_date===date&&r.done)recs.push(r);});
+  // Real recorded flights only (a pure manual logbook row with no times/TTIS shouldn't inflate Maintenance).
+  var recs=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.fr_date===date&&r.done&&(r.endHours!=null||r.off))recs.push(r);});
   var h=nav;
   if(S._frEditId&&(S._frData||{})[S._frEditId]&&S._frData[S._frEditId].fr_date===date){h+=_frRenderEdit(S._frData[S._frEditId]);}
   return h+_frTodayBody(recs,date);
@@ -16618,7 +16622,7 @@ function _frTodayBody(recs,today){
 // Upload one aircraft's day to the maintenance log, then mark its flights submitted.
 window.frSubmitAircraft=function(ac){
   var today=S._frRecDate||_frToday();
-  var list=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.fr_date===today&&r.done&&r.aircraft===ac)list.push(r);});
+  var list=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.fr_date===today&&r.done&&r.aircraft===ac&&(r.endHours!=null||r.off))list.push(r);});
   if(!list.length)return;
   if(typeof confirm==='function'&&!confirm('Confirm '+_frAcShort(ac)+'’s '+list.length+' flight'+(list.length===1?'':'s')+' are correct and upload to the maintenance log?'))return;
   var totLdg=0,totSt=0,maxEnd=null;list.forEach(function(r){totLdg+=(+r.landings||0);totSt+=(+r.starts||0);if(r.endHours!=null&&(maxEnd==null||+r.endHours>maxEnd))maxEnd=+r.endHours;});
@@ -16854,7 +16858,8 @@ function _lbRenderEdit(r){
 window.frLbEdit=function(id){S._lbEditId=(S._lbEditId===id?null:id);render();};
 window.frLbEditCancel=function(){S._lbEditId=null;render();};
 window.frLbField=function(id,field,val){var r=(S._frData||{})[id];if(!r)return;
-  if(field==='flightTime')r.flightTime=(val===''?null:Math.round((+val)*10)/10);
+  if(field==='fr_date'){if(!val)return;r.fr_date=val;}
+  else if(field==='flightTime')r.flightTime=(val===''?null:Math.round((+val)*10)/10);
   else if(field==='aircraft'){r.aircraft=val;r.type=_frAcType(val);}
   else r[field]=val; // fr_date, picName, copilot, details
   _frSave(r);if(typeof safeRender==='function')safeRender();};
