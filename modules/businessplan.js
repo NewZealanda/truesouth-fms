@@ -39,11 +39,13 @@ var BIZ_DEFAULT={
       {code:'SLD',type:'GA8', burn:70, fuelType:'avgas',hours:503.8,maint:95000, eoCost:210000, eoInt:2000,propCost:20000,propInt:2400},
       {code:'SLQ',type:'GA8', burn:70, fuelType:'avgas',hours:524.3,maint:152000,eoCost:210000, eoInt:2000,propCost:20000,propInt:2400}
     ],
-    // Per-location landing fee + airways/route charge, by aircraft type (all ex-GST). The calculator
-    // adds the fee at each place the flight LANDS (destination, + departure again on a round trip).
+    // Per-location charges by aircraft type (all ex-GST), split into landing + concession + airways
+    // so each is visible/verifiable. The calculator adds all three at each place the flight LANDS
+    // (destination, + departure again on a round trip). Concession = DOC-style access fee (we fly
+    // other concession sites too); leave 0 where there isn't one.
     locations:[
-      {name:'Queenstown', ldgC208:69.25, ldgGA8:32,     awC208:14.24,  awGA8:9.65},
-      {name:'Milford',    ldgC208:221.52,ldgGA8:124.32, awC208:133.11, awGA8:61.03}
+      {name:'Queenstown', ldgC208:69.25,  ldgGA8:32,     concC208:0,  concGA8:0,  awC208:14.24,  awGA8:9.65},
+      {name:'Milford',    ldgC208:202.52, ldgGA8:105.32, concC208:19, concGA8:19, awC208:133.11, awGA8:61.03}
     ]
   },
   // Staff pay-rate reference (daily rates). new = post-raise (Oct).
@@ -123,6 +125,7 @@ function _bizState(){
   if(!S._bizPlan.running.fuel)S._bizPlan.running.fuel=JSON.parse(JSON.stringify(BIZ_DEFAULT.running.fuel));
   if(!Array.isArray(S._bizPlan.running.aircraft))S._bizPlan.running.aircraft=[];
   if(!Array.isArray(S._bizPlan.running.locations))S._bizPlan.running.locations=JSON.parse(JSON.stringify(BIZ_DEFAULT.running.locations));
+  else S._bizPlan.running.locations.forEach(function(l){if(l.concC208==null)l.concC208=0;if(l.concGA8==null)l.concGA8=0;}); // backfill the split-out concession fields
   if(!Array.isArray(S._bizPlan.payRates))S._bizPlan.payRates=JSON.parse(JSON.stringify(BIZ_DEFAULT.payRates));
   if(!S._bizPlan.paxTargets||typeof S._bizPlan.paxTargets!=='object')S._bizPlan.paxTargets={};
   if(!S._bizPlan.paxData||typeof S._bizPlan.paxData!=='object')S._bizPlan.paxData={};
@@ -163,10 +166,11 @@ function _bizRunCalc(ac,fuel){
   var maintHr=mHr+eoHr+propHr;
   return {fuelHr:fuelHr,mHr:mHr,eoHr:eoHr,propHr:propHr,maintHr:maintHr,totalHr:fuelHr+maintHr};
 }
-// Landing fee + airways charge for a location, for an aircraft type ('C208'|'GA8'). All ex-GST.
-function _bizLocFees(loc,type){var g=(type==='GA8');return {ldg:(+(g?loc.ldgGA8:loc.ldgC208)||0),aw:(+(g?loc.awGA8:loc.awC208)||0)};}
-// Cost of a single flight: aircraft × flight time (fuel + maintenance per hr) plus the landing +
-// airways fees at every place it LANDS — the destination, and the departure again on a round trip.
+// Landing + concession + airways for a location, for an aircraft type ('C208'|'GA8'). All ex-GST.
+function _bizLocFees(loc,type){var g=(type==='GA8');return {ldg:(+(g?loc.ldgGA8:loc.ldgC208)||0),conc:(+(g?loc.concGA8:loc.concC208)||0),aw:(+(g?loc.awGA8:loc.awC208)||0)};}
+// Cost of a single flight: aircraft × flight time (fuel + maintenance per hr) plus the landing,
+// concession + airways fees at every place it LANDS — the destination, and the departure again on
+// a round trip.
 function _bizFlightCost(ac,hrs,depIdx,destIdx,round){
   var p=_bizState();var c=_bizRunCalc(ac,p.running.fuel);
   hrs=+hrs||0;var flight=c.totalHr*hrs;
@@ -174,9 +178,9 @@ function _bizFlightCost(ac,hrs,depIdx,destIdx,round){
   var arrivals=[];                          // indices of locations the flight lands at
   if(locs[destIdx])arrivals.push(destIdx);
   if(round&&locs[depIdx]&&depIdx!=null)arrivals.push(depIdx);
-  var stops=[],ldgTot=0,awTot=0;
-  arrivals.forEach(function(li){var f=_bizLocFees(locs[li],ac.type);ldgTot+=f.ldg;awTot+=f.aw;stops.push({name:locs[li].name,ldg:f.ldg,aw:f.aw});});
-  return {fuelHr:c.fuelHr,maintHr:c.maintHr,runHr:c.totalHr,hrs:hrs,flight:flight,ldg:ldgTot,aw:awTot,stops:stops,total:flight+ldgTot+awTot};
+  var stops=[],ldgTot=0,concTot=0,awTot=0;
+  arrivals.forEach(function(li){var f=_bizLocFees(locs[li],ac.type);ldgTot+=f.ldg;concTot+=f.conc;awTot+=f.aw;stops.push({name:locs[li].name,ldg:f.ldg,conc:f.conc,aw:f.aw});});
+  return {fuelHr:c.fuelHr,maintHr:c.maintHr,runHr:c.totalHr,hrs:hrs,flight:flight,ldg:ldgTot,conc:concTot,aw:awTot,stops:stops,total:flight+ldgTot+concTot+awTot};
 }
 window.bizRunTab=function(t){S._bizRunTab=t;render();};
 window.bizSetLoc=function(i,field,value){var p=_bizState();if(!p.running.locations[i])return;p.running.locations[i][field]=(field==='name')?value:(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
@@ -614,7 +618,7 @@ function _bizRunCalcView(){
     h+='<div class="card"><div class="st">'+_rzEscSafe(ac.code||'')+' · '+(r.hrs||0)+' hr</div>';
     h+='<div style="font-size:13px">';
     h+=row('Flight time — '+(r.hrs||0)+' hr × '+_bizPh(r.runHr)+'/hr <span style="color:var(--text3);font-size:11px">(fuel '+_bizPh(r.fuelHr)+' + maint '+_bizPh(r.maintHr)+')</span>',r.flight);
-    r.stops.forEach(function(s){h+=row('Landing — '+_rzEscSafe(s.name),s.ldg);if(s.aw)h+=row('Airways — '+_rzEscSafe(s.name),s.aw);});
+    r.stops.forEach(function(s){h+=row('Landing — '+_rzEscSafe(s.name),s.ldg);if(s.conc)h+=row('Concession — '+_rzEscSafe(s.name),s.conc);if(s.aw)h+=row('Airways — '+_rzEscSafe(s.name),s.aw);});
     h+=row('Total flight cost',r.total,true);
     h+='</div>';
     h+='<div style="font-size:11px;color:var(--text3);padding:6px 0 0">Lands at '+(r.stops.length?r.stops.map(function(s){return _rzEscSafe(s.name);}).join(' + '):'—')+'. Direct operating cost only (fuel, maintenance + overhaul reserves, landings, airways) — all ex GST. Insurance, finance, pilot &amp; training sit in the P&amp;L.</div>';
@@ -667,18 +671,18 @@ function _bizRunVars(){
   h+='</tbody></table></div></div>';
   // Landings + airways per location
   h+='<div class="card" style="padding:0;overflow-x:auto"><div class="st" style="padding:14px 14px 6px">Landings &amp; airways <span style="font-weight:400;font-size:11px;color:var(--text3)">— per place, by type, ex GST</span></div>'+
-    '<table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:560px">'+
-    '<thead><tr style="background:var(--card2)">'+['Place','Landing C208','Landing GA8','Airways C208','Airways GA8',''].map(function(t,i){return '<th style="text-align:'+(i<1?'left':'center')+';padding:6px 6px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+    '<table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:760px">'+
+    '<thead><tr style="background:var(--card2)">'+['Place','Landing C208','Landing GA8','Concession C208','Concession GA8','Airways C208','Airways GA8',''].map(function(t,i){return '<th style="text-align:'+(i<1?'left':'center')+';padding:6px 6px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
   (p.running.locations||[]).forEach(function(loc,i){
-    var n=function(field){return '<td style="padding:2px 4px"><input type="number" step="0.01" value="'+(loc[field]!=null&&loc[field]!==''?loc[field]:'')+'" onchange="window.bizSetLoc('+i+',\''+field+'\',this.value)" style="'+_bizInS+';width:84px;text-align:right"></td>';};
+    var n=function(field){return '<td style="padding:2px 4px"><input type="number" step="0.01" value="'+(loc[field]!=null&&loc[field]!==''?loc[field]:'')+'" onchange="window.bizSetLoc('+i+',\''+field+'\',this.value)" style="'+_bizInS+';width:78px;text-align:right"></td>';};
     h+='<tr style="border-top:1px solid var(--border2)">'+
-      '<td style="padding:2px 6px"><input value="'+_rzEscSafe(loc.name||'')+'" onchange="window.bizSetLoc('+i+',\'name\',this.value)" style="'+_bizInS+';width:130px;font-weight:700"></td>'+
-      n('ldgC208')+n('ldgGA8')+n('awC208')+n('awGA8')+
+      '<td style="padding:2px 6px"><input value="'+_rzEscSafe(loc.name||'')+'" onchange="window.bizSetLoc('+i+',\'name\',this.value)" style="'+_bizInS+';width:120px;font-weight:700"></td>'+
+      n('ldgC208')+n('ldgGA8')+n('concC208')+n('concGA8')+n('awC208')+n('awGA8')+
       '<td style="padding:2px 4px;text-align:center"><button onclick="window.bizDelLoc('+i+')" title="Remove" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button></td>'+
       '</tr>';
   });
   h+='</tbody></table></div><div style="margin:4px 0 12px"><button class="btn btn-ghost" style="font-size:12px" onclick="window.bizAddLoc()">+ Add place</button></div>';
-  h+='<div style="font-size:11px;color:var(--text3);padding:0 2px 8px">Airways = the inbound route/airways charge for that place. The calculator adds a place’s landing + airways each time the flight lands there (destination, and the departure again on a round trip).</div>';
+  h+='<div style="font-size:11px;color:var(--text3);padding:0 2px 8px">Landing = aerodrome fee (e.g. QAC at Queenstown, MOT at Milford). Concession = DOC-style access fee (0 where there isn’t one). Airways = inbound route charge. The calculator adds all three each time the flight lands at a place (destination, and the departure again on a round trip).</div>';
   return h;
 }
 
