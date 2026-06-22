@@ -743,7 +743,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.97';
+const APP_VER='v24.98';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -15616,6 +15616,16 @@ function _rzRenderSchedule(){
       '<div><label>Colour</label><input class="fi" type="color" value="'+_rzEsc(ed.color||_rzAcCol(ed.aircraft))+'" onchange="window.schedEditField(\'color\',this.value)" style="height:38px;padding:3px"></div>'+
     '</div>'+
     '<div style="margin-bottom:10px"><label>Notes</label><input class="fi" type="text" value="'+_rzEsc(ed.notes)+'" onblur="window.schedEditField(\'notes\',this.value)"></div>'+
+    (function(){
+      // Pilot picker — tap a type-rated pilot (tap again to clear). For a brand-new block the choice
+      // is held on the draft and applied when you Save.
+      var selP=ed.id?((S._schedPilots||{})[ed.id]||''):(ed.pilot||'');
+      var pp=_rzAvailablePilots().filter(function(p){if(!ed.aircraft||ed.aircraft==='__unalloc__')return true;var en=_rzPilotEndorse(p.code);return !(en&&en.length)||en.indexOf(ed.aircraft)>=0;});
+      var ph='<div style="margin-bottom:10px"><label>Pilot</label><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">';
+      if(!pp.length)ph+='<span style="font-size:11px;color:var(--text3)">No type-rated pilots available</span>';
+      pp.forEach(function(p){var on=selP===p.code;var off=!p.rostered;ph+='<button onclick="window.schedSetBlockPilot(\''+_rzEsc(p.code).replace(/\'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(off?' (not rostered on today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid #60a5fa':'1px solid rgba(96,165,250,'+(off?'.28':'.5')+')')+';background:rgba(96,165,250,'+(on?'.22':(off?'.05':'.1'))+');color:#60a5fa;font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'✈ ')+_rzEsc(p.code)+(off?' <span style="font-size:8px;font-weight:700">off</span>':'')+'</button>';});
+      ph+='</div></div>';return ph;
+    })()+
     '<div style="display:flex;gap:8px">'+
       '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.schedSaveBlock()">💾 Save</button>'+
       (ed.id?'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.schedDeleteBlock()">🗑 Delete</button>':'')+
@@ -15701,7 +15711,7 @@ function _rzRenderSchedule(){
       const _drag=isBk?(' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(String(b.order)).replace(/'/g,"\\'")+'\',event)"'):'';
       blocksH+='<div'+_drag+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
-        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(b.label||b.aircraft)+'</div>'+
+        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+(!isBk&&(S._schedPilots||{})[b.id]?'<span style="color:#60a5fa">✈'+_rzEsc((S._schedPilots||{})[b.id])+'</span> ':'')+_rzEsc(b.label||b.aircraft)+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+(isBk?'':'–'+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';
     });
@@ -15810,6 +15820,14 @@ window.schedEditField=function(field,val){
   }
   if(field==='aircraft'||field==='color'||field==='label'||field==='start')render();
 };
+// Assign a pilot to the block being edited. Existing block → set immediately; new (unsaved) block →
+// hold on the draft and apply on Save. Tapping the selected pilot again clears it.
+window.schedSetBlockPilot=function(code){
+  var ed=S._schedEdit;if(!ed||!code)return;
+  if(ed.id){window.rezdySchedSetPilot(ed.id,code);return;}  // sets S._schedPilots[id] + saves + render
+  if(ed.aircraft&&ed.aircraft!=='__unalloc__'){var en=_rzPilotEndorse(code);if(en&&en.length&&en.indexOf(ed.aircraft)<0){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ed.aircraft).replace('ZK-','')+'.','warn');return;}}
+  ed.pilot=(ed.pilot===code?'':code);render();
+};
 window.schedSaveBlock=async function(){
   const ed=S._schedEdit;if(!ed)return;
   if(!ed.aircraft){toast('Pick an aircraft','err');return;}
@@ -15819,6 +15837,7 @@ window.schedSaveBlock=async function(){
   const payload={id:id,block_date:S.rezdyDate,data:{aircraft:ed.aircraft,label:ed.label||'',start:ed.start,end:ed.end,color:ed.color||_rzAcCol(ed.aircraft),notes:ed.notes||''}};
   const r=await sbU('ts_schedule',[payload]);
   if(!r){toast('Save failed','err');return;}
+  if(ed.pilot){S._schedPilots=S._schedPilots||{};S._schedPilots[id]=ed.pilot;if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();}  // apply the draft pilot to the new block
   S._schedEdit=null;
   toast('Block saved ✓','ok');
   await window.rezdyLoadSchedule();
