@@ -265,13 +265,43 @@ function _bizMonthly(t){
 
 // ── persistence ──
 window.loadBusinessPlan=function(){
-  try{var c=lsGet&&lsGet('ts_business_plan');if(c&&typeof c==='object'){S._bizPlan=c;S._bizPaxMerged=false;}}catch(e){}
-  try{fetch(SB+'/rest/v1/ts_settings?key=eq.business_plan&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){try{if(rows&&rows[0]&&rows[0].value){S._bizPlan=JSON.parse(rows[0].value);S._bizPaxMerged=false;}}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});}catch(e){}
+  try{var c=lsGet&&lsGet('ts_business_plan');if(c&&typeof c==='object'){S._bizPlan=c;S._bizPaxMerged=false;_bizSetBase(c);}}catch(e){}
+  try{fetch(SB+'/rest/v1/ts_settings?key=eq.business_plan&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){try{if(rows&&rows[0]&&rows[0].value){S._bizPlan=JSON.parse(rows[0].value);S._bizPaxMerged=false;_bizSetBase(S._bizPlan);}}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});}catch(e){}
 };
-function _bizSave(){
-  var p=_bizState();
-  try{lsSet&&lsSet('ts_business_plan',p);}catch(e){}
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'business_plan',value:JSON.stringify(p)}]).then(function(r){if(r===null&&typeof toast==='function')toast('Business plan did not save to the server — check connection','warn');}).catch(function(){});
+// ── Live business plan: merge-before-write so concurrent editors/devices don't clobber each other ──
+function _bizClone(x){try{return JSON.parse(JSON.stringify(x||{}));}catch(e){return {};}}
+function _bizSetBase(p){try{S._bizBase=JSON.stringify(p||S._bizPlan||{});}catch(e){S._bizBase=null;}}
+// Apply THIS device's changes (diff base→cur) onto the freshest cloud copy. paxData merges per DATE
+// and paxSync per MONTH (so two people syncing different months don't wipe each other); other
+// top-level sections are taken from this device only if it changed them (preserves others' edits).
+function _bizMerge(fresh,base,cur){
+  fresh=_bizClone(fresh);base=base||{};cur=cur||{};
+  fresh.paxData=fresh.paxData||{};var bp=base.paxData||{},cp=cur.paxData||{},dk={};
+  Object.keys(bp).forEach(function(k){dk[k]=1;});Object.keys(cp).forEach(function(k){dk[k]=1;});
+  Object.keys(dk).forEach(function(ds){if(JSON.stringify(cp[ds])!==JSON.stringify(bp[ds])){if(cp[ds]!=null)fresh.paxData[ds]=_bizClone(cp[ds]);else delete fresh.paxData[ds];}});
+  fresh.paxSync=fresh.paxSync||{};var bs=base.paxSync||{},cs=cur.paxSync||{},mk={};
+  Object.keys(bs).forEach(function(k){mk[k]=1;});Object.keys(cs).forEach(function(k){mk[k]=1;});
+  Object.keys(mk).forEach(function(ym){if(JSON.stringify(cs[ym])!==JSON.stringify(bs[ym])&&cs[ym]!=null)fresh.paxSync[ym]=cs[ym];});
+  Object.keys(cur).forEach(function(k){if(k==='paxData'||k==='paxSync')return;if(JSON.stringify(cur[k])!==JSON.stringify(base[k]))fresh[k]=_bizClone(cur[k]);});
+  return fresh;
+}
+let _bizSaving=false,_bizResave=false;
+function _bizSave(){var p=_bizState();try{lsSet&&lsSet('ts_business_plan',p);}catch(e){}_bizMergeSave();}
+async function _bizMergeSave(){
+  if(_bizSaving){_bizResave=true;return;}
+  _bizSaving=true;
+  try{
+    var base=S._bizBase?JSON.parse(S._bizBase):null;
+    var fresh=null;
+    try{var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.business_plan&select=value',{headers:SH});if(r.ok){var rows=await r.json();if(rows&&rows[0]&&rows[0].value)fresh=JSON.parse(rows[0].value);}}catch(e){}
+    var merged=(fresh&&base)?_bizMerge(fresh,base,S._bizPlan):S._bizPlan;
+    S._bizPlan=merged;try{lsSet&&lsSet('ts_business_plan',merged);}catch(e){}
+    var res=(typeof sbU==='function')?await sbU('ts_settings',[{key:'business_plan',value:JSON.stringify(merged)}]):null;
+    if(res===null){if(typeof toast==='function')toast('Business plan did not save to the server — check connection','warn');}
+    else{_bizSetBase(merged);}  // advance base only after a confirmed write
+    if(typeof safeRender==='function')safeRender();
+  }catch(e){console.error('[biz save]',e);}
+  finally{_bizSaving=false;if(_bizResave){_bizResave=false;_bizMergeSave();}}
 }
 window.bizSetTranche=function(i,field,value){var p=_bizState();if(!p.tranches[i])return;p.tranches[i][field]=(field==='name'||field==='type')?value:(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizAddTranche=function(){_bizState().tranches.push({name:'New facility',amount:0,rate:0,type:'io',term:10});_bizSave();render();};

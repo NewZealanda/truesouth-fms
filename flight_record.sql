@@ -16,11 +16,16 @@ create table if not exists ts_flight_records (
   pob          integer,                 -- persons on board, INCLUDING the PIC
   off_blocks   text,                    -- "HH:MM"
   on_blocks    text,                    -- "HH:MM"
+  actype       text,                    -- aircraft type, recorded legally: "C208B" / "GA8"
   start_hours  numeric,                 -- airframe TTIS at off-blocks
-  end_hours    numeric,                 -- confirmed TTIS at shutdown
-  flight_time  numeric,                 -- hours added to TTIS (block time − taxi adjustment)
+  end_hours    numeric,                 -- confirmed TTIS at shutdown (= start + tacho)
+  flight_time  numeric,                 -- OFF→ON block time (the legal flight time)
+  tacho        numeric,                 -- TTIS used = block time − taxi adjustment (drives the airframe hours)
   landings     integer default 1,
-  done         boolean default false,   -- finalised (pilot tapped SAVE FLIGHT after confirming TTIS)
+  starts       integer default 1,       -- engine starts (tracked esp. for the C208B fleet)
+  done         boolean default false,   -- finalised by the pilot (tapped SAVE after confirming TTIS)
+  submitted    boolean default false,   -- uploaded to the maintenance log (end-of-day, last PIC)
+  submitted_by text,
   manual       boolean default false,   -- entered manually (not auto-detected)
   note         text,
   updated_at   timestamptz default now(),

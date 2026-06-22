@@ -412,7 +412,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.88';
+const APP_VER='v24.90';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1900,7 +1900,7 @@ async function reloadTable(table){
     if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,(r.rates&&parseFloat(r.rates.perHour)>0)?r.rates:dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
-      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames,rz_fuel_ov,rz_pickup_locs,roster,roster_colors)&select=key,value',{headers:SH});
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames,rz_fuel_ov,rz_pickup_locs,roster,roster_colors,business_plan,fr_settings)&select=key,value',{headers:SH});
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
@@ -1928,6 +1928,15 @@ async function reloadTable(table){
               lsSet('ts_maintenance',S.maintenance);changed=true;
             }}catch(e){}
           }
+          if(row.key==='business_plan'&&row.value&&!(typeof _bizSaving!=='undefined'&&_bizSaving)){
+            // Live business plan — merge another device's save (keeping this device's unsaved edits).
+            try{var bp=JSON.parse(row.value);if(bp&&typeof bp==='object'){
+              S._bizPlan=(S._bizBase&&typeof _bizMerge==='function')?_bizMerge(bp,JSON.parse(S._bizBase),S._bizPlan||bp):bp;
+              if(typeof _bizSetBase==='function')_bizSetBase(bp);else S._bizBase=JSON.stringify(bp);
+              S._bizPaxMerged=false;lsSet('ts_business_plan',S._bizPlan);changed=true;
+            }}catch(e){}
+          }
+          if(row.key==='fr_settings'&&row.value){try{var _frs=JSON.parse(row.value);if(_frs&&typeof _frs==='object'){S._frSettings=_frs;changed=true;}}catch(e){}}
         });
         return changed;
       }

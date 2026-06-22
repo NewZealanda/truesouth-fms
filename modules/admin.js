@@ -3022,14 +3022,14 @@ async function loadMaintenanceFromCloud(){
 // lands straight on Maintenance). Shows local instantly, pulls cloud, NEVER loses cloud data if the
 // merge throws, and always clears the loading spinner.
 window.ensureMaintenance=function(force){
-  if(S._maintLoaded&&!force)return;
+  if(S._maintLoaded&&!force)return Promise.resolve();
   S._maintLoaded=true;
   if(!S.maintenance||!S.maintenance.hist){
     var _mLocal=lsGet('ts_maintenance');
     S.maintenance=(_mLocal&&_mLocal.hist)?Object.assign({},_mLocal,{_loading:false}):{hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{},_loading:false};
   } else { S.maintenance._loading=false; }
   _maintSetBase(S.maintenance);
-  loadMaintenanceFromCloud().then(function(cloud){
+  return loadMaintenanceFromCloud().then(function(cloud){
     if(cloud&&cloud.hist){
       try{var ob=S._maintBase?JSON.parse(S._maintBase):S.maintenance;S.maintenance=_maintMerge(cloud,ob,S.maintenance||cloud);}
       catch(e){S.maintenance=cloud;}            // failsafe: never lose the cloud copy
