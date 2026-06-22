@@ -3710,12 +3710,15 @@ function _rzRenderSchedule(){
         '<option value="">— select —</option>'+
         acIds.map(function(a){return '<option value="'+_rzEsc(a)+'"'+(ed.aircraft===a?' selected':'')+'>'+_rzEsc(a)+'</option>';}).join('')+
       '</select></div>'+
-      '<div><label>Label</label><input class="fi" type="text" value="'+_rzEsc(ed.label)+'" onblur="window.schedEditField(\'label\',this.value)" placeholder="e.g. Milford scenic"></div>'+
+      '<div><label>Label <span style="font-weight:400;color:var(--text3);font-size:10px">(route only — pilot/aircraft auto-added)</span></label><input class="fi" type="text" value="'+_rzEsc(ed.label)+'" onblur="window.schedEditField(\'label\',this.value)" placeholder="e.g. QN-WF"></div>'+
     '</div><div class="g3" style="margin-bottom:10px">'+
       '<div><label>Start (HH:MM)</label><input class="fi" type="time" value="'+_rzEsc(ed.start)+'" onchange="window.schedEditField(\'start\',this.value)"></div>'+
       '<div><label>End (HH:MM)</label><input class="fi" type="time" value="'+_rzEsc(ed.end)+'" onchange="window.schedEditField(\'end\',this.value)"></div>'+
       '<div><label>Colour</label><input class="fi" type="color" value="'+_rzEsc(ed.color||_rzAcCol(ed.aircraft))+'" onchange="window.schedEditField(\'color\',this.value)" style="height:38px;padding:3px"></div>'+
     '</div>'+
+    '<div style="margin-bottom:10px"><label>Flight type <span style="font-weight:400;color:var(--text3);font-size:10px">(shows in the pilot’s flight record)</span></label><select class="fi" onchange="window.schedEditField(\'ftype\',this.value)">'+
+      ['Maintenance','Training','Ferry','Private Hire','Other'].map(function(t){return '<option value="'+t+'"'+((ed.ftype||'Maintenance')===t?' selected':'')+'>'+t+'</option>';}).join('')+
+    '</select></div>'+
     '<div style="margin-bottom:10px"><label>Notes</label><input class="fi" type="text" value="'+_rzEsc(ed.notes)+'" onblur="window.schedEditField(\'notes\',this.value)"></div>'+
     (function(){
       // Pilot picker — tap a type-rated pilot (tap again to clear). For a brand-new block the choice
@@ -3812,7 +3815,7 @@ function _rzRenderSchedule(){
       const _drag=isBk?(' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(String(b.order)).replace(/'/g,"\\'")+'\',event)"'):'';
       blocksH+='<div'+_drag+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
-        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+(!isBk&&(S._schedPilots||{})[b.id]?'<span style="color:#60a5fa">✈'+_rzEsc((S._schedPilots||{})[b.id])+'</span> ':'')+_rzEsc(b.label||b.aircraft)+'</div>'+
+        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+(isBk?'':'–'+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';
     });
@@ -3898,16 +3901,25 @@ function _rzSchedBroadcast(){
   }catch(e){}
 }
 window.rezdyReloadScheduleLive=function(){if(S.rezdyDate&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();};
+// Manual block display title: "AA/SLA QN-WF" — pilot + aircraft are DERIVED (from the picker and the
+// aircraft selector); the operator only types the label (e.g. "QN-WF").
+function _rzManBlockTitle(b){
+  var pilot=(S._schedPilots||{})[b.id]||'';
+  var ac=(b.aircraft&&b.aircraft!=='__unalloc__')?String(b.aircraft).replace(/^ZK-?/,''):'';
+  var pre=(pilot?pilot+'/':'')+ac;
+  var lbl=b.label||'';
+  return ((pre?pre:'')+(pre&&lbl?' ':'')+lbl)||(b.aircraft||'');
+}
 window.schedNewBlock=function(){
   const acIds=Object.keys((S&&S.aircraft)||{});
   const ac=acIds[0]||'';
-  S._schedEdit={id:null,aircraft:ac,label:'',start:'09:00',end:'10:00',color:_rzAcCol(ac),notes:''};
+  S._schedEdit={id:null,aircraft:ac,label:'',start:'09:00',end:'10:00',color:_rzAcCol(ac),notes:'',ftype:'Maintenance'};
   render();
 };
 window.schedEditBlock=function(id){
   const b=(S._schedBlocks||[]).find(function(x){return x.id===id;});
   if(!b)return;
-  S._schedEdit={id:b.id,aircraft:b.aircraft||'',label:b.label||'',start:b.start||'09:00',end:b.end||'10:00',color:b.color||_rzAcCol(b.aircraft),notes:b.notes||''};
+  S._schedEdit={id:b.id,aircraft:b.aircraft||'',label:b.label||'',start:b.start||'09:00',end:b.end||'10:00',color:b.color||_rzAcCol(b.aircraft),notes:b.notes||'',ftype:b.ftype||'Maintenance'};
   render();
 };
 window.schedEditField=function(field,val){
@@ -3935,7 +3947,7 @@ window.schedSaveBlock=async function(){
   if(!ed.start||!ed.end){toast('Start and end required','err');return;}
   if(ed.end<=ed.start){toast('End time must be after the start time','err');return;}
   const id=ed.id||('sch_'+Date.now()+'_'+Math.floor(Math.random()*1e5));
-  const payload={id:id,block_date:S.rezdyDate,data:{aircraft:ed.aircraft,label:ed.label||'',start:ed.start,end:ed.end,color:ed.color||_rzAcCol(ed.aircraft),notes:ed.notes||''}};
+  const payload={id:id,block_date:S.rezdyDate,data:{aircraft:ed.aircraft,label:ed.label||'',start:ed.start,end:ed.end,color:ed.color||_rzAcCol(ed.aircraft),notes:ed.notes||'',ftype:ed.ftype||'Maintenance'}};
   const r=await sbU('ts_schedule',[payload]);
   if(!r){toast('Save failed','err');return;}
   if(ed.pilot){S._schedPilots=S._schedPilots||{};S._schedPilots[id]=ed.pilot;if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();}  // apply the draft pilot to the new block

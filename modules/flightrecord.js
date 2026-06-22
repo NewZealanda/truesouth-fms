@@ -57,7 +57,7 @@ function _frProdDest(prod){
 }
 function _frDayFlights(uid){
   var u=(S.users||[]).find(function(x){return x.id===uid;});if(!u)return [];
-  var code=_frPilotCode(u);var bk=S._rezdyBookings||[];if(!bk.length)return [];
+  var code=_frPilotCode(u);var bk=S._rezdyBookings||[];
   var groups={};
   bk.forEach(function(b){
     if(/cancel/i.test(b.status||''))return;
@@ -88,6 +88,16 @@ function _frDayFlights(uid){
     out.push({ac:f.ac,start:_frHHMM(retMin),prod:'Ferry',pob:1,from:(f.to||'MF'),to:'QN',ferry:true,
       hint:(next&&_frMins(next.start)<retMin)?'reposition for next load':'empty return'});
   });
+  // Manual schedule blocks (maintenance / training / ferry / private hire) the operator created on the
+  // calendar and assigned to THIS pilot — show them as flights too (label "QN-WF" → from QN, to WF).
+  if(S.rezdyDate===_frToday()){
+    (S._schedBlocks||[]).forEach(function(b){
+      var pc=(S._schedPilots||{})[b.id];if(!pc||!code||String(pc)!==String(code))return;
+      var lbl=String(b.label||'').trim();
+      var parts=lbl.split(/[-–/]/).map(function(s){return s.trim();}).filter(Boolean);
+      out.push({ac:b.aircraft,start:b.start,prod:b.ftype||'Maintenance',from:parts[0]||'QN',to:parts[1]||'',pob:1,manualBlock:true,hint:lbl});
+    });
+  }
   out.sort(function(a,b){return _frMins(a.start)-_frMins(b.start);});
   return out;
 }
@@ -230,7 +240,7 @@ function _frRenderTodayRecord(uid){
 function _frTodayBody(recs,today){
   if(!recs.length)return '<div class="card" style="color:var(--text3);padding:24px;font-size:13px">No flights recorded for this day.</div>';
   var byAc={};recs.forEach(function(r){(byAc[r.aircraft]=byAc[r.aircraft]||[]).push(r);});
-  var pname=function(id){var u=(S.users||[]).find(function(x){return x.id===id;});return u?(u.name||'').split(' ')[0]:'?';};
+  var pname=function(id){var u=(S.users||[]).find(function(x){return x.id===id;});return u?(u.name||'?'):'?';};
   var h='';
   Object.keys(byAc).sort().forEach(function(ac){
     var list=byAc[ac].slice().sort(function(a,b){return _frMins(a.off)-_frMins(b.off);});
