@@ -40,7 +40,7 @@ function _rzVehSave(){
 function _rzVehLoad(){
   try{fetch(SB+'/rest/v1/ts_settings?key=eq.rz_vehicles&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
     var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}
-    if(Array.isArray(v)&&v.length){S._rzVehicles=v;try{lsSet('ts_rz_vehicles',v);}catch(e){}S._pickupVans=null;render();}
+    if(Array.isArray(v)&&v.length){S._rzVehicles=v;try{lsSet('ts_rz_vehicles',v);}catch(e){}if(typeof _sbSetBase==='function')_sbSetBase('rz_vehicles',v);S._pickupVans=null;render();}
   }).catch(function(){});}catch(e){}
 }
 // ── Vehicle management panel (Pickups ⚙) ──
@@ -192,7 +192,7 @@ function _rzFuelOvLoad(){
   try{var cch=lsGet('ts_rz_fuel_ov');if(cch&&typeof cch==='object')S._rzFuelOv=cch;}catch(e){}
   try{fetch(SB+'/rest/v1/ts_settings?key=eq.rz_fuel_ov&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
     var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}
-    if(v&&typeof v==='object'){S._rzFuelOv=v;try{lsSet('ts_rz_fuel_ov',v);}catch(e){}render();}
+    if(v&&typeof v==='object'){S._rzFuelOv=v;try{lsSet('ts_rz_fuel_ov',v);}catch(e){}if(typeof _sbSetBase==='function')_sbSetBase('rz_fuel_ov',v);render();}
   }).catch(function(){});}catch(e){}
 }
 // Set/clear one override field. Empty value reverts that field to its built-in default.
@@ -263,7 +263,7 @@ function _rzPickupLocsLoad(){
   try{var cch=lsGet('ts_rz_pickup_locs');if(Array.isArray(cch))S._rzPickupLocs=cch;}catch(e){}
   try{fetch(SB+'/rest/v1/ts_settings?key=eq.rz_pickup_locs&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
     var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}
-    if(Array.isArray(v)){S._rzPickupLocs=v;try{lsSet('ts_rz_pickup_locs',v);}catch(e){}render();}
+    if(Array.isArray(v)){S._rzPickupLocs=v;try{lsSet('ts_rz_pickup_locs',v);}catch(e){}if(typeof _sbSetBase==='function')_sbSetBase('rz_pickup_locs',v);render();}
     else if(!Array.isArray(S._rzPickupLocs)){
       // First run on this account: seed the cloud from the built-in list so every device shares it.
       S._rzPickupLocs=_RZ_PICKUP_LOC_SEED.map(function(o){return {name:o.name,address:o.address,min:o.min,lat:o.lat||'',lng:o.lng||''};});
@@ -2392,7 +2392,7 @@ function _rzManBubble(p,allPax){
       '<div style="font-size:11px;font-weight:700;color:#1e293b;white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'+
       '<div onclick="event.stopPropagation();window.rezdyManEditWeight(\''+idEsc+'\')" title="'+(decld?'Declared weight — tap to enter actual':'Tap to enter / edit actual weight')+'" style="font-size:10px;font-weight:700;color:'+wCol+';cursor:pointer">'+w+'</div>'+
     '</div>'+
-    '<div onclick="event.stopPropagation();window.rezdyManRemove(\''+idEsc+'\')" title="Remove from manifest" style="position:absolute;top:0;right:1px;font-size:10px;color:#94a3b8;cursor:pointer;padding:0 2px">✕</div>'+
+    '<div onclick="event.stopPropagation();window.rezdyManRemove(\''+idEsc+'\')" title="'+(p.ac?'Send to the unallocated pool':'Remove from manifest')+'" style="position:absolute;top:0;right:1px;font-size:10px;color:#94a3b8;cursor:pointer;padding:0 2px">✕</div>'+
   '</div>';
 }
 // The pilot allocated on the CALENDAR for this aircraft at this departure's time — used to
@@ -2425,9 +2425,11 @@ function _rzRenderManifest(){
     '<div><div class="st" style="margin-bottom:0">Seatmap</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzDowLabel(S.rezdyDate)+' · '+pax.length+' pax · '+pool.length+' unallocated'+(selDep&&selDep!=='—'?' @ '+_rzEsc(selDep):'')+'</p></div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+      '<button class="btn btn-ghost" style="font-size:12px'+((S._rzManUndo&&S._rzManUndo.length)?'':';opacity:.4')+'" '+((S._rzManUndo&&S._rzManUndo.length)?'':'disabled ')+'onclick="window.rezdyManUndo()" title="Undo the last seating change (up to 10)">↶ Undo</button>'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.rezdyManAdd()">+ Add passenger</button>'+
       (_rzManBaseDeps().length>1?'<button class="btn btn-ghost" style="font-size:12px'+(S._rzManCombineOpen?';border-color:var(--accent);color:var(--accent)':'')+'" onclick="window.rezdyManCombineToggle()">🔗 Combine departures</button>':'')+
       (pool.length?'<button class="btn btn-primary" style="font-size:12px;padding:7px 12px" onclick="window.rezdyManAllocate()">✈ Allocate to aircraft</button>':'')+
+      (pax.some(function(p){return p.ac;})?'<button class="btn btn-ghost" style="font-size:12px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.rezdyManUnallocateAll()" title="Send everyone back to the unallocated pool">↺ Unallocate all</button>':'')+
       (pax.length?'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.rezdyManClear()">🗑 Clear</button>':'')+
     '</div></div>';
   // Combine-departures panel.
@@ -2616,12 +2618,20 @@ function _rzRenderManifest(){
   }
   return h;
 }
-function _rzManSave(){
+// Snapshot/restore the full manifest state — for the seatmap undo stack (10 deep).
+function _rzManSnapshot(){try{return JSON.parse(JSON.stringify({pax:S._rzManPax||[],pic:S._rzManPic||{},coPic:S._rzManCoPic||{},fuel:S._rzManFuel||{},hidden:S._rzManHidden||[],seats:S._rzManSeats||{},cargo:S._rzManCargo||{},depMerge:S._rzManDepMerge||{}}));}catch(e){return null;}}
+function _rzManApplySnap(s){if(!s)return;S._rzManPax=s.pax||[];S._rzManPic=s.pic||{};S._rzManCoPic=s.coPic||{};S._rzManFuel=s.fuel||{};S._rzManHidden=s.hidden||[];S._rzManSeats=s.seats||{};S._rzManCargo=s.cargo||{};S._rzManDepMerge=s.depMerge||{};}
+function _rzManSetUndoBase(){S._rzManLast=_rzManSnapshot();} // call after load / realtime apply (not undoable)
+function _rzManSave(noUndo){
+  // Record the prior state for undo (cap 10), unless this save IS an undo/restore.
+  if(!noUndo&&S._rzManLast){S._rzManUndo=S._rzManUndo||[];S._rzManUndo.push(S._rzManLast);if(S._rzManUndo.length>10)S._rzManUndo.shift();}
+  S._rzManLast=_rzManSnapshot();
   var ds=S.rezdyDate;
   var payload={pax:S._rzManPax||[],pic:S._rzManPic||{},coPic:S._rzManCoPic||{},fuel:S._rzManFuel||{},hidden:S._rzManHidden||[],seats:S._rzManSeats||{},cargo:S._rzManCargo||{},depMerge:S._rzManDepMerge||{}};
   if(typeof sbMergeSave==='function')sbMergeSave('rz_manifest_'+ds,payload,function(m){
     if(S.rezdyDate!==ds)return; // date changed mid-save — don't write the old day onto the new one
     S._rzManPax=m.pax||[];S._rzManPic=m.pic||{};S._rzManCoPic=m.coPic||{};S._rzManFuel=m.fuel||{};S._rzManHidden=m.hidden||[];S._rzManSeats=m.seats||{};S._rzManCargo=m.cargo||{};S._rzManDepMerge=m.depMerge||{};
+    S._rzManLast=_rzManSnapshot(); // keep the undo baseline in step with the merged result
   });
   _rzManBroadcast();
 }
@@ -2660,6 +2670,7 @@ window.rezdyReloadManifestLive=function(){
       S._rzManCargo=(v.cargo&&typeof v.cargo==='object')?v.cargo:{};
       S._rzManDepMerge=(v.depMerge&&typeof v.depMerge==='object')?v.depMerge:{};
       if(typeof _sbSetBase==='function')_sbSetBase('rz_manifest_'+S.rezdyDate,{pax:S._rzManPax,pic:S._rzManPic,coPic:S._rzManCoPic,fuel:S._rzManFuel,hidden:S._rzManHidden,seats:S._rzManSeats,cargo:S._rzManCargo,depMerge:S._rzManDepMerge});
+      if(typeof _rzManSetUndoBase==='function')_rzManSetUndoBase(); // keep undo baseline in step with a remote update
       if(typeof safeRender==='function')safeRender();
     }
   }).catch(function(){});}catch(e){}
@@ -2680,6 +2691,7 @@ window.rezdyLoadManifest=async function(){
     else{S._rzManPax=[];S._rzManPic={};S._rzManCoPic={};S._rzManFuel={};S._rzManHidden=[];S._rzManSeats={};S._rzManCargo={};S._rzManDepMerge={};}
     // Capture the as-loaded baseline so the first save merges (doesn't clobber a concurrent edit).
     if(typeof _sbSetBase==='function')_sbSetBase('rz_manifest_'+S.rezdyDate,{pax:S._rzManPax,pic:S._rzManPic,coPic:S._rzManCoPic,fuel:S._rzManFuel,hidden:S._rzManHidden,seats:S._rzManSeats,cargo:S._rzManCargo,depMerge:S._rzManDepMerge});
+    if(typeof _rzManSetUndoBase==='function'){_rzManSetUndoBase();S._rzManUndo=[];} // fresh undo history for the day
   }catch(e){S._rzManPax=S._rzManPax||[];S._rzManPic=S._rzManPic||{};S._rzManFuel=S._rzManFuel||{};S._rzManHidden=S._rzManHidden||[];S._rzManSeats=S._rzManSeats||{};S._rzManCargo=S._rzManCargo||{};S._rzManDepMerge=S._rzManDepMerge||{};}
   S._rzManLoaded=true;render();
 };
@@ -2843,9 +2855,35 @@ window.rezdyManRemoveInfant=function(infId){
   delete inf.infantOf;inf.type='adult';_rzManSave();render();
 };
 window.rezdyManRemove=function(id){
-  // Removing a host also unfolds its infants back into the pool.
-  (S._rzManPax||[]).forEach(function(x){if(x.infantOf===id){delete x.infantOf;x.type='adult';}});
-  S._rzManPax=(S._rzManPax||[]).filter(function(x){return x.id!==id;});_rzManSave();render();
+  var p=(S._rzManPax||[]).find(function(x){return x.id===id;});if(!p)return;
+  if(p.ac){
+    // SEATED → send back to the unallocated pool (clear the seat + aircraft) so it can be re-seated.
+    var dep=_rzPaxDep(p);var ok=_rzSeatKey(dep,p.ac);S._rzManSeats=S._rzManSeats||{};var osm=S._rzManSeats[ok]||{};
+    Object.keys(osm).forEach(function(k){if(osm[k]===p.id)delete osm[k];});S._rzManSeats[ok]=osm;
+    p.ac=null;(S._rzManPax||[]).forEach(function(x){if(x.infantOf===p.id)x.ac=null;});
+  } else {
+    // Already in the pool → remove from the manifest (its infants unfold back to the pool).
+    (S._rzManPax||[]).forEach(function(x){if(x.infantOf===id){delete x.infantOf;x.type='adult';}});
+    S._rzManPax=(S._rzManPax||[]).filter(function(x){return x.id!==id;});
+  }
+  _rzManSave();render();
+};
+// Undo the last seatmap change (up to 10 steps).
+window.rezdyManUndo=function(){
+  if(!(S._rzManUndo&&S._rzManUndo.length)){if(typeof toast==='function')toast('Nothing to undo','warn');return;}
+  _rzManApplySnap(S._rzManUndo.pop());
+  _rzManSetUndoBase();      // the restored state itself isn't an undoable step
+  _rzManSave(true);         // persist without pushing a new undo entry
+  if(typeof toast==='function')toast('Undone','ok');
+  render();
+};
+// Reset the seating: send everyone back to the unallocated pool (clears all seat + aircraft
+// allocations for the day). Keeps the passengers and their details; undoable.
+window.rezdyManUnallocateAll=function(){
+  if(typeof confirm==='function'&&!confirm('Send all passengers back to the unallocated pool for this day? (You can Undo.)'))return;
+  (S._rzManPax||[]).forEach(function(p){p.ac=null;});
+  S._rzManSeats={};
+  _rzManSave();render();
 };
 window.rezdyManClear=function(){if(!confirm('Clear the whole manifest for this day?'))return;S._rzManPax=[];S._rzManSeats={};S._rzManPic={};S._rzManCoPic={};S._rzManFuel={};S._rzManCargo={};S._rzManHidden=[];S._rzManDepMerge={};_rzManSave();render();};
 // Enter / edit a passenger's ACTUAL weight directly in the manifest.
@@ -3173,7 +3211,7 @@ function _rzManSeatGrid(dep,acId,col){
         h+='<div class="pax-bubble" draggable="true" ondragstart="window.rezdyManDragStart(\''+idEsc+'\',event)" ondragover="event.preventDefault()" ondrop="window.rezdyManDropSeat(\''+depE+'\',\''+acE+'\','+idx+',event)" title="'+_rzEsc(p.name||'')+'" style="position:relative;width:'+SW+'px;height:'+SH+'px;border-radius:7px;border:1.5px solid '+(p.paymentReq?'#ef4444':gcol)+';border-left:4px solid '+gcol+';background:rgba(255,255,255,.93);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;cursor:grab">'+
           (isChild?'<div title="Child" style="position:absolute;bottom:2px;right:2px;font-size:10px;font-weight:900;background:#f97316;color:#fff;border-radius:3px;padding:0 4px;line-height:1.4;box-shadow:0 1px 2px rgba(0,0,0,.3)">C</div>':'')+
           (infN?'<div title="Infant: '+_rzEsc(infN)+'" style="position:absolute;bottom:2px;'+(isChild?'left:2px':'right:2px')+';font-size:10px;font-weight:900;background:#ec4899;color:#fff;border-radius:3px;padding:0 4px;line-height:1.4;box-shadow:0 1px 2px rgba(0,0,0,.3)">i</div>':'')+
-          '<div onclick="event.stopPropagation();window.rezdyManRemove(\''+idEsc+'\')" title="Remove" style="position:absolute;top:-1px;right:1px;font-size:9px;color:#94a3b8;cursor:pointer;padding:0 1px">✕</div>'+
+          '<div onclick="event.stopPropagation();window.rezdyManRemove(\''+idEsc+'\')" title="Send to the unallocated pool" style="position:absolute;top:-1px;right:1px;font-size:9px;color:#94a3b8;cursor:pointer;padding:0 1px">✕</div>'+
           '<div style="font-size:9.5px;font-weight:700;color:#1e293b;white-space:nowrap;max-width:'+(SW-10)+'px;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'+
           '<div onclick="event.stopPropagation();window.rezdyManEditWeight(\''+idEsc+'\')" title="'+(decld?'Declared weight — tap to enter actual':'Tap to edit actual weight')+'" style="font-size:8.5px;font-weight:700;color:'+wCol+';cursor:pointer">'+wTxt+'</div>'+
         '</div>';

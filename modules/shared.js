@@ -466,7 +466,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.04';
+const APP_VER='v25.06';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1529,6 +1529,7 @@ async function loadAll(){
           S.user=_userFromClaims(_jwtClaims(_sbSession.access_token));
           auditLog('session_restore',{via:'supabase',user:S.user.email});
           await _reloadCoreTables();
+          _loadAuditLog(); // S.user now set → load the audit history on refresh too
           S._authRestoring=false;initRealtime();render();setTimeout(function(){restoreWorkspace();},400);
         } else { S._authRestoring=false;_applySession(null);try{localStorage.removeItem('ts_sb_session');}catch(e){} render(); }
       })();
@@ -1544,28 +1545,27 @@ async function loadAll(){
   S.auditLog=lsGet('ts_audit_log')||[];
   render();
   if(S.user)setTimeout(function(){restoreWorkspace();},400);
-  // Then fetch latest 50 from Supabase in background (works on fresh login AND refresh)
-  if(S.user?.superAdmin){
-    (async()=>{try{
-      const r=await fetch(SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit=50',{
-        headers:SH  // use the user JWT (SH), not the anon key, so RLS lets the audit history load
-      });
-      if(!r.ok) return;
-      const rows=await r.json();
-      const mapped=rows.map(x=>({
-        time:x.created_at,user:x.user_email,name:x.user_name||x.user_email,
-        role:x.role,action:x.action,detail:x.detail,device:x.device
-      }));
-      const existing=new Set((S.auditLog||[]).map(e=>e.time+e.user+e.action));
-      const fresh=mapped.filter(e=>!existing.has(e.time+e.user+e.action));
-      if(fresh.length){
-        S.auditLog=[...mapped,...(S.auditLog||[]).filter(e=>!existing.has(e.time+e.user+e.action))];
-        S.auditLog=S.auditLog.slice(0,1000);
-        lsSet('ts_audit_log',S.auditLog);
-        render(); // re-render to show fresh data
-      }
-    }catch(e){console.warn('Audit fetch failed:',e);}})();
-  }
+  // Then fetch latest 50 from Supabase in background. On an AUTH_PHASE_C refresh S.user is set
+  // asynchronously, so this is ALSO called from inside the restore IIFE once the user exists.
+  _loadAuditLog();
+}
+// Superadmin audit-log background fetch (uses the user JWT via SH so RLS allows the read).
+function _loadAuditLog(){
+  if(!(S.user&&S.user.superAdmin))return;
+  (async()=>{try{
+    const r=await fetch(SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit=50',{headers:SH});
+    if(!r.ok) return;
+    const rows=await r.json();
+    const mapped=rows.map(x=>({time:x.created_at,user:x.user_email,name:x.user_name||x.user_email,role:x.role,action:x.action,detail:x.detail,device:x.device}));
+    const existing=new Set((S.auditLog||[]).map(e=>e.time+e.user+e.action));
+    const fresh=mapped.filter(e=>!existing.has(e.time+e.user+e.action));
+    if(fresh.length){
+      S.auditLog=[...mapped,...(S.auditLog||[]).filter(e=>!existing.has(e.time+e.user+e.action))];
+      S.auditLog=S.auditLog.slice(0,1000);
+      lsSet('ts_audit_log',S.auditLog);
+      render();
+    }
+  }catch(e){console.warn('Audit fetch failed:',e);}})();
 }
 
 // ── Supabase Realtime ──
@@ -2445,19 +2445,8 @@ async function _doLogin(emailArg,passArg){
   S.tab=u.role==='maint'?'maintenance':'manifest';S._appLoading=true;render();initRealtime();setTimeout(function(){restoreWorkspace();},600);setTimeout(function(){S._appLoading=false;render();},1400);
   // Phase C: the boot fetch ran as anon (RLS hid protected tables) — reload them now the JWT is set.
   if(AUTH_PHASE_C){_reloadCoreTables().then(function(){safeRender();});}
-  // Fetch latest audit log from Supabase after login
-  if(u.superAdmin){
-    (async()=>{try{
-      const r=await fetch(SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit=50',{
-        headers:SH  // use the user JWT (SH), not the anon key, so RLS lets the audit history load
-      });
-      if(!r.ok) return;
-      const rows=await r.json();
-      const mapped=rows.map(x=>({time:x.created_at,user:x.user_email,name:x.user_name||x.user_email,role:x.role,action:x.action,detail:x.detail,device:x.device}));
-      S.auditLog=[...mapped,...(S.auditLog||[])].filter((e,i,a)=>a.findIndex(x=>x.time+x.user+x.action===e.time+e.user+e.action)===i).slice(0,1000);
-      lsSet('ts_audit_log',S.auditLog);
-    }catch(e){}})();
-  }
+  // Fetch latest audit log from Supabase after login (shared helper; uses the user JWT via SH)
+  _loadAuditLog();
 }
 
 window.tryLogin=async function(){
