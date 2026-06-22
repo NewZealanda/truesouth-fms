@@ -466,8 +466,9 @@ function _bizRenderPaxDaily(){
     var isPast=(ym<curMonth)||(ym===curMonth&&d<=today.getDate());if(isPast)daysElapsed=d;
     var isToday=(ym===curMonth&&d===today.getDate());
     var isFuture=(ym>curMonth)||(ym===curMonth&&d>today.getDate()); // forward bookings — indicative, not confirmed
-    var hasAny=row.p26!=null||row.p25!=null;
-    var tracking=(totT&&hasAny)?(accum/totT)-(d/daysIn):null; // % of target reached − % of month elapsed
+    // Tracking stays live every day — even days we didn't fly: accum carries forward while the
+    // month keeps elapsing, so the figure dips on a no-fly day instead of dropping to a dash.
+    var tracking=totT?(accum/totT)-(d/daysIn):null; // % of target reached − % of month elapsed
     var compare=runLy?accum/runLy:null;
     var ht=tracking!=null?_bizHeat(tracking,-0.15,0.15):null;
     var hc=compare!=null?_bizHeat(compare,0.7,1.3):null;
