@@ -236,6 +236,7 @@ function renderFlightRecord(){
   }
   h+='</div>';
   h+=_frLocOverlay();   // searchable "Other" From/To picker (when open)
+  h+=_frTypeOverlay();  // "Other" flight-type popup (when open)
   return h;
 }
 // ── Aircraft Records — per aircraft, browsable by date; reviewed & uploaded to Maintenance ──
@@ -509,7 +510,10 @@ function _frRenderDraftForm(d,manual){
   // Product
   h+='<div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:6px 0 6px">Flight type</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:14px">';
-  _frProducts().forEach(function(pr){h+=_frBigBtn(_frEsc(pr),d.product===pr,"window.frDraftSet('product','"+_frJs(pr)+"')");});
+  var _prods=_frProducts();
+  _prods.forEach(function(pr){h+=_frBigBtn(_frEsc(pr),d.product===pr,"window.frDraftSet('product','"+_frJs(pr)+"')");});
+  var _customType=d.product&&_prods.indexOf(d.product)<0;   // a typed-in type that isn't a preset
+  h+=_frBigBtn(_customType?_frEsc(d.product):'Other…',_customType,"window.frTypePickOpen()");
   h+='</div>';
   // Route (from → to) quick picks
   var locs=FR_LOCS_DEFAULT;
@@ -568,6 +572,21 @@ window.frLocPickClose=function(){S._frLocPick=null;render();};
 window.frLocFilter=function(q){q=String(q||'').toLowerCase();var els=document.querySelectorAll('.frLocItem');for(var i=0;i<els.length;i++){els[i].style.display=(els[i].getAttribute('data-s')||'').indexOf(q)>=0?'':'none';}};
 window.frLocPick=function(code){var side=S._frLocPick&&S._frLocPick.side;S._frLocPick=null;if(side&&code)window.frDraftSet(side,code);else render();};
 window.frLocUseTyped=function(v){v=String(v||'').trim().toUpperCase();var side=S._frLocPick&&S._frLocPick.side;if(!side){return;}S._frLocPick=null;if(v)window.frDraftSet(side,v);else render();};
+// ── "Other" flight type — popup to type a custom type ──
+function _frTypeOverlay(){
+  if(!S._frTypePick)return '';
+  var cur=(S._frDraft&&S._frDraft.product)||'';
+  if(_frProducts().indexOf(cur)>=0)cur=''; // don't prefill a preset
+  return '<div onclick="if(event.target===this)window.frTypePickClose()" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px">'+
+    '<div style="background:var(--card);border-radius:14px;max-width:420px;width:100%;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.45)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:15px;font-weight:800">Other flight type</div><button onclick="window.frTypePickClose()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>'+
+      '<input id="frTypeInput" autofocus value="'+_frEsc(cur)+'" onkeydown="if(event.key===\'Enter\')window.frTypeUse(this.value)" placeholder="e.g. Survey, Charter, Test…" style="width:100%;box-sizing:border-box;height:48px;font-size:16px;font-weight:700;padding:0 12px;border:2px solid var(--border2);border-radius:10px;background:var(--card2);color:var(--text)">'+
+      '<button onclick="window.frTypeUse(document.getElementById(\'frTypeInput\').value)" style="width:100%;margin-top:12px;min-height:52px;border-radius:12px;border:none;background:#16a34a;color:#fff;font-size:16px;font-weight:800;cursor:pointer">✓ Use this type</button>'+
+    '</div></div>';
+}
+window.frTypePickOpen=function(){S._frTypePick=true;render();setTimeout(function(){var el=document.getElementById('frTypeInput');if(el){el.focus();try{el.select();}catch(e){}}},60);};
+window.frTypePickClose=function(){S._frTypePick=false;render();};
+window.frTypeUse=function(v){v=String(v||'').trim();S._frTypePick=false;if(v)window.frDraftSet('product',v);else render();};
 
 function _frRenderLand(r){
   var h='<div class="card" style="border-left:4px solid #16a34a">';
