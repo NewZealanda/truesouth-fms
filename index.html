@@ -743,7 +743,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.95';
+const APP_VER='v24.96';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -12919,6 +12919,17 @@ window.rezdySchedDropPilot=function(key,e){
   if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
 };
 window.rezdySchedClearPilot=function(key){if(S._schedPilots)delete S._schedPilots[String(key)];if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();};
+// Click-to-set pilot (alternative to drag-and-drop). Clicking the already-assigned pilot clears it.
+window.rezdySchedSetPilot=function(key,code){
+  key=String(key);if(!key||!code)return;
+  var ac=null;
+  if(key.indexOf('|')>=0)ac=key.split('|')[0];
+  else{var blk=(S._schedBlocks||[]).find(function(b){return String(b.id)===key;});ac=blk&&blk.aircraft;}
+  if(ac&&ac!=='__unalloc__'){var en=_rzPilotEndorse(code);if(en&&en.length&&en.indexOf(ac)<0){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}}
+  S._schedPilots=S._schedPilots||{};
+  if(S._schedPilots[key]===code)delete S._schedPilots[key];else S._schedPilots[key]=code;  // toggle off if re-tapped
+  if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
+};
 // Detach a flyback booking from a flight (revert the combine).
 window.rezdySchedDetach=function(order){order=String(order);_rzSchedPushUndo();if(S._rzSchedAttach)delete S._rzSchedAttach[order];if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();};
 
@@ -15549,6 +15560,16 @@ function _rzRenderSchedule(){
             (_grp.pilot?'<span class="pill" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.5);color:#60a5fa;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">✈ '+_rzEsc(_grp.pilot)+' <span onclick="event.stopPropagation();window.rezdySchedClearPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
+      // Click-to-set pilot picker — tap a pilot to assign (tap again to clear). Only type-rated
+      // pilots for this aircraft are shown.
+      var _gkey=String(_grp.key).replace(/'/g,"\\'");
+      var _gpick=_rzAvailablePilots().filter(function(p){if(!_gac)return true;var en=_rzPilotEndorse(p.code);return !(en&&en.length)||en.indexOf(_gac)>=0;});
+      detailH+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 8px">'+
+        '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-right:2px">Set pilot</span>';
+      if(!_gpick.length){detailH+='<span style="font-size:11px;color:var(--text3)">No type-rated pilots available</span>';}
+      _gpick.forEach(function(p){var on=_grp.pilot===p.code;var off=!p.rostered;
+        detailH+='<button onclick="event.stopPropagation();window.rezdySchedSetPilot(\''+_gkey+'\',\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(off?' (not rostered on today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid #60a5fa':'1px solid rgba(96,165,250,'+(off?'.28':'.5')+')')+';background:rgba(96,165,250,'+(on?'.22':(off?'.05':'.1'))+');color:#60a5fa;font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'✈ ')+_rzEsc(p.code)+(off?' <span style="font-size:8px;font-weight:700">off</span>':'')+'</button>';});
+      detailH+='</div>';
       // Full product title(s) at the top — the real Rezdy product name, not just the short code.
       var _allBk=_grp.bookings.concat(_grp._fb||[]);
       var _titles=[];_allBk.forEach(function(bk){var t=String((bk.it&&bk.it.product)||'').trim();if(t&&_titles.indexOf(t)<0)_titles.push(t);});
@@ -15715,7 +15736,7 @@ function _rzRenderSchedule(){
     '</div></div>';
   // Available pilots — drag a code bubble onto a flight block to allocate.
   var _pilots=_rzAvailablePilots();
-  var pilotsBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:8px">Pilots <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(drag onto a flight)</span></div>';
+  var pilotsBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:8px">Pilots <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(drag onto a flight, or tap a flight and pick a pilot)</span></div>';
   if(!_pilots.length){pilotsBar+='<div style="font-size:12px;color:var(--text3)">No aircraft-approved pilots found.</div>';}
   else{
     pilotsBar+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
