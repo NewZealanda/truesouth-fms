@@ -113,8 +113,12 @@ function _frDayFlights(uid){
   legs.forEach(function(lg){
     var pos=posByAc[lg.ac]||'QN';                      // each aircraft starts the day at base (QN)
     if(pos!==lg.from){                                  // not where the next leg departs → reposition empty
-      out.push({ac:lg.ac,start:_frHHMM(Math.max(0,lg.t-50)),prod:'Ferry',pob:1,from:pos,to:lg.from,ferry:true,
-        hint:'reposition empty for '+lg.start+' '+lg.prod});
+      // The end-of-day "fetch" pattern (sitting at base, but the next leg is a RETURN out of MF) has
+      // typical times: ferry out ~14:30, return home ~15:40. Other repositions: ~50 min before the leg.
+      var fetch=(pos==='QN'&&lg.ret);
+      out.push({ac:lg.ac,start:fetch?'14:30':_frHHMM(Math.max(0,lg.t-50)),prod:'Ferry',pob:1,from:pos,to:lg.from,ferry:true,
+        hint:fetch?'reposition empty to collect the return':'reposition empty for '+lg.start+' '+lg.prod});
+      if(fetch)lg=Object.assign({},lg,{start:'15:40'});   // typical afternoon return-home time
     }
     out.push(lg);
     posByAc[lg.ac]=lg.to;
