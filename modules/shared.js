@@ -412,7 +412,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.86';
+const APP_VER='v24.87';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1915,10 +1915,13 @@ async function reloadTable(table){
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
           if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
           if(row.key==='maintenance'&&row.value){
-            // Merge the broadcast in (keeping any unsaved local edit) rather than clobbering it.
             try{const m=JSON.parse(row.value);if(m&&m.hist){
-              var _ob=S._maintBase?JSON.parse(S._maintBase):m;
-              S.maintenance=(typeof _maintMerge==='function')?_maintMerge(m,_ob,S.maintenance||m):m;
+              // Only MERGE when this device has unsaved edits to preserve (S._maintBase set). With no
+              // base, take the cloud copy directly — merging an empty default looked like "deleted
+              // everything" and wiped the data (showed blank for users with no local cache).
+              if(S._maintBase&&typeof _maintMerge==='function'){
+                S.maintenance=_maintMerge(m,JSON.parse(S._maintBase),S.maintenance||m);
+              } else { S.maintenance=m; }
               if(typeof _maintSetBase==='function')_maintSetBase(m);else S._maintBase=JSON.stringify(m);
               lsSet('ts_maintenance',S.maintenance);changed=true;
             }}catch(e){}

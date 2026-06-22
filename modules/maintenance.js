@@ -1,6 +1,7 @@
 // === MODULE: maintenance === v1.0 ===
 /* acDisp() moved to shared.js (single canonical definition) */
 function renderMaintenance(){
+  if(!S._maintLoaded&&typeof window.ensureMaintenance==='function')window.ensureMaintenance(); // lazy-load on a direct landing/refresh
   initMaintenance();
   const m=S.maintenance||{};
   if(m._loading){return'<div style="display:flex;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:var(--text3)"><div style="width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--acc);border-radius:50%;animation:spin 0.7s linear infinite"></div><span style="font-size:14px">Loading maintenance data…</span></div>';}

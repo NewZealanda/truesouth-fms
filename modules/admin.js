@@ -680,24 +680,8 @@ window.setTab=function(t){
   if(t==='admin'){
     Promise.all([reloadTable('ts_crew'),reloadTable('ts_users')]).then(function(){render();});
   }
-  // Load maintenance: show local data instantly, sync from cloud in background
-  if(t==='maintenance'){
-    var _mLocal=lsGet('ts_maintenance');
-    S.maintenance=(_mLocal&&_mLocal.hist)
-      ?Object.assign({},_mLocal,{_loading:false})
-      :{hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{},_loading:false};
-    _maintSetBase(S.maintenance);   // snapshot the loaded state so saves know what THIS device changes
-    // Background cloud sync — merge in cloud (keeps any just-made local edit) instead of clobbering
-    loadMaintenanceFromCloud().then(function(cloud){
-      if(cloud&&cloud.hist){
-        var ob=S._maintBase?JSON.parse(S._maintBase):cloud;
-        S.maintenance=_maintMerge(cloud,ob,S.maintenance||cloud);
-        lsSet('ts_maintenance',S.maintenance);
-        _maintSetBase(cloud);
-        render();
-      }
-    }).catch(function(){});
-  }
+  // Load maintenance: show local data instantly, sync from cloud in background.
+  if(t==='maintenance'){window.ensureMaintenance(true);}
   window.scrollTo(0,0);
   render();
 };
@@ -3031,6 +3015,26 @@ async function loadMaintenanceFromCloud(){
     return val&&val.hist?val:null;
   }catch{return null;}
 }
+// Robust maintenance loader — used on tab open AND lazily on first render (covers a refresh that
+// lands straight on Maintenance). Shows local instantly, pulls cloud, NEVER loses cloud data if the
+// merge throws, and always clears the loading spinner.
+window.ensureMaintenance=function(force){
+  if(S._maintLoaded&&!force)return;
+  S._maintLoaded=true;
+  if(!S.maintenance||!S.maintenance.hist){
+    var _mLocal=lsGet('ts_maintenance');
+    S.maintenance=(_mLocal&&_mLocal.hist)?Object.assign({},_mLocal,{_loading:false}):{hist:[],oil:[],nextCheck:{},checkType:{},engineLastOH:{},engineToRun:{},propLastOH:{},propToRun:{},bookings:{},priority:[],compwash:{},adas:{},_loading:false};
+  } else { S.maintenance._loading=false; }
+  _maintSetBase(S.maintenance);
+  loadMaintenanceFromCloud().then(function(cloud){
+    if(cloud&&cloud.hist){
+      try{var ob=S._maintBase?JSON.parse(S._maintBase):S.maintenance;S.maintenance=_maintMerge(cloud,ob,S.maintenance||cloud);}
+      catch(e){S.maintenance=cloud;}            // failsafe: never lose the cloud copy
+      S.maintenance._loading=false;lsSet('ts_maintenance',S.maintenance);_maintSetBase(cloud);
+    } else if(S.maintenance){S.maintenance._loading=false;}
+    render();
+  }).catch(function(){if(S.maintenance)S.maintenance._loading=false;render();});
+};
 function initMaintenance(){
   // Fetch handled by setTab on every tab click; just ensure state exists
   if(!S.maintenance){
