@@ -303,7 +303,7 @@ const DEFAULT_ROLE_PERMS={
   accounts: {operations:false,calendar:false,charter:false,maintenance:false,roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:true},
   marketing: {operations:false,calendar:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false}
 };
-function hasRolePerm(perm){const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
+function hasRolePerm(perm){if(perm==='charter')perm='operations'; /* charter access now follows Operations */ const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
 // Flight / PIC eligibility is derived from a crew member's AIRCRAFT APPROVALS (endorsements)
 // in their profile — there is no separate "PIC eligible" flag. Anyone approved on at least
 // one aircraft can fly / act as PIC. Resolves the user's crew record by name/linkedCrew.
@@ -412,7 +412,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.81';
+const APP_VER='v24.82';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

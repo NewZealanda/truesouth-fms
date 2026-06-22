@@ -3290,8 +3290,7 @@ window.saveRolePerms=async function(silent){
 function renderAdminPerms(){
   S._permsPageTs=Date.now();   // mark the grid as actively on screen (blocks reload clobber)
   var PERM_COLS=[
-    {k:'operations',    lbl:'Ops',           tip:'Access to flight operations (manifests, loadsheets, seatmap)'},
-    {k:'charter',       lbl:'Charter',        tip:'View and manage charter quotes'},
+    {k:'operations',    lbl:'Ops',           tip:'Access to flight operations (manifests, loadsheets, seatmap, charter)'},
     {k:'maintenance',   lbl:'Maint',          tip:'Access to the maintenance section'},
     {k:'roster_leave',  lbl:'Roster & Leave', tip:'View the roster and submit/view own leave requests'},
     {k:'roster_edit',   lbl:'Roster Edit',    tip:'Edit the roster and build patterns (otherwise view-only)'},
