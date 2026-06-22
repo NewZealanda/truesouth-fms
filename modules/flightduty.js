@@ -236,7 +236,7 @@ window.loadFlightDuty=async function(){
     if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.user_id+'|'+r.fd_date]={ds:r.duty_start||'',de:r.duty_end||'',ft:r.flight_time||0,lc:r.ldg_c208||0,lg:r.ldg_ga8||0,ext:!!r.extended,ov:!!r.override,ovr:r.override_reason||'',note:r.note||'',by:r.updated_by||'',at:r.updated_at||''};});S._fdData=d;try{lsSet&&lsSet('ts_flightduty_cache',d);}catch(e){}}
     var certs=await sbF('ts_fd_certs',_scope,'certified_at');
     if(Array.isArray(certs)){var cc={};certs.forEach(function(r){cc[r.user_id+'|'+r.period]={at:r.certified_at,by:r.certified_by||''};});S._fdCerts=cc;}
-    fetch(SB+'/rest/v1/ts_settings?key=eq.fd_limits&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value)S._fdLimits=JSON.parse(s[0].value);}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});
+    fetch(SB+'/rest/v1/ts_settings?key=eq.fd_limits&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value){S._fdLimits=JSON.parse(s[0].value);if(typeof _sbSetBase==='function')_sbSetBase('fd_limits',S._fdLimits);}}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});
   }catch(e){}
   if(typeof safeRender==='function')safeRender();
 };
@@ -244,7 +244,7 @@ window.loadFlightDuty=async function(){
 window.fdSetLimit=function(key,field,value){
   S._fdLimits=S._fdLimits||{};S._fdLimits[key]=S._fdLimits[key]||{};
   S._fdLimits[key][field]=(value===''||value==null||isNaN(+value))?'':(+value); // NaN → revert to default
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'fd_limits',value:JSON.stringify(S._fdLimits)}]).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('fd_limits',S._fdLimits||{},function(m){S._fdLimits=m;});
   if(typeof safeRender==='function')safeRender();
 };
 

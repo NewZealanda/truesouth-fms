@@ -619,6 +619,60 @@ async function _reloadCoreTables(){
 }
 const sbPatch=async(t,id,data)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(data)});return r.ok;}catch{return false;}};
 
+// ── Shared ts_settings merge-before-write (generalises the maintenance/roster/business_plan fix) ──
+// A 3-way deep merge: cloud=latest server, base=what THIS device last saw, local=this device's value.
+// Keeps other devices' changes to anything this device didn't touch; applies this device's
+// adds/edits/removes. Arrays of {id}/{key} merge by id; other arrays replace only if changed.
+function _sbMerge3(cloud, base, local){
+  var isObj=function(v){return v&&typeof v==='object'&&!Array.isArray(v);};
+  if(Array.isArray(local)&&Array.isArray(cloud)){
+    var idOf=function(x){return x&&typeof x==='object'?(x.id!=null?String(x.id):(x.key!=null?String(x.key):null)):null;};
+    var all=local.concat(cloud);
+    var ided=all.length>0&&all.every(function(x){return idOf(x)!=null;});
+    if(!ided){return JSON.stringify(local)!==JSON.stringify(base)?local:cloud;}
+    var ba=Array.isArray(base)?base:[];
+    var mapC={},mapB={},mapL={};cloud.forEach(function(x){mapC[idOf(x)]=x;});ba.forEach(function(x){mapB[idOf(x)]=x;});local.forEach(function(x){mapL[idOf(x)]=x;});
+    var ids=[],seen={};
+    local.forEach(function(x){var i=idOf(x);if(!seen[i]){seen[i]=1;ids.push(i);}});
+    cloud.forEach(function(x){var i=idOf(x);if(!seen[i]){seen[i]=1;ids.push(i);}});
+    ba.forEach(function(x){var i=idOf(x);if(!seen[i]){seen[i]=1;ids.push(i);}});
+    var out=[];
+    ids.forEach(function(id){var l=mapL[id],b=mapB[id],c=mapC[id];var changed=JSON.stringify(l)!==JSON.stringify(b);
+      if(changed){if(l!==undefined)out.push((isObj(l)&&isObj(c))?_sbMerge3(c,b,l):l);}
+      else{if(c!==undefined)out.push(c);}});
+    return out;
+  }
+  if(isObj(local)&&isObj(cloud)){
+    var res={},keys={};[cloud,base||{},local].forEach(function(o){if(o&&typeof o==='object')Object.keys(o).forEach(function(k){keys[k]=1;});});
+    Object.keys(keys).forEach(function(k){var l=local[k],b=base?base[k]:undefined,c=cloud[k];var changed=JSON.stringify(l)!==JSON.stringify(b);
+      if(changed){if(l===undefined){/* locally deleted */}else if((isObj(l)&&isObj(c))||(Array.isArray(l)&&Array.isArray(c)))res[k]=_sbMerge3(c,b,l);else res[k]=l;}
+      else{if(c!==undefined)res[k]=c;}});
+    return res;
+  }
+  return (JSON.stringify(local)!==JSON.stringify(base))?local:cloud;
+}
+var _sbBase={},_sbSaving={},_sbRetry={};
+function _sbSetBase(key,val){try{_sbBase[key]=JSON.parse(JSON.stringify(val));}catch(e){_sbBase[key]=val;}}
+// Merge-save a ts_settings blob: re-GET cloud, merge this device's changes onto it, write. ABORTS
+// (and retries) if the cloud read fails, so a partial local copy can never clobber the server.
+// applyFn(merged) lets the caller adopt the merged result (so other devices' changes show locally).
+async function sbMergeSave(key, localVal, applyFn){
+  if(_sbSaving[key]){_sbSaving[key].again={v:localVal,fn:applyFn};return;}
+  _sbSaving[key]={};
+  try{
+    var ok=false,present=false,fresh=null;
+    try{var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.'+encodeURIComponent(key)+'&select=value',{headers:SH});
+      if(r.ok){ok=true;var rows=await r.json();if(rows&&rows.length){present=true;fresh=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;}}}catch(e){}
+    if(!ok){_sbSaving[key]=null;clearTimeout(_sbRetry[key]);_sbRetry[key]=setTimeout(function(){sbMergeSave(key,localVal,applyFn);},2500);return null;}
+    var base=(key in _sbBase)?_sbBase[key]:(present?fresh:localVal);
+    var merged=present?_sbMerge3(fresh,base,localVal):localVal;
+    var res=await sbU('ts_settings',[{key:key,value:JSON.stringify(merged)}]);
+    if(res!==null){_sbSetBase(key,merged);if(typeof applyFn==='function')try{applyFn(merged);}catch(e){}}
+    return res;
+  }catch(e){console.error('[sbMergeSave]',key,e);return null;}
+  finally{var again=_sbSaving[key]&&_sbSaving[key].again;_sbSaving[key]=null;if(again)sbMergeSave(key,again.v,again.fn);}
+}
+
 
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
@@ -743,7 +797,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.03';
+const APP_VER='v25.04';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1672,7 +1726,7 @@ async function loadAll(){
     // Load saved charter quotes
     try{
       const _cq=await fetch(SB+'/rest/v1/ts_settings?key=eq.charter_quotes&select=value',{headers:SH});
-      if(_cq.ok){const _cqd=await _cq.json();if(_cqd[0]&&_cqd[0].value){lsSet('ts_charter_quotes_cache',JSON.parse(_cqd[0].value));}}
+      if(_cq.ok){const _cqd=await _cq.json();if(_cqd[0]&&_cqd[0].value){const _cqv=JSON.parse(_cqd[0].value);lsSet('ts_charter_quotes_cache',_cqv);_sbSetBase('charter_quotes',_cqv);}}
     }catch(e){}
     // Load the featured/pinned aerodrome list (source of truth for the dropdown "Featured" group)
     try{
@@ -2231,14 +2285,15 @@ async function reloadTable(table){
     if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,(r.rates&&parseFloat(r.rates.perHour)>0)?r.rates:dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
-      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames,rz_fuel_ov,rz_pickup_locs,roster,roster_colors,business_plan,fr_settings)&select=key,value',{headers:SH});
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames,rz_fuel_ov,rz_pickup_locs,rz_vehicles,roster,roster_colors,business_plan,fr_settings,fd_limits,aircraft_obs,charter_quotes)&select=key,value',{headers:SH});
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
           if(row.key==='role_perms'&&row.value&&!_editingPerms()&&Date.now()-(S._permsEditTs||0)>5000){S.rolePerms=JSON.parse(row.value);lsSet('ts_role_perms',S.rolePerms);changed=true;}
-          if(row.key==='rz_depnames'&&row.value){try{var _dn=JSON.parse(row.value);if(_dn&&typeof _dn==='object'){S._rzDepNames=_dn;lsSet('ts_rz_depnames',_dn);changed=true;}}catch(e){}}
-          if(row.key==='rz_fuel_ov'&&row.value){try{var _fo=JSON.parse(row.value);if(_fo&&typeof _fo==='object'){S._rzFuelOv=_fo;lsSet('ts_rz_fuel_ov',_fo);changed=true;}}catch(e){}}
-          if(row.key==='rz_pickup_locs'&&row.value&&!(S.section==='settings'&&((S.admin||{}).section)==='operations')){try{var _pl=JSON.parse(row.value);if(Array.isArray(_pl)){S._rzPickupLocs=_pl;S._rzPickupLocsLoaded=true;lsSet('ts_rz_pickup_locs',_pl);changed=true;}}catch(e){}}
+          if(row.key==='rz_depnames'&&row.value){try{var _dn=JSON.parse(row.value);if(_dn&&typeof _dn==='object'){S._rzDepNames=_dn;lsSet('ts_rz_depnames',_dn);_sbSetBase('rz_depnames',_dn);changed=true;}}catch(e){}}
+          if(row.key==='rz_fuel_ov'&&row.value){try{var _fo=JSON.parse(row.value);if(_fo&&typeof _fo==='object'){S._rzFuelOv=_fo;lsSet('ts_rz_fuel_ov',_fo);_sbSetBase('rz_fuel_ov',_fo);changed=true;}}catch(e){}}
+          if(row.key==='rz_pickup_locs'&&row.value&&!(S.section==='settings'&&((S.admin||{}).section)==='operations')){try{var _pl=JSON.parse(row.value);if(Array.isArray(_pl)){S._rzPickupLocs=_pl;S._rzPickupLocsLoaded=true;lsSet('ts_rz_pickup_locs',_pl);_sbSetBase('rz_pickup_locs',_pl);changed=true;}}catch(e){}}
+          if(row.key==='rz_vehicles'&&row.value){try{var _rv=JSON.parse(row.value);if(Array.isArray(_rv)){S._rzVehicles=_rv;lsSet('ts_rz_vehicles',_rv);_sbSetBase('rz_vehicles',_rv);changed=true;}}catch(e){}}
           // A3: live roster — propagate another device's roster save. SKIPPED while this device has
           // an unsaved draft so we never clobber in-progress edits (it reconciles on their save).
           if(row.key==='roster'&&row.value&&!(typeof _rosterUnsaved==='function'&&_rosterUnsaved())){try{var _ro=JSON.parse(row.value);if(_ro&&typeof _ro==='object'){S.roster=_ro;lsSet('ts_roster',_ro);changed=true;}}catch(e){}}
@@ -2267,7 +2322,10 @@ async function reloadTable(table){
               S._bizPaxMerged=false;lsSet('ts_business_plan',S._bizPlan);changed=true;
             }}catch(e){}
           }
-          if(row.key==='fr_settings'&&row.value){try{var _frs=JSON.parse(row.value);if(_frs&&typeof _frs==='object'){S._frSettings=_frs;changed=true;}}catch(e){}}
+          if(row.key==='fr_settings'&&row.value){try{var _frs=JSON.parse(row.value);if(_frs&&typeof _frs==='object'){S._frSettings=_frs;_sbSetBase('fr_settings',_frs);changed=true;}}catch(e){}}
+          if(row.key==='fd_limits'&&row.value){try{var _fdl=JSON.parse(row.value);if(_fdl&&typeof _fdl==='object'){S._fdLimits=_fdl;_sbSetBase('fd_limits',_fdl);changed=true;}}catch(e){}}
+          if(row.key==='aircraft_obs'&&row.value){try{var _ao=JSON.parse(row.value);if(_ao&&typeof _ao==='object'){S.maintObs=_ao;lsSet('ts_aircraft_obs',_ao);_sbSetBase('aircraft_obs',_ao);changed=true;}}catch(e){}}
+          if(row.key==='charter_quotes'&&row.value){try{var _cq=JSON.parse(row.value);if(Array.isArray(_cq)){lsSet('ts_charter_quotes_cache',_cq);_sbSetBase('charter_quotes',_cq);changed=true;}}catch(e){}}
         });
         return changed;
       }
@@ -5423,11 +5481,11 @@ window.saveCharterQuote=function(){
     const wh=parseFloat(leg.waitHrs)||0;
     totalCost+=lc+Math.max(0,wh-1)*waitRate;
   });
-  const quote={legs:JSON.parse(JSON.stringify(legs)),totalCost,savedAt:new Date().toISOString()};
+  const quote={id:'q_'+Date.now()+'_'+Math.floor(Math.random()*1e4),legs:JSON.parse(JSON.stringify(legs)),totalCost,savedAt:new Date().toISOString()};
   const quotes=lsGet('ts_charter_quotes_cache')||[];
   quotes.unshift(quote);
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
+  sbMergeSave('charter_quotes',quotes,function(m){lsSet('ts_charter_quotes_cache',m);}).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   toast('Quote saved ✓','ok');
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
@@ -5444,7 +5502,7 @@ window.deleteCharterQuote=function(idx){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
   quotes.splice(idx,1);
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
+  sbMergeSave('charter_quotes',quotes,function(m){lsSet('ts_charter_quotes_cache',m);}).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
@@ -5454,7 +5512,7 @@ window.renameCharterQuote=function(qi,newName){
   if(quotes[qi].name===newName)return;
   quotes[qi].name=newName;
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
+  sbMergeSave('charter_quotes',quotes,function(m){lsSet('ts_charter_quotes_cache',m);}).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
 };
 
@@ -9070,13 +9128,13 @@ function renderMaintObservations(){
 window.loadMaintObs=async function(){
   try{
     var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.aircraft_obs&select=value',{headers:SH});
-    if(r.ok){var rows=await r.json();if(rows&&rows[0]&&rows[0].value){S.maintObs=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;lsSet('ts_aircraft_obs',S.maintObs);safeRender();return;}}
+    if(r.ok){var rows=await r.json();if(rows&&rows[0]&&rows[0].value){S.maintObs=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;lsSet('ts_aircraft_obs',S.maintObs);if(typeof _sbSetBase==='function')_sbSetBase('aircraft_obs',S.maintObs);safeRender();return;}}
   }catch(e){}
   var c=lsGet('ts_aircraft_obs');if(c){S.maintObs=c;safeRender();}
 };
 function _saveMaintObs(){
   lsSet('ts_aircraft_obs',S.maintObs||{});
-  sbU('ts_settings',[{key:'aircraft_obs',value:JSON.stringify(S.maintObs||{})}]).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('aircraft_obs',S.maintObs||{},function(m){S.maintObs=m;try{lsSet&&lsSet('ts_aircraft_obs',m);}catch(e){}});
 }
 // Defense-in-depth: gate maintenance writes (the UI hides the controls; this stops
 // console/edge-case writes too).
@@ -11947,7 +12005,7 @@ function _rzVehicles(){
 }
 function _rzVehSave(){
   try{if(typeof lsSet==='function')lsSet('ts_rz_vehicles',S._rzVehicles||[]);}catch(e){}
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_vehicles',value:JSON.stringify(S._rzVehicles||[])}]).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('rz_vehicles',S._rzVehicles||[],function(m){S._rzVehicles=m;try{lsSet&&lsSet('ts_rz_vehicles',m);}catch(e){}});
 }
 function _rzVehLoad(){
   try{fetch(SB+'/rest/v1/ts_settings?key=eq.rz_vehicles&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
@@ -12098,7 +12156,7 @@ function _rzProdFuelKg(code,acId){var a=_acSpec(acId);if(!a)return null;var c=_r
 function _rzProdBurnDisp(code,acId){var a=_acSpec(acId);if(!a)return null;var c=_rzEffCfg(code);var u=(a.layout==='ga8')?c.av:c.cv;if(u&&u.burn!=null)return u.burn;return null;}
 function _rzFuelOvSave(){
   try{if(typeof lsSet==='function')lsSet('ts_rz_fuel_ov',S._rzFuelOv||{});}catch(e){}
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_fuel_ov',value:JSON.stringify(S._rzFuelOv||{})}]).then(function(r){if(r===null&&typeof toast==='function')toast('Fuel defaults did not save to the server — check connection.','warn');}).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('rz_fuel_ov',S._rzFuelOv||{},function(m){S._rzFuelOv=m;try{lsSet&&lsSet('ts_rz_fuel_ov',m);}catch(e){}}).then(function(r){if(r===null&&typeof toast==='function')toast('Fuel defaults did not save to the server — check connection.','warn');});
 }
 function _rzFuelOvLoad(){
   try{var cch=lsGet('ts_rz_fuel_ov');if(cch&&typeof cch==='object')S._rzFuelOv=cch;}catch(e){}
@@ -12186,7 +12244,7 @@ function _rzPickupLocsLoad(){
 }
 function _rzPickupLocsSave(silent){
   try{if(typeof lsSet==='function')lsSet('ts_rz_pickup_locs',S._rzPickupLocs||[]);}catch(e){}
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_pickup_locs',value:JSON.stringify(S._rzPickupLocs||[])}]).then(function(r){if(r===null&&!silent&&typeof toast==='function')toast('Pickup locations did not save to the server — check connection.','warn');}).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('rz_pickup_locs',S._rzPickupLocs||[],function(m){S._rzPickupLocs=m;try{lsSet&&lsSet('ts_rz_pickup_locs',m);}catch(e){}}).then(function(r){if(r===null&&!silent&&typeof toast==='function')toast('Pickup locations did not save to the server — check connection.','warn');});
 }
 window.rezdyPickupLocSet=function(i,field,val){
   if(!Array.isArray(S._rzPickupLocs))return;var o=S._rzPickupLocs[i];if(!o)return;
@@ -12269,7 +12327,7 @@ window.rezdyRenameDep=function(dep){
   S._rzDepNames=S._rzDepNames||{};
   if(!v||v===_def)delete S._rzDepNames[dep];else S._rzDepNames[dep]=v;
   try{if(typeof lsSet==='function')lsSet('ts_rz_depnames',S._rzDepNames);}catch(e){}
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_depnames',value:JSON.stringify(S._rzDepNames)}]).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('rz_depnames',S._rzDepNames||{},function(m){S._rzDepNames=m;try{lsSet&&lsSet('ts_rz_depnames',m);}catch(e){}});
   render();
 };
 // Which fleet aircraft a booking is allocated to — read from the comments / custom fields
@@ -14529,7 +14587,12 @@ function _rzRenderManifest(){
   return h;
 }
 function _rzManSave(){
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_manifest_'+S.rezdyDate,value:JSON.stringify({pax:S._rzManPax||[],pic:S._rzManPic||{},coPic:S._rzManCoPic||{},fuel:S._rzManFuel||{},hidden:S._rzManHidden||[],seats:S._rzManSeats||{},cargo:S._rzManCargo||{},depMerge:S._rzManDepMerge||{}})}]).catch(function(){});
+  var ds=S.rezdyDate;
+  var payload={pax:S._rzManPax||[],pic:S._rzManPic||{},coPic:S._rzManCoPic||{},fuel:S._rzManFuel||{},hidden:S._rzManHidden||[],seats:S._rzManSeats||{},cargo:S._rzManCargo||{},depMerge:S._rzManDepMerge||{}};
+  if(typeof sbMergeSave==='function')sbMergeSave('rz_manifest_'+ds,payload,function(m){
+    if(S.rezdyDate!==ds)return; // date changed mid-save — don't write the old day onto the new one
+    S._rzManPax=m.pax||[];S._rzManPic=m.pic||{};S._rzManCoPic=m.coPic||{};S._rzManFuel=m.fuel||{};S._rzManHidden=m.hidden||[];S._rzManSeats=m.seats||{};S._rzManCargo=m.cargo||{};S._rzManDepMerge=m.depMerge||{};
+  });
   _rzManBroadcast();
 }
 // Live editing: tell other devices the manifest for this date changed so they reload it.
@@ -14566,6 +14629,7 @@ window.rezdyReloadManifestLive=function(){
       S._rzManSeats=(v.seats&&typeof v.seats==='object')?v.seats:{};
       S._rzManCargo=(v.cargo&&typeof v.cargo==='object')?v.cargo:{};
       S._rzManDepMerge=(v.depMerge&&typeof v.depMerge==='object')?v.depMerge:{};
+      if(typeof _sbSetBase==='function')_sbSetBase('rz_manifest_'+S.rezdyDate,{pax:S._rzManPax,pic:S._rzManPic,coPic:S._rzManCoPic,fuel:S._rzManFuel,hidden:S._rzManHidden,seats:S._rzManSeats,cargo:S._rzManCargo,depMerge:S._rzManDepMerge});
       if(typeof safeRender==='function')safeRender();
     }
   }).catch(function(){});}catch(e){}
@@ -14584,6 +14648,8 @@ window.rezdyLoadManifest=async function(){
       S._rzManDepMerge=(v&&v.depMerge&&typeof v.depMerge==='object')?v.depMerge:{};
     }
     else{S._rzManPax=[];S._rzManPic={};S._rzManCoPic={};S._rzManFuel={};S._rzManHidden=[];S._rzManSeats={};S._rzManCargo={};S._rzManDepMerge={};}
+    // Capture the as-loaded baseline so the first save merges (doesn't clobber a concurrent edit).
+    if(typeof _sbSetBase==='function')_sbSetBase('rz_manifest_'+S.rezdyDate,{pax:S._rzManPax,pic:S._rzManPic,coPic:S._rzManCoPic,fuel:S._rzManFuel,hidden:S._rzManHidden,seats:S._rzManSeats,cargo:S._rzManCargo,depMerge:S._rzManDepMerge});
   }catch(e){S._rzManPax=S._rzManPax||[];S._rzManPic=S._rzManPic||{};S._rzManFuel=S._rzManFuel||{};S._rzManHidden=S._rzManHidden||[];S._rzManSeats=S._rzManSeats||{};S._rzManCargo=S._rzManCargo||{};S._rzManDepMerge=S._rzManDepMerge||{};}
   S._rzManLoaded=true;render();
 };
@@ -16115,7 +16181,7 @@ window.loadFlightDuty=async function(){
     if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.user_id+'|'+r.fd_date]={ds:r.duty_start||'',de:r.duty_end||'',ft:r.flight_time||0,lc:r.ldg_c208||0,lg:r.ldg_ga8||0,ext:!!r.extended,ov:!!r.override,ovr:r.override_reason||'',note:r.note||'',by:r.updated_by||'',at:r.updated_at||''};});S._fdData=d;try{lsSet&&lsSet('ts_flightduty_cache',d);}catch(e){}}
     var certs=await sbF('ts_fd_certs',_scope,'certified_at');
     if(Array.isArray(certs)){var cc={};certs.forEach(function(r){cc[r.user_id+'|'+r.period]={at:r.certified_at,by:r.certified_by||''};});S._fdCerts=cc;}
-    fetch(SB+'/rest/v1/ts_settings?key=eq.fd_limits&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value)S._fdLimits=JSON.parse(s[0].value);}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});
+    fetch(SB+'/rest/v1/ts_settings?key=eq.fd_limits&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value){S._fdLimits=JSON.parse(s[0].value);if(typeof _sbSetBase==='function')_sbSetBase('fd_limits',S._fdLimits);}}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});
   }catch(e){}
   if(typeof safeRender==='function')safeRender();
 };
@@ -16123,7 +16189,7 @@ window.loadFlightDuty=async function(){
 window.fdSetLimit=function(key,field,value){
   S._fdLimits=S._fdLimits||{};S._fdLimits[key]=S._fdLimits[key]||{};
   S._fdLimits[key][field]=(value===''||value==null||isNaN(+value))?'':(+value); // NaN → revert to default
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'fd_limits',value:JSON.stringify(S._fdLimits)}]).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('fd_limits',S._fdLimits||{},function(m){S._fdLimits=m;});
   if(typeof safeRender==='function')safeRender();
 };
 
@@ -16486,7 +16552,7 @@ function _frOpenFlight(uid){var rows=_frRows(uid);for(var i=rows.length-1;i>=0;i
 window.loadFlightRecords=async function(){
   try{var c=lsGet&&lsGet('ts_flight_records_cache');if(c&&typeof c==='object')S._frData=c;}catch(e){}
   // settings (adjustment + products)
-  try{if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_settings?key=eq.fr_settings&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value)S._frSettings=JSON.parse(s[0].value);}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});}catch(e){}
+  try{if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_settings?key=eq.fr_settings&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value){S._frSettings=JSON.parse(s[0].value);if(typeof _sbSetBase==='function')_sbSetBase('fr_settings',S._frSettings);}}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});}catch(e){}
   if(typeof sbF!=='function'){if(typeof render==='function')render();return;}
   try{
     // Pull ALL records (not just this pilot) so the per-aircraft Today's Record shows every PIC's
@@ -16501,7 +16567,7 @@ function _frSave(rec){
   try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}
   if(typeof sbU==='function')sbU('ts_flight_records',[{id:rec.id,user_id:rec.user_id,fr_date:rec.fr_date,aircraft:rec.aircraft||null,actype:rec.type||null,product:rec.product||null,route_from:rec.from||null,route_to:rec.to||null,pob:+rec.pob||0,off_blocks:rec.off||null,on_blocks:rec.on||null,start_hours:rec.startHours!=null?+rec.startHours:null,end_hours:rec.endHours!=null?+rec.endHours:null,flight_time:rec.flightTime!=null?+rec.flightTime:null,tacho:rec.tacho!=null?+rec.tacho:null,landings:+rec.landings||1,starts:+rec.starts||1,pic_name:rec.picName||null,copilot:rec.copilot||null,details:rec.details||null,manual:!!rec.manual,note:rec.note||null,done:!!rec.done,submitted:!!rec.submitted,submitted_by:rec.submittedBy||null,updated_at:new Date().toISOString(),updated_by:(S.user&&S.user.name)||''}]).catch(function(){});
 }
-function _frSaveSettings(){if(typeof sbU==='function')sbU('ts_settings',[{key:'fr_settings',value:JSON.stringify(S._frSettings||{})}]).catch(function(){});}
+function _frSaveSettings(){if(typeof sbMergeSave==='function')sbMergeSave('fr_settings',S._frSettings||{},function(m){S._frSettings=m;});}
 
 // ── auto-detect the pilot's flights today from the calendar ──
 function _frPilotCode(u){var cr=(typeof _crewForUser==='function')?_crewForUser(u):null;return (cr&&cr.code)||'';}

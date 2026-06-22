@@ -169,11 +169,11 @@ window.saveCharterQuote=function(){
     const wh=parseFloat(leg.waitHrs)||0;
     totalCost+=lc+Math.max(0,wh-1)*waitRate;
   });
-  const quote={legs:JSON.parse(JSON.stringify(legs)),totalCost,savedAt:new Date().toISOString()};
+  const quote={id:'q_'+Date.now()+'_'+Math.floor(Math.random()*1e4),legs:JSON.parse(JSON.stringify(legs)),totalCost,savedAt:new Date().toISOString()};
   const quotes=lsGet('ts_charter_quotes_cache')||[];
   quotes.unshift(quote);
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
+  sbMergeSave('charter_quotes',quotes,function(m){lsSet('ts_charter_quotes_cache',m);}).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   toast('Quote saved ✓','ok');
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
@@ -190,7 +190,7 @@ window.deleteCharterQuote=function(idx){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
   quotes.splice(idx,1);
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
+  sbMergeSave('charter_quotes',quotes,function(m){lsSet('ts_charter_quotes_cache',m);}).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
@@ -200,7 +200,7 @@ window.renameCharterQuote=function(qi,newName){
   if(quotes[qi].name===newName)return;
   quotes[qi].name=newName;
   lsSet('ts_charter_quotes_cache',quotes);
-  sbU('ts_settings',[{key:'charter_quotes',value:JSON.stringify(quotes)}]).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
+  sbMergeSave('charter_quotes',quotes,function(m){lsSet('ts_charter_quotes_cache',m);}).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
 };
 

@@ -43,7 +43,7 @@ function _frOpenFlight(uid){var rows=_frRows(uid);for(var i=rows.length-1;i>=0;i
 window.loadFlightRecords=async function(){
   try{var c=lsGet&&lsGet('ts_flight_records_cache');if(c&&typeof c==='object')S._frData=c;}catch(e){}
   // settings (adjustment + products)
-  try{if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_settings?key=eq.fr_settings&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value)S._frSettings=JSON.parse(s[0].value);}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});}catch(e){}
+  try{if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_settings?key=eq.fr_settings&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value){S._frSettings=JSON.parse(s[0].value);if(typeof _sbSetBase==='function')_sbSetBase('fr_settings',S._frSettings);}}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});}catch(e){}
   if(typeof sbF!=='function'){if(typeof render==='function')render();return;}
   try{
     // Pull ALL records (not just this pilot) so the per-aircraft Today's Record shows every PIC's
@@ -58,7 +58,7 @@ function _frSave(rec){
   try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}
   if(typeof sbU==='function')sbU('ts_flight_records',[{id:rec.id,user_id:rec.user_id,fr_date:rec.fr_date,aircraft:rec.aircraft||null,actype:rec.type||null,product:rec.product||null,route_from:rec.from||null,route_to:rec.to||null,pob:+rec.pob||0,off_blocks:rec.off||null,on_blocks:rec.on||null,start_hours:rec.startHours!=null?+rec.startHours:null,end_hours:rec.endHours!=null?+rec.endHours:null,flight_time:rec.flightTime!=null?+rec.flightTime:null,tacho:rec.tacho!=null?+rec.tacho:null,landings:+rec.landings||1,starts:+rec.starts||1,pic_name:rec.picName||null,copilot:rec.copilot||null,details:rec.details||null,manual:!!rec.manual,note:rec.note||null,done:!!rec.done,submitted:!!rec.submitted,submitted_by:rec.submittedBy||null,updated_at:new Date().toISOString(),updated_by:(S.user&&S.user.name)||''}]).catch(function(){});
 }
-function _frSaveSettings(){if(typeof sbU==='function')sbU('ts_settings',[{key:'fr_settings',value:JSON.stringify(S._frSettings||{})}]).catch(function(){});}
+function _frSaveSettings(){if(typeof sbMergeSave==='function')sbMergeSave('fr_settings',S._frSettings||{},function(m){S._frSettings=m;});}
 
 // ── auto-detect the pilot's flights today from the calendar ──
 function _frPilotCode(u){var cr=(typeof _crewForUser==='function')?_crewForUser(u):null;return (cr&&cr.code)||'';}

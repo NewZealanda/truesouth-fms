@@ -110,13 +110,13 @@ function renderMaintObservations(){
 window.loadMaintObs=async function(){
   try{
     var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.aircraft_obs&select=value',{headers:SH});
-    if(r.ok){var rows=await r.json();if(rows&&rows[0]&&rows[0].value){S.maintObs=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;lsSet('ts_aircraft_obs',S.maintObs);safeRender();return;}}
+    if(r.ok){var rows=await r.json();if(rows&&rows[0]&&rows[0].value){S.maintObs=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;lsSet('ts_aircraft_obs',S.maintObs);if(typeof _sbSetBase==='function')_sbSetBase('aircraft_obs',S.maintObs);safeRender();return;}}
   }catch(e){}
   var c=lsGet('ts_aircraft_obs');if(c){S.maintObs=c;safeRender();}
 };
 function _saveMaintObs(){
   lsSet('ts_aircraft_obs',S.maintObs||{});
-  sbU('ts_settings',[{key:'aircraft_obs',value:JSON.stringify(S.maintObs||{})}]).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('aircraft_obs',S.maintObs||{},function(m){S.maintObs=m;try{lsSet&&lsSet('ts_aircraft_obs',m);}catch(e){}});
 }
 // Defense-in-depth: gate maintenance writes (the UI hides the controls; this stops
 // console/edge-case writes too).

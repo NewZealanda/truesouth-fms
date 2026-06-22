@@ -35,7 +35,7 @@ function _rzVehicles(){
 }
 function _rzVehSave(){
   try{if(typeof lsSet==='function')lsSet('ts_rz_vehicles',S._rzVehicles||[]);}catch(e){}
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_vehicles',value:JSON.stringify(S._rzVehicles||[])}]).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('rz_vehicles',S._rzVehicles||[],function(m){S._rzVehicles=m;try{lsSet&&lsSet('ts_rz_vehicles',m);}catch(e){}});
 }
 function _rzVehLoad(){
   try{fetch(SB+'/rest/v1/ts_settings?key=eq.rz_vehicles&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
@@ -186,7 +186,7 @@ function _rzProdFuelKg(code,acId){var a=_acSpec(acId);if(!a)return null;var c=_r
 function _rzProdBurnDisp(code,acId){var a=_acSpec(acId);if(!a)return null;var c=_rzEffCfg(code);var u=(a.layout==='ga8')?c.av:c.cv;if(u&&u.burn!=null)return u.burn;return null;}
 function _rzFuelOvSave(){
   try{if(typeof lsSet==='function')lsSet('ts_rz_fuel_ov',S._rzFuelOv||{});}catch(e){}
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_fuel_ov',value:JSON.stringify(S._rzFuelOv||{})}]).then(function(r){if(r===null&&typeof toast==='function')toast('Fuel defaults did not save to the server — check connection.','warn');}).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('rz_fuel_ov',S._rzFuelOv||{},function(m){S._rzFuelOv=m;try{lsSet&&lsSet('ts_rz_fuel_ov',m);}catch(e){}}).then(function(r){if(r===null&&typeof toast==='function')toast('Fuel defaults did not save to the server — check connection.','warn');});
 }
 function _rzFuelOvLoad(){
   try{var cch=lsGet('ts_rz_fuel_ov');if(cch&&typeof cch==='object')S._rzFuelOv=cch;}catch(e){}
@@ -274,7 +274,7 @@ function _rzPickupLocsLoad(){
 }
 function _rzPickupLocsSave(silent){
   try{if(typeof lsSet==='function')lsSet('ts_rz_pickup_locs',S._rzPickupLocs||[]);}catch(e){}
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_pickup_locs',value:JSON.stringify(S._rzPickupLocs||[])}]).then(function(r){if(r===null&&!silent&&typeof toast==='function')toast('Pickup locations did not save to the server — check connection.','warn');}).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('rz_pickup_locs',S._rzPickupLocs||[],function(m){S._rzPickupLocs=m;try{lsSet&&lsSet('ts_rz_pickup_locs',m);}catch(e){}}).then(function(r){if(r===null&&!silent&&typeof toast==='function')toast('Pickup locations did not save to the server — check connection.','warn');});
 }
 window.rezdyPickupLocSet=function(i,field,val){
   if(!Array.isArray(S._rzPickupLocs))return;var o=S._rzPickupLocs[i];if(!o)return;
@@ -357,7 +357,7 @@ window.rezdyRenameDep=function(dep){
   S._rzDepNames=S._rzDepNames||{};
   if(!v||v===_def)delete S._rzDepNames[dep];else S._rzDepNames[dep]=v;
   try{if(typeof lsSet==='function')lsSet('ts_rz_depnames',S._rzDepNames);}catch(e){}
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_depnames',value:JSON.stringify(S._rzDepNames)}]).catch(function(){});
+  if(typeof sbMergeSave==='function')sbMergeSave('rz_depnames',S._rzDepNames||{},function(m){S._rzDepNames=m;try{lsSet&&lsSet('ts_rz_depnames',m);}catch(e){}});
   render();
 };
 // Which fleet aircraft a booking is allocated to — read from the comments / custom fields
@@ -2617,7 +2617,12 @@ function _rzRenderManifest(){
   return h;
 }
 function _rzManSave(){
-  if(typeof sbU==='function')sbU('ts_settings',[{key:'rz_manifest_'+S.rezdyDate,value:JSON.stringify({pax:S._rzManPax||[],pic:S._rzManPic||{},coPic:S._rzManCoPic||{},fuel:S._rzManFuel||{},hidden:S._rzManHidden||[],seats:S._rzManSeats||{},cargo:S._rzManCargo||{},depMerge:S._rzManDepMerge||{}})}]).catch(function(){});
+  var ds=S.rezdyDate;
+  var payload={pax:S._rzManPax||[],pic:S._rzManPic||{},coPic:S._rzManCoPic||{},fuel:S._rzManFuel||{},hidden:S._rzManHidden||[],seats:S._rzManSeats||{},cargo:S._rzManCargo||{},depMerge:S._rzManDepMerge||{}};
+  if(typeof sbMergeSave==='function')sbMergeSave('rz_manifest_'+ds,payload,function(m){
+    if(S.rezdyDate!==ds)return; // date changed mid-save — don't write the old day onto the new one
+    S._rzManPax=m.pax||[];S._rzManPic=m.pic||{};S._rzManCoPic=m.coPic||{};S._rzManFuel=m.fuel||{};S._rzManHidden=m.hidden||[];S._rzManSeats=m.seats||{};S._rzManCargo=m.cargo||{};S._rzManDepMerge=m.depMerge||{};
+  });
   _rzManBroadcast();
 }
 // Live editing: tell other devices the manifest for this date changed so they reload it.
@@ -2654,6 +2659,7 @@ window.rezdyReloadManifestLive=function(){
       S._rzManSeats=(v.seats&&typeof v.seats==='object')?v.seats:{};
       S._rzManCargo=(v.cargo&&typeof v.cargo==='object')?v.cargo:{};
       S._rzManDepMerge=(v.depMerge&&typeof v.depMerge==='object')?v.depMerge:{};
+      if(typeof _sbSetBase==='function')_sbSetBase('rz_manifest_'+S.rezdyDate,{pax:S._rzManPax,pic:S._rzManPic,coPic:S._rzManCoPic,fuel:S._rzManFuel,hidden:S._rzManHidden,seats:S._rzManSeats,cargo:S._rzManCargo,depMerge:S._rzManDepMerge});
       if(typeof safeRender==='function')safeRender();
     }
   }).catch(function(){});}catch(e){}
@@ -2672,6 +2678,8 @@ window.rezdyLoadManifest=async function(){
       S._rzManDepMerge=(v&&v.depMerge&&typeof v.depMerge==='object')?v.depMerge:{};
     }
     else{S._rzManPax=[];S._rzManPic={};S._rzManCoPic={};S._rzManFuel={};S._rzManHidden=[];S._rzManSeats={};S._rzManCargo={};S._rzManDepMerge={};}
+    // Capture the as-loaded baseline so the first save merges (doesn't clobber a concurrent edit).
+    if(typeof _sbSetBase==='function')_sbSetBase('rz_manifest_'+S.rezdyDate,{pax:S._rzManPax,pic:S._rzManPic,coPic:S._rzManCoPic,fuel:S._rzManFuel,hidden:S._rzManHidden,seats:S._rzManSeats,cargo:S._rzManCargo,depMerge:S._rzManDepMerge});
   }catch(e){S._rzManPax=S._rzManPax||[];S._rzManPic=S._rzManPic||{};S._rzManFuel=S._rzManFuel||{};S._rzManHidden=S._rzManHidden||[];S._rzManSeats=S._rzManSeats||{};S._rzManCargo=S._rzManCargo||{};S._rzManDepMerge=S._rzManDepMerge||{};}
   S._rzManLoaded=true;render();
 };
