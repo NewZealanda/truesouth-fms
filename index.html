@@ -743,7 +743,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.02';
+const APP_VER='v25.03';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1825,7 +1825,7 @@ async function loadAll(){
   if(S.user?.superAdmin){
     (async()=>{try{
       const r=await fetch(SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit=50',{
-        headers:{'apikey':SK,'Authorization':'Bearer '+SK}
+        headers:SH  // use the user JWT (SH), not the anon key, so RLS lets the audit history load
       });
       if(!r.ok) return;
       const rows=await r.json();
@@ -2722,7 +2722,7 @@ async function _doLogin(emailArg,passArg){
   if(u.superAdmin){
     (async()=>{try{
       const r=await fetch(SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit=50',{
-        headers:{'apikey':SK,'Authorization':'Bearer '+SK}
+        headers:SH  // use the user JWT (SH), not the anon key, so RLS lets the audit history load
       });
       if(!r.ok) return;
       const rows=await r.json();
@@ -6796,7 +6796,7 @@ window.bulkDeleteSaved=async function(){
   lsSet('ts_loadsheets_cache',S.saved);
   lsSet('ts_manifests_cache',S.manifests);
   S.savedSel={};render();
-  for(var i=0;i<lsIds.length;i++){var s2=S.saved.find(function(x){return x.id===lsIds[i];});if(s2)await sbU('ts_loadsheets',[{id:s2.id,form:s2.form,saved_at:s2.savedAt,status:'deleted'}]).catch(function(){});}
+  for(var i=0;i<lsIds.length;i++){var s2=S.saved.find(function(x){return x.id===lsIds[i];});if(s2)await sbU('ts_loadsheets',[{id:s2.id,form:s2.form,saved_at:s2.savedAt,status:'deleted',drive_uploaded:!!s2.driveUploaded}]).catch(function(){});}
   for(var j=0;j<mIds.length;j++){var m2=S.manifests.find(function(x){return x.id===mIds[j];});if(m2)await sbU('ts_manifests',[{id:m2.id,name:m2.name,data:m2.data,saved_at:m2.savedAt}]).catch(function(){});}
 };
 window.bulkUploadSaved=async function(){
@@ -7672,10 +7672,10 @@ window.openSelectedSaved=function(){
   window.scrollTo(0,0);render();
   toast('Opened '+(nLs+nMf)+' item'+((nLs+nMf)!==1?'s':''),'ok');
 };
-window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted'}]);};
+window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]);};
 window.restoreFromBin=async function(id){
   var s=S.saved.find(function(x){return x.id===id;});
-  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status}]);return;}
+  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status,drive_uploaded:!!s.driveUploaded}]);return;}
   var m=S.manifests.find(function(x){return x.id===id;});
   if(m){if(m.data)delete m.data._deleted;m._deleted=false;lsSet('ts_manifests_cache',S.manifests);render();await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);}
 };
@@ -13450,7 +13450,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -15872,6 +15872,7 @@ window.schedDeleteBlock=async function(){
   const ed=S._schedEdit;if(!ed||!ed.id)return;
   if(!confirm('Delete this schedule block?'))return;
   const ok=await sbDel('ts_schedule',ed.id);
+  if(ok&&S._schedPilots&&S._schedPilots[ed.id]){delete S._schedPilots[ed.id];if(window.pickupSave)window.pickupSave(true);} // don't orphan the block's pilot in the pickup blob
   S._schedEdit=null;
   if(ok){toast('Block deleted','ok');await window.rezdyLoadSchedule();_rzSchedBroadcast();}
   else{toast('Delete failed','err');render();}
@@ -16576,7 +16577,7 @@ window.frUseFlight=function(ac,prod,from,to,pob,manual){
   S._frDraft={ac:ac||'',product:prod||'',from:from||'',to:to||'',pob:(pob!=null?+pob:1),startHours:(hrs!=null?hrs:''),manual:!!manual};
   render();
 };
-window.frDraftSet=function(field,value){S._frDraft=S._frDraft||{};S._frDraft[field]=(field==='pob'||field==='startHours')?value:value;render();};
+window.frDraftSet=function(field,value){S._frDraft=S._frDraft||{};S._frDraft[field]=(field==='pob')?Math.max(0,Math.round(+value)||0):value;render();};
 window.frDraftPob=function(delta){S._frDraft=S._frDraft||{};var v=(+S._frDraft.pob||0)+delta;if(v<0)v=0;S._frDraft.pob=v;render();};
 window.frDraftHours=function(delta){S._frDraft=S._frDraft||{};var v=(parseFloat(S._frDraft.startHours)||0)+delta;v=Math.round(v*10)/10;if(v<0)v=0;S._frDraft.startHours=v;render();};
 window.frOffBlocks=function(){
@@ -16620,7 +16621,7 @@ window.frEditDeleteConfirm=function(id){var r=(S._frData||{})[id];if(!r){S._frDe
   delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}
   if(typeof sbDel==='function')sbDel('ts_flight_records',id);else if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});
   S._frDelConfirm=null;S._frEditId=null;if(typeof toast==='function')toast('Flight deleted','ok');render();};
-window.frCancelFlight=function(id){if(typeof confirm==='function'&&!confirm('Discard this flight record?'))return;var r=(S._frData||{})[id];if(r){delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}if(typeof sbU!=='undefined'&&typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});}render();};
+window.frCancelFlight=function(id){if(typeof confirm==='function'&&!confirm('Discard this flight record?'))return;var r=(S._frData||{})[id];if(r){delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}if(typeof sbDel==='function')sbDel('ts_flight_records',id);else if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});}render();};
 window.frSetAdj=function(val){S._frSettings=S._frSettings||{};S._frSettings.adj=(val===''?1:Math.max(0,Math.round(+val)));_frSaveSettings();if(typeof safeRender==='function')safeRender();};
 window.frToggleSettings=function(){S._frSettingsOpen=!S._frSettingsOpen;render();};
 
@@ -16775,8 +16776,15 @@ window.frSubmitAircraft=function(ac){
 // entered are preserved (fdSaveRow merges). Loads F&D first so an existing row isn't wiped.
 function _frPushToFD(date,uids){
   if(typeof window.fdSaveRow!=='function'||!uids||!uids.length)return Promise.resolve();
+  // SAFETY: fdSaveRow does a full-row UPSERT, so writing a pilot's row without first holding their
+  // existing row would null their duty start/end. Managers load EVERY pilot's rows; non-managers
+  // load only their own. So only push rows we can safely merge: all if manager, else just the actor.
+  var canAll=(typeof _fdCanManage==='function'&&_fdCanManage());
+  var me=(S.user&&S.user.id)||'';
+  var targets=canAll?uids.slice():uids.filter(function(u){return u===me;});
+  if(!targets.length)return Promise.resolve();
   var doPush=function(){
-    uids.forEach(function(uid){
+    targets.forEach(function(uid){
       var ft=0,lc=0,lg=0;
       Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];
         if(!r||r.fr_date!==date||r.user_id!==uid||!r.done)return;
@@ -16787,8 +16795,9 @@ function _frPushToFD(date,uids){
       window.fdSaveRow(uid,date,{ft:Math.round(ft*10)/10,lc:lc,lg:lg});
     });
   };
-  // Ensure existing F&D rows are loaded (so duty times survive the merge), then push.
-  if(!S._fdData&&typeof window.loadFlightDuty==='function'){return Promise.resolve(window.loadFlightDuty()).then(doPush);}
+  // Always re-load F&D first so we hold each target's latest row (duty times survive the merge,
+  // and we don't race a row another device just created).
+  if(typeof window.loadFlightDuty==='function')return Promise.resolve(window.loadFlightDuty()).then(doPush);
   doPush();return Promise.resolve();
 }
 function _frRenderEdit(r){

@@ -412,7 +412,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.02';
+const APP_VER='v25.03';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1494,7 +1494,7 @@ async function loadAll(){
   if(S.user?.superAdmin){
     (async()=>{try{
       const r=await fetch(SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit=50',{
-        headers:{'apikey':SK,'Authorization':'Bearer '+SK}
+        headers:SH  // use the user JWT (SH), not the anon key, so RLS lets the audit history load
       });
       if(!r.ok) return;
       const rows=await r.json();
@@ -2391,7 +2391,7 @@ async function _doLogin(emailArg,passArg){
   if(u.superAdmin){
     (async()=>{try{
       const r=await fetch(SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit=50',{
-        headers:{'apikey':SK,'Authorization':'Bearer '+SK}
+        headers:SH  // use the user JWT (SH), not the anon key, so RLS lets the audit history load
       });
       if(!r.ok) return;
       const rows=await r.json();

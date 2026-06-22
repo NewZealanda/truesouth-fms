@@ -1311,7 +1311,7 @@ window.bulkDeleteSaved=async function(){
   lsSet('ts_loadsheets_cache',S.saved);
   lsSet('ts_manifests_cache',S.manifests);
   S.savedSel={};render();
-  for(var i=0;i<lsIds.length;i++){var s2=S.saved.find(function(x){return x.id===lsIds[i];});if(s2)await sbU('ts_loadsheets',[{id:s2.id,form:s2.form,saved_at:s2.savedAt,status:'deleted'}]).catch(function(){});}
+  for(var i=0;i<lsIds.length;i++){var s2=S.saved.find(function(x){return x.id===lsIds[i];});if(s2)await sbU('ts_loadsheets',[{id:s2.id,form:s2.form,saved_at:s2.savedAt,status:'deleted',drive_uploaded:!!s2.driveUploaded}]).catch(function(){});}
   for(var j=0;j<mIds.length;j++){var m2=S.manifests.find(function(x){return x.id===mIds[j];});if(m2)await sbU('ts_manifests',[{id:m2.id,name:m2.name,data:m2.data,saved_at:m2.savedAt}]).catch(function(){});}
 };
 window.bulkUploadSaved=async function(){
@@ -2187,10 +2187,10 @@ window.openSelectedSaved=function(){
   window.scrollTo(0,0);render();
   toast('Opened '+(nLs+nMf)+' item'+((nLs+nMf)!==1?'s':''),'ok');
 };
-window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted'}]);};
+window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]);};
 window.restoreFromBin=async function(id){
   var s=S.saved.find(function(x){return x.id===id;});
-  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status}]);return;}
+  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status,drive_uploaded:!!s.driveUploaded}]);return;}
   var m=S.manifests.find(function(x){return x.id===id;});
   if(m){if(m.data)delete m.data._deleted;m._deleted=false;lsSet('ts_manifests_cache',S.manifests);render();await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);}
 };

@@ -134,7 +134,7 @@ window.frUseFlight=function(ac,prod,from,to,pob,manual){
   S._frDraft={ac:ac||'',product:prod||'',from:from||'',to:to||'',pob:(pob!=null?+pob:1),startHours:(hrs!=null?hrs:''),manual:!!manual};
   render();
 };
-window.frDraftSet=function(field,value){S._frDraft=S._frDraft||{};S._frDraft[field]=(field==='pob'||field==='startHours')?value:value;render();};
+window.frDraftSet=function(field,value){S._frDraft=S._frDraft||{};S._frDraft[field]=(field==='pob')?Math.max(0,Math.round(+value)||0):value;render();};
 window.frDraftPob=function(delta){S._frDraft=S._frDraft||{};var v=(+S._frDraft.pob||0)+delta;if(v<0)v=0;S._frDraft.pob=v;render();};
 window.frDraftHours=function(delta){S._frDraft=S._frDraft||{};var v=(parseFloat(S._frDraft.startHours)||0)+delta;v=Math.round(v*10)/10;if(v<0)v=0;S._frDraft.startHours=v;render();};
 window.frOffBlocks=function(){
@@ -178,7 +178,7 @@ window.frEditDeleteConfirm=function(id){var r=(S._frData||{})[id];if(!r){S._frDe
   delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}
   if(typeof sbDel==='function')sbDel('ts_flight_records',id);else if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});
   S._frDelConfirm=null;S._frEditId=null;if(typeof toast==='function')toast('Flight deleted','ok');render();};
-window.frCancelFlight=function(id){if(typeof confirm==='function'&&!confirm('Discard this flight record?'))return;var r=(S._frData||{})[id];if(r){delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}if(typeof sbU!=='undefined'&&typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});}render();};
+window.frCancelFlight=function(id){if(typeof confirm==='function'&&!confirm('Discard this flight record?'))return;var r=(S._frData||{})[id];if(r){delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}if(typeof sbDel==='function')sbDel('ts_flight_records',id);else if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});}render();};
 window.frSetAdj=function(val){S._frSettings=S._frSettings||{};S._frSettings.adj=(val===''?1:Math.max(0,Math.round(+val)));_frSaveSettings();if(typeof safeRender==='function')safeRender();};
 window.frToggleSettings=function(){S._frSettingsOpen=!S._frSettingsOpen;render();};
 
@@ -333,8 +333,15 @@ window.frSubmitAircraft=function(ac){
 // entered are preserved (fdSaveRow merges). Loads F&D first so an existing row isn't wiped.
 function _frPushToFD(date,uids){
   if(typeof window.fdSaveRow!=='function'||!uids||!uids.length)return Promise.resolve();
+  // SAFETY: fdSaveRow does a full-row UPSERT, so writing a pilot's row without first holding their
+  // existing row would null their duty start/end. Managers load EVERY pilot's rows; non-managers
+  // load only their own. So only push rows we can safely merge: all if manager, else just the actor.
+  var canAll=(typeof _fdCanManage==='function'&&_fdCanManage());
+  var me=(S.user&&S.user.id)||'';
+  var targets=canAll?uids.slice():uids.filter(function(u){return u===me;});
+  if(!targets.length)return Promise.resolve();
   var doPush=function(){
-    uids.forEach(function(uid){
+    targets.forEach(function(uid){
       var ft=0,lc=0,lg=0;
       Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];
         if(!r||r.fr_date!==date||r.user_id!==uid||!r.done)return;
@@ -345,8 +352,9 @@ function _frPushToFD(date,uids){
       window.fdSaveRow(uid,date,{ft:Math.round(ft*10)/10,lc:lc,lg:lg});
     });
   };
-  // Ensure existing F&D rows are loaded (so duty times survive the merge), then push.
-  if(!S._fdData&&typeof window.loadFlightDuty==='function'){return Promise.resolve(window.loadFlightDuty()).then(doPush);}
+  // Always re-load F&D first so we hold each target's latest row (duty times survive the merge,
+  // and we don't race a row another device just created).
+  if(typeof window.loadFlightDuty==='function')return Promise.resolve(window.loadFlightDuty()).then(doPush);
   doPush();return Promise.resolve();
 }
 function _frRenderEdit(r){

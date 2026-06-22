@@ -1538,7 +1538,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -3960,6 +3960,7 @@ window.schedDeleteBlock=async function(){
   const ed=S._schedEdit;if(!ed||!ed.id)return;
   if(!confirm('Delete this schedule block?'))return;
   const ok=await sbDel('ts_schedule',ed.id);
+  if(ok&&S._schedPilots&&S._schedPilots[ed.id]){delete S._schedPilots[ed.id];if(window.pickupSave)window.pickupSave(true);} // don't orphan the block's pilot in the pickup blob
   S._schedEdit=null;
   if(ok){toast('Block deleted','ok');await window.rezdyLoadSchedule();_rzSchedBroadcast();}
   else{toast('Delete failed','err');render();}
