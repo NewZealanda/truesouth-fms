@@ -8,7 +8,7 @@
 //  NOTE: persistence needs the ts_flight_records table — see flight_record.sql.
 // ─────────────────────────────────────────────────────────────────────────────
 
-var FR_PRODUCTS_DEFAULT=['FCF','THH','FJHH','MCHS','STT','Ferry','Maintenance','Training','Private Hire'];
+var FR_PRODUCTS_DEFAULT=['FCF','MFOH','THH','FJHH','MCHS','STT','Ferry','Maintenance','Training','Private Hire'];
 var FR_LOCS_DEFAULT=['QN','MF','MC','FJ','WF'];
 
 function _frToday(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}

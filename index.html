@@ -797,7 +797,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.07';
+const APP_VER='v25.08';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16221,8 +16221,9 @@ window.loadFlightDuty=async function(){
   try{var c=lsGet&&lsGet('ts_flightduty_cache');if(c&&typeof c==='object')S._fdData=c;}catch(e){}
   if(typeof sbF!=='function'){if(typeof render==='function')render();return;}
   try{
-    // non-managers only pull their own rows (defence-in-depth alongside RLS)
-    var _scope=_fdCanManage()?'':'&user_id=eq.'+encodeURIComponent((S.user&&S.user.id)||'');
+    // Load ALL pilots' rows so the Team Summary (rostering view, shown to every pilot) populates —
+    // not just the signed-in pilot's. RLS still governs server-side access.
+    var _scope='';
     var rows=await sbF('ts_flightduty',_scope,'fd_date');
     if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.user_id+'|'+r.fd_date]={ds:r.duty_start||'',de:r.duty_end||'',ft:r.flight_time||0,lc:r.ldg_c208||0,lg:r.ldg_ga8||0,ext:!!r.extended,ov:!!r.override,ovr:r.override_reason||'',note:r.note||'',by:r.updated_by||'',at:r.updated_at||''};});S._fdData=d;try{lsSet&&lsSet('ts_flightduty_cache',d);}catch(e){}}
     var certs=await sbF('ts_fd_certs',_scope,'certified_at');
@@ -16563,7 +16564,7 @@ function _rzEscSafe(s){if(typeof _rzEsc==='function')return _rzEsc(s);if(typeof 
 //  NOTE: persistence needs the ts_flight_records table — see flight_record.sql.
 // ─────────────────────────────────────────────────────────────────────────────
 
-var FR_PRODUCTS_DEFAULT=['FCF','THH','FJHH','MCHS','STT','Ferry','Maintenance','Training','Private Hire'];
+var FR_PRODUCTS_DEFAULT=['FCF','MFOH','THH','FJHH','MCHS','STT','Ferry','Maintenance','Training','Private Hire'];
 var FR_LOCS_DEFAULT=['QN','MF','MC','FJ','WF'];
 
 function _frToday(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}

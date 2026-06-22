@@ -230,8 +230,9 @@ window.loadFlightDuty=async function(){
   try{var c=lsGet&&lsGet('ts_flightduty_cache');if(c&&typeof c==='object')S._fdData=c;}catch(e){}
   if(typeof sbF!=='function'){if(typeof render==='function')render();return;}
   try{
-    // non-managers only pull their own rows (defence-in-depth alongside RLS)
-    var _scope=_fdCanManage()?'':'&user_id=eq.'+encodeURIComponent((S.user&&S.user.id)||'');
+    // Load ALL pilots' rows so the Team Summary (rostering view, shown to every pilot) populates —
+    // not just the signed-in pilot's. RLS still governs server-side access.
+    var _scope='';
     var rows=await sbF('ts_flightduty',_scope,'fd_date');
     if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.user_id+'|'+r.fd_date]={ds:r.duty_start||'',de:r.duty_end||'',ft:r.flight_time||0,lc:r.ldg_c208||0,lg:r.ldg_ga8||0,ext:!!r.extended,ov:!!r.override,ovr:r.override_reason||'',note:r.note||'',by:r.updated_by||'',at:r.updated_at||''};});S._fdData=d;try{lsSet&&lsSet('ts_flightduty_cache',d);}catch(e){}}
     var certs=await sbF('ts_fd_certs',_scope,'certified_at');
