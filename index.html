@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.71';
+const APP_VER='v24.73';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16940,14 +16940,25 @@ function _bizRunCalcView(){
     '</div></div>';
   if(ac){
     var r=_bizFlightCost(ac,hrs,depIdx,destIdx,round);
-    var row=function(lbl,val,strong){return '<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px solid var(--border2)'+(strong?';font-weight:800':'')+'"><span style="color:'+(strong?'var(--text1)':'var(--text2)')+'">'+lbl+'</span><span style="'+(strong?'font-size:17px;color:#f59e0b':'color:var(--text1)')+'">'+_bizPh(val)+'</span></div>';};
-    h+='<div class="card"><div class="st">'+_rzEscSafe(ac.code||'')+' · '+(r.hrs||0)+' hr</div>';
-    h+='<div style="font-size:13px">';
-    h+=row('Flight time — '+(r.hrs||0)+' hr × '+_bizPh(r.runHr)+'/hr <span style="color:var(--text3);font-size:11px">(fuel '+_bizPh(r.fuelHr)+' + maint '+_bizPh(r.maintHr)+')</span>',r.flight);
-    r.stops.forEach(function(s){h+=row('Landing — '+_rzEscSafe(s.name),s.ldg);if(s.conc)h+=row('Concession — '+_rzEscSafe(s.name),s.conc);if(s.aw)h+=row('Airways — '+_rzEscSafe(s.name),s.aw);});
-    h+=row('Total flight cost',r.total,true);
+    // right-side value is a pre-formatted string so we can show "$X / hr", "N hr", money, etc.
+    var row=function(lbl,right,strong,big){return '<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px solid var(--border2)'+(strong?';font-weight:800':'')+'"><span style="color:'+(strong?'var(--text1)':'var(--text2)')+'">'+lbl+'</span><span style="'+(big?'font-size:18px;font-weight:800;color:#f59e0b':strong?'font-weight:800;color:var(--text1)':'color:var(--text1)')+'">'+right+'</span></div>';};
+    // ── Running cost (the aircraft itself) — per hour and for the flight ──
+    h+='<div class="card"><div class="st">Running cost — '+_rzEscSafe(ac.code||'')+' <span style="font-weight:400;font-size:11px;color:var(--text3)">('+_rzEscSafe(ac.type)+', ex GST)</span></div><div style="font-size:13px">';
+    h+=row('Fuel',_bizPh(r.fuelHr)+' <span style="color:var(--text3);font-size:11px">/ hr</span>');
+    h+=row('Maintenance',_bizPh(r.maintHr)+' <span style="color:var(--text3);font-size:11px">/ hr</span>');
+    h+=row('Running cost',_bizPh(r.runHr)+' <span style="color:var(--text3);font-size:11px">/ hr</span>',true);
+    h+=row('Flight time','<span style="color:var(--text1)">'+(r.hrs||0)+' hr</span>');
+    h+=row('Running cost for flight',_bizPh(r.flight),true);
+    h+='</div></div>';
+    // ── Total flight cost — running cost + the per-place charges ──
+    h+='<div class="card"><div class="st">Total flight cost — '+(r.hrs||0)+' hr · lands '+(r.stops.length?r.stops.map(function(s){return _rzEscSafe(s.name);}).join(' + '):'—')+'</div><div style="font-size:13px">';
+    h+=row('Running cost ('+(r.hrs||0)+' hr)',_bizPh(r.flight));
+    r.stops.forEach(function(s){h+=row('Landing — '+_rzEscSafe(s.name),_bizPh(s.ldg));if(s.conc)h+=row('Concession — '+_rzEscSafe(s.name),_bizPh(s.conc));if(s.aw)h+=row('Airways — '+_rzEscSafe(s.name),_bizPh(s.aw));});
+    h+=row('Total (ex GST)',_bizPh(r.total),true);
+    h+=row('GST (15%)',_bizPh(r.total*0.15));
+    h+=row('Total incl GST',_bizPh(r.total*1.15),true,true);
     h+='</div>';
-    h+='<div style="font-size:11px;color:var(--text3);padding:6px 0 0">Lands at '+(r.stops.length?r.stops.map(function(s){return _rzEscSafe(s.name);}).join(' + '):'—')+'. Direct operating cost only (fuel, maintenance + overhaul reserves, landings, airways) — all ex GST. Insurance, finance, pilot &amp; training sit in the P&amp;L.</div>';
+    h+='<div style="font-size:11px;color:var(--text3);padding:6px 0 0">Direct operating cost only (fuel, maintenance + overhaul reserves, landings, concession, airways) — all ex GST. Insurance, finance, pilot &amp; training sit in the P&amp;L.</div>';
     h+='</div>';
   }
   return h;
