@@ -236,6 +236,8 @@ window.lsSeatEditPopup=function(idx){
   var clearEl=document.getElementById('lsSpClear');
   if(clearEl){
     clearEl.onclick=function(){
+      var _nm=(f.names[idx]||'').trim();
+      if(typeof confirm==='function'&&!confirm('Clear '+(_nm?('“'+_nm+'”'):'this passenger')+' from this seat?'))return;
       if(!S._lsFormUndoStack)S._lsFormUndoStack=[];
       S._lsFormUndoStack.push(JSON.parse(JSON.stringify(S.form)));
       if(S._lsFormUndoStack.length>20)S._lsFormUndoStack.shift();

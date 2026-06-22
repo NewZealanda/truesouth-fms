@@ -141,8 +141,8 @@ window.frAdjEndHours=function(id,delta){var r=(S._frData||{})[id];if(!r)return;v
 // at end of day, when the last PIC reviews the per-aircraft record and uploads.
 window.frFinish=function(id){var r=(S._frData||{})[id];if(!r)return;if(r.endHours==null){if(typeof toast==='function')toast('Confirm the TTIS hours first.','warn');return;}r.done=true;_frSave(r);if(typeof toast==='function')toast('Flight saved to Today’s Record ✓','ok');S._frPage='record';S._frRecDate=null;render();};
 // ── editing a recorded flight (via Today's flights) ──
-window.frEdit=function(id){S._frEditId=id;render();};
-window.frEditCancel=function(){S._frEditId=null;render();};
+window.frEdit=function(id){S._frEditId=id;S._frDelConfirm=null;render();};
+window.frEditCancel=function(){S._frEditId=null;S._frDelConfirm=null;render();};
 window.frEditField=function(id,field,val){var r=(S._frData||{})[id];if(!r)return;
   if(field==='pob'||field==='landings'||field==='starts')r[field]=Math.max(0,Math.round(+val)||0);
   else if(field==='startHours'||field==='endHours')r[field]=(val===''?null:Math.round((+val)*10)/10);
@@ -151,6 +151,12 @@ window.frEditField=function(id,field,val){var r=(S._frData||{})[id];if(!r)return
   if(r.endHours!=null&&r.startHours!=null)r.tacho=Math.round((r.endHours-(+r.startHours||0))*10)/10; // TTIS used
   _frSave(r);if(typeof safeRender==='function')safeRender();};
 window.frEditDone=function(id){S._frEditId=null;_frSave((S._frData||{})[id]);if(typeof toast==='function')toast('Updated ✓ (aircraft hours not auto-recalculated)','ok');render();};
+window.frEditDelete=function(id){S._frDelConfirm=id;render();};            // show the in-app confirm screen
+window.frEditDeleteCancel=function(){S._frDelConfirm=null;render();};
+window.frEditDeleteConfirm=function(id){var r=(S._frData||{})[id];if(!r){S._frDelConfirm=null;render();return;}
+  delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}
+  if(typeof sbDel==='function')sbDel('ts_flight_records',id);else if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});
+  S._frDelConfirm=null;S._frEditId=null;if(typeof toast==='function')toast('Flight deleted','ok');render();};
 window.frCancelFlight=function(id){if(typeof confirm==='function'&&!confirm('Discard this flight record?'))return;var r=(S._frData||{})[id];if(r){delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}if(typeof sbU!=='undefined'&&typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});}render();};
 window.frSetAdj=function(val){S._frSettings=S._frSettings||{};S._frSettings.adj=(val===''?1:Math.max(0,Math.round(+val)));_frSaveSettings();if(typeof safeRender==='function')safeRender();};
 window.frToggleSettings=function(){S._frSettingsOpen=!S._frSettingsOpen;render();};
@@ -303,8 +309,20 @@ function _frRenderEdit(r){
     '</div>';
   h+='<div style="font-size:11px;color:var(--text3);margin-top:8px">Flight time (off→on block) <b style="color:var(--text1)">'+(r.flightTime!=null?r.flightTime.toFixed(1):'—')+'h</b> · tacho (TTIS used) <b style="color:var(--text1)">'+(r.tacho!=null?r.tacho.toFixed(1):'—')+'h</b> · type '+_frEsc(_frAcType(r.aircraft))+'</div>';
   h+='<div style="margin-top:10px"><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">Notes</label><textarea onchange="window.frEditField(\''+r.id+'\',\'note\',this.value)" rows="2" style="width:100%;box-sizing:border-box;font-size:14px;padding:10px;border:2px solid var(--border2);border-radius:10px;background:var(--card);color:var(--text);resize:vertical">'+_frEsc(r.note||'')+'</textarea></div>';
-  h+='<button onclick="window.frEditDone(\''+r.id+'\')" style="width:100%;margin-top:14px;min-height:56px;border-radius:14px;border:none;background:#16a34a;color:#fff;font-size:18px;font-weight:800;cursor:pointer">✓ Save changes</button>';
-  h+='<div style="font-size:11px;color:var(--text3);margin-top:6px">'+(r.submitted?'This day was already uploaded — changing it here will not re-write Maintenance; adjust there if needed.':'Changes here flow through when you upload the aircraft to Maintenance.')+'</div>';
+  if(S._frDelConfirm===r.id){
+    // in-app confirm screen for delete
+    h+='<div style="margin-top:14px;padding:16px;border-radius:14px;border:2px solid #ef4444;background:rgba(239,68,68,.08)">'+
+      '<div style="font-size:15px;font-weight:800;color:#ef4444;margin-bottom:4px">Delete this flight?</div>'+
+      '<div style="font-size:13px;color:var(--text2);margin-bottom:14px">'+_frEsc(_frAcShort(r.aircraft))+(r.product?' · '+_frEsc(r.product):'')+(r.off?' · off '+_frEsc(r.off):'')+(r.flightTime!=null?' · '+r.flightTime.toFixed(1)+'h':'')+'. This cannot be undone.</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button onclick="window.frEditDeleteCancel()" style="flex:1;min-height:52px;border-radius:12px;border:2px solid var(--border2);background:var(--card);color:var(--text1);font-size:16px;font-weight:700;cursor:pointer">Cancel</button>'+
+        '<button onclick="window.frEditDeleteConfirm(\''+r.id+'\')" style="flex:1;min-height:52px;border-radius:12px;border:none;background:#ef4444;color:#fff;font-size:16px;font-weight:800;cursor:pointer">🗑 Yes, delete</button>'+
+      '</div></div>';
+  } else {
+    h+='<div style="display:flex;gap:8px;margin-top:14px"><button onclick="window.frEditDone(\''+r.id+'\')" style="flex:1;min-height:56px;border-radius:14px;border:none;background:#16a34a;color:#fff;font-size:18px;font-weight:800;cursor:pointer">✓ Save changes</button>'+
+      '<button onclick="window.frEditDelete(\''+r.id+'\')" style="padding:0 18px;min-height:56px;border-radius:14px;border:1px solid #ef444455;background:rgba(239,68,68,.08);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer">🗑 Delete flight</button></div>';
+    h+='<div style="font-size:11px;color:var(--text3);margin-top:6px">'+(r.submitted?'This day was already uploaded — changing or deleting it here will not re-write Maintenance; adjust there if needed.':'Changes here flow through when you upload the aircraft to Maintenance.')+'</div>';
+  }
   h+='</div>';
   return h;
 }

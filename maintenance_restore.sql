@@ -1,8 +1,5 @@
--- TrueSouth FMS — Maintenance restore (reconstructed from audit log, 11–22 Jun 2026).
--- Run in the Supabase SQL editor. Restores recent TTIS/landings/starts + the SLA oil entry.
--- Check/overhaul config (next check, engine/prop OH, comp-wash, ADAS) was set before the
--- audit window and could NOT be recovered — re-enter those in the Maintenance UI after running.
--- IMPORTANT: deploy v24.94 BEFORE running this, or the live v24.92 bug may overwrite it again.
-
-insert into ts_settings (key, value) values ('maintenance', $json${"hist":[{"date":"2026-06-12","ZK-SLA_starts":2},{"date":"2026-06-14","ZK-SLQ":7628.8},{"date":"2026-06-15","ZK-SLB":12373.4,"ZK-SLB_landings":2,"ZK-SLB_starts":2,"ZK-SLQ":7630.1,"ZK-SLA":3882.2,"ZK-SLA_starts":2,"ZK-SLA_landings":2},{"date":"2026-06-16","ZK-SLQ":7633.5,"ZK-SLB":12375.2,"ZK-SLB_starts":4,"ZK-SLB_landings":4,"ZK-SLD":8470.5},{"date":"2026-06-17","ZK-SLQ":7634.7,"ZK-SLD":8471.7,"ZK-SLB_starts":2,"ZK-SLB":12376.2,"ZK-SLA":3882.2,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLB_landings":2},{"date":"2026-06-18","ZK-SLA":3883.2,"ZK-SLA_starts":2,"ZK-SLA_landings":2,"ZK-SLQ":7635.9,"ZK-SLB":12377.2,"ZK-SLB_starts":2,"ZK-SLB_landings":2},{"date":"2026-06-21","ZK-SDB":18816.5,"ZK-SDB_starts":2,"ZK-SDB_landings":2,"ZK-SLA":3884.9,"ZK-SLA_starts":4,"ZK-SLA_landings":4,"ZK-SLB":12379.9,"ZK-SLB_starts":6,"ZK-SLB_landings":6,"ZK-SLQ":7637.2},{"date":"2026-06-22","ZK-SLB":12380.9,"ZK-SLB_starts":2,"ZK-SLB_landings":2,"ZK-SLQ":7638.3,"ZK-SLD":8476.1}],"oil":[{"date":"2026-06-21","ZK-SLA":1}],"nextCheck":{},"checkType":{},"engineLastOH":{},"engineToRun":{},"propLastOH":{},"propToRun":{},"bookings":{},"priority":[],"compwash":{},"adas":{}}$json$)
-on conflict (key) do update set value = excluded.value;
+-- SUPERSEDED — do NOT run this file.
+-- Use maintenance_restore_full.sql instead. That version:
+--   * restores the full daily TTIS history back to 10 Jun 2025 (+ landings/starts/oil),
+--   * MERGES (replaces only hist + oil) so it preserves the next-check/overhaul config you re-entered.
+-- This earlier file overwrote the whole maintenance blob with audit-only data and would wipe your config.
