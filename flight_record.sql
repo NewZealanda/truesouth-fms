@@ -26,6 +26,9 @@ create table if not exists ts_flight_records (
   done         boolean default false,   -- finalised by the pilot (tapped SAVE after confirming TTIS)
   submitted    boolean default false,   -- uploaded to the maintenance log (end-of-day, last PIC)
   submitted_by text,
+  pic_name     text,                    -- logbook PIC override (defaults to the record's pilot)
+  copilot      text,                    -- logbook co-pilot name (single-pilot ops: usually blank)
+  details      text,                    -- logbook "details of flight" e.g. "QN-MF-QN x4" (defaults to route)
   manual       boolean default false,   -- entered manually (not auto-detected)
   note         text,
   updated_at   timestamptz default now(),

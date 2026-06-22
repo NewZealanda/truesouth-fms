@@ -144,6 +144,7 @@ function _sectionAllowed(sec){
     case 'flightduty':  return (hasRolePerm('flightduty'))||!!(S.user&&S.user.superAdmin);
     case 'businessplan':return (hasRolePerm('businessplan'))||!!(S.user&&S.user.superAdmin);
     case 'flightrecord':return (hasRolePerm('flightrecord'))||!!(S.user&&S.user.superAdmin);
+    case 'logbook':     return !!S.user; // every signed-in pilot has a personal logbook
     default:            return true;
   }
 }
@@ -574,12 +575,14 @@ function renderDrawer(){
   {var _canFD=hasRolePerm('flightduty')||(S.user&&S.user.superAdmin);
    var _canBP=hasRolePerm('businessplan')||(S.user&&S.user.superAdmin);
    var _canFR=hasRolePerm('flightrecord')||(S.user&&S.user.superAdmin);
-   if(_canFD||_canBP||_canFR){
+   var _canLB=!!(S.user); // every signed-in pilot gets a personal logbook
+   if(_canFD||_canBP||_canFR||_canLB){
     var _fdNavBtn=function(label,section,icon){
       var on=sec===section;
       return '<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+section+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(on?'rgba(124,58,237,.22)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(on?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+icon+'</span><span style="flex:1">'+label+'</span></button>';
     };
     if(_canFR)h+=_fdNavBtn('Flight Record','flightrecord','🛩️');
+    if(_canLB)h+=_fdNavBtn('Logbooks','logbook','📒');
     if(_canFD)h+=_fdNavBtn('Flight & Duty','flightduty','🕓');
     if(_canBP)h+=_fdNavBtn('Business Plan','businessplan','📈');
   }}
@@ -749,6 +752,10 @@ function renderApp(){
         if(_sec==='flightrecord'){
           if(!(hasRolePerm('flightrecord')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-flightrecord">'+renderFlightRecord()+'</div>';
+        }
+        if(_sec==='logbook'){
+          if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-logbook">'+renderLogbook()+'</div>';
         }
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}

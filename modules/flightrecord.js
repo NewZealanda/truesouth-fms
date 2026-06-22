@@ -38,14 +38,14 @@ window.loadFlightRecords=async function(){
     // Pull ALL records (not just this pilot) so the per-aircraft Today's Record shows every PIC's
     // flights — the last PIC reviews the whole day before uploading.
     var rows=await sbF('ts_flight_records','','updated_at');
-    if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.id]={id:r.id,user_id:r.user_id,fr_date:r.fr_date,aircraft:r.aircraft||'',type:r.actype||'',product:r.product||'',from:r.route_from||'',to:r.route_to||'',pob:r.pob||0,off:r.off_blocks||'',on:r.on_blocks||'',startHours:r.start_hours,endHours:r.end_hours,flightTime:r.flight_time,tacho:r.tacho,landings:r.landings||1,starts:r.starts!=null?r.starts:1,manual:!!r.manual,note:r.note||'',done:!!r.done,submitted:!!r.submitted,submittedBy:r.submitted_by||'',at:r.updated_at||'',by:r.updated_by||''};});S._frData=d;try{lsSet&&lsSet('ts_flight_records_cache',d);}catch(e){}}
+    if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.id]={id:r.id,user_id:r.user_id,fr_date:r.fr_date,aircraft:r.aircraft||'',type:r.actype||'',product:r.product||'',from:r.route_from||'',to:r.route_to||'',pob:r.pob||0,off:r.off_blocks||'',on:r.on_blocks||'',startHours:r.start_hours,endHours:r.end_hours,flightTime:r.flight_time,tacho:r.tacho,landings:r.landings||1,starts:r.starts!=null?r.starts:1,picName:r.pic_name||'',copilot:r.copilot||'',details:r.details||'',manual:!!r.manual,note:r.note||'',done:!!r.done,submitted:!!r.submitted,submittedBy:r.submitted_by||'',at:r.updated_at||'',by:r.updated_by||''};});S._frData=d;try{lsSet&&lsSet('ts_flight_records_cache',d);}catch(e){}}
   }catch(e){}
   if(typeof safeRender==='function')safeRender();
 };
 function _frSave(rec){
   S._frData=S._frData||{};S._frData[rec.id]=rec;
   try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}
-  if(typeof sbU==='function')sbU('ts_flight_records',[{id:rec.id,user_id:rec.user_id,fr_date:rec.fr_date,aircraft:rec.aircraft||null,actype:rec.type||null,product:rec.product||null,route_from:rec.from||null,route_to:rec.to||null,pob:+rec.pob||0,off_blocks:rec.off||null,on_blocks:rec.on||null,start_hours:rec.startHours!=null?+rec.startHours:null,end_hours:rec.endHours!=null?+rec.endHours:null,flight_time:rec.flightTime!=null?+rec.flightTime:null,tacho:rec.tacho!=null?+rec.tacho:null,landings:+rec.landings||1,starts:+rec.starts||1,manual:!!rec.manual,note:rec.note||null,done:!!rec.done,submitted:!!rec.submitted,submitted_by:rec.submittedBy||null,updated_at:new Date().toISOString(),updated_by:(S.user&&S.user.name)||''}]).catch(function(){});
+  if(typeof sbU==='function')sbU('ts_flight_records',[{id:rec.id,user_id:rec.user_id,fr_date:rec.fr_date,aircraft:rec.aircraft||null,actype:rec.type||null,product:rec.product||null,route_from:rec.from||null,route_to:rec.to||null,pob:+rec.pob||0,off_blocks:rec.off||null,on_blocks:rec.on||null,start_hours:rec.startHours!=null?+rec.startHours:null,end_hours:rec.endHours!=null?+rec.endHours:null,flight_time:rec.flightTime!=null?+rec.flightTime:null,tacho:rec.tacho!=null?+rec.tacho:null,landings:+rec.landings||1,starts:+rec.starts||1,pic_name:rec.picName||null,copilot:rec.copilot||null,details:rec.details||null,manual:!!rec.manual,note:rec.note||null,done:!!rec.done,submitted:!!rec.submitted,submitted_by:rec.submittedBy||null,updated_at:new Date().toISOString(),updated_by:(S.user&&S.user.name)||''}]).catch(function(){});
 }
 function _frSaveSettings(){if(typeof sbU==='function')sbU('ts_settings',[{key:'fr_settings',value:JSON.stringify(S._frSettings||{})}]).catch(function(){});}
 
@@ -154,7 +154,13 @@ window.frToggleSettings=function(){S._frSettingsOpen=!S._frSettingsOpen;render()
 
 // ── RENDER ──────────────────────────────────────────────────────────────────────
 var _FR_BTN='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:64px;border-radius:14px;border:2px solid var(--border2);background:var(--card);color:var(--text1);font-size:16px;font-weight:700;cursor:pointer;padding:10px;text-align:center;line-height:1.2';
-function _frBigBtn(label,on,onclick,sub){return '<button onclick="'+onclick+'" style="'+_FR_BTN+(on?';border-color:#7c3aed;background:rgba(124,58,237,.14);color:#a78bfa':'')+'">'+label+(sub?'<span style="font-size:11px;font-weight:600;color:var(--text3)">'+sub+'</span>':'')+'</button>';}
+function _frBigBtn(label,on,onclick,sub,col){
+  var extra='';
+  if(col){extra=on?';border-color:'+col+';background:'+col+'22;color:'+col:';border-color:'+col+'66;color:'+col;}
+  else if(on){extra=';border-color:#7c3aed;background:rgba(124,58,237,.14);color:#a78bfa';}
+  return '<button onclick="'+onclick+'" style="'+_FR_BTN+extra+'">'+label+(sub?'<span style="font-size:11px;font-weight:600;color:var(--text3)">'+sub+'</span>':'')+'</button>';
+}
+function _frAcCol(ac){return (typeof AC_COL!=='undefined'&&AC_COL[ac])||'#64748b';}
 
 function renderFlightRecord(){
   if(!S._frLoaded){S._frLoaded=true;if(window.loadFlightRecords)window.loadFlightRecords();}
@@ -164,7 +170,7 @@ function renderFlightRecord(){
   var uid=(S.user&&S.user.id)||'';
   var open=_frOpenFlight(uid);
   var page=S._frPage||'log';
-  var h=(typeof _tier2==='function')?_tier2([{lbl:'Log a flight',on:page==='log',onclick:"S._frPage='log';render()"},{lbl:'Today’s record',on:page==='record',onclick:"S._frPage='record';render()"}]):'';
+  var h=(typeof _tier2==='function')?_tier2([{lbl:'Log a flight',on:page==='log',onclick:"S._frPage='log';render()"},{lbl:'Aircraft records',on:page==='record',onclick:"S._frPage='record';render()"}]):'';
   if(page==='record'){ h+=_frRenderTodayRecord(uid); return h; }
   if(open){ h+=open.on?_frRenderConfirm(open):_frRenderLand(open); }
   else { h+=_frRenderStart(uid); }
@@ -180,19 +186,32 @@ function renderFlightRecord(){
   h+='</div>';
   return h;
 }
-// ── Today's Record — per aircraft, reviewed & uploaded to Maintenance by the last PIC ──
+// ── Aircraft Records — per aircraft, browsable by date; reviewed & uploaded to Maintenance ──
+function _frShiftRecDate(delta){var d=new Date((S._frRecDate||_frToday())+'T00:00:00');d.setDate(d.getDate()+delta);S._frRecDate=_frIsoLocal(d);render();}
+window._frShiftRecDate=_frShiftRecDate;
+function _frIsoLocal(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function _frRenderTodayRecord(uid){
-  var today=_frToday();
-  var recs=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.fr_date===today&&r.done)recs.push(r);});
-  if(S._frEditId&&(S._frData||{})[S._frEditId]&&S._frData[S._frEditId].fr_date===today){return _frRenderEdit(S._frData[S._frEditId])+_frTodayBody(recs,today);}
-  return _frTodayBody(recs,today);
+  var date=S._frRecDate||_frToday();
+  var isToday=date===_frToday();
+  var dlbl=new Date(date+'T00:00:00').toLocaleDateString('en-NZ',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  // date navigator
+  var nav='<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<button onclick="window._frShiftRecDate(-1)" style="width:42px;height:42px;border-radius:10px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:18px;font-weight:800;cursor:pointer">‹</button>'+
+    '<input type="date" value="'+date+'" onchange="S._frRecDate=this.value;render()" style="height:42px;font-size:14px;padding:0 10px;border:1px solid var(--border2);border-radius:10px;background:var(--card);color:var(--text)">'+
+    '<button onclick="window._frShiftRecDate(1)" style="width:42px;height:42px;border-radius:10px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:18px;font-weight:800;cursor:pointer">›</button>'+
+    (isToday?'':'<button onclick="S._frRecDate=null;render()" style="height:42px;padding:0 14px;border-radius:10px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-size:13px;font-weight:700;cursor:pointer">Today</button>')+
+    '<div style="font-weight:800;font-size:15px;margin-left:4px">'+_frEsc(dlbl)+(isToday?' <span style="font-size:11px;color:#16a34a;font-weight:700">• today</span>':'')+'</div>'+
+  '</div>';
+  var recs=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.fr_date===date&&r.done)recs.push(r);});
+  var h=nav;
+  if(S._frEditId&&(S._frData||{})[S._frEditId]&&S._frData[S._frEditId].fr_date===date){h+=_frRenderEdit(S._frData[S._frEditId]);}
+  return h+_frTodayBody(recs,date);
 }
 function _frTodayBody(recs,today){
-  if(!recs.length)return '<div class="card" style="color:var(--text3);padding:24px;font-size:13px">No flights recorded yet today. Log one on the <b>Log a flight</b> tab.</div>';
+  if(!recs.length)return '<div class="card" style="color:var(--text3);padding:24px;font-size:13px">No flights recorded for this day.</div>';
   var byAc={};recs.forEach(function(r){(byAc[r.aircraft]=byAc[r.aircraft]||[]).push(r);});
   var pname=function(id){var u=(S.users||[]).find(function(x){return x.id===id;});return u?(u.name||'').split(' ')[0]:'?';};
-  var dlbl=new Date(today+'T00:00:00').toLocaleDateString('en-NZ',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  var h='<div class="card"><div class="st">Today’s record <span style="font-weight:400;font-size:11px;color:var(--text3)">— '+_frEsc(dlbl)+' · verify &amp; upload to Maintenance</span></div></div>';
+  var h='';
   Object.keys(byAc).sort().forEach(function(ac){
     var list=byAc[ac].slice().sort(function(a,b){return _frMins(a.off)-_frMins(b.off);});
     var isC208=_frAcType(ac)==='C208B';
@@ -201,7 +220,7 @@ function _frTodayBody(recs,today){
     var submitted=list.every(function(r){return r.submitted;});
     var subBy=(list.find(function(r){return r.submitted&&r.submittedBy;})||{}).submittedBy;
     h+='<div class="card" style="padding:0;overflow-x:auto;border-left:4px solid '+(submitted?'#16a34a':'#f59e0b')+'">';
-    h+='<div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><span style="font-size:17px;font-weight:800">'+_frEsc(_frAcShort(ac))+'</span> <span style="font-size:12px;color:var(--text3)">'+_frEsc(_frAcType(ac))+'</span></div>'+
+    h+='<div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><span style="font-size:17px;font-weight:800;color:'+_frAcCol(ac)+'">'+_frEsc(_frAcShort(ac))+'</span> <span style="font-size:12px;color:var(--text3)">'+_frEsc(_frAcType(ac))+'</span></div>'+
       '<div style="font-size:12px;color:var(--text2)">'+list.length+' flight'+(list.length===1?'':'s')+' · flight '+totFlt.toFixed(1)+'h · tacho '+totTacho.toFixed(1)+'h · '+totLdg+' ldg'+(isC208?' · '+totSt+' starts':'')+' · TTIS → '+(maxEnd!=null?maxEnd.toFixed(1):'—')+'</div></div>';
     var cols=['PIC','Type','Route','Off','On','Flt h','Tacho','TTIS st','TTIS end','Ldg'].concat(isC208?['Starts']:[]).concat(['Notes']);
     h+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:'+(isC208?760:700)+'px"><thead><tr style="background:var(--card2)">'+cols.map(function(t,i){return '<th style="text-align:'+(i<3?'left':'center')+';padding:6px 7px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
@@ -231,7 +250,7 @@ function _frTodayBody(recs,today){
 }
 // Upload one aircraft's day to the maintenance log, then mark its flights submitted.
 window.frSubmitAircraft=function(ac){
-  var today=_frToday();
+  var today=S._frRecDate||_frToday();
   var list=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.fr_date===today&&r.done&&r.aircraft===ac)list.push(r);});
   if(!list.length)return;
   if(typeof confirm==='function'&&!confirm('Confirm '+_frAcShort(ac)+'’s '+list.length+' flight'+(list.length===1?'':'s')+' are correct and upload to the maintenance log?'))return;
@@ -291,7 +310,7 @@ function _frRenderStart(uid){
       var fy=!!f.ferry;
       h+='<button onclick="window.frUseFlight(\''+_frJs(f.ac)+'\',\''+_frJs(f.prod)+'\',\''+_frJs(f.from)+'\',\''+_frJs(f.to)+'\','+f.pob+',false);window.frTab(\'auto\')" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;border:2px solid '+(fy?'rgba(245,158,11,.5)':'var(--border2)')+';background:'+(fy?'rgba(245,158,11,.08)':'var(--card)')+';color:var(--text1);cursor:pointer;margin-bottom:8px;text-align:left">'+
         '<span style="font-size:18px;font-weight:800;min-width:54px">'+_frEsc(f.start)+'</span>'+
-        '<span style="font-size:17px;font-weight:800;color:'+(fy?'#f59e0b':'#7c3aed')+'">'+_frEsc(_frAcShort(f.ac))+'</span>'+
+        '<span style="font-size:17px;font-weight:800;color:'+(fy?'#f59e0b':_frAcCol(f.ac))+'">'+_frEsc(_frAcShort(f.ac))+'</span>'+
         '<span style="font-size:15px;font-weight:700">'+_frEsc((f.from||'')+(f.to?'→'+f.to:''))+'</span>'+
         '<span style="font-size:13px;color:var(--text2)">'+_frEsc(f.prod)+' · '+f.pob+' POB'+(fy?' · <span style="color:#f59e0b;font-weight:700">FERRY'+(f.hint?' ('+_frEsc(f.hint)+')':'')+'</span>':'')+'</span>'+
         '<span style="margin-left:auto;font-size:20px;color:var(--text3)">▸</span>'+
@@ -317,7 +336,7 @@ function _frRenderDraftForm(d,manual){
   // Aircraft (big tap grid)
   h+='<div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:6px 0 6px">Aircraft</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-bottom:14px">';
-  _frAcList().forEach(function(ac){h+=_frBigBtn(_frAcShort(ac),d.ac===ac,"window.frUseFlight('"+_frJs(ac)+"','"+_frJs(d.product||'')+"','"+_frJs(d.from||'')+"','"+_frJs(d.to||'')+"',"+(+d.pob||1)+","+(manual?'true':'false')+")",_frAcHours(ac)!=null?(+_frAcHours(ac)).toFixed(1)+'h':'');});
+  _frAcList().forEach(function(ac){h+=_frBigBtn(_frAcShort(ac),d.ac===ac,"window.frUseFlight('"+_frJs(ac)+"','"+_frJs(d.product||'')+"','"+_frJs(d.from||'')+"','"+_frJs(d.to||'')+"',"+(+d.pob||1)+","+(manual?'true':'false')+")",_frAcHours(ac)!=null?(+_frAcHours(ac)).toFixed(1)+'h':'',_frAcCol(ac));});
   h+='</div>';
   // Product
   h+='<div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:6px 0 6px">Flight type</div>';
@@ -387,3 +406,90 @@ function _frRenderConfirm(r){
   return h;
 }
 function _frBlockStr(r){var blk=_frMins(r.on)-_frMins(r.off);if(blk<0)blk+=1440;return Math.floor(blk/60)+'h '+(blk%60)+'m';}
+
+// ── LOGBOOKS ─────────────────────────────────────────────────────────────────────
+// Each pilot's personal logbook, auto-built from their flight records. Solid table; tap a
+// row to expand and adjust. Columns: Month · Day · Type · Registration · PIC · Co-Pilot · Details · Flight time.
+function _frUserName(id){var u=(S.users||[]).find(function(x){return x.id===id;});return u?(u.name||''):'';}
+function _frPicName(r){return r.picName||_frUserName(r.user_id)||'';}
+function _frDetails(r){return r.details||((r.from||'')+(r.to?'-'+r.to:''))||(r.product||'');}
+function renderLogbook(){
+  if(!S._frLoaded){S._frLoaded=true;if(window.loadFlightRecords)window.loadFlightRecords();}
+  if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Sign in to view your logbook.</div>';
+  var mgr=(typeof hasRolePerm==='function'&&hasRolePerm('flightrecord_manage'))||(S.user&&S.user.superAdmin);
+  var viewUid=(mgr&&S._lbUid)||(S.user&&S.user.id)||'';
+  var h='';
+  // pilot selector for managers
+  if(mgr){
+    var pilots={};Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r)pilots[r.user_id]=1;});pilots[S.user.id]=1;
+    h+='<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text3);font-weight:700">Logbook for</span>';
+    Object.keys(pilots).forEach(function(uid){var nm=_frUserName(uid)||'?';var on=uid===viewUid;h+='<button onclick="S._lbUid=\''+_frJs(uid)+'\';S._lbEditId=null;render()" style="padding:6px 12px;border-radius:8px;border:2px solid '+(on?'#7c3aed':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.14)':'transparent')+';color:'+(on?'#a78bfa':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer">'+_frEsc(nm.split(' ')[0]||nm)+'</button>';});
+    h+='</div>';
+  }
+  // gather this pilot's logged flights
+  var rows=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.user_id===viewUid&&(r.done||r.manual))rows.push(r);});
+  rows.sort(function(a,b){return a.fr_date===b.fr_date?(_frMins(b.off)-_frMins(a.off)):String(b.fr_date).localeCompare(String(a.fr_date));});
+  var total=rows.reduce(function(s,r){return s+(+r.flightTime||0);},0);
+  var ttC=rows.filter(function(r){return _frAcType(r.aircraft)==='C208B';}).reduce(function(s,r){return s+(+r.flightTime||0);},0);
+  var ttG=rows.filter(function(r){return _frAcType(r.aircraft)==='GA8';}).reduce(function(s,r){return s+(+r.flightTime||0);},0);
+  var _vn=_frUserName(viewUid);var _title=_vn?(_frEsc(_vn)+(/[sS]$/.test(_vn)?'’':'’s')+' logbook'):'My logbook';
+  h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><div><div style="font-size:17px;font-weight:800">'+_title+'</div>'+
+    '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+rows.length+' flights · total '+total.toFixed(1)+'h <span style="color:var(--text2)">(C208B '+ttC.toFixed(1)+'h · GA8 '+ttG.toFixed(1)+'h)</span></div></div>'+
+    '<button onclick="window.frLbAdd()" style="padding:9px 16px;border-radius:10px;border:1px dashed var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">+ Add entry</button></div></div>';
+  if(S._lbEditId&&(S._frData||{})[S._lbEditId]&&S._frData[S._lbEditId].user_id===viewUid)h+=_lbRenderEdit(S._frData[S._lbEditId]);
+  if(!rows.length){h+='<div class="card" style="color:var(--text3);padding:24px;font-size:13px">No flights logged yet. They appear here automatically when you record a flight, or add one manually.</div>';return h;}
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:720px"><thead><tr style="background:var(--card2)">'+
+    ['Month','Day','Type','Reg','PIC','Co-Pilot','Details','Flt h'].map(function(t,i){return '<th style="text-align:'+(i>=7?'right':'left')+';padding:8px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+  var lastMonth='';
+  rows.forEach(function(r){
+    var dt=new Date(r.fr_date+'T00:00:00');
+    var mon=dt.toLocaleDateString('en-NZ',{month:'short',year:'2-digit'});
+    var day=dt.getDate();
+    var col=_frAcCol(r.aircraft);
+    var newMonth=mon!==lastMonth;lastMonth=mon;
+    h+='<tr onclick="window.frLbEdit(\''+r.id+'\')" style="border-top:1px solid var(--border2);cursor:pointer'+(S._lbEditId===r.id?';background:rgba(124,58,237,.06)':'')+'">'+
+      '<td style="padding:6px 8px;font-weight:700;color:'+(newMonth?'var(--text1)':'var(--text3)')+'">'+(newMonth?_frEsc(mon):'')+'</td>'+
+      '<td style="padding:6px 8px;text-align:center;font-weight:700">'+day+'</td>'+
+      '<td style="padding:6px 8px;color:var(--text2)">'+_frEsc(_frAcType(r.aircraft))+'</td>'+
+      '<td style="padding:6px 8px;font-weight:800;color:'+col+'">'+_frEsc(_frAcShort(r.aircraft))+'</td>'+
+      '<td style="padding:6px 8px">'+_frEsc(_frPicName(r))+'</td>'+
+      '<td style="padding:6px 8px;color:var(--text2)">'+_frEsc(r.copilot||'')+'</td>'+
+      '<td style="padding:6px 8px;color:var(--text2)">'+_frEsc(_frDetails(r))+'</td>'+
+      '<td style="padding:6px 8px;text-align:right;font-weight:800">'+(r.flightTime!=null?(+r.flightTime).toFixed(1):'—')+'</td>'+
+    '</tr>';
+  });
+  h+='<tr style="border-top:2px solid var(--border2);background:var(--card2)"><td colspan="7" style="padding:8px;text-align:right;font-weight:700;color:var(--text2)">Total</td><td style="padding:8px;text-align:right;font-weight:800">'+total.toFixed(1)+'h</td></tr>';
+  h+='</tbody></table></div>';
+  h+='<div style="font-size:11px;color:var(--text3);padding:2px 4px 10px">Tap any row to adjust it.</div>';
+  return h;
+}
+function _lbRenderEdit(r){
+  var h='<div class="card" style="border-left:4px solid '+_frAcCol(r.aircraft)+'">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:16px;font-weight:800">Logbook entry</div><button onclick="window.frLbEditCancel()" style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer">✕ Close</button></div>';
+  // registration buttons (aircraft colours)
+  h+='<div style="font-size:10px;color:var(--text3);font-weight:700;margin-bottom:4px">REGISTRATION</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+  _frAcList().forEach(function(ac){var c=_frAcCol(ac);var on=r.aircraft===ac;h+='<button onclick="window.frLbField(\''+r.id+'\',\'aircraft\',\''+_frJs(ac)+'\')" style="padding:7px 12px;border-radius:9px;border:2px solid '+(on?c:c+'66')+';background:'+(on?c+'22':'transparent')+';color:'+c+';font-size:13px;font-weight:800;cursor:pointer">'+_frEsc(_frAcShort(ac))+'</button>';});
+  h+='</div>';
+  function fld(lbl,field,val,type,w){return '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">'+lbl+'</label><input type="'+(type||'text')+'"'+(type==='number'?' step="0.1"':'')+' value="'+_frEsc(val==null?'':val)+'" onchange="window.frLbField(\''+r.id+'\',\''+field+'\',this.value)" style="width:'+(w||130)+'px;height:46px;font-size:15px;font-weight:700;text-align:center;border:2px solid var(--border2);border-radius:10px;background:var(--card);color:var(--text)"></div>';}
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'+
+    fld('Date','fr_date',r.fr_date,'date',160)+
+    fld('PIC','picName',_frPicName(r),'text',150)+
+    fld('Co-Pilot','copilot',r.copilot,'text',150)+
+    fld('Flight time (h)','flightTime',r.flightTime,'number',120)+
+  '</div>';
+  h+='<div style="margin-top:10px"><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">Details of flight (e.g. QN-MF-QN x4)</label><input type="text" value="'+_frEsc(_frDetails(r))+'" onchange="window.frLbField(\''+r.id+'\',\'details\',this.value)" style="width:100%;box-sizing:border-box;height:46px;font-size:15px;font-weight:700;padding:0 12px;border:2px solid var(--border2);border-radius:10px;background:var(--card);color:var(--text)"></div>';
+  h+='<div style="display:flex;gap:8px;margin-top:14px"><button onclick="window.frLbEditCancel()" style="flex:1;min-height:52px;border-radius:14px;border:none;background:#16a34a;color:#fff;font-size:17px;font-weight:800;cursor:pointer">✓ Done</button>';
+  if(r.manual)h+='<button onclick="window.frLbDelete(\''+r.id+'\')" style="padding:0 18px;min-height:52px;border-radius:14px;border:1px solid #ef444455;background:transparent;color:#ef4444;font-size:14px;font-weight:700;cursor:pointer">Delete</button>';
+  h+='</div><div style="font-size:11px;color:var(--text3);margin-top:6px">Type is set from the registration. Editing flight time here does not change the maintenance TTIS.</div>';
+  h+='</div>';
+  return h;
+}
+window.frLbEdit=function(id){S._lbEditId=(S._lbEditId===id?null:id);render();};
+window.frLbEditCancel=function(){S._lbEditId=null;render();};
+window.frLbField=function(id,field,val){var r=(S._frData||{})[id];if(!r)return;
+  if(field==='flightTime')r.flightTime=(val===''?null:Math.round((+val)*10)/10);
+  else if(field==='aircraft'){r.aircraft=val;r.type=_frAcType(val);}
+  else r[field]=val; // fr_date, picName, copilot, details
+  _frSave(r);if(typeof safeRender==='function')safeRender();};
+window.frLbAdd=function(){var uid=((typeof hasRolePerm==='function'&&hasRolePerm('flightrecord_manage')||(S.user&&S.user.superAdmin))&&S._lbUid)||(S.user&&S.user.id)||'';var ac=_frAcList()[0]||'';var rec={id:_frNewId(),user_id:uid,fr_date:_frToday(),aircraft:ac,type:_frAcType(ac),product:'',from:'',to:'',pob:1,off:'',on:'',startHours:null,endHours:null,flightTime:null,tacho:null,landings:1,starts:1,picName:'',copilot:'',details:'',manual:true,note:'',done:true,submitted:false,at:new Date().toISOString()};_frSave(rec);S._lbEditId=rec.id;render();};
+window.frLbDelete=function(id){var r=(S._frData||{})[id];if(!r||!r.manual)return;if(typeof confirm==='function'&&!confirm('Delete this manual logbook entry?'))return;delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}if(typeof sbDel==='function')sbDel('ts_flight_records',id);else if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});S._lbEditId=null;render();};
