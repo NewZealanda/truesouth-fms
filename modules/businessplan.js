@@ -126,6 +126,13 @@ function _bizState(){
   if(!S._bizPlan.running||typeof S._bizPlan.running!=='object')S._bizPlan.running=JSON.parse(JSON.stringify(BIZ_DEFAULT.running));
   if(!S._bizPlan.running.fuel)S._bizPlan.running.fuel=JSON.parse(JSON.stringify(BIZ_DEFAULT.running.fuel));
   if(!Array.isArray(S._bizPlan.running.aircraft))S._bizPlan.running.aircraft=[];
+  // One-time backfill: ensure the leased SDB ($1500/hr + fuel) is in the fleet so it appears in the
+  // calculator. Guarded by a flag so a deliberate delete sticks (the flag persists on the next save).
+  if(!S._bizPlan.running._sdbSeed){
+    if(!S._bizPlan.running.aircraft.some(function(a){return String(a.code||'').toUpperCase()==='SDB';}))
+      S._bizPlan.running.aircraft.push({code:'SDB',type:'C208',burn:170,fuelType:'jeta1',hours:500,maint:0,eoCost:0,eoInt:1,propCost:0,propInt:1,lease:1500});
+    S._bizPlan.running._sdbSeed=true;
+  }
   if(!Array.isArray(S._bizPlan.running.locations))S._bizPlan.running.locations=JSON.parse(JSON.stringify(BIZ_DEFAULT.running.locations));
   else S._bizPlan.running.locations.forEach(function(l){if(l.concC208==null)l.concC208=0;if(l.concGA8==null)l.concGA8=0;}); // backfill the split-out concession fields
   if(!Array.isArray(S._bizPlan.payRates))S._bizPlan.payRates=JSON.parse(JSON.stringify(BIZ_DEFAULT.payRates));
