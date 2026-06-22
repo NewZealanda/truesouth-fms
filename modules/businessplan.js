@@ -455,10 +455,11 @@ function _bizRenderPaxDaily(){
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;table-layout:fixed;width:'+W.reduce(function(a,b){return a+b;},0)+'px">';
   h+='<colgroup>'+W.map(function(w){return '<col style="width:'+w+'px">';}).join('')+'</colgroup>';
   h+='<thead><tr style="background:var(--card2)">'+['Date','26 Pax','Accum','Tracking','Last Yr','Accum LY','Compare'].map(function(t,i){return '<th style="text-align:'+(i===0?'left':'center')+';padding:6px 4px;font-size:9.5px;color:var(--text3);font-weight:700">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
-  var accum=0,runLy=0,daysElapsed=0;
+  var accum=0,runLy=0,daysElapsed=0,accumToday=0;
+  var _tdy=(ym===curMonth)?today.getDate():(ym<curMonth?daysIn:0); // "today" within this month (0 = whole month ahead, daysIn = all past)
   for(var d=1;d<=daysIn;d++){
     var ds=ym+'-'+String(d).padStart(2,'0');var row=p.paxData[ds]||{};
-    var p26=(+row.p26||0),ly=(+row.p25||0);accum+=p26;runLy+=ly;
+    var p26=(+row.p26||0),ly=(+row.p25||0);accum+=p26;runLy+=ly;if(d<=_tdy)accumToday=accum;
     var isPast=(ym<curMonth)||(ym===curMonth&&d<=today.getDate());if(isPast)daysElapsed=d;
     var isToday=(ym===curMonth&&d===today.getDate());
     var isFuture=(ym>curMonth)||(ym===curMonth&&d>today.getDate()); // forward bookings — indicative, not confirmed
@@ -480,15 +481,15 @@ function _bizRenderPaxDaily(){
       '</tr>';
   }
   h+='</tbody></table></div>';
-  // bottom figures
-  var paxPerDay=daysElapsed?accum/daysElapsed:0;
-  var paxToTarget=totT?Math.max(0,totT-accum):null;
-  var daysToTarget=(paxPerDay>0&&paxToTarget!=null)?Math.ceil(paxToTarget/paxPerDay):null;
+  // bottom figures — confirmed-to-today vs target
+  var daysLeft=Math.max(0,daysIn-_tdy);                          // days remaining in the month (after today)
+  var paxToTarget=totT?Math.max(0,totT-accumToday):null;          // target − pax accumulated up to today
+  var paxPerDay=(paxToTarget!=null&&daysLeft>0)?Math.ceil(paxToTarget/daysLeft):(paxToTarget||0); // daily rate needed to hit target
   function fig(lbl,val,col){return '<div style="flex:1 1 120px;border:1px solid var(--border2);border-top:3px solid '+(col||'#7c3aed')+';border-radius:9px;padding:10px 12px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700">'+lbl+'</div><div style="font-size:19px;font-weight:800;margin-top:2px">'+val+'</div></div>';}
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
-    fig('Pax / day',(Math.round(paxPerDay*10)/10),'#60a5fa')+
+    fig('Pax/day needed',paxPerDay,'#60a5fa')+
     fig('Pax to target',(paxToTarget!=null?paxToTarget:'—'),'#f59e0b')+
-    fig('Days to target',(daysToTarget!=null?daysToTarget:'—'),'#ef4444')+
+    fig('Days left',daysLeft,'#ef4444')+
     fig('Target',(target!=null?target:'—'),'#22c55e')+
     '</div>';
   h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px">Today is highlighted; <span style="opacity:.55">dimmed days are still to come — forward bookings, not yet confirmed flown</span>. Target comes from the FY budget for this month. Tracking = % of target reached − % of the month elapsed (green = ahead of pace). Compare = this year vs last year. "Sync seats sold" pulls 26 Pax from Rezdy bookings.</div>';
