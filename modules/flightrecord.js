@@ -19,6 +19,17 @@ function _frAdj(){var a=S._frSettings&&S._frSettings.adj!=null?(+S._frSettings.a
 function _frAcShort(ac){return String(ac||'').replace(/^ZK-?/,'');}
 function _frAcList(){return Object.keys((S&&S.aircraft)||{});}
 function _frAcType(ac){var sp=(typeof _acSpec==='function')?_acSpec(ac):((S.aircraft||{})[ac]);return (sp&&sp.layout==='ga8')?'GA8':'C208B';}
+// Resolve a short location code (as used in a block label, e.g. "QN", "WF", "MF") to its full place
+// name. The codes are the ICAO without the NZ prefix — QN→NZQN→Queenstown, WF→NZWF→Wanaka.
+function _frPlaceName(code){
+  code=String(code||'').trim().toUpperCase();if(!code)return '';
+  var icao=code.length>=4?code:('NZ'+code);
+  var list=(typeof NZ_AERODROMES!=='undefined')?NZ_AERODROMES:[];
+  var a=list.find(function(x){return x.icao===icao;});
+  if(!a){try{var cust=(typeof _getCustomAerodromes==='function')?_getCustomAerodromes():[];a=(cust||[]).find(function(x){return x.icao===icao;});}catch(e){}}
+  return a?a.name:'';
+}
+function _frRouteName(from,to){var f=_frPlaceName(from),t=_frPlaceName(to);if(!f&&!t)return '';return (f||from||'')+(t?' → '+t:'');}
 function _frAcHours(ac){try{return (typeof maintGetLatest==='function')?maintGetLatest(ac):null;}catch(e){return null;}}
 function _frEsc(s){if(typeof _rzEscSafe==='function')return _rzEscSafe(s);if(typeof esc==='function')return esc(s);return String(s==null?'':s);}
 // Escape a value to sit safely inside a single-quoted JS string literal within a double-quoted onclick attribute.
@@ -184,6 +195,14 @@ function _frAcCol(ac){return (typeof AC_COL!=='undefined'&&AC_COL[ac])||'#64748b
 function renderFlightRecord(){
   if(!S._frLoaded){S._frLoaded=true;if(window.loadFlightRecords)window.loadFlightRecords();}
   if(!S._maintLoaded&&typeof window.ensureMaintenance==='function')window.ensureMaintenance(); // so TTIS start prefills from the latest airswitch
+  // Ensure TODAY's calendar data is loaded so allocated scenic flights + manual blocks appear even
+  // if the pilot hasn't opened the Calendar. Runs once per session; only when viewing today's date.
+  if(!S._frSchedEnsured&&S.rezdyDate===_frToday()){
+    S._frSchedEnsured=true;
+    if(S._schedBlocks==null&&typeof window.rezdyLoadSchedule==='function')window.rezdyLoadSchedule();
+    if(S._rezdyBookings==null&&typeof window.rezdyLoadBookings==='function')window.rezdyLoadBookings();
+    if((S._schedPilots==null||!Object.keys(S._schedPilots||{}).length)&&typeof window.rezdyLoadPickups==='function')window.rezdyLoadPickups();
+  }
   if(!(typeof hasRolePerm==='function'&&hasRolePerm('flightrecord'))&&!(S.user&&S.user.superAdmin))
     return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
   var uid=(S.user&&S.user.id)||'';
@@ -354,7 +373,7 @@ function _frRenderStart(uid){
       h+='<button onclick="window.frUseFlight(\''+_frJs(f.ac)+'\',\''+_frJs(f.prod)+'\',\''+_frJs(f.from)+'\',\''+_frJs(f.to)+'\','+f.pob+',false);window.frTab(\'auto\')" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;border:2px solid '+(fy?'rgba(245,158,11,.5)':'var(--border2)')+';background:'+(fy?'rgba(245,158,11,.08)':'var(--card)')+';color:var(--text1);cursor:pointer;margin-bottom:8px;text-align:left">'+
         '<span style="font-size:18px;font-weight:800;min-width:54px">'+_frEsc(f.start)+'</span>'+
         '<span style="font-size:17px;font-weight:800;color:'+(fy?'#f59e0b':_frAcCol(f.ac))+'">'+_frEsc(_frAcShort(f.ac))+'</span>'+
-        '<span style="font-size:15px;font-weight:700">'+_frEsc((f.from||'')+(f.to?'→'+f.to:''))+'</span>'+
+        '<span style="font-size:15px;font-weight:700">'+_frEsc((f.from||'')+(f.to?'→'+f.to:''))+(_frRouteName(f.from,f.to)?'<span style="display:block;font-size:10px;font-weight:600;color:var(--text3)">'+_frEsc(_frRouteName(f.from,f.to))+'</span>':'')+'</span>'+
         '<span style="font-size:13px;color:var(--text2)">'+_frEsc(f.prod)+' · '+f.pob+' POB'+(fy?' · <span style="color:#f59e0b;font-weight:700">FERRY'+(f.hint?' ('+_frEsc(f.hint)+')':'')+'</span>':'')+'</span>'+
         '<span style="margin-left:auto;font-size:20px;color:var(--text3)">▸</span>'+
       '</button>';
