@@ -134,6 +134,7 @@ function _bizState(){
     else if(!(+_sdb.lease>0))_sdb.lease=1500; // existing SDB → make it the $1500/hr lease
     S._bizPlan.running._sdbSeed=true;
   }
+  if(!Array.isArray(S._bizPlan.savedCalcs))S._bizPlan.savedCalcs=[]; // saved flight-cost calculations (shared)
   if(!Array.isArray(S._bizPlan.running.locations))S._bizPlan.running.locations=JSON.parse(JSON.stringify(BIZ_DEFAULT.running.locations));
   else S._bizPlan.running.locations.forEach(function(l){if(l.concC208==null)l.concC208=0;if(l.concGA8==null)l.concGA8=0;}); // backfill the split-out concession fields
   if(!Array.isArray(S._bizPlan.payRates))S._bizPlan.payRates=JSON.parse(JSON.stringify(BIZ_DEFAULT.payRates));
@@ -209,6 +210,26 @@ window.bizSetLoc=function(i,field,value){var p=_bizState();if(!p.running.locatio
 window.bizAddLoc=function(){_bizState().running.locations.push({name:'New place',ldgC208:0,ldgGA8:0,awC208:0,awGA8:0});_bizSave();render();};
 window.bizDelLoc=function(i){var p=_bizState();p.running.locations.splice(i,1);_bizSave();render();};
 window.bizSetCalc=function(field,value){S._bizCalc=S._bizCalc||{};S._bizCalc[field]=value;render();};
+// Snapshot of the current calculator state (aircraft, route, flight time + the full cost breakdown).
+function _bizCalcSnapshot(){
+  var p=_bizState();var acs=p.running.aircraft,locs=p.running.locations,cal=S._bizCalc||{};
+  if(!acs.length)return null;
+  var srcs=[{key:'C208',lbl:'C208B (owned avg)',type:'C208'},{key:'GA8',lbl:'GA8 (owned avg)',type:'GA8'}];
+  acs.forEach(function(a,i){srcs.push({key:'ac'+i,lbl:(a.code||'?')+(+a.lease>0?' (lease)':''),type:a.type,acIdx:i});});
+  var srcKey=(srcs.some(function(s){return s.key===cal.src;}))?cal.src:'C208';
+  var sel=srcs.find(function(s){return s.key===srcKey;})||srcs[0];
+  var rc;if(sel.acIdx!=null){var c=_bizRunCalc(acs[sel.acIdx],p.running.fuel);rc={fuelHr:c.fuelHr,maintHr:c.maintHr,totalHr:c.totalHr,isLease:c.isLease,n:1};}
+  else{var av=_bizTypeAvg(sel.type);rc={fuelHr:av.fuelHr,maintHr:av.maintHr,totalHr:av.totalHr,isLease:false,n:av.n};}
+  var depIdx=(cal.dep!=null&&locs[+cal.dep])?+cal.dep:0;
+  var destIdx=(cal.dest!=null&&locs[+cal.dest])?+cal.dest:(locs.length>1?1:0);
+  var round=(cal.round===undefined)?true:!!cal.round;
+  var r=_bizFlightCost(rc,sel.type,cal.hrs,depIdx,destIdx,round);
+  var route=((locs[depIdx]&&locs[depIdx].name)||'?')+(round?' ⇄ ':' → ')+((locs[destIdx]&&locs[destIdx].name)||'?');
+  return {ts:new Date().toISOString(),lbl:sel.lbl,route:route,hrs:r.hrs,fuelHr:r.fuelHr,maintHr:r.maintHr,runHr:r.runHr,flight:r.flight,ldg:r.ldg,conc:r.conc,aw:r.aw,total:r.total,isLease:r.isLease};
+}
+window.bizCalcSave=function(){var s=_bizCalcSnapshot();if(!s)return;_bizState().savedCalcs.push(s);_bizSave();if(typeof toast==='function')toast('Saved to compare ✓','ok');render();};
+window.bizCalcDelSaved=function(i){var p=_bizState();p.savedCalcs.splice(i,1);_bizSave();render();};
+window.bizCalcClearSaved=function(){var p=_bizState();p.savedCalcs=[];_bizSave();render();};
 function _bizAddMonths(ds,n){var m=/(\d{4})-(\d{2})/.exec(String(ds||''));if(!m)return ds;var d=new Date(+m[1],+m[2]-1+n,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01';}
 function _bizMonLabel(ds){var m=/(\d{4})-(\d{2})/.exec(String(ds||''));if(!m)return ds;return new Date(+m[1],+m[2]-1,1).toLocaleDateString('en-NZ',{month:'short',year:'2-digit'});}
 // Build a loan's month-by-month schedule. Interest-only for ioMonths, then amortise the (paydown-
@@ -565,7 +586,13 @@ function _bizRenderPaxDaily(){
   var _tdy=(ym===curMonth)?today.getDate():(ym<curMonth?daysIn:0); // "today" within this month (0 = whole month ahead, daysIn = all past)
   for(var d=1;d<=daysIn;d++){
     var ds=ym+'-'+String(d).padStart(2,'0');var row=p.paxData[ds]||{};
-    var p26=(+row.p26||0),ly=(+row.p25||0);accum+=p26;runLy+=ly;if(d<=_tdy)accumToday=accum;
+    var p26=(+row.p26||0);
+    // Last Yr = the SAME calendar date one year earlier (its 26-Pax actual). Falls back to a stored
+    // p25 (the earliest season, which has no prior-year 26-Pax in the data). This lines last year up
+    // to the exact date and auto-fills July + months ahead.
+    var _lyPrev=p.paxData[_bizYearBefore(ds)]||{};
+    var ly=(_lyPrev.p26!=null&&_lyPrev.p26!=='')?(+_lyPrev.p26):(+row.p25||0);
+    accum+=p26;runLy+=ly;if(d<=_tdy)accumToday=accum;
     var isPast=(ym<curMonth)||(ym===curMonth&&d<=today.getDate());if(isPast)daysElapsed=d;
     var isToday=(ym===curMonth&&d===today.getDate());
     var isFuture=(ym>curMonth)||(ym===curMonth&&d>today.getDate()); // forward bookings — indicative, not confirmed
@@ -582,7 +609,7 @@ function _bizRenderPaxDaily(){
       '<td style="padding:2px 3px"><input type="number" value="'+(row.p26!=null?row.p26:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p26\',this.value)" style="'+_inS+'"></td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700">'+(accum||'')+'</td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700'+(ht?';background:'+ht.bg+';color:'+ht.fg:';color:var(--text3)')+'">'+(tracking!=null?(tracking>=0?'+':'')+(tracking*100).toFixed(1)+'%':'—')+'</td>'+
-      '<td style="padding:2px 3px"><input type="number" value="'+(row.p25!=null?row.p25:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p25\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:3px 4px;text-align:center;color:var(--text2)">'+(ly||'')+'</td>'+
       '<td style="padding:3px 4px;text-align:center;color:var(--text3)">'+(runLy||'')+'</td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700'+(hc?';background:'+hc.bg+';color:'+hc.fg:';color:var(--text3)')+'">'+(compare!=null?Math.round(compare*100)+'%':'—')+'</td>'+
       '</tr>';
@@ -637,6 +664,7 @@ function _bizRenderRoster(){
 var _bizInS='width:100%;font-size:12px;padding:4px 5px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);box-sizing:border-box';
 function _bizPh(n){return '$'+(+n||0).toLocaleString('en-NZ',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function _bizFmtWhen(iso){var d=iso?new Date(iso):null;if(!d||isNaN(d))return '';return d.toLocaleString('en-NZ',{weekday:'long',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});}
+function _bizYearBefore(ds){var m=/(\d{4})-(\d{2})-(\d{2})/.exec(String(ds||''));return m?((+m[1]-1)+'-'+m[2]+'-'+m[3]):ds;} // same month/day, prior year
 function _bizRenderRunning(){
   var tab=S._bizRunTab||'calc';
   var tabs=[{id:'calc',lbl:'Calculator'},{id:'maint',lbl:'Maintenance'},{id:'vars',lbl:'Cost variables'}];
@@ -692,8 +720,33 @@ function _bizRunCalcView(){
     h+=row('GST (15%)',_bizPh(r.total*0.15));
     h+=row('Total incl GST',_bizPh(r.total*1.15),true,true);
     h+='</div>';
-    h+='<div style="font-size:11px;color:var(--text3);padding:6px 0 0">Direct operating cost only (fuel, maintenance + overhaul reserves, landings, concession, airways) — all ex GST. Insurance, finance, pilot &amp; training sit in the P&amp;L.</div>';
+    h+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px">'+
+      '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(96,165,250,.5);color:#60a5fa" onclick="window.bizCalcSave()">💾 Save &amp; compare</button>'+
+      '<span style="font-size:11px;color:var(--text3)">Direct operating cost only — all ex GST. Insurance, finance, pilot &amp; training sit in the P&amp;L.</span>'+
+    '</div>';
     h+='</div>';
+  }
+  // ── Saved flights — side-by-side comparison ──
+  var saved=p.savedCalcs||[];
+  if(saved.length){
+    var minTot=Math.min.apply(null,saved.map(function(s){return s.total||0;}));
+    h+='<div class="card" style="padding:0;overflow-x:auto"><div class="st" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 14px 6px"><span>Saved flights — compare</span><button class="btn btn-ghost" style="font-size:11px;color:#ef4444;border-color:rgba(239,68,68,.35)" onclick="if(confirm(\'Clear all saved flights?\'))window.bizCalcClearSaved()">Clear all</button></div>';
+    h+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:640px"><thead><tr style="background:var(--card2)">'+
+      ['Aircraft','Route','Hrs','Run/hr','Landings','Total ex GST','Incl GST',''].map(function(t,i){return '<th style="text-align:'+(i<2?'left':i>6?'center':'right')+';padding:6px 8px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+    saved.forEach(function(s,i){
+      var cheapest=(s.total||0)<=minTot+0.001;
+      h+='<tr style="border-top:1px solid var(--border2)">'+
+        '<td style="padding:5px 8px;font-weight:700;white-space:nowrap">'+_rzEscSafe(s.lbl||'')+'</td>'+
+        '<td style="padding:5px 8px;color:var(--text2);white-space:nowrap">'+_rzEscSafe(s.route||'')+'</td>'+
+        '<td style="padding:5px 8px;text-align:right">'+(s.hrs||0)+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh(s.runHr)+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh((+s.ldg||0)+(+s.conc||0)+(+s.aw||0))+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;font-weight:800;color:'+(cheapest?'#22c55e':'#f59e0b')+'">'+_bizPh(s.total)+(cheapest&&saved.length>1?' <span style="font-size:9px;font-weight:700">✓ low</span>':'')+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh((s.total||0)*1.15)+'</td>'+
+        '<td style="padding:5px 6px;text-align:center"><button onclick="window.bizCalcDelSaved('+i+')" title="Remove" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button></td>'+
+        '</tr>';
+    });
+    h+='</tbody></table></div>';
   }
   return h;
 }
