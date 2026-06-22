@@ -797,7 +797,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.09';
+const APP_VER='v25.10';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -12393,7 +12393,7 @@ function _rzApplyManualBk(){
 function _rzPickups(){
   const out=[];const ov=S._pickupLocOverride||{};const tov=S._pickupTimeOverride||{};
   (S._rezdyBookings||[]).forEach(function(b){
-    if(/cancel/i.test(b.status||''))return; // don't send drivers to collect cancelled customers
+    if(_rzIsCancelled(b)||_rzIsNoShow(b.orderNumber||''))return; // don't collect cancelled or no-show customers
     const _ac=_rzBookingAc(b,String(b.orderNumber||'')); // the aircraft they're flying on (for the drop-off pill)
     (b.items||[]).forEach(function(it,ii){
       if(!it.pickup)return;
@@ -12939,7 +12939,7 @@ function _rzAcRows(acId){
 function _rzOrdersForBlockKey(key){
   var out=[];
   (S._rezdyBookings||[]).forEach(function(b){
-    if(/cancel/i.test(b.status||''))return;
+    if(_rzIsCancelled(b))return;
     var ac=_rzBookingAc(b,String(b.orderNumber||''))||'__unalloc__';
     ((b.items)||[]).forEach(function(it){var t=_rzDepTime(it.startTimeLocal||'');if(!t)return;var start=_rzHHMMcolon(t);var prod=_rzProduct(it.product);if(ac+'|'+start+'|'+prod===key)out.push(String(b.orderNumber||''));});
   });
@@ -13143,18 +13143,47 @@ window.rezdyCheckinCycleType=function(order,n){
 function _rzCheckBtn(label,on,onclick,title){
   return '<button onclick="'+onclick+'" title="'+_rzEsc(title)+'" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid '+(on?'#22c55e':'var(--border2)')+';background:'+(on?'rgba(34,197,94,.15)':'transparent')+';color:'+(on?'#4ade80':'var(--text3)')+'">'+(on?'✓':'○')+' '+_rzEsc(label)+'</button>';
 }
+// Cancellation: a booking is cancelled if Rezdy says so OR we've locally cancelled it (with a reason).
+function _rzIsCancelled(b){if(!b)return false;return /cancel/i.test(b.status||'')||!!((S._rzBookingCancel||{})[String(b.orderNumber||'')]);}
+function _rzCancelInfo(b){return (S._rzBookingCancel||{})[String((b&&b.orderNumber)||'')]||null;}
+function _rzIsNoShow(order){return !!((S._rzNoShow||{})[String(order||'')]);}
+// Locally cancel a booking (does NOT cancel it in Rezdy) — moves it to the Cancelled list with a reason.
+window.rezdyBookingCancel=function(order){
+  order=String(order);
+  var reason=(typeof prompt==='function')?prompt('Cancel booking #'+order+'\nReason (recorded against the booking):',''):'';
+  if(reason==null)return;
+  S._rzBookingCancel=S._rzBookingCancel||{};
+  S._rzBookingCancel[order]={reason:String(reason||'').trim(),by:(S.user&&S.user.name)||'',at:new Date().toISOString()};
+  if(S._rzNoShow)delete S._rzNoShow[order];                 // cancelled supersedes no-show
+  if(window.pickupSave)window.pickupSave(true);
+  if(typeof toast==='function')toast('Booking #'+order+' cancelled','ok');
+  render();
+};
+window.rezdyBookingUncancel=function(order){
+  order=String(order);if(!((S._rzBookingCancel||{})[order]))return;
+  if(typeof confirm==='function'&&!confirm('Restore booking #'+order+' to the active list?'))return;
+  delete S._rzBookingCancel[order];if(window.pickupSave)window.pickupSave(true);render();
+};
+// Mark / unmark a no-show: stays on the booking list but shown RED and excluded from the seatmap push.
+window.rezdyBookingNoShow=function(order){
+  order=String(order);S._rzNoShow=S._rzNoShow||{};
+  if(S._rzNoShow[order])delete S._rzNoShow[order];else S._rzNoShow[order]=true;
+  if(window.pickupSave)window.pickupSave(true);render();
+};
 // One booking rendered as its own card (passenger manifest view).
 function _rzBookingCard(b){
   var ono=b.orderNumber||'';
   var oE=_rzEsc(ono).replace(/'/g,"\\'");
-  var cancelled=/cancel/i.test(b.status||'');
+  var localCancel=_rzCancelInfo(b);
+  var cancelled=_rzIsCancelled(b);
+  var noShow=_rzIsNoShow(ono);
   var open=!!(S._rezdyOpen||{})[ono];
   var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
   var bd=_rzEffBreakdown(b);
   var prod=_rzProduct((((b.items||[])[0]||{}).product)||'');
   var stCol=cancelled?'#ef4444':(/confirm/i.test(b.status||'')?'#86efac':'var(--text2)');
   var wx=!!(S._rzBookingWx||{})[ono],ci=!!(S._rzBookingCheckedIn||{})[ono];
-  var h='<div class="card" style="padding:12px 14px;margin-bottom:12px'+(cancelled?';opacity:.6':(ci?';border:1px solid #15803d;background:rgba(34,197,94,.08)':''))+'">';
+  var h='<div class="card" style="padding:12px 14px;margin-bottom:12px'+(cancelled?';opacity:.6':(noShow?';border:1px solid #ef4444;background:rgba(239,68,68,.10)':(ci?';border:1px solid #15803d;background:rgba(34,197,94,.08)':'')))+'">';
   // header
   h+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">';
   h+='<div style="min-width:0;flex:1 1 200px">'+
@@ -13170,10 +13199,20 @@ function _rzBookingCard(b){
   if(!cancelled){
     h+=_rzCheckBtn('Wx',wx,'window.rezdyBookingToggleWx(\''+oE+'\')','Weather check called by passenger');
     h+=_rzCheckBtn('Checked in',ci,'window.rezdyCheckinClick(\''+oE+'\')','Check in: enter names + actual weights');
+    // No-show toggle (red when on) — shows red + excluded from the seatmap push.
+    h+='<button onclick="window.rezdyBookingNoShow(\''+oE+'\')" title="No-show — shows red and is excluded from the seatmap push" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid '+(noShow?'#ef4444':'var(--border2)')+';background:'+(noShow?'rgba(239,68,68,.15)':'transparent')+';color:'+(noShow?'#f87171':'var(--text3)')+'">'+(noShow?'✕':'○')+' No-show</button>';
+    h+='<button onclick="window.rezdyBookingCancel(\''+oE+'\')" title="Cancel this booking (records a reason; does not cancel it in Rezdy)" style="font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid rgba(239,68,68,.4);background:transparent;color:#ef4444">Cancel</button>';
   }
-  h+='<span style="font-size:11px;font-weight:700;color:'+stCol+'">'+_rzEsc(b.status)+'</span>';
+  if(localCancel){
+    h+='<span style="font-size:11px;font-weight:800;color:#ef4444">✕ CANCELLED</span>'+
+       '<button onclick="window.rezdyBookingUncancel(\''+oE+'\')" title="Restore to the active list" style="font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;border:1.5px solid var(--border2);background:transparent;color:var(--text3)">Restore</button>';
+  } else {
+    h+='<span style="font-size:11px;font-weight:700;color:'+stCol+'">'+_rzEsc(b.status)+'</span>';
+  }
   h+=owing?'<span class="pill pill-warn" style="font-size:10px">⚠ '+_rzEsc(_rzMoney(bal,b.currency))+'</span>':'<span style="font-size:11px;color:#4ade80;font-weight:700">Paid</span>';
   h+='</div></div>';
+  if(localCancel)h+='<div style="font-size:11px;color:#f87171;margin-top:4px">Cancelled'+(localCancel.by?' by '+_rzEsc(localCancel.by):'')+(localCancel.reason?' — '+_rzEsc(localCancel.reason):'')+'</div>';
+  if(noShow&&!cancelled)h+='<div style="font-size:11px;color:#f87171;font-weight:700;margin-top:4px">NO-SHOW — excluded from the seatmap push</div>';
   // Aircraft — collapsed shows only the selected one; the full pill selector moves into the dropdown.
   if(!cancelled&&!open)h+=_rzBookingAcBadge(b,ono);
   // Passenger bubbles + aircraft selector live inside the expanded detail (dropdown).
@@ -13216,7 +13255,7 @@ function _rzBkSearchRow(b){
   var prod=_rzProduct((((b.items||[])[0])||{}).product||'');
   var bd=_rzBdText(_rzEffBreakdown(b));
   var ci=(date===S.rezdyDate&&(S._rzBookingCheckedIn||{})[order])?'<span style="color:#22c55e;font-weight:800;font-size:10px;margin-left:6px">✓ checked in</span>':'';
-  var cancelled=/cancel/i.test(b.status||'');
+  var cancelled=_rzIsCancelled(b);
   return '<div onclick="window.rezdyBkOpenResult(\''+dE+'\',\''+oE+'\',\''+depE+'\')" class="card" style="cursor:pointer;padding:10px 12px;margin-bottom:8px'+(cancelled?';opacity:.55':'')+'">'+
     '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">'+
       '<span style="font-size:14px;font-weight:800;color:var(--text1)">'+_rzEsc(b.customerName||order)+(cancelled?' <span style="font-size:10px;color:#ef4444;font-weight:800">✕ cancelled</span>':'')+'</span>'+
@@ -13237,8 +13276,8 @@ function _rzRenderBookings(){
   if(!S._rezdyBookings){if(!S._rezdyLoading)window.rezdyLoadBookings();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading bookings…</div>';}
   if(!S._rezdyOpen||typeof S._rezdyOpen!=='object')S._rezdyOpen={};
   const allRows=(S._rezdyBookings||[]).slice();
-  const active=allRows.filter(function(b){return !/cancel/i.test(b.status||'');});
-  const cancelledRows=allRows.filter(function(b){return /cancel/i.test(b.status||'');});
+  const active=allRows.filter(function(b){return !_rzIsCancelled(b);});
+  const cancelledRows=allRows.filter(function(b){return _rzIsCancelled(b);});
   const deps=[];active.forEach(function(b){var d=_rzBookingDep(b);if(deps.indexOf(d)<0)deps.push(d);});
   deps.sort(_rzDepCmp);
   const q=String(S._bkSearch||'').trim();
@@ -13516,7 +13555,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._rzBookingCancel={};S._rzNoShow={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -13882,9 +13921,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -13906,6 +13945,8 @@ function _pkApplyBlob(d){
   S._rzSchedAttach=(d.schedAttach&&typeof d.schedAttach==='object')?d.schedAttach:{};
   S._rzCheckin=(d.checkin&&typeof d.checkin==='object')?d.checkin:{};
   S._pickupAck=(d.ack&&typeof d.ack==='object')?d.ack:{};
+  S._rzBookingCancel=(d.bookingCancel&&typeof d.bookingCancel==='object')?d.bookingCancel:{};
+  S._rzNoShow=(d.noShow&&typeof d.noShow==='object')?d.noShow:{};
   S._rzDepOrder=Array.isArray(d.depOrder)?d.depOrder:[];
 }
 function _pkSnapshot(d){try{return JSON.parse(JSON.stringify(d));}catch(e){return null;}}
@@ -14675,7 +14716,7 @@ window.rezdyLoadManifest=async function(){
 };
 // The currently-selected Bookings departure (resolved the same way as _rzRenderBookings).
 function _rzCurBookingsDep(){
-  var deps=[];(S._rezdyBookings||[]).forEach(function(b){if(/cancel/i.test(b.status||''))return;var d=_rzBookingDep(b);if(deps.indexOf(d)<0)deps.push(d);});
+  var deps=[];(S._rezdyBookings||[]).forEach(function(b){if(_rzIsCancelled(b))return;var d=_rzBookingDep(b);if(deps.indexOf(d)<0)deps.push(d);});
   deps.sort(_rzDepCmp);
   return (S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:(deps[0]||null);
 }
@@ -14697,9 +14738,10 @@ window.rezdyManPull=function(depScope){
   var existing={};(S._rzManPax||[]).forEach(function(p){existing[p.id]=p;});
   var fresh=[];
   (S._rezdyBookings||[]).forEach(function(b){
-    if(/cancel/i.test(b.status||''))return;
+    if(_rzIsCancelled(b))return;
     if(depScope&&_rzBookingDep(b)!==depScope)return; // only the pushed departure
     var order=String(b.orderNumber||'');
+    if(_rzIsNoShow(order))return; // no-shows are explicitly excluded from the seatmap push
     // Only CHECKED-IN passengers appear in the seatmap (with captured names + weights).
     var ci=_rzCheckinPax(order);
     if(!(S._rzBookingCheckedIn||{})[order]||!ci)return;
@@ -14974,8 +15016,8 @@ function _rzBkPrintRow(b){
 }
 window.rezdyBookingsPrint=function(){
   var allRows=(S._rezdyBookings||[]).slice();
-  var active=allRows.filter(function(b){return !/cancel/i.test(b.status||'');});
-  var cancelled=allRows.filter(function(b){return /cancel/i.test(b.status||'');});
+  var active=allRows.filter(function(b){return !_rzIsCancelled(b);});
+  var cancelled=allRows.filter(function(b){return _rzIsCancelled(b);});
   if(!allRows.length){if(typeof toast==='function')toast('No bookings to print for this day.','warn');return;}
   var byDep={};active.forEach(function(b){var d=_rzBookingDep(b);(byDep[d]=byDep[d]||[]).push(b);});
   var deps=Object.keys(byDep).sort(_rzDepCmp);
@@ -15618,7 +15660,7 @@ function _rzRenderSchedule(){
   // into ONE block (e.g. "SLB · 13A · FCF"). Click it to see the bookings + passengers inside.
   const bkGroups={};
   (S._rezdyBookings||[]).forEach(function(b){
-    if(/cancel/i.test(b.status||''))return;
+    if(_rzIsCancelled(b))return;
     var ac=_rzBookingAc(b,String(b.orderNumber||''))||'__unalloc__';
     var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
     ((b.items)||[]).forEach(function(it){
@@ -15656,7 +15698,7 @@ function _rzRenderSchedule(){
   const _totBk=bkBlocks.reduce(function(s,g){return s+g.bookings.length;},0);
   // Whole-day passenger breakdown for the overview (same format as the Bookings header). Seats
   // sold excludes infants (lap pax — they travel free).
-  var _cA=0,_cC=0,_cI=0;(S._rezdyBookings||[]).forEach(function(b){if(/cancel/i.test(b.status||''))return;var _e=_rzEffBreakdown(b);_cA+=_e.a;_cC+=_e.c;_cI+=_e.i;});
+  var _cA=0,_cC=0,_cI=0;(S._rezdyBookings||[]).forEach(function(b){if(_rzIsCancelled(b))return;var _e=_rzEffBreakdown(b);_cA+=_e.a;_cC+=_e.c;_cI+=_e.i;});
   var _cSeats=_cA+_cC;
   var _calBd=(_cA+_cC+_cI>0)?'<div style="font-size:12px;margin:5px 0 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
       '<span style="font-weight:800;color:var(--text2);letter-spacing:.02em">'+_cA+'A'+(_cC?' · '+_cC+'C':'')+(_cI?' · '+_cI+'i':'')+'</span>'+
