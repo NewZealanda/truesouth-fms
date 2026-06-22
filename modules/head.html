@@ -122,6 +122,13 @@ label{font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bot
 .sub-tab{padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.13);cursor:pointer;font-size:12px;font-weight:600;background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);white-space:nowrap;transition:background .15s,color .15s,border-color .15s;}
 .sub-tab:hover{background:rgba(255,255,255,.11);color:rgba(255,255,255,.75);}
 .sub-tab.on{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.3);color:#fff;font-weight:700;}
+/* Unified 2nd-tier tab strip — a light segmented control that sits below the header, same everywhere. */
+.t2bar{display:flex;gap:4px;background:var(--card2);border:1px solid var(--border2);border-radius:11px;padding:4px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.t2bar::-webkit-scrollbar{display:none;}
+.t2tab{flex:1 1 0;min-width:max-content;padding:9px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;text-align:center;transition:background .15s,color .15s;line-height:1.2;}
+.t2tab:hover{color:var(--text1);}
+.t2tab.on{background:var(--card);color:var(--text1);font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.14);}
+@media (max-width:560px){.t2tab{padding:9px 10px;font-size:12px;}}
 
 /* ── Solver boxes ── */
 .solver-box{border-radius:10px;padding:12px 14px;margin-top:8px;border:1px solid;}

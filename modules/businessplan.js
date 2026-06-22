@@ -348,8 +348,7 @@ function renderBusinessPlan(){
   var tabs=[{id:'pax',lbl:'Pax tracker'},{id:'running',lbl:'Running costs'},{id:'roster',lbl:'Pay rates'}];
   var tab=S._bizTab||'pax';
   if(!tabs.some(function(t){return t.id===tab;}))tab='pax';
-  var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    tabs.map(function(t){return '<button class="sub-tab '+(tab===t.id?'on':'')+'" onclick="window.bizSetTab(\''+t.id+'\')">'+t.lbl+'</button>';}).join('')+'</div>';
+  var bar=(typeof _tier2==='function')?_tier2(tabs.map(function(t){return {lbl:t.lbl,on:tab===t.id,onclick:"window.bizSetTab('"+t.id+"')"};})):'';
   var body=(tab==='running')?_bizRenderRunning():(tab==='roster')?_bizRenderRoster():_bizRenderPax();
   return '<div>'+bar+body+'</div>';
 }

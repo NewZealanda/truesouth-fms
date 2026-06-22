@@ -257,8 +257,7 @@ function renderFlightDuty(){
   var tab=S._fdTab||'record';
   var tabs=[{id:'record',lbl:'My Record'},{id:'summary',lbl:'Team Summary'}];
   if(canManage)tabs[0]={id:'record',lbl:'Pilot Record'};
-  var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    tabs.map(function(t){return '<button class="sub-tab '+(tab===t.id?'on':'')+'" onclick="window.fdSetTab(\''+t.id+'\')">'+t.lbl+'</button>';}).join('')+'</div>';
+  var bar=(typeof _tier2==='function')?_tier2(tabs.map(function(t){return {lbl:t.lbl,on:tab===t.id,onclick:"window.fdSetTab('"+t.id+"')"};})):'';
   var body=(tab==='summary')?_fdRenderSummary():_fdRenderRecord(canManage);
   return '<div>'+bar+body+'</div>';
 }

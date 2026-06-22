@@ -614,15 +614,15 @@ function renderOpsSubTabs(){
   const isLsView=!!(S.activeTabId||S._newLsTab);
   const isLegacyLs=isLsView&&opsTab!=='rloadsheets'; // the legacy loadsheet editor (S.tab='loadsheet')
   const savedCount=(S.saved||[]).filter(function(s){return s.status!=='deleted';}).length;
-  var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
-  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='bookings'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'bookings\')" style="flex-shrink:0">Bookings</button>';
-  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='rseatmap'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'rseatmap\')" style="flex-shrink:0">Seatmap</button>';
-  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='rloadsheets'?'on':'')+'" onclick="window.switchOpsTab(\'rloadsheets\')" style="flex-shrink:0">Loadsheets</button>';
-  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='saved'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'saved\')" style="flex-shrink:0">Saved ('+savedCount+')</button>';
-  if(hasRolePerm('charter'))h+='<button tabindex="-1" class="sub-tab '+(opsTab==='charter'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'charter\')" style="flex-shrink:0">Charter</button>';
-  h+='<button tabindex="-1" class="sub-tab '+(opsTab==='ground'&&!isLegacyLs?'on':'')+'" onclick="window.switchOpsTab(\'ground\')" style="flex-shrink:0">Ground</button>';
-  h+='</div>';
-  return h;
+  var tabs=[
+    {lbl:'Bookings',on:opsTab==='bookings'&&!isLegacyLs,onclick:"window.switchOpsTab('bookings')"},
+    {lbl:'Seatmap',on:opsTab==='rseatmap'&&!isLegacyLs,onclick:"window.switchOpsTab('rseatmap')"},
+    {lbl:'Loadsheets',on:opsTab==='rloadsheets',onclick:"window.switchOpsTab('rloadsheets')"},
+    {lbl:'Saved ('+savedCount+')',on:opsTab==='saved'&&!isLegacyLs,onclick:"window.switchOpsTab('saved')"}
+  ];
+  if(hasRolePerm('charter'))tabs.push({lbl:'Charter',on:opsTab==='charter'&&!isLegacyLs,onclick:"window.switchOpsTab('charter')"});
+  tabs.push({lbl:'Ground',on:opsTab==='ground'&&!isLegacyLs,onclick:"window.switchOpsTab('ground')"});
+  return _tier2(tabs);
 }
 
 function renderSettingsSubTabs(){
@@ -640,12 +640,7 @@ function renderSettingsSubTabs(){
   // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20.
   if(_adminPlus)sections.push({id:'gdrive',lbl:'Drive'},{id:'statistics',lbl:'Statistics'});
   if(hasRolePerm('audit'))sections.push({id:'audit',lbl:'Audit'});
-  var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
-  sections.forEach(function(s){
-    h+='<button tabindex="-1" class="sub-tab '+(cur===s.id?'on':'')+'" onclick="if(!S.admin)S.admin={};S.admin.section=\''+s.id+'\';render()" style="flex-shrink:0">'+s.lbl+'</button>';
-  });
-  h+='</div>';
-  return h;
+  return _tier2(sections.map(function(s){return {lbl:s.lbl,on:cur===s.id,onclick:"if(!S.admin)S.admin={};S.admin.section='"+s.id+"';render()"};}));
 }
 var _MAINT_TAB_LBL={overview:'Overview',log:'Logs',aircraft:'Aircraft',observations:'Observations',bookings:'Bookings',estimator:'Estimator',search:'Search'};
 // Ordered maintenance tier-2 tab ids (permission-aware). Single source of truth for the tab bar
@@ -655,15 +650,19 @@ function _maintTabIds(){
     ?['overview','log','aircraft','observations','bookings','estimator','search']
     :['overview','log','aircraft','observations','search'];
 }
+// Unified 2nd-tier segmented tab strip. tabs:[{lbl,on,onclick}]. Same look everywhere.
+function _tier2(tabs){if(!tabs||!tabs.length)return '';return '<div class="t2bar">'+tabs.map(function(t){return '<button tabindex="-1" class="t2tab'+(t.on?' on':'')+'" onclick="'+t.onclick+'">'+t.lbl+'</button>';}).join('')+'</div>';}
+// The right 2nd-tier strip for the current section — rendered once at the top of the page (below header).
+function renderTier2Bar(){
+  var sec=S.section||'operations';
+  if(sec==='operations')return renderOpsSubTabs();
+  if(sec==='maintenance')return renderMaintenanceSubTabs();
+  if(sec==='settings')return renderSettingsSubTabs();
+  return '';
+}
 function renderMaintenanceSubTabs(){
   const sub=S.maintTab||'overview';
-  const tabs=_maintTabIds().map(function(id){return {id:id,lbl:_MAINT_TAB_LBL[id]||id};});
-  var h='<div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;padding-bottom:10px">';
-  tabs.forEach(function(t){
-    h+='<button tabindex="-1" class="sub-tab '+(sub===t.id?'on':'')+'" onclick="S.maintTab=\''+t.id+'\';render()" style="flex-shrink:0">'+t.lbl+'</button>';
-  });
-  h+='</div>';
-  return h;
+  return _tier2(_maintTabIds().map(function(id){return {lbl:_MAINT_TAB_LBL[id]||id,on:sub===id,onclick:"S.maintTab='"+id+"';render()"};}));
 }
 function renderApp(){
   const sh={connecting:`<span class="sync-dot dot-spin"></span>Connecting`,ok:`<span class="sync-dot dot-ok"></span>Synced`,error:`<span class="sync-dot dot-err"></span>Offline`}[S.syncStatus]||'';
@@ -690,7 +689,6 @@ function renderApp(){
           </button>
         </div>
       </div>
-      ${(function(){var sec=S.section||'operations';if(sec==='operations')return renderOpsSubTabs();if(sec==='maintenance')return renderMaintenanceSubTabs();if(sec==='settings')return renderSettingsSubTabs();return '';})()}
     </div>
     ${S._drawerOpen?renderDrawer():''}
     ${S._helpOpen?`<div onclick="S._helpOpen=false;render()" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
@@ -722,6 +720,7 @@ function renderApp(){
       </div>
     </div>`:''}
     <div class="page">
+      ${renderTier2Bar()}
       ${S.appMsg?`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;margin-bottom:10px;font-size:13px;font-weight:600;background:${S.appMsg.type==='ok'?'var(--ok-bg)':'var(--err-bg)'};border:1px solid ${S.appMsg.type==='ok'?'var(--ok-border)':'var(--err-border)'};color:${S.appMsg.type==='ok'?'var(--ok-text)':'var(--err-text)'}">
         <span>${S.appMsg.text}</span>
         <button onclick="S.appMsg=null;render()" style="padding:2px 8px;border-radius:4px;border:1px solid currentColor;background:transparent;cursor:pointer;font-size:11px;color:inherit">✕</button>
