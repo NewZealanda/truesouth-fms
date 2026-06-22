@@ -3446,7 +3446,8 @@ function renderAdminAudit(){
       grouped.push(Object.assign({},e,{_count:1}));
     }
   });
-  var rows=grouped.slice(0,200).map(function(e){
+  var _show=S._auditShow||200;
+  var rows=grouped.slice(0,_show).map(function(e){
     var rawDet=typeof e.detail==='object'?JSON.stringify(e.detail):String(e.detail||'');
     var det=_auditDetail(e);
     var cnt=e._count>1?' <span style="font-size:10px;font-weight:700;color:var(--acc);background:rgba(99,102,241,.12);border-radius:10px;padding:0 6px">×'+e._count+'</span>':'';
@@ -3460,7 +3461,7 @@ function renderAdminAudit(){
   }).join('');
   return'<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
     +'<div class="st" style="margin-bottom:0">Audit Log</div>'
-    +'<span style="font-size:11px;color:var(--text3)">Last '+Math.min(log.length,200)+' of '+log.length+' entries</span>'
+    +'<span style="font-size:11px;color:var(--text3)">Showing '+Math.min(grouped.length,_show)+' of '+grouped.length+(S._auditNoMore?'':'+')+' entries</span>'
     +'</div>'
     +'<div style="overflow-x:auto">'
     +'<table style="border-collapse:collapse;width:100%;font-size:12px">'
@@ -3472,5 +3473,19 @@ function renderAdminAudit(){
     +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600">Detail</th>'
     +'</tr></thead>'
     +'<tbody>'+rows+'</tbody>'
-    +'</table></div></div>';
+    +'</table></div>'
+    +((grouped.length>_show||!S._auditNoMore)
+        ?'<div style="text-align:center;margin-top:12px"><button class="btn btn-ghost" style="font-size:12px" onclick="window.auditShowMore()">Show more ↓</button></div>'
+        :'')
+    +'</div>';
 }
+window.auditShowMore=function(){
+  S._auditShow=(S._auditShow||200)+200;
+  var log=S.auditLog||[];
+  // If we've revealed most of what's loaded and more may exist on the server, pull older entries.
+  if(S._auditShow>=log.length&&!S._auditNoMore&&typeof _loadAuditLog==='function'){
+    var oldest=log.length?log[log.length-1].time:null;
+    if(oldest)_loadAuditLog({before:oldest,more:true});
+  }
+  render();
+};

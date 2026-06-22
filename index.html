@@ -797,7 +797,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.06';
+const APP_VER='v25.07';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1880,22 +1880,26 @@ async function loadAll(){
   // asynchronously, so this is ALSO called from inside the restore IIFE once the user exists.
   _loadAuditLog();
 }
-// Superadmin audit-log background fetch (uses the user JWT via SH so RLS allows the read).
-function _loadAuditLog(){
+// Superadmin audit-log fetch (uses the user JWT via SH so RLS allows the read). Pulls the latest 200
+// by default; opts.before=<ISO time> pages further back (for the "Show more" button).
+function _loadAuditLog(opts){
   if(!(S.user&&S.user.superAdmin))return;
+  opts=opts||{};
+  var lim=opts.limit||200;
   (async()=>{try{
-    const r=await fetch(SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit=50',{headers:SH});
+    var url=SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit='+lim+(opts.before?('&created_at=lt.'+encodeURIComponent(opts.before)):'');
+    const r=await fetch(url,{headers:SH});
     if(!r.ok) return;
     const rows=await r.json();
+    S._auditNoMore=(rows.length<lim); // a short page = we've reached the end (hides "Show more")
     const mapped=rows.map(x=>({time:x.created_at,user:x.user_email,name:x.user_name||x.user_email,role:x.role,action:x.action,detail:x.detail,device:x.device}));
     const existing=new Set((S.auditLog||[]).map(e=>e.time+e.user+e.action));
     const fresh=mapped.filter(e=>!existing.has(e.time+e.user+e.action));
     if(fresh.length){
-      S.auditLog=[...mapped,...(S.auditLog||[]).filter(e=>!existing.has(e.time+e.user+e.action))];
-      S.auditLog=S.auditLog.slice(0,1000);
+      S.auditLog=[...(S.auditLog||[]),...fresh].sort(function(a,b){return String(b.time).localeCompare(String(a.time));}).slice(0,5000);
       lsSet('ts_audit_log',S.auditLog);
       render();
-    }
+    } else if(opts.more){ render(); }
   }catch(e){console.warn('Audit fetch failed:',e);}})();
 }
 
@@ -8978,7 +8982,8 @@ function renderAdminAudit(){
       grouped.push(Object.assign({},e,{_count:1}));
     }
   });
-  var rows=grouped.slice(0,200).map(function(e){
+  var _show=S._auditShow||200;
+  var rows=grouped.slice(0,_show).map(function(e){
     var rawDet=typeof e.detail==='object'?JSON.stringify(e.detail):String(e.detail||'');
     var det=_auditDetail(e);
     var cnt=e._count>1?' <span style="font-size:10px;font-weight:700;color:var(--acc);background:rgba(99,102,241,.12);border-radius:10px;padding:0 6px">×'+e._count+'</span>':'';
@@ -8992,7 +8997,7 @@ function renderAdminAudit(){
   }).join('');
   return'<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
     +'<div class="st" style="margin-bottom:0">Audit Log</div>'
-    +'<span style="font-size:11px;color:var(--text3)">Last '+Math.min(log.length,200)+' of '+log.length+' entries</span>'
+    +'<span style="font-size:11px;color:var(--text3)">Showing '+Math.min(grouped.length,_show)+' of '+grouped.length+(S._auditNoMore?'':'+')+' entries</span>'
     +'</div>'
     +'<div style="overflow-x:auto">'
     +'<table style="border-collapse:collapse;width:100%;font-size:12px">'
@@ -9004,8 +9009,22 @@ function renderAdminAudit(){
     +'<th style="padding:6px 8px;text-align:left;color:var(--text3);font-weight:600">Detail</th>'
     +'</tr></thead>'
     +'<tbody>'+rows+'</tbody>'
-    +'</table></div></div>';
+    +'</table></div>'
+    +((grouped.length>_show||!S._auditNoMore)
+        ?'<div style="text-align:center;margin-top:12px"><button class="btn btn-ghost" style="font-size:12px" onclick="window.auditShowMore()">Show more ↓</button></div>'
+        :'')
+    +'</div>';
 }
+window.auditShowMore=function(){
+  S._auditShow=(S._auditShow||200)+200;
+  var log=S.auditLog||[];
+  // If we've revealed most of what's loaded and more may exist on the server, pull older entries.
+  if(S._auditShow>=log.length&&!S._auditNoMore&&typeof _loadAuditLog==='function'){
+    var oldest=log.length?log[log.length-1].time:null;
+    if(oldest)_loadAuditLog({before:oldest,more:true});
+  }
+  render();
+};
 /* acDisp() moved to shared.js (single canonical definition) */
 function renderMaintenance(){
   if(!S._maintLoaded&&typeof window.ensureMaintenance==='function')window.ensureMaintenance(); // lazy-load on a direct landing/refresh

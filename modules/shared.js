@@ -466,7 +466,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.06';
+const APP_VER='v25.07';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1549,22 +1549,26 @@ async function loadAll(){
   // asynchronously, so this is ALSO called from inside the restore IIFE once the user exists.
   _loadAuditLog();
 }
-// Superadmin audit-log background fetch (uses the user JWT via SH so RLS allows the read).
-function _loadAuditLog(){
+// Superadmin audit-log fetch (uses the user JWT via SH so RLS allows the read). Pulls the latest 200
+// by default; opts.before=<ISO time> pages further back (for the "Show more" button).
+function _loadAuditLog(opts){
   if(!(S.user&&S.user.superAdmin))return;
+  opts=opts||{};
+  var lim=opts.limit||200;
   (async()=>{try{
-    const r=await fetch(SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit=50',{headers:SH});
+    var url=SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit='+lim+(opts.before?('&created_at=lt.'+encodeURIComponent(opts.before)):'');
+    const r=await fetch(url,{headers:SH});
     if(!r.ok) return;
     const rows=await r.json();
+    S._auditNoMore=(rows.length<lim); // a short page = we've reached the end (hides "Show more")
     const mapped=rows.map(x=>({time:x.created_at,user:x.user_email,name:x.user_name||x.user_email,role:x.role,action:x.action,detail:x.detail,device:x.device}));
     const existing=new Set((S.auditLog||[]).map(e=>e.time+e.user+e.action));
     const fresh=mapped.filter(e=>!existing.has(e.time+e.user+e.action));
     if(fresh.length){
-      S.auditLog=[...mapped,...(S.auditLog||[]).filter(e=>!existing.has(e.time+e.user+e.action))];
-      S.auditLog=S.auditLog.slice(0,1000);
+      S.auditLog=[...(S.auditLog||[]),...fresh].sort(function(a,b){return String(b.time).localeCompare(String(a.time));}).slice(0,5000);
       lsSet('ts_audit_log',S.auditLog);
       render();
-    }
+    } else if(opts.more){ render(); }
   }catch(e){console.warn('Audit fetch failed:',e);}})();
 }
 
