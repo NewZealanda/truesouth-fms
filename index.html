@@ -797,7 +797,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.10';
+const APP_VER='v25.11';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16813,7 +16813,10 @@ function renderFlightRecord(){
   var uid=(S.user&&S.user.id)||'';
   var open=_frOpenFlight(uid);
   var page=S._frPage||'log';
-  var h=(typeof _tier2==='function')?_tier2([{lbl:'Log a flight',on:page==='log',onclick:"S._frPage='log';render()"},{lbl:'Aircraft records',on:page==='record',onclick:"S._frPage='record';render()"}]):'';
+  var _tabs=[{lbl:'Log a flight',on:page==='log',onclick:"S._frPage='log';render()"},{lbl:'Aircraft records',on:page==='record',onclick:"S._frPage='record';render()"}];
+  if(_frStatsAllowed())_tabs.push({lbl:'Statistics',on:page==='stats',onclick:"S._frPage='stats';render()"});
+  var h=(typeof _tier2==='function')?_tier2(_tabs):'';
+  if(page==='stats'&&_frStatsAllowed()){ h+=_frRenderStats(); return h; }
   if(page==='record'){ h+=_frRenderTodayRecord(uid); return h; }
   if(open){ h+=open.on?_frRenderConfirm(open):_frRenderLand(open); }
   else { h+=_frRenderStart(uid); }
@@ -16901,6 +16904,66 @@ function _frTodayBody(recs,today){
     else{h+='<button onclick="window.frSubmitAircraft(\''+ac+'\')" style="width:100%;min-height:62px;border-radius:14px;border:none;background:#16a34a;color:#fff;font-size:18px;font-weight:800;cursor:pointer">✓ Information correct — submit '+_frEsc(_frAcShort(ac))+'</button><div style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">Writes the day’s TTIS, landings'+(isC208?' &amp; starts':'')+' to Maintenance, and each pilot’s flight time + landings to Flight &amp; Duty. Tap a row to fix anything first.</div>';}
     h+='</div></div>';
   });
+  return h;
+}
+// ── Statistics (admin / F&D-manager) ─────────────────────────────────────────────
+function _frStatsAllowed(){return !!((S.user&&S.user.superAdmin)||(typeof hasRolePerm==='function'&&(hasRolePerm('admin_users')||hasRolePerm('flightrecord_manage'))));}
+window.frStatSearch=function(v){S._frStatQ=v;}; // no render (DOM filter keeps focus)
+window.frStatFilter=function(q){q=String(q||'').toLowerCase();var els=document.querySelectorAll('.frStatRow');for(var i=0;i<els.length;i++){els[i].style.display=(els[i].getAttribute('data-s')||'').indexOf(q)>=0?'':'none';}};
+window.frStatPilot=function(uid){S._frStatUid=(S._frStatUid===uid?null:uid);render();};
+function _frRenderStats(){
+  if(!_frStatsAllowed())return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+  if(!S._frLoaded){S._frLoaded=true;if(window.loadFlightRecords)window.loadFlightRecords();}
+  var recs=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.done&&(r.endHours!=null||r.off))recs.push(r);});
+  var pn=function(uid){var u=(S.users||[]).find(function(x){return x.id===uid;});return u?(u.name||uid):uid;};
+  // aggregate per pilot (+ per-destination)
+  var byP={};
+  recs.forEach(function(r){var a=byP[r.user_id]||(byP[r.user_id]={n:0,ft:0,tacho:0,lc:0,lg:0,first:r.fr_date,last:r.fr_date,dest:{}});
+    a.n++;a.ft+=(+r.flightTime||0);a.tacho+=(+r.tacho||0);
+    if(_frAcType(r.aircraft)==='GA8')a.lg+=(+r.landings||0);else a.lc+=(+r.landings||0);
+    if(String(r.fr_date)<String(a.first))a.first=r.fr_date;if(String(r.fr_date)>String(a.last))a.last=r.fr_date;
+    var key=(r.from||'?')+'→'+(r.to||'?');var d=a.dest[key]||(a.dest[key]={n:0,ft:0,tacho:0});d.n++;d.ft+=(+r.flightTime||0);d.tacho+=(+r.tacho||0);
+  });
+  var pilots=Object.keys(byP).map(function(uid){return {uid:uid,nm:pn(uid),a:byP[uid]};}).sort(function(x,y){return x.nm.localeCompare(y.nm);});
+  var r1=function(v){return (Math.round(v*10)/10).toFixed(1);};
+  var h='<div class="card"><div class="st">Flight statistics <span style="font-weight:400;font-size:11px;color:var(--text3)">— all recorded flights</span></div>';
+  if(!recs.length){h+='<div style="color:var(--text3);font-size:13px;padding:8px 2px">No recorded flights yet.</div></div>';return h;}
+  h+='<input id="frStatSearch" oninput="window.frStatFilter(this.value)" placeholder="Search pilot…" value="'+_frEsc(S._frStatQ||'')+'" style="width:100%;box-sizing:border-box;height:42px;font-size:15px;padding:0 12px;margin-top:8px;border:2px solid var(--border2);border-radius:10px;background:var(--card);color:var(--text)"></div>';
+  // Per-pilot summary
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:640px"><thead><tr style="background:var(--card2)">'+
+    ['Pilot','Flights','Flight h','Avg/flt','Tacho h (airswitch)','C208B ldg','GA8 ldg'].map(function(t,i){return '<th style="text-align:'+(i?'center':'left')+';padding:7px 8px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+  pilots.forEach(function(p){var a=p.a;var sel=S._frStatUid===p.uid;
+    h+='<tr class="frStatRow" data-s="'+_frEsc(p.nm.toLowerCase())+'" onclick="window.frStatPilot(\''+_frJs(p.uid)+'\')" style="border-top:1px solid var(--border2);cursor:pointer'+(sel?';background:rgba(124,58,237,.08)':'')+'">'+
+      '<td style="padding:6px 8px;font-weight:700">'+(sel?'▾ ':'▸ ')+_frEsc(p.nm)+'</td>'+
+      '<td style="padding:6px 8px;text-align:center">'+a.n+'</td>'+
+      '<td style="padding:6px 8px;text-align:center;font-weight:700">'+r1(a.ft)+'</td>'+
+      '<td style="padding:6px 8px;text-align:center">'+r1(a.ft/a.n)+'</td>'+
+      '<td style="padding:6px 8px;text-align:center;color:var(--text2)">'+r1(a.tacho)+'</td>'+
+      '<td style="padding:6px 8px;text-align:center">'+a.lc+'</td>'+
+      '<td style="padding:6px 8px;text-align:center">'+a.lg+'</td>'+
+    '</tr>';
+  });
+  h+='</tbody></table></div>';
+  // Per-destination detail for the selected pilot
+  if(S._frStatUid&&byP[S._frStatUid]){
+    var a=byP[S._frStatUid];
+    var dests=Object.keys(a.dest).map(function(k){return {k:k,d:a.dest[k]};}).sort(function(x,y){return y.d.n-x.d.n;});
+    h+='<div class="card" style="padding:0;overflow-x:auto"><div class="st" style="padding:14px 14px 6px">'+_frEsc(pn(S._frStatUid))+' — by route <span style="font-weight:400;font-size:11px;color:var(--text3)">'+a.n+' flights · '+r1(a.ft)+'h total · '+_frEsc(a.first)+' → '+_frEsc(a.last)+'</span></div>'+
+      '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px"><thead><tr style="background:var(--card2)">'+
+      ['Route','Flights','Total h','Avg flight time','Avg tacho'].map(function(t,i){return '<th style="text-align:'+(i?'center':'left')+';padding:7px 8px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+    dests.forEach(function(e){var d=e.d;var parts=e.k.split('→');var rl=_frRouteName(parts[0],parts[1]);
+      h+='<tr style="border-top:1px solid var(--border2)">'+
+        '<td style="padding:6px 8px;font-weight:700">'+_frEsc(e.k)+(rl?'<span style="display:block;font-size:10px;font-weight:500;color:var(--text3)">'+_frEsc(rl)+'</span>':'')+'</td>'+
+        '<td style="padding:6px 8px;text-align:center">'+d.n+'</td>'+
+        '<td style="padding:6px 8px;text-align:center">'+r1(d.ft)+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;font-weight:700">'+r1(d.ft/d.n)+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;color:var(--text2)">'+r1(d.tacho/d.n)+'</td>'+
+      '</tr>';
+    });
+    h+='</tbody></table><div style="font-size:11px;color:var(--text3);padding:8px 12px">Tacho = airswitch (engine) time. Tap the pilot again to collapse.</div></div>';
+  } else {
+    h+='<div style="font-size:11px;color:var(--text3);padding:2px 4px">Tap a pilot to see their average flight times by route.</div>';
+  }
   return h;
 }
 // Upload one aircraft's day to the maintenance log, then mark its flights submitted.
