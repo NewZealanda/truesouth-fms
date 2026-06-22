@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.79';
+const APP_VER='v24.80';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16592,7 +16592,7 @@ window.bizToggleSched=function(id){S._bizSchedOpen=(S._bizSchedOpen===id)?null:i
 window.bizAddPaydown=function(i){var p=_bizState();if(!p.loans[i])return;(p.loans[i].paydowns=p.loans[i].paydowns||[]).push({date:p.loans[i].start||'2025-06-01',amount:0});_bizSave();render();};
 window.bizSetPaydown=function(i,j,field,value){var p=_bizState();if(!p.loans[i]||!p.loans[i].paydowns[j])return;p.loans[i].paydowns[j][field]=(field==='date')?value:(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizDelPaydown=function(i,j){var p=_bizState();if(!p.loans[i])return;p.loans[i].paydowns.splice(j,1);_bizSave();render();};
-window.bizSetFuel=function(k,value){var p=_bizState();p.running.fuel[k]=(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizSetFuel=function(k,value){var p=_bizState();p.running.fuel[k]=(value===''?'':(+value));p.running.fuelUpdated=new Date().toISOString();_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizSetRunAc=function(i,field,value){var p=_bizState();if(!p.running.aircraft[i])return;p.running.aircraft[i][field]=(field==='code'||field==='type'||field==='fuelType')?value:(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizAddRunAc=function(){_bizState().running.aircraft.push({code:'NEW',type:'C208',burn:170,fuelType:'jeta1',hours:500,maint:0,eoCost:1000000,eoInt:3600,propCost:20000,propInt:2400});_bizSave();render();};
 window.bizDelRunAc=function(i){var p=_bizState();p.running.aircraft.splice(i,1);_bizSave();render();};
@@ -16907,7 +16907,7 @@ function _bizRenderPaxDaily(){
       '<td style="padding:3px 4px;white-space:nowrap;font-size:11px"><b>'+d+'</b> <span style="color:var(--text3)">'+dow+'</span>'+(isToday?' <span style="font-size:8.5px;color:#a78bfa;font-weight:800">TODAY</span>':'')+'</td>'+
       '<td style="padding:2px 3px"><input type="number" value="'+(row.p26!=null?row.p26:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p26\',this.value)" style="'+_inS+'"></td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700">'+(accum||'')+'</td>'+
-      '<td style="padding:3px 4px;text-align:center;font-weight:700'+(ht?';background:'+ht.bg+';color:'+ht.fg:';color:var(--text3)')+'">'+(tracking!=null?(tracking>=0?'+':'')+Math.round(tracking*100)+'%':'—')+'</td>'+
+      '<td style="padding:3px 4px;text-align:center;font-weight:700'+(ht?';background:'+ht.bg+';color:'+ht.fg:';color:var(--text3)')+'">'+(tracking!=null?(tracking>=0?'+':'')+(tracking*100).toFixed(1)+'%':'—')+'</td>'+
       '<td style="padding:2px 3px"><input type="number" value="'+(row.p25!=null?row.p25:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p25\',this.value)" style="'+_inS+'"></td>'+
       '<td style="padding:3px 4px;text-align:center;color:var(--text3)">'+(runLy||'')+'</td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700'+(hc?';background:'+hc.bg+';color:'+hc.fg:';color:var(--text3)')+'">'+(compare!=null?Math.round(compare*100)+'%':'—')+'</td>'+
@@ -16962,6 +16962,7 @@ function _bizRenderRoster(){
 
 var _bizInS='width:100%;font-size:12px;padding:4px 5px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);box-sizing:border-box';
 function _bizPh(n){return '$'+(+n||0).toLocaleString('en-NZ',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function _bizFmtWhen(iso){var d=iso?new Date(iso):null;if(!d||isNaN(d))return '';return d.toLocaleString('en-NZ',{weekday:'long',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});}
 function _bizRenderRunning(){
   var tab=S._bizRunTab||'calc';
   var tabs=[{id:'calc',lbl:'Calculator'},{id:'maint',lbl:'Maintenance'},{id:'vars',lbl:'Cost variables'}];
@@ -17058,7 +17059,8 @@ function _bizRunMaint(){
 // ── Cost variables: fuel (price + per-aircraft burn) and landings/airways per location ──
 function _bizRunVars(){
   var p=_bizState();var fuel=p.running.fuel;
-  var h='<div class="card"><div class="st">Fuel <span style="font-weight:400;font-size:11px;color:var(--text3)">— ex GST</span></div>'+
+  var _fU=p.running.fuelUpdated?('<span style="font-size:11px;color:var(--text3);font-weight:400">Last updated '+_rzEscSafe(_bizFmtWhen(p.running.fuelUpdated))+'</span>'):'';
+  var h='<div class="card"><div class="st" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>Fuel <span style="font-weight:400;font-size:11px;color:var(--text3)">— ex GST</span></span>'+_fU+'</div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">'+
       '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">AvGas $/L</label><input type="number" step="0.01" value="'+(fuel.avgas!==''?fuel.avgas:'')+'" onchange="window.bizSetFuel(\'avgas\',this.value)" style="'+_bizInS+';width:90px;text-align:right"></div>'+
       '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">Jet A1 $/L</label><input type="number" step="0.01" value="'+(fuel.jeta1!==''?fuel.jeta1:'')+'" onchange="window.bizSetFuel(\'jeta1\',this.value)" style="'+_bizInS+';width:90px;text-align:right"></div>'+
