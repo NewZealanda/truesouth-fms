@@ -1287,11 +1287,12 @@ function _rzBookingCard(b){
   if(noShow&&!cancelled)h+='<div style="font-size:11px;color:#f87171;font-weight:700;margin-top:4px">NO-SHOW — excluded from the seatmap push</div>';
   // Aircraft — collapsed shows only the selected one; the full pill selector moves into the dropdown.
   if(!cancelled&&!open)h+=_rzBookingAcBadge(b,ono);
-  // Internal note (office only) — always visible (collapsed + expanded). Saved on blur.
+  // Internal note (office only) — always visible (collapsed + expanded), right-aligned under the
+  // buttons. Saved on blur.
   if(!cancelled){
     var _bkNote=_rzEsc((S._rzBkNote||{})[ono]||'');
-    h+='<div style="margin-top:8px"><textarea onblur="window.rezdyBookingNote(\''+oE+'\',this.value)" placeholder="📝 Internal note (office only)…" rows="1" '+
-      'style="width:100%;box-sizing:border-box;resize:vertical;min-height:30px;font-family:inherit;font-size:12px;line-height:1.45;padding:6px 9px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text1)">'+_bkNote+'</textarea></div>';
+    h+='<div style="display:flex;justify-content:flex-end;margin-top:6px"><textarea onblur="window.rezdyBookingNote(\''+oE+'\',this.value)" placeholder="📝 Internal note…" rows="1" '+
+      'style="width:240px;max-width:100%;box-sizing:border-box;resize:vertical;min-height:24px;font-family:inherit;font-size:11px;line-height:1.4;padding:4px 8px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1)">'+_bkNote+'</textarea></div>';
   }
   // Passenger bubbles + aircraft selector live inside the expanded detail (dropdown).
   if(open)h+='<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:10px">'+(!cancelled?_rzBookingAcPills(b,ono):'')+_rzBookingDetail(b)+
