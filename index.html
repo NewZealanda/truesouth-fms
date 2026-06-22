@@ -743,7 +743,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.00';
+const APP_VER='v25.01';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2437,7 +2437,9 @@ function autoSaveLS(){
 async function saveLsToDb(id,form){
   if(!S.user||!id||!form)return;
   const status=form.status||'unsigned';
-  await sbU('ts_loadsheets',[{id:id,form:form,saved_at:new Date().toISOString(),status:status}]);
+  // Preserve the Drive-archive flag so an archived loadsheet isn't reverted to "Signed" on a re-save.
+  const _du=!!((S.saved||[]).find(function(s){return s.id===id;})||{}).driveUploaded;
+  await sbU('ts_loadsheets',[{id:id,form:form,saved_at:new Date().toISOString(),status:status,drive_uploaded:_du}]);
   S.saved=(S.saved||[]).map(function(s){return s.id===id?Object.assign({},s,{form:form,savedAt:new Date().toISOString(),status:status}):s;});
   lsSet('ts_loadsheets_cache',S.saved);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{id:id,by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
@@ -7184,19 +7186,28 @@ window.applyTypedSig=()=>{
 };
 
 // ── Save / Submit ──
+// Carry the Drive-archive flag (and who/when) forward across a re-save so an archived loadsheet
+// (status 'complete' + driveUploaded) doesn't fall back to the Signed tab. Returns the flag for the
+// upsert payload so the server keeps drive_uploaded too.
+function _lsCarryArchive(id,sheet){
+  var pv=(S.saved||[]).find(function(s){return s.id===id;})||{};
+  if(pv.driveUploaded){sheet.driveUploaded=true;sheet.uploadedBy=pv.uploadedBy||'';sheet.uploadedAt=pv.uploadedAt||'';}
+  return !!pv.driveUploaded;
+}
 window.saveUnsigned=async()=>{
   const f=S.form;if(!f.ac){toast('Select an aircraft first.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
   const isEdit=!!S.editId;
   f.savedBy=(S.user&&S.user.name)||'';
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'unsigned'};
+  var _du=_lsCarryArchive(id,sheet);
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);
   S.editId=id;S.formDirty=false;
   // Clear originalForm — user deliberately saved, so restore banner no longer needed
   var _savingTab=S.lsTabs.find(function(t){return t.id===id;});
   if(_savingTab)delete _savingTab.originalForm;
   lsSet('ts_loadsheets_cache',S.saved);
-  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned'}]);
+  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned',drive_uploaded:_du}]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog(isEdit?'loadsheet_edit':'loadsheet_save',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
@@ -7228,11 +7239,12 @@ window.submitLsInPlace=async function(){
   f.sigBy=(S.user&&S.user.name)||'';f.sigTs=f.sigTs||new Date().toISOString();
   f.savedBy=(S.user&&S.user.name)||'';
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'complete'};
+  var _du=_lsCarryArchive(id,sheet);
   S.saved=S.saved.filter(function(s){return s.id!==id;});S.saved.unshift(sheet);
   lsSet('ts_loadsheets_cache',S.saved);
   S.editId=id;S.formDirty=false;
   var _t=S.lsTabs.find(function(t){return t.id===id;});if(_t)delete _t.originalForm;
-  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
+  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
@@ -7257,11 +7269,12 @@ window.handleSubmit=async()=>{
   f.sigBy=(S.user&&S.user.name)||'';f.sigTs=new Date().toISOString();
   f.savedBy=(S.user&&S.user.name)||'';
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'complete'};
+  var _du=_lsCarryArchive(id,sheet);
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);lsSet('ts_loadsheets_cache',S.saved);
   var _submitTab=S.lsTabs.find(function(t){return t.id===id;});
   if(_submitTab)delete _submitTab.originalForm;
   // Google Drive upload happens via nightly scheduler only
-  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete'}]);
+  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
   toast('Loadsheet submitted.','ok');

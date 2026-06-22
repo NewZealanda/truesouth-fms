@@ -412,7 +412,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.00';
+const APP_VER='v25.01';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2106,7 +2106,9 @@ function autoSaveLS(){
 async function saveLsToDb(id,form){
   if(!S.user||!id||!form)return;
   const status=form.status||'unsigned';
-  await sbU('ts_loadsheets',[{id:id,form:form,saved_at:new Date().toISOString(),status:status}]);
+  // Preserve the Drive-archive flag so an archived loadsheet isn't reverted to "Signed" on a re-save.
+  const _du=!!((S.saved||[]).find(function(s){return s.id===id;})||{}).driveUploaded;
+  await sbU('ts_loadsheets',[{id:id,form:form,saved_at:new Date().toISOString(),status:status,drive_uploaded:_du}]);
   S.saved=(S.saved||[]).map(function(s){return s.id===id?Object.assign({},s,{form:form,savedAt:new Date().toISOString(),status:status}):s;});
   lsSet('ts_loadsheets_cache',S.saved);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{id:id,by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
