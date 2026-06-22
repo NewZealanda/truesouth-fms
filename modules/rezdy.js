@@ -1193,7 +1193,7 @@ window.rezdyBookingUncancel=function(order){
 window.rezdyBookingNoShow=function(order){
   order=String(order);S._rzNoShow=S._rzNoShow||{};
   var on=!S._rzNoShow[order];
-  if(on)S._rzNoShow[order]=true;else delete S._rzNoShow[order];
+  if(on){S._rzNoShow[order]=true;if(S._rzSelfDrive)delete S._rzSelfDrive[order];}else delete S._rzNoShow[order]; // no-show & self-drive are mutually exclusive
   if(window.pickupSave)window.pickupSave(true);
   if(on)_rzNotifyNoShow(order);   // tell the desk
   render();
@@ -1210,7 +1210,7 @@ window.pickupMarkNoShow=function(order){
   order=String(order);
   if(typeof confirm==='function'&&!confirm('Mark this customer as a NO-SHOW?\nThey’ll be removed from your run and the desk will be notified.'))return;
   S._rzNoShow=S._rzNoShow||{};
-  if(!S._rzNoShow[order]){S._rzNoShow[order]=true;if(window.pickupSave)window.pickupSave(true);_rzNotifyNoShow(order);if(typeof toast==='function')toast('Marked no-show — desk notified','ok');}
+  if(!S._rzNoShow[order]){S._rzNoShow[order]=true;if(S._rzSelfDrive)delete S._rzSelfDrive[order];if(window.pickupSave)window.pickupSave(true);_rzNotifyNoShow(order);if(typeof toast==='function')toast('Marked no-show — desk notified','ok');}
   render();
 };
 // Notify desk / operations staff when a booking is marked no-show.
@@ -4000,7 +4000,7 @@ window.rezdyGotoBooking=function(order){
   S._schedGroupKey=null;
   // Select the booking's departure (or the cancelled view) so its card is actually on screen.
   var _b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===order;});
-  if(_b)S._bkDepFilter=/cancel/i.test(_b.status||'')?'__cancelled__':_rzBookingDep(_b);
+  if(_b)S._bkDepFilter=_rzIsCancelled(_b)?'__cancelled__':_rzBookingDep(_b);
   if(typeof window.switchOpsTab==='function')window.switchOpsTab('bookings');
   else{S.section='operations';S.tab='bookings';render();}
 };

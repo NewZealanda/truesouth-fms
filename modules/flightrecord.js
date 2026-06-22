@@ -74,10 +74,13 @@ function _frProdDest(prod){
 }
 function _frDayFlights(uid){
   var u=(S.users||[]).find(function(x){return x.id===uid;});if(!u)return [];
+  // Only auto-detect when the calendar is on TODAY — otherwise S._rezdyBookings/_schedBlocks are for a
+  // different day and would surface the wrong flights (manual-block branch already guards this).
+  if(S.rezdyDate&&S.rezdyDate!==_frToday())return [];
   var code=_frPilotCode(u);var bk=S._rezdyBookings||[];
   var groups={};
   bk.forEach(function(b){
-    if(/cancel/i.test(b.status||''))return;
+    if((typeof _rzIsCancelled==='function')?_rzIsCancelled(b):/cancel/i.test(b.status||''))return;
     var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,String(b.orderNumber||'')):null;if(!ac||ac==='__none__')return;
     ((b.items)||[]).forEach(function(it){
       var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
@@ -404,12 +407,10 @@ window.frSubmitAircraft=function(ac){
 // entered are preserved (fdSaveRow merges). Loads F&D first so an existing row isn't wiped.
 function _frPushToFD(date,uids){
   if(typeof window.fdSaveRow!=='function'||!uids||!uids.length)return Promise.resolve();
-  // SAFETY: fdSaveRow does a full-row UPSERT, so writing a pilot's row without first holding their
-  // existing row would null their duty start/end. Managers load EVERY pilot's rows; non-managers
-  // load only their own. So only push rows we can safely merge: all if manager, else just the actor.
-  var canAll=(typeof _fdCanManage==='function'&&_fdCanManage());
-  var me=(S.user&&S.user.id)||'';
-  var targets=canAll?uids.slice():uids.filter(function(u){return u===me;});
+  // fdSaveRow does a full-row UPSERT, so we must hold each pilot's existing row before writing or we'd
+  // null their duty times. loadFlightDuty (called below) now loads ALL pilots' rows, so the merge is
+  // safe for everyone on the aircraft — push them all (so a co-pilot's F&D isn't silently dropped).
+  var targets=uids.slice();
   if(!targets.length)return Promise.resolve();
   var doPush=function(){
     targets.forEach(function(uid){

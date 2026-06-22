@@ -330,9 +330,15 @@ async function sbMergeSave(key, localVal, applyFn){
   _sbSaving[key]={};
   try{
     var ok=false,present=false,fresh=null;
-    try{var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.'+encodeURIComponent(key)+'&select=value',{headers:SH});
+    // Use _sbFetch (refreshes the JWT on a 401) — a raw fetch would 401-loop near token expiry.
+    try{var r=await _sbFetch(SB+'/rest/v1/ts_settings?key=eq.'+encodeURIComponent(key)+'&select=value',{headers:SH});
       if(r.ok){ok=true;var rows=await r.json();if(rows&&rows.length){present=true;fresh=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;}}}catch(e){}
-    if(!ok){_sbSaving[key]=null;clearTimeout(_sbRetry[key]);_sbRetry[key]=setTimeout(function(){sbMergeSave(key,localVal,applyFn);},2500);return null;}
+    if(!ok){
+      // Couldn't read the server copy — don't risk clobbering it. Retry the LATEST queued value.
+      var againF=(_sbSaving[key]&&_sbSaving[key].again)||{v:localVal,fn:applyFn};
+      _sbSaving[key]=null;clearTimeout(_sbRetry[key]);_sbRetry[key]=setTimeout(function(){sbMergeSave(key,againF.v,againF.fn);},2500);
+      return null;
+    }
     var base=(key in _sbBase)?_sbBase[key]:(present?fresh:localVal);
     var merged=present?_sbMerge3(fresh,base,localVal):localVal;
     var res=await sbU('ts_settings',[{key:key,value:JSON.stringify(merged)}]);
@@ -346,8 +352,8 @@ async function sbMergeSave(key, localVal, applyFn){
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true},
-  admin:       {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true},
+  superadmin:  {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true},
+  admin:       {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true},
   cx_manager:  {operations:true,calendar:true, charter:false,maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
   pilot:       {operations:true,calendar:true, charter:false,maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true, rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
   desk:        {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
@@ -466,7 +472,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.12';
+const APP_VER='v25.13';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1557,10 +1563,13 @@ function _loadAuditLog(opts){
   var lim=opts.limit||200;
   (async()=>{try{
     var url=SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit='+lim+(opts.before?('&created_at=lt.'+encodeURIComponent(opts.before)):'');
-    const r=await fetch(url,{headers:SH});
+    const r=await _sbFetch(url,{headers:SH});
     if(!r.ok) return;
     const rows=await r.json();
     S._auditNoMore=(rows.length<lim); // a short page = we've reached the end (hides "Show more")
+    // Track the oldest row fetched as an explicit paging cursor (rows are desc → last is oldest), so
+    // "Show more" keeps advancing even once the in-memory log is capped at 5000.
+    if(rows.length){var _oldest=rows[rows.length-1].created_at;if(!S._auditCursor||String(_oldest)<String(S._auditCursor))S._auditCursor=_oldest;}
     const mapped=rows.map(x=>({time:x.created_at,user:x.user_email,name:x.user_name||x.user_email,role:x.role,action:x.action,detail:x.detail,device:x.device}));
     const existing=new Set((S.auditLog||[]).map(e=>e.time+e.user+e.action));
     const fresh=mapped.filter(e=>!existing.has(e.time+e.user+e.action));
@@ -1746,7 +1755,7 @@ function initRealtime(){
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='charter_update'){
           var _cupl=msg.payload.payload;
           if(_cupl&&_cupl.sessionId!==_sessionId){
-            if(_cupl.quotes)lsSet('ts_charter_quotes_cache',_cupl.quotes);
+            if(_cupl.quotes){lsSet('ts_charter_quotes_cache',_cupl.quotes);if(typeof _sbSetBase==='function')_sbSetBase('charter_quotes',_cupl.quotes);}
             if(_cupl.by&&S.user&&_cupl.by!==S.user.name)toast((_cupl.by||'Someone')+' updated charter quotes','info');
             if(S.tab==='charter')safeRender();
           }

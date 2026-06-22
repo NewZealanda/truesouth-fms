@@ -285,16 +285,21 @@ function _bizMerge(fresh,base,cur){
   Object.keys(cur).forEach(function(k){if(k==='paxData'||k==='paxSync')return;if(JSON.stringify(cur[k])!==JSON.stringify(base[k]))fresh[k]=_bizClone(cur[k]);});
   return fresh;
 }
-let _bizSaving=false,_bizResave=false;
+let _bizSaving=false,_bizResave=false,_bizRetry=null;
 function _bizSave(){var p=_bizState();try{lsSet&&lsSet('ts_business_plan',p);}catch(e){}_bizMergeSave();}
 async function _bizMergeSave(){
   if(_bizSaving){_bizResave=true;return;}
   _bizSaving=true;
   try{
     var base=S._bizBase?JSON.parse(S._bizBase):null;
-    var fresh=null;
-    try{var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.business_plan&select=value',{headers:SH});if(r.ok){var rows=await r.json();if(rows&&rows[0]&&rows[0].value)fresh=JSON.parse(rows[0].value);}}catch(e){}
-    var merged=(fresh&&base)?_bizMerge(fresh,base,S._bizPlan):S._bizPlan;
+    var ok=false,present=false,fresh=null;
+    // _sbFetch refreshes the JWT on 401; distinguish a failed read from an absent row.
+    try{var r=await _sbFetch(SB+'/rest/v1/ts_settings?key=eq.business_plan&select=value',{headers:SH});if(r.ok){ok=true;var rows=await r.json();if(rows&&rows[0]&&rows[0].value){present=true;fresh=JSON.parse(rows[0].value);}}}catch(e){}
+    if(!ok){ // couldn't read the server copy → don't clobber it with the full local plan; retry
+      if(typeof toast==='function')toast('Business plan not saved — could not read the latest. Will retry.','warn');
+      _bizSaving=false;_bizResave=false;clearTimeout(_bizRetry);_bizRetry=setTimeout(_bizMergeSave,2500);return;
+    }
+    var merged=(present&&base)?_bizMerge(fresh,base,S._bizPlan):S._bizPlan;
     S._bizPlan=merged;try{lsSet&&lsSet('ts_business_plan',merged);}catch(e){}
     var res=(typeof sbU==='function')?await sbU('ts_settings',[{key:'business_plan',value:JSON.stringify(merged)}]):null;
     if(res===null){if(typeof toast==='function')toast('Business plan did not save to the server — check connection','warn');}

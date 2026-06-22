@@ -3330,7 +3330,8 @@ function renderAdminPerms(){
     {k:'flightduty',    lbl:'F&D',            tip:'Access Flight & Duty — own record + team summary'},
     {k:'flightduty_manage',lbl:'F&D Mgr',     tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'},
     {k:'businessplan',  lbl:'Biz Plan',       tip:'View the confidential TSF Business Plan'},
-    {k:'flightrecord',  lbl:'Flt Record',     tip:'Daily Flight Record card (in development — superadmin only)'}
+    {k:'flightrecord',  lbl:'Flt Record',     tip:'Access the Flight Record (log flights, aircraft records)'},
+    {k:'flightrecord_manage',lbl:'Flt Rec Mgr',tip:'Flight Record statistics + view/manage all pilots\' logbooks'}
     // (the old 'rezdy' column was retired in v24.16 — the Rezdy section no longer exists; Calendar
     //  has its own perm and Pickups live under Operations ▸ Ground gated by 'operations'.)
   ];
@@ -3482,10 +3483,11 @@ function renderAdminAudit(){
 window.auditShowMore=function(){
   S._auditShow=(S._auditShow||200)+200;
   var log=S.auditLog||[];
-  // If we've revealed most of what's loaded and more may exist on the server, pull older entries.
-  if(S._auditShow>=log.length&&!S._auditNoMore&&typeof _loadAuditLog==='function'){
-    var oldest=log.length?log[log.length-1].time:null;
-    if(oldest)_loadAuditLog({before:oldest,more:true});
+  // Pull older entries from the server if more may exist, using the explicit paging cursor
+  // (robust even once the in-memory log is capped).
+  if(!S._auditNoMore&&typeof _loadAuditLog==='function'){
+    var cur=S._auditCursor||(log.length?log[log.length-1].time:null);
+    if(cur)_loadAuditLog({before:cur,more:true});
   }
   render();
 };

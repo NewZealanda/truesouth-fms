@@ -134,7 +134,7 @@ function renderSavedQuotes(){
     return'<div style="padding:12px 0;border-bottom:1px solid var(--border)">'
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">'
         +'<div style="min-width:0;flex:1">'
-          +'<div contenteditable="true" data-qi="'+qi+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="font-weight:700;font-size:13px;color:var(--text1);cursor:text;outline:none;border-bottom:1px dashed transparent;transition:border-color .15s" onfocus="this.style.borderBottomColor=\'var(--acc)\'" onblur="this.style.borderBottomColor=\'transparent\';window.renameCharterQuote(+this.dataset.qi,this.textContent.trim())" title="Click to rename">'+esc(name)+'</div>'
+          +'<div contenteditable="true" data-qid="'+esc(String(q.id!=null?q.id:qi))+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="font-weight:700;font-size:13px;color:var(--text1);cursor:text;outline:none;border-bottom:1px dashed transparent;transition:border-color .15s" onfocus="this.style.borderBottomColor=\'var(--acc)\'" onblur="this.style.borderBottomColor=\'transparent\';window.renameCharterQuote(this.dataset.qid,this.textContent.trim())" title="Click to rename">'+esc(name)+'</div>'
           +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+routeStr+(fqd?' · For: '+fqd:'')+'</div>'
           +'<div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">'
             +acPills
@@ -144,8 +144,8 @@ function renderSavedQuotes(){
           +'</div>'
         +'</div>'
         +'<div style="display:flex;gap:6px;flex-shrink:0">'
-          +'<button class="btn btn-ghost" style="font-size:12px" onclick="window.loadCharterQuote('+qi+')">📂 Load</button>'
-          +'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.deleteCharterQuote('+qi+')">✕</button>'
+          +'<button class="btn btn-ghost" style="font-size:12px" onclick="window.loadCharterQuote(\''+esc(String(q.id!=null?q.id:qi))+'\')">📂 Load</button>'
+          +'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.deleteCharterQuote(\''+esc(String(q.id!=null?q.id:qi))+'\')">✕</button>'
         +'</div>'
       +'</div>'
     +'</div>';
@@ -178,27 +178,34 @@ window.saveCharterQuote=function(){
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
-window.loadCharterQuote=function(idx){
+// Resolve a quote reference (id, or a legacy numeric index) to its current array index.
+function _charterQuoteIdx(quotes,ref){
+  var i=quotes.findIndex(function(x){return x.id!=null&&String(x.id)===String(ref);});
+  if(i<0&&/^\d+$/.test(String(ref)))i=+ref;
+  return i;
+}
+window.loadCharterQuote=function(ref){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
-  if(!quotes[idx])return;
+  const idx=_charterQuoteIdx(quotes,ref);if(idx<0||!quotes[idx])return;
   S.charter={legs:JSON.parse(JSON.stringify(quotes[idx].legs||[])),showQuote:false};
   S.charterTab='calc';
   render();toast('Quote loaded','ok');
 };
-window.deleteCharterQuote=function(idx){
-  if(!confirm('Delete this saved quote?'))return;
+window.deleteCharterQuote=function(ref){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
+  const idx=_charterQuoteIdx(quotes,ref);if(idx<0||!quotes[idx])return;
+  if(!confirm('Delete this saved quote?'))return;
   quotes.splice(idx,1);
   lsSet('ts_charter_quotes_cache',quotes);
   sbMergeSave('charter_quotes',quotes,function(m){lsSet('ts_charter_quotes_cache',m);}).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
-window.renameCharterQuote=function(qi,newName){
+window.renameCharterQuote=function(ref,newName){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
-  if(!quotes[qi])return;
-  if(quotes[qi].name===newName)return;
-  quotes[qi].name=newName;
+  const idx=_charterQuoteIdx(quotes,ref);if(idx<0||!quotes[idx])return;
+  if(quotes[idx].name===newName)return;
+  quotes[idx].name=newName;
   lsSet('ts_charter_quotes_cache',quotes);
   sbMergeSave('charter_quotes',quotes,function(m){lsSet('ts_charter_quotes_cache',m);}).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();

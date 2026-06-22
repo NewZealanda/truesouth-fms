@@ -733,7 +733,7 @@ window._rBuildChoose=function(c){
 };
 
 // Sentinel: a change that DELETES a roster cell (vs setting it to a value).
-var _RDEL=' __rdel__';
+var _RDEL='__rdel__';
 // Merge-before-write: re-GET the latest cloud roster and apply ONLY the given changed cells onto
 // it, so a concurrent device's edits to OTHER cells survive (was: blind whole-blob last-writer-wins).
 // `changes` shape: { 'YYYY-MM-DD': { userId: newValue | _RDEL } }. Returns true on a confirmed save.

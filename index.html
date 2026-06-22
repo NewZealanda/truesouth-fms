@@ -661,9 +661,15 @@ async function sbMergeSave(key, localVal, applyFn){
   _sbSaving[key]={};
   try{
     var ok=false,present=false,fresh=null;
-    try{var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.'+encodeURIComponent(key)+'&select=value',{headers:SH});
+    // Use _sbFetch (refreshes the JWT on a 401) — a raw fetch would 401-loop near token expiry.
+    try{var r=await _sbFetch(SB+'/rest/v1/ts_settings?key=eq.'+encodeURIComponent(key)+'&select=value',{headers:SH});
       if(r.ok){ok=true;var rows=await r.json();if(rows&&rows.length){present=true;fresh=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;}}}catch(e){}
-    if(!ok){_sbSaving[key]=null;clearTimeout(_sbRetry[key]);_sbRetry[key]=setTimeout(function(){sbMergeSave(key,localVal,applyFn);},2500);return null;}
+    if(!ok){
+      // Couldn't read the server copy — don't risk clobbering it. Retry the LATEST queued value.
+      var againF=(_sbSaving[key]&&_sbSaving[key].again)||{v:localVal,fn:applyFn};
+      _sbSaving[key]=null;clearTimeout(_sbRetry[key]);_sbRetry[key]=setTimeout(function(){sbMergeSave(key,againF.v,againF.fn);},2500);
+      return null;
+    }
     var base=(key in _sbBase)?_sbBase[key]:(present?fresh:localVal);
     var merged=present?_sbMerge3(fresh,base,localVal):localVal;
     var res=await sbU('ts_settings',[{key:key,value:JSON.stringify(merged)}]);
@@ -677,8 +683,8 @@ async function sbMergeSave(key, localVal, applyFn){
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true},
-  admin:       {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true},
+  superadmin:  {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true},
+  admin:       {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true},
   cx_manager:  {operations:true,calendar:true, charter:false,maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
   pilot:       {operations:true,calendar:true, charter:false,maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true, rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
   desk:        {operations:true,calendar:true, charter:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
@@ -797,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.12';
+const APP_VER='v25.13';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1888,10 +1894,13 @@ function _loadAuditLog(opts){
   var lim=opts.limit||200;
   (async()=>{try{
     var url=SB+'/rest/v1/ts_audit_log?order=created_at.desc&limit='+lim+(opts.before?('&created_at=lt.'+encodeURIComponent(opts.before)):'');
-    const r=await fetch(url,{headers:SH});
+    const r=await _sbFetch(url,{headers:SH});
     if(!r.ok) return;
     const rows=await r.json();
     S._auditNoMore=(rows.length<lim); // a short page = we've reached the end (hides "Show more")
+    // Track the oldest row fetched as an explicit paging cursor (rows are desc → last is oldest), so
+    // "Show more" keeps advancing even once the in-memory log is capped at 5000.
+    if(rows.length){var _oldest=rows[rows.length-1].created_at;if(!S._auditCursor||String(_oldest)<String(S._auditCursor))S._auditCursor=_oldest;}
     const mapped=rows.map(x=>({time:x.created_at,user:x.user_email,name:x.user_name||x.user_email,role:x.role,action:x.action,detail:x.detail,device:x.device}));
     const existing=new Set((S.auditLog||[]).map(e=>e.time+e.user+e.action));
     const fresh=mapped.filter(e=>!existing.has(e.time+e.user+e.action));
@@ -2077,7 +2086,7 @@ function initRealtime(){
         if(msg.event==='broadcast'&&msg.payload&&msg.payload.event==='charter_update'){
           var _cupl=msg.payload.payload;
           if(_cupl&&_cupl.sessionId!==_sessionId){
-            if(_cupl.quotes)lsSet('ts_charter_quotes_cache',_cupl.quotes);
+            if(_cupl.quotes){lsSet('ts_charter_quotes_cache',_cupl.quotes);if(typeof _sbSetBase==='function')_sbSetBase('charter_quotes',_cupl.quotes);}
             if(_cupl.by&&S.user&&_cupl.by!==S.user.name)toast((_cupl.by||'Someone')+' updated charter quotes','info');
             if(S.tab==='charter')safeRender();
           }
@@ -5439,7 +5448,7 @@ function renderSavedQuotes(){
     return'<div style="padding:12px 0;border-bottom:1px solid var(--border)">'
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">'
         +'<div style="min-width:0;flex:1">'
-          +'<div contenteditable="true" data-qi="'+qi+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="font-weight:700;font-size:13px;color:var(--text1);cursor:text;outline:none;border-bottom:1px dashed transparent;transition:border-color .15s" onfocus="this.style.borderBottomColor=\'var(--acc)\'" onblur="this.style.borderBottomColor=\'transparent\';window.renameCharterQuote(+this.dataset.qi,this.textContent.trim())" title="Click to rename">'+esc(name)+'</div>'
+          +'<div contenteditable="true" data-qid="'+esc(String(q.id!=null?q.id:qi))+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}" style="font-weight:700;font-size:13px;color:var(--text1);cursor:text;outline:none;border-bottom:1px dashed transparent;transition:border-color .15s" onfocus="this.style.borderBottomColor=\'var(--acc)\'" onblur="this.style.borderBottomColor=\'transparent\';window.renameCharterQuote(this.dataset.qid,this.textContent.trim())" title="Click to rename">'+esc(name)+'</div>'
           +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+routeStr+(fqd?' · For: '+fqd:'')+'</div>'
           +'<div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">'
             +acPills
@@ -5449,8 +5458,8 @@ function renderSavedQuotes(){
           +'</div>'
         +'</div>'
         +'<div style="display:flex;gap:6px;flex-shrink:0">'
-          +'<button class="btn btn-ghost" style="font-size:12px" onclick="window.loadCharterQuote('+qi+')">📂 Load</button>'
-          +'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.deleteCharterQuote('+qi+')">✕</button>'
+          +'<button class="btn btn-ghost" style="font-size:12px" onclick="window.loadCharterQuote(\''+esc(String(q.id!=null?q.id:qi))+'\')">📂 Load</button>'
+          +'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.deleteCharterQuote(\''+esc(String(q.id!=null?q.id:qi))+'\')">✕</button>'
         +'</div>'
       +'</div>'
     +'</div>';
@@ -5483,27 +5492,34 @@ window.saveCharterQuote=function(){
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
-window.loadCharterQuote=function(idx){
+// Resolve a quote reference (id, or a legacy numeric index) to its current array index.
+function _charterQuoteIdx(quotes,ref){
+  var i=quotes.findIndex(function(x){return x.id!=null&&String(x.id)===String(ref);});
+  if(i<0&&/^\d+$/.test(String(ref)))i=+ref;
+  return i;
+}
+window.loadCharterQuote=function(ref){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
-  if(!quotes[idx])return;
+  const idx=_charterQuoteIdx(quotes,ref);if(idx<0||!quotes[idx])return;
   S.charter={legs:JSON.parse(JSON.stringify(quotes[idx].legs||[])),showQuote:false};
   S.charterTab='calc';
   render();toast('Quote loaded','ok');
 };
-window.deleteCharterQuote=function(idx){
-  if(!confirm('Delete this saved quote?'))return;
+window.deleteCharterQuote=function(ref){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
+  const idx=_charterQuoteIdx(quotes,ref);if(idx<0||!quotes[idx])return;
+  if(!confirm('Delete this saved quote?'))return;
   quotes.splice(idx,1);
   lsSet('ts_charter_quotes_cache',quotes);
   sbMergeSave('charter_quotes',quotes,function(m){lsSet('ts_charter_quotes_cache',m);}).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
   render();
 };
-window.renameCharterQuote=function(qi,newName){
+window.renameCharterQuote=function(ref,newName){
   const quotes=lsGet('ts_charter_quotes_cache')||[];
-  if(!quotes[qi])return;
-  if(quotes[qi].name===newName)return;
-  quotes[qi].name=newName;
+  const idx=_charterQuoteIdx(quotes,ref);if(idx<0||!quotes[idx])return;
+  if(quotes[idx].name===newName)return;
+  quotes[idx].name=newName;
   lsSet('ts_charter_quotes_cache',quotes);
   sbMergeSave('charter_quotes',quotes,function(m){lsSet('ts_charter_quotes_cache',m);}).then(function(r){if(r===null)toast('Charter quote did not save to the server — check connection.','warn');});
   if(typeof broadcastCharter==='function')broadcastCharter();
@@ -8866,7 +8882,8 @@ function renderAdminPerms(){
     {k:'flightduty',    lbl:'F&D',            tip:'Access Flight & Duty — own record + team summary'},
     {k:'flightduty_manage',lbl:'F&D Mgr',     tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'},
     {k:'businessplan',  lbl:'Biz Plan',       tip:'View the confidential TSF Business Plan'},
-    {k:'flightrecord',  lbl:'Flt Record',     tip:'Daily Flight Record card (in development — superadmin only)'}
+    {k:'flightrecord',  lbl:'Flt Record',     tip:'Access the Flight Record (log flights, aircraft records)'},
+    {k:'flightrecord_manage',lbl:'Flt Rec Mgr',tip:'Flight Record statistics + view/manage all pilots\' logbooks'}
     // (the old 'rezdy' column was retired in v24.16 — the Rezdy section no longer exists; Calendar
     //  has its own perm and Pickups live under Operations ▸ Ground gated by 'operations'.)
   ];
@@ -9018,10 +9035,11 @@ function renderAdminAudit(){
 window.auditShowMore=function(){
   S._auditShow=(S._auditShow||200)+200;
   var log=S.auditLog||[];
-  // If we've revealed most of what's loaded and more may exist on the server, pull older entries.
-  if(S._auditShow>=log.length&&!S._auditNoMore&&typeof _loadAuditLog==='function'){
-    var oldest=log.length?log[log.length-1].time:null;
-    if(oldest)_loadAuditLog({before:oldest,more:true});
+  // Pull older entries from the server if more may exist, using the explicit paging cursor
+  // (robust even once the in-memory log is capped).
+  if(!S._auditNoMore&&typeof _loadAuditLog==='function'){
+    var cur=S._auditCursor||(log.length?log[log.length-1].time:null);
+    if(cur)_loadAuditLog({before:cur,more:true});
   }
   render();
 };
@@ -10915,7 +10933,7 @@ window._rBuildChoose=function(c){
 };
 
 // Sentinel: a change that DELETES a roster cell (vs setting it to a value).
-var _RDEL=' __rdel__';
+var _RDEL='__rdel__';
 // Merge-before-write: re-GET the latest cloud roster and apply ONLY the given changed cells onto
 // it, so a concurrent device's edits to OTHER cells survive (was: blind whole-blob last-writer-wins).
 // `changes` shape: { 'YYYY-MM-DD': { userId: newValue | _RDEL } }. Returns true on a confirmed save.
@@ -13171,7 +13189,7 @@ window.rezdyBookingUncancel=function(order){
 window.rezdyBookingNoShow=function(order){
   order=String(order);S._rzNoShow=S._rzNoShow||{};
   var on=!S._rzNoShow[order];
-  if(on)S._rzNoShow[order]=true;else delete S._rzNoShow[order];
+  if(on){S._rzNoShow[order]=true;if(S._rzSelfDrive)delete S._rzSelfDrive[order];}else delete S._rzNoShow[order]; // no-show & self-drive are mutually exclusive
   if(window.pickupSave)window.pickupSave(true);
   if(on)_rzNotifyNoShow(order);   // tell the desk
   render();
@@ -13188,7 +13206,7 @@ window.pickupMarkNoShow=function(order){
   order=String(order);
   if(typeof confirm==='function'&&!confirm('Mark this customer as a NO-SHOW?\nThey’ll be removed from your run and the desk will be notified.'))return;
   S._rzNoShow=S._rzNoShow||{};
-  if(!S._rzNoShow[order]){S._rzNoShow[order]=true;if(window.pickupSave)window.pickupSave(true);_rzNotifyNoShow(order);if(typeof toast==='function')toast('Marked no-show — desk notified','ok');}
+  if(!S._rzNoShow[order]){S._rzNoShow[order]=true;if(S._rzSelfDrive)delete S._rzSelfDrive[order];if(window.pickupSave)window.pickupSave(true);_rzNotifyNoShow(order);if(typeof toast==='function')toast('Marked no-show — desk notified','ok');}
   render();
 };
 // Notify desk / operations staff when a booking is marked no-show.
@@ -15978,7 +15996,7 @@ window.rezdyGotoBooking=function(order){
   S._schedGroupKey=null;
   // Select the booking's departure (or the cancelled view) so its card is actually on screen.
   var _b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===order;});
-  if(_b)S._bkDepFilter=/cancel/i.test(_b.status||'')?'__cancelled__':_rzBookingDep(_b);
+  if(_b)S._bkDepFilter=_rzIsCancelled(_b)?'__cancelled__':_rzBookingDep(_b);
   if(typeof window.switchOpsTab==='function')window.switchOpsTab('bookings');
   else{S.section='operations';S.tab='bookings';render();}
 };
@@ -16712,10 +16730,13 @@ function _frProdDest(prod){
 }
 function _frDayFlights(uid){
   var u=(S.users||[]).find(function(x){return x.id===uid;});if(!u)return [];
+  // Only auto-detect when the calendar is on TODAY — otherwise S._rezdyBookings/_schedBlocks are for a
+  // different day and would surface the wrong flights (manual-block branch already guards this).
+  if(S.rezdyDate&&S.rezdyDate!==_frToday())return [];
   var code=_frPilotCode(u);var bk=S._rezdyBookings||[];
   var groups={};
   bk.forEach(function(b){
-    if(/cancel/i.test(b.status||''))return;
+    if((typeof _rzIsCancelled==='function')?_rzIsCancelled(b):/cancel/i.test(b.status||''))return;
     var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,String(b.orderNumber||'')):null;if(!ac||ac==='__none__')return;
     ((b.items)||[]).forEach(function(it){
       var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
@@ -17042,12 +17063,10 @@ window.frSubmitAircraft=function(ac){
 // entered are preserved (fdSaveRow merges). Loads F&D first so an existing row isn't wiped.
 function _frPushToFD(date,uids){
   if(typeof window.fdSaveRow!=='function'||!uids||!uids.length)return Promise.resolve();
-  // SAFETY: fdSaveRow does a full-row UPSERT, so writing a pilot's row without first holding their
-  // existing row would null their duty start/end. Managers load EVERY pilot's rows; non-managers
-  // load only their own. So only push rows we can safely merge: all if manager, else just the actor.
-  var canAll=(typeof _fdCanManage==='function'&&_fdCanManage());
-  var me=(S.user&&S.user.id)||'';
-  var targets=canAll?uids.slice():uids.filter(function(u){return u===me;});
+  // fdSaveRow does a full-row UPSERT, so we must hold each pilot's existing row before writing or we'd
+  // null their duty times. loadFlightDuty (called below) now loads ALL pilots' rows, so the merge is
+  // safe for everyone on the aircraft — push them all (so a co-pilot's F&D isn't silently dropped).
+  var targets=uids.slice();
   if(!targets.length)return Promise.resolve();
   var doPush=function(){
     targets.forEach(function(uid){
@@ -17613,16 +17632,21 @@ function _bizMerge(fresh,base,cur){
   Object.keys(cur).forEach(function(k){if(k==='paxData'||k==='paxSync')return;if(JSON.stringify(cur[k])!==JSON.stringify(base[k]))fresh[k]=_bizClone(cur[k]);});
   return fresh;
 }
-let _bizSaving=false,_bizResave=false;
+let _bizSaving=false,_bizResave=false,_bizRetry=null;
 function _bizSave(){var p=_bizState();try{lsSet&&lsSet('ts_business_plan',p);}catch(e){}_bizMergeSave();}
 async function _bizMergeSave(){
   if(_bizSaving){_bizResave=true;return;}
   _bizSaving=true;
   try{
     var base=S._bizBase?JSON.parse(S._bizBase):null;
-    var fresh=null;
-    try{var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.business_plan&select=value',{headers:SH});if(r.ok){var rows=await r.json();if(rows&&rows[0]&&rows[0].value)fresh=JSON.parse(rows[0].value);}}catch(e){}
-    var merged=(fresh&&base)?_bizMerge(fresh,base,S._bizPlan):S._bizPlan;
+    var ok=false,present=false,fresh=null;
+    // _sbFetch refreshes the JWT on 401; distinguish a failed read from an absent row.
+    try{var r=await _sbFetch(SB+'/rest/v1/ts_settings?key=eq.business_plan&select=value',{headers:SH});if(r.ok){ok=true;var rows=await r.json();if(rows&&rows[0]&&rows[0].value){present=true;fresh=JSON.parse(rows[0].value);}}}catch(e){}
+    if(!ok){ // couldn't read the server copy → don't clobber it with the full local plan; retry
+      if(typeof toast==='function')toast('Business plan not saved — could not read the latest. Will retry.','warn');
+      _bizSaving=false;_bizResave=false;clearTimeout(_bizRetry);_bizRetry=setTimeout(_bizMergeSave,2500);return;
+    }
+    var merged=(present&&base)?_bizMerge(fresh,base,S._bizPlan):S._bizPlan;
     S._bizPlan=merged;try{lsSet&&lsSet('ts_business_plan',merged);}catch(e){}
     var res=(typeof sbU==='function')?await sbU('ts_settings',[{key:'business_plan',value:JSON.stringify(merged)}]):null;
     if(res===null){if(typeof toast==='function')toast('Business plan did not save to the server — check connection','warn');}
