@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.77';
+const APP_VER='v24.79';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16464,6 +16464,7 @@ function _bizState(){
   if(!Array.isArray(S._bizPlan.payRates))S._bizPlan.payRates=JSON.parse(JSON.stringify(BIZ_DEFAULT.payRates));
   if(!S._bizPlan.paxTargets||typeof S._bizPlan.paxTargets!=='object')S._bizPlan.paxTargets={};
   if(!S._bizPlan.paxData||typeof S._bizPlan.paxData!=='object')S._bizPlan.paxData={};
+  if(!S._bizPlan.paxSync||typeof S._bizPlan.paxSync!=='object')S._bizPlan.paxSync={}; // ym -> ISO time of last Rezdy sync (shared)
   // Backfill historical pax from the spreadsheet for any date/field not already present, so a saved
   // or partial cloud blob can't hide the history. Runs once per load; Rezdy-synced / edited values win.
   if(!S._bizPaxMerged&&typeof _bizPaxDefault==='function'){
@@ -16649,6 +16650,7 @@ window.bizPaxSyncRezdy=async function(ym,auto){
     Object.keys(p.paxData).forEach(function(ds){if(ds.slice(0,7)===ym&&p.paxData[ds]){delete p.paxData[ds].p26;if(p.paxData[ds].p25==null)delete p.paxData[ds];}});
     var n=0;
     Object.keys(byDate).forEach(function(ds){p.paxData[ds]=p.paxData[ds]||{};p.paxData[ds].p26=byDate[ds];n++;});
+    p.paxSync=p.paxSync||{};p.paxSync[ym]=new Date().toISOString(); // shared last-updated stamp
     _bizSave();render();
     if(typeof toast==='function')toast(auto?('Pulled provisional bookings for '+ym+' ✓'):('Updated '+n+' day'+(n===1?'':'s')+' from Rezdy seats sold ✓'),'ok');
   }catch(e){if(!auto&&typeof toast==='function')toast('Could not pull from Rezdy — '+e,'err');}
@@ -16856,14 +16858,30 @@ function _bizRenderPaxDaily(){
   var _inS='width:100%;font-size:12px;padding:4px 2px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:center;box-sizing:border-box';
   var monLbl=new Date(y,mo-1,1).toLocaleDateString('en-NZ',{month:'long',year:'numeric'});
   var curMonth=_bizDefaultPaxMonth();var today=new Date();
-  // A future month holds only provisional forward bookings (no confirmed history yet) — auto-pull
-  // them from Rezdy the first time it's opened this session, so the numbers are there without a click.
-  if(ym>curMonth){S._bizPaxAutoSynced=S._bizPaxAutoSynced||{};if(!S._bizPaxAutoSynced[ym]){S._bizPaxAutoSynced[ym]=1;if(typeof window.bizPaxSyncRezdy==='function')setTimeout(function(){window.bizPaxSyncRezdy(ym,true);},0);}}
+  // Provisional numbers are pulled on demand via the Sync button (saved to the shared plan, so every
+  // viewer sees the same data + when it was last refreshed).
+  var _syncIso=(p.paxSync||{})[ym];
+  function _bizFmtSync(iso){var d=iso?new Date(iso):null;if(!d||isNaN(d))return '';return d.toLocaleString('en-NZ',{weekday:'long',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});}
+  var _syncNote=_syncIso?'<span style="font-size:11px;color:var(--text3)">Last updated '+_rzEscSafe(_bizFmtSync(_syncIso))+'</span>':'';
   var h='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
     '<div style="display:flex;align-items:center;gap:6px"><button class="btn btn-ghost" style="font-size:13px;padding:4px 10px" onclick="window.bizPaxMonth(-1)">◁</button>'+
     '<span style="font-weight:700;font-size:14px;min-width:130px;text-align:center">'+monLbl+'</span>'+
     '<button class="btn btn-ghost" style="font-size:13px;padding:4px 10px" onclick="window.bizPaxMonth(1)">▶</button></div>'+
-    '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(96,165,250,.5);color:#60a5fa" onclick="window.bizPaxSyncRezdy(\''+ym+'\')" title="Fill 26 Pax from Rezdy seats sold for this month">⟳ Sync seats sold</button></div>';
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+_syncNote+
+      '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(96,165,250,.5);color:#60a5fa" onclick="window.bizPaxSyncRezdy(\''+ym+'\')" title="Pull 26 Pax from Rezdy seats sold for this month (saved for everyone)">⟳ Sync seats sold</button></div></div>';
+  // Headline figures (at the top): confirmed-to-today vs target.
+  var _td=(ym===curMonth)?today.getDate():(ym<curMonth?daysIn:0);   // "today" within this month
+  var accumTd=0;for(var _dd=1;_dd<=_td;_dd++){var _r=p.paxData[ym+'-'+String(_dd).padStart(2,'0')];if(_r)accumTd+=(+_r.p26||0);}
+  var daysLeft=Math.max(0,daysIn-_td);
+  var paxToTarget=totT?Math.max(0,totT-accumTd):null;
+  var paxPerDay=(paxToTarget!=null&&daysLeft>0)?Math.ceil(paxToTarget/daysLeft):(paxToTarget||0);
+  function fig(lbl,val,col){return '<div style="flex:1 1 120px;border:1px solid var(--border2);border-top:3px solid '+(col||'#7c3aed')+';border-radius:9px;padding:10px 12px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700">'+lbl+'</div><div style="font-size:19px;font-weight:800;margin-top:2px">'+val+'</div></div>';}
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
+    fig('Pax/day needed',paxPerDay,'#60a5fa')+
+    fig('Pax to target',(paxToTarget!=null?paxToTarget:'—'),'#f59e0b')+
+    fig('Days left',daysLeft,'#ef4444')+
+    fig('Target',(target!=null?target:'—'),'#22c55e')+
+    '</div>';
   // Fixed-width table (natural width from the colgroup) so headers, inputs and computed cells line up.
   var W=[78,62,60,72,62,64,72]; // Date,26 Pax,Accum,Tracking,Last Yr,Accum LY,Compare
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;table-layout:fixed;width:'+W.reduce(function(a,b){return a+b;},0)+'px">';
@@ -16896,17 +16914,6 @@ function _bizRenderPaxDaily(){
       '</tr>';
   }
   h+='</tbody></table></div>';
-  // bottom figures — confirmed-to-today vs target
-  var daysLeft=Math.max(0,daysIn-_tdy);                          // days remaining in the month (after today)
-  var paxToTarget=totT?Math.max(0,totT-accumToday):null;          // target − pax accumulated up to today
-  var paxPerDay=(paxToTarget!=null&&daysLeft>0)?Math.ceil(paxToTarget/daysLeft):(paxToTarget||0); // daily rate needed to hit target
-  function fig(lbl,val,col){return '<div style="flex:1 1 120px;border:1px solid var(--border2);border-top:3px solid '+(col||'#7c3aed')+';border-radius:9px;padding:10px 12px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700">'+lbl+'</div><div style="font-size:19px;font-weight:800;margin-top:2px">'+val+'</div></div>';}
-  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
-    fig('Pax/day needed',paxPerDay,'#60a5fa')+
-    fig('Pax to target',(paxToTarget!=null?paxToTarget:'—'),'#f59e0b')+
-    fig('Days left',daysLeft,'#ef4444')+
-    fig('Target',(target!=null?target:'—'),'#22c55e')+
-    '</div>';
   h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px">Today is highlighted; <span style="opacity:.55">dimmed days are still to come — forward bookings, not yet confirmed flown</span>. Target comes from the FY budget for this month. Tracking = % of target reached − % of the month elapsed (green = ahead of pace). Compare = this year vs last year. "Sync seats sold" pulls 26 Pax from Rezdy bookings.</div>';
   return h;
 }
