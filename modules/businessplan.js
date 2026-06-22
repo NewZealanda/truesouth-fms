@@ -129,8 +129,9 @@ function _bizState(){
   // One-time backfill: ensure the leased SDB ($1500/hr + fuel) is in the fleet so it appears in the
   // calculator. Guarded by a flag so a deliberate delete sticks (the flag persists on the next save).
   if(!S._bizPlan.running._sdbSeed){
-    if(!S._bizPlan.running.aircraft.some(function(a){return String(a.code||'').toUpperCase()==='SDB';}))
-      S._bizPlan.running.aircraft.push({code:'SDB',type:'C208',burn:170,fuelType:'jeta1',hours:500,maint:0,eoCost:0,eoInt:1,propCost:0,propInt:1,lease:1500});
+    var _sdb=S._bizPlan.running.aircraft.find(function(a){return String(a.code||'').toUpperCase()==='SDB';});
+    if(!_sdb)S._bizPlan.running.aircraft.push({code:'SDB',type:'C208',burn:170,fuelType:'jeta1',hours:500,maint:0,eoCost:0,eoInt:1,propCost:0,propInt:1,lease:1500});
+    else if(!(+_sdb.lease>0))_sdb.lease=1500; // existing SDB → make it the $1500/hr lease
     S._bizPlan.running._sdbSeed=true;
   }
   if(!Array.isArray(S._bizPlan.running.locations))S._bizPlan.running.locations=JSON.parse(JSON.stringify(BIZ_DEFAULT.running.locations));
@@ -651,7 +652,7 @@ function _bizRunCalcView(){
   if(!acs.length)return '<div class="card" style="color:var(--text3);padding:20px;font-size:13px">Add an aircraft on the Maintenance tab first.</div>';
   // Sources: the two owned-fleet type averages, plus each leased aircraft individually (lease + fuel).
   var srcs=[{key:'C208',lbl:'C208B (owned avg)',type:'C208'},{key:'GA8',lbl:'GA8 (owned avg)',type:'GA8'}];
-  acs.forEach(function(a,i){if(+a.lease>0)srcs.push({key:'ac'+i,lbl:(a.code||'?')+' (lease)',type:a.type,acIdx:i});});
+  acs.forEach(function(a,i){srcs.push({key:'ac'+i,lbl:(a.code||'?')+(+a.lease>0?' (lease)':''),type:a.type,acIdx:i});}); // every aircraft individually, incl. SDB
   var srcKey=(srcs.some(function(s){return s.key===cal.src;}))?cal.src:'C208';
   var sel=srcs.find(function(s){return s.key===srcKey;})||srcs[0];
   var rc,srcLbl;
