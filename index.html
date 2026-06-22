@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.66';
+const APP_VER='v24.67';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -12723,6 +12723,17 @@ function _rzEffBreakdown(b){
 }
 function _rzBdText(bd){return bd.a+'A'+(bd.c?' · '+bd.c+'C':'')+(bd.i?' · '+bd.i+'i':'');}
 function _rzBdCompact(bd){return bd.a+'A'+(bd.c?bd.c+'C':'')+(bd.i?bd.i+'i':'');} // 10A2C1i
+// Aggregate folded-flyback bookings into one " + NA CODE" string per product code (so 3×1A FLB
+// shows as "+ 3A FLB", not three separate "+ 1A FLB"). Returns '' when nothing is folded in.
+function _rzFbSummary(fbArr){
+  var byCode={};
+  (fbArr||[]).forEach(function(bk){
+    var code=_rzProduct((bk.it&&bk.it.product)||'')||'FLB';
+    var e=_rzEffBreakdown(bk.b);var g=byCode[code]||(byCode[code]={a:0,c:0,i:0});
+    g.a+=e.a;g.c+=e.c;g.i+=e.i;
+  });
+  return Object.keys(byCode).map(function(code){return ' + '+_rzBdCompact(byCode[code])+' '+code;}).join('');
+}
 // Pilots available to fly — the single source of truth is the AIRCRAFT APPROVAL pills in each
 // crew profile, so this reads from S.crew (every aircraft-approved crew member), NOT just login
 // accounts. Each carries a `rostered` flag (rostered-on for the day) so the UI can sort/dim the
@@ -15450,7 +15461,7 @@ function _rzRenderSchedule(){
     var gbd={a:0,c:0,i:0};g.bookings.forEach(function(bk){var e=_rzEffBreakdown(bk.b);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
     var pilot=(S._schedPilots||{})[g.key]||null;
     g.bd=gbd;g.pilot=pilot;
-    var fbStr='';(g._fb||[]).forEach(function(bk){var e=_rzEffBreakdown(bk.b);var code=_rzProduct((bk.it&&bk.it.product)||'');fbStr+=' + '+_rzBdCompact(e)+' '+code;});
+    var fbStr=_rzFbSummary(g._fb);   // aggregated, e.g. " + 3A FLB"
     g.label=(pilot?pilot+'/':'')+acLbl+' '+_rzBdCompact(gbd)+' '+g.product+fbStr;g.order=g.key;g._owing=g.owing;
     return g;
   });
@@ -15483,7 +15494,7 @@ function _rzRenderSchedule(){
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px">'+
           '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">'+
             '<span class="pill" style="background:'+_gcol+'22;border:1px solid '+_gcol+';color:'+_gcol+';font-size:12px;font-weight:800;padding:2px 10px;border-radius:12px">'+_rzEsc(_gac||'Unallocated')+'</span>'+
-            '<span style="font-size:14px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(_grp.start)+' · '+_grp.pax+'A · '+_rzEsc(_grp.product)+'</span>'+
+            '<span style="font-size:14px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(_grp.start)+' · '+_rzEsc(_rzBdCompact(_grp.bd||{a:_grp.pax,c:0,i:0}))+' '+_rzEsc(_grp.product)+'<span style="color:#f59e0b">'+_rzEsc(_rzFbSummary(_grp._fb))+'</span></span>'+
             (_grp.pilot?'<span class="pill" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.5);color:#60a5fa;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">✈ '+_rzEsc(_grp.pilot)+' <span onclick="event.stopPropagation();window.rezdySchedClearPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
