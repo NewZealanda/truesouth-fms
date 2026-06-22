@@ -743,7 +743,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.96';
+const APP_VER='v24.97';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -8878,6 +8878,7 @@ function renderAdminAudit(){
     if(diff<86400000)return Math.floor(diff/3600000)+'h ago';
     return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});
   }
+  function fmtFull(t){if(!t)return'';var d=new Date(t);return d.toLocaleString('en-NZ',{weekday:'short',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});}
   function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
   // Turn raw action+detail into a plain-English summary.
   function _auditAction(a){
@@ -8922,7 +8923,7 @@ function renderAdminAudit(){
     var det=_auditDetail(e);
     var cnt=e._count>1?' <span style="font-size:10px;font-weight:700;color:var(--acc);background:rgba(99,102,241,.12);border-radius:10px;padding:0 6px">×'+e._count+'</span>':'';
     return'<tr style="border-bottom:1px solid var(--border)">'
-      +'<td style="padding:7px 8px;font-size:11px;color:var(--text3);white-space:nowrap">'+fmtTime(e.time)+'</td>'
+      +'<td title="'+esc(fmtFull(e.time))+'" style="padding:7px 8px;font-size:11px;color:var(--text3);white-space:nowrap;cursor:help">'+fmtTime(e.time)+'</td>'
       +'<td style="padding:7px 8px;font-size:12px;font-weight:600;white-space:nowrap">'+esc(e.name||e.user||'')+'</td>'
       +'<td style="padding:7px 8px;font-size:11px;color:var(--text3)">'+esc(e.role||'')+'</td>'
       +'<td style="padding:7px 8px;font-size:12px">'+esc(_auditAction(e.action))+cnt+'</td>'
