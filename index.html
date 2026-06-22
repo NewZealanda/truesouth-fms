@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.75';
+const APP_VER='v24.77';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16609,11 +16609,26 @@ function _bizPaxTarget(ym){
   return null;
 }
 // Pull this year's daily pax (26 Pax) from Rezdy seats-sold for the displayed month.
+// Refresh EVERY day of a month from Rezdy into ts_rezdy_bookings (the cache is filled per-day, so
+// days never opened in Bookings would otherwise be missing). Limited concurrency to be gentle.
+async function _bizSyncMonthRezdy(ym){
+  if(typeof callFn!=='function')return;
+  var y=+ym.slice(0,4),mo=+ym.slice(5,7),daysIn=new Date(y,mo,0).getDate();
+  var days=[];for(var d=1;d<=daysIn;d++)days.push(ym+'-'+String(d).padStart(2,'0'));
+  var idx=0;
+  async function worker(){while(idx<days.length){var ds=days[idx++];try{await callFn('rezdy-sync',{date:ds});}catch(e){}}}
+  var ws=[];for(var k=0;k<4;k++)ws.push(worker());
+  await Promise.all(ws);
+}
 window.bizPaxSyncRezdy=async function(ym,auto){
   if(typeof sbF!=='function')return;
   var from=ym+'-01';var d=new Date(+ym.slice(0,4),+ym.slice(5,7),0);var to=ym+'-'+String(d.getDate()).padStart(2,'0');
-  if(!auto&&typeof toast==='function')toast('Pulling seats sold from Rezdy…','info');
+  var cur=_bizDefaultPaxMonth();
+  if(!auto&&typeof toast==='function')toast(ym>=cur?('Pulling all '+ym+' bookings from Rezdy — this can take a moment…'):'Pulling seats sold from Rezdy…','info');
   try{
+    // Current/future months: pull the WHOLE month live from Rezdy first (so un-viewed days are
+    // included). Past months use whatever is already cached.
+    if(ym>=cur)await _bizSyncMonthRezdy(ym);
     var rows=await sbF('ts_rezdy_bookings','&tour_date=gte.'+from+'&tour_date=lte.'+to);
     if(!Array.isArray(rows)){if(!auto&&typeof toast==='function')toast('No bookings found for that month.','warn');return;}
     // Count seats sold EXACTLY like the Bookings/Calendar page: map each row to a booking (drops
@@ -16787,6 +16802,15 @@ function _bizHeat(val,lo,hi){
   var fg=(alpha>=0.5)?'#ffffff':'rgb('+Math.round(r*0.85)+','+Math.round(g*0.7)+','+Math.round(b*0.7)+')';
   return {bg:'rgba('+r+','+g+','+b+','+alpha.toFixed(2)+')',fg:fg};
 }
+// Original "minor" scale — clamped red → amber → green (no dark extremes). Used for the Compare column.
+function _bizHeatMinor(val,lo,hi){
+  var t=Math.max(0,Math.min(1,(val-lo)/(hi-lo)));
+  function L(a,b,u){return Math.round(a+(b-a)*u);}
+  var r,g,b;
+  if(t<0.5){var u=t/0.5;r=L(239,245,u);g=L(68,158,u);b=L(68,11,u);}
+  else{var u=(t-0.5)/0.5;r=L(245,34,u);g=L(158,197,u);b=L(11,94,u);}
+  return {bg:'rgba('+r+','+g+','+b+',0.20)',fg:'rgb('+r+','+g+','+b+')'};
+}
 function _bizPaxMonths(){var p=_bizState();var o={};Object.keys(p.paxData).forEach(function(ds){if((+p.paxData[ds].p26)>0||(+p.paxData[ds].p25)>0)o[ds.slice(0,7)]=1;});return Object.keys(o).sort();}
 function _bizMonthTot(ym,field){var p=_bizState();var t=0;Object.keys(p.paxData).forEach(function(ds){if(ds.slice(0,7)===ym)t+=(+p.paxData[ds][field]||0);});return t;}
 
@@ -16808,7 +16832,7 @@ function _bizRenderPaxSummary(){
     var pax=_bizMonthTot(ym,'p26'),ly=_bizMonthTot(ym,'p25'),target=_bizPaxTarget(ym);
     tP+=pax;tT+=(target||0);tL+=ly;
     var pctT=target?pax/target:null;var vsLy=ly?pax/ly:null;
-    var ct=pctT!=null?_bizHeat(pctT,0.7,1.1):null;var cl=vsLy!=null?_bizHeat(vsLy,0.7,1.3):null;
+    var ct=pctT!=null?_bizHeat(pctT,0.7,1.1):null;var cl=vsLy!=null?_bizHeatMinor(vsLy,0.7,1.3):null; // vs-last-year (compare) → minor scale
     h+='<tr style="border-top:1px solid var(--border2)">'+
       '<td style="padding:5px 10px;font-weight:700;white-space:nowrap">'+_bizMonLabel(ym+'-01')+'</td>'+
       '<td style="padding:5px 10px;text-align:right;font-weight:700">'+pax+'</td>'+
@@ -16857,8 +16881,8 @@ function _bizRenderPaxDaily(){
     // month keeps elapsing, so the figure dips on a no-fly day instead of dropping to a dash.
     var tracking=totT?(accum/totT)-(d/daysIn):null; // % of target reached − % of month elapsed
     var compare=runLy?accum/runLy:null;
-    var ht=tracking!=null?_bizHeat(tracking,-0.15,0.15):null;
-    var hc=compare!=null?_bizHeat(compare,0.7,1.3):null;
+    var ht=tracking!=null?_bizHeat(tracking,-0.15,0.15):null;            // Tracking → extended (black) scale
+    var hc=compare!=null?_bizHeatMinor(compare,0.7,1.3):null;            // Compare → original minor scale
     var dow=new Date(y,mo-1,d).toLocaleDateString('en-NZ',{weekday:'short'});
     var rowStyle='border-top:1px solid var(--border2);'+(isToday?'background:rgba(124,58,237,.14);box-shadow:inset 3px 0 0 #7c3aed;':(isFuture?'opacity:.45;':''));
     h+='<tr style="'+rowStyle+'">'+
