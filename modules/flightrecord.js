@@ -96,17 +96,24 @@ function _frDayFlights(uid){
     if(code&&pilot&&String(pilot)===String(code))ins.push({ac:g.ac,start:g.start,prod:g.prod,pob:g.pob+1,from:'QN',to:_frProdDest(g.prod)||'MF'}); // +1 PIC
   });
   ins.sort(function(a,b){return _frMins(a.start)-_frMins(b.start);});
-  // Build the leg list: each scenic departure = an INBOUND leg, plus a FERRY return leg (empty,
-  // no loadsheet) back to QN. If a new departure begins before this leg's block ends, the return
-  // is a reposition ferry to pick up the next load. The pilot picks/edits the leg they're flying.
+  // Each scenic departure is a "block": an OUTBOUND leg (QN→dest) at the start and a PASSENGER RETURN
+  // (dest→QN, same product) at the end — normally you go and come back, NO ferry. A ferry (empty
+  // reposition) is only added when the NEXT departure on the SAME aircraft starts BEFORE this block's
+  // return — then the aircraft must reposition empty back to base to start the next load. The pilot
+  // picks/edits the leg they're flying.
   var out=[];
   ins.forEach(function(f,i){
-    out.push(f);
-    var durMin=(typeof _rzProductDuration==='function')?_rzProductDuration(f.prod):0;
-    var retMin=_frMins(f.start)+(durMin||90);
-    var next=ins[i+1];
-    out.push({ac:f.ac,start:_frHHMM(retMin),prod:'Ferry',pob:1,from:(f.to||'MF'),to:'QN',ferry:true,
-      hint:(next&&_frMins(next.start)<retMin)?'reposition for next load':'empty return'});
+    out.push(f);  // outbound (QN→dest, pax)
+    var durMin=(typeof _rzProductDuration==='function')?_rzProductDuration(f.prod):0;durMin=durMin||90;
+    var retMin=_frMins(f.start)+durMin;
+    // passenger return at the end of the block (dest→QN, same product)
+    out.push({ac:f.ac,start:_frHHMM(retMin),prod:f.prod,pob:f.pob,from:(f.to||'MF'),to:'QN',ret:true,hint:'return'});
+    // ferry ONLY if the next same-aircraft departure overlaps (starts before this block returns)
+    var next=null;for(var j=i+1;j<ins.length;j++){if(ins[j].ac===f.ac){next=ins[j];break;}}
+    if(next&&_frMins(next.start)<retMin){
+      out.push({ac:f.ac,start:_frHHMM(_frMins(next.start)-50),prod:'Ferry',pob:1,from:(f.to||'MF'),to:'QN',ferry:true,
+        hint:'reposition empty for '+next.start+' '+next.prod});
+    }
   });
   // Manual schedule blocks (maintenance / training / ferry / private hire) the operator created on the
   // calendar and assigned to THIS pilot — show them as flights too (label "QN-WF" → from QN, to WF).
