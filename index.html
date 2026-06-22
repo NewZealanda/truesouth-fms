@@ -736,7 +736,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.65';
+const APP_VER='v24.66';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16547,13 +16547,13 @@ function _bizPaxTarget(ym){
   return null;
 }
 // Pull this year's daily pax (26 Pax) from Rezdy seats-sold for the displayed month.
-window.bizPaxSyncRezdy=async function(ym){
+window.bizPaxSyncRezdy=async function(ym,auto){
   if(typeof sbF!=='function')return;
   var from=ym+'-01';var d=new Date(+ym.slice(0,4),+ym.slice(5,7),0);var to=ym+'-'+String(d.getDate()).padStart(2,'0');
-  if(typeof toast==='function')toast('Pulling seats sold from Rezdy…','info');
+  if(!auto&&typeof toast==='function')toast('Pulling seats sold from Rezdy…','info');
   try{
     var rows=await sbF('ts_rezdy_bookings','&tour_date=gte.'+from+'&tour_date=lte.'+to);
-    if(!Array.isArray(rows)){if(typeof toast==='function')toast('No bookings found for that month.','warn');return;}
+    if(!Array.isArray(rows)){if(!auto&&typeof toast==='function')toast('No bookings found for that month.','warn');return;}
     // Count seats sold EXACTLY like the Bookings/Calendar page: map each row to a booking (drops
     // supplier-duplicate rows), skip cancellations (status lives on the booking JSON, not the DB
     // row), and sum adults + children (infants travel free, so excluded — matches "seats sold").
@@ -16573,8 +16573,8 @@ window.bizPaxSyncRezdy=async function(ym){
     var n=0;
     Object.keys(byDate).forEach(function(ds){p.paxData[ds]=p.paxData[ds]||{};p.paxData[ds].p26=byDate[ds];n++;});
     _bizSave();render();
-    if(typeof toast==='function')toast('Updated '+n+' day'+(n===1?'':'s')+' from Rezdy seats sold ✓','ok');
-  }catch(e){if(typeof toast==='function')toast('Could not pull from Rezdy — '+e,'err');}
+    if(typeof toast==='function')toast(auto?('Pulled provisional bookings for '+ym+' ✓'):('Updated '+n+' day'+(n===1?'':'s')+' from Rezdy seats sold ✓'),'ok');
+  }catch(e){if(!auto&&typeof toast==='function')toast('Could not pull from Rezdy — '+e,'err');}
 };
 window.bizBudgetSel=function(id){S._bizBudget=id;render();};
 window.bizSetBudgetDriver=function(bid,field,m,value){var p=_bizState();var b=p.budgets.find(function(x){return x.id===bid;});if(!b||!b[field])return;b[field][m]=(value===''?'':(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
@@ -16760,6 +16760,9 @@ function _bizRenderPaxDaily(){
   var _inS='width:100%;font-size:12px;padding:4px 2px;border:1px solid var(--border2);border-radius:5px;background:var(--card);color:var(--text);text-align:center;box-sizing:border-box';
   var monLbl=new Date(y,mo-1,1).toLocaleDateString('en-NZ',{month:'long',year:'numeric'});
   var curMonth=_bizDefaultPaxMonth();var today=new Date();
+  // A future month holds only provisional forward bookings (no confirmed history yet) — auto-pull
+  // them from Rezdy the first time it's opened this session, so the numbers are there without a click.
+  if(ym>curMonth){S._bizPaxAutoSynced=S._bizPaxAutoSynced||{};if(!S._bizPaxAutoSynced[ym]){S._bizPaxAutoSynced[ym]=1;if(typeof window.bizPaxSyncRezdy==='function')setTimeout(function(){window.bizPaxSyncRezdy(ym,true);},0);}}
   var h='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
     '<div style="display:flex;align-items:center;gap:6px"><button class="btn btn-ghost" style="font-size:13px;padding:4px 10px" onclick="window.bizPaxMonth(-1)">◁</button>'+
     '<span style="font-weight:700;font-size:14px;min-width:130px;text-align:center">'+monLbl+'</span>'+
