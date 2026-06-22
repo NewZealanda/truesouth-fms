@@ -616,6 +616,14 @@ function renderMaintBookings(){
           <input type="number" class="fi" step="0.1" value="${m.propLastOH?.[ac]??''}" placeholder="—"
             onchange="window.saveMaintCheck('${ac}','propLastOH',this.value===''?null:parseFloat(this.value))" style="font-size:12px"></div>
       </div>
+      <div class="g2" style="gap:8px;margin-bottom:10px">
+        <div><label style="font-size:11px;color:var(--text3)">Engine hrs to run</label>
+          <input type="number" class="fi" step="0.1" value="${m.engineToRun?.[ac]??''}" placeholder="—"
+            onchange="window.saveMaintCheck('${ac}','engineToRun',this.value===''?null:parseFloat(this.value))" style="font-size:12px"></div>
+        <div><label style="font-size:11px;color:var(--text3)">Prop hrs to run</label>
+          <input type="number" class="fi" step="0.1" value="${m.propToRun?.[ac]??''}" placeholder="—"
+            onchange="window.saveMaintCheck('${ac}','propToRun',this.value===''?null:parseFloat(this.value))" style="font-size:12px"></div>
+      </div>
       <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Maintenance Bookings</div>
       ${bks.map((b,bi)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;background:var(--card2);padding:6px 8px;border-radius:6px">
         <input type="date" class="fi" value="${b.date}" onchange="window.editBooking('${ac}',${bi},'date',this.value)" style="width:120px;font-size:11px">
@@ -1008,6 +1016,8 @@ window.saveMaintCheck=function(ac,field,val){
   if(field==='checkType') S.maintenance.checkType[ac]=val;
   if(field==='engineLastOH'){S.maintenance.engineLastOH=S.maintenance.engineLastOH||{};S.maintenance.engineLastOH[ac]=val;}
   if(field==='propLastOH'){S.maintenance.propLastOH=S.maintenance.propLastOH||{};S.maintenance.propLastOH[ac]=val;}
+  if(field==='engineToRun'){S.maintenance.engineToRun=S.maintenance.engineToRun||{};S.maintenance.engineToRun[ac]=val;}
+  if(field==='propToRun'){S.maintenance.propToRun=S.maintenance.propToRun||{};S.maintenance.propToRun[ac]=val;}
   saveMaintenance();render();
 };
 

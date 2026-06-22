@@ -3028,7 +3028,9 @@ async function _maintMergeSave(){
 }
 async function loadMaintenanceFromCloud(){
   try{
-    const r=await fetch(SB+'/rest/v1/ts_settings?key=eq.maintenance&select=value',{headers:SH});
+    // _sbFetch refreshes the JWT on a 401 — a raw fetch would null out near token expiry and make
+    // _maintMergeSave abort+retry forever without ever refreshing.
+    const r=await (typeof _sbFetch==='function'?_sbFetch:fetch)(SB+'/rest/v1/ts_settings?key=eq.maintenance&select=value',{headers:SH});
     if(!r.ok)return null;
     const rows=await r.json();
     if(!rows||!rows.length)return null;

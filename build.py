@@ -94,6 +94,13 @@ def build():
             sys.exit(1)
         with open(path, 'r', encoding='latin-1') as f:
             content = f.read()
+        # Guard: a stray NUL byte (e.g. a mis-typed string escape) is invisible in editors but ships a
+        # corrupt byte that can break CDNs/minifiers. Fail loudly rather than deploy it.
+        if '\x00' in content:
+            col = content.index('\x00')
+            line = content.count('\n', 0, col) + 1
+            print(f'\nERROR: NUL byte in {name}.{ext} at line {line} — remove it before building.')
+            sys.exit(1)
         # Strip the module header comment from JS files (not needed in output)
         if ext == 'js' and content.startswith('// === MODULE:'):
             content = content[content.index('\n')+1:]
