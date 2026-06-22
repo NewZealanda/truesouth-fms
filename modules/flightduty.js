@@ -452,7 +452,7 @@ function _fdRenderRecord(canManage){
   var cert=_fdCert(uid,month);
   var monthEnded=month<_fdMonth(_fdToday());
   if(cert){
-    h+='<div class="card" style="border-left:3px solid #22c55e;font-size:12px;color:var(--text2)">✓ '+_rzEscSafe(_fdMonthLabel(month))+' certified by '+_rzEscSafe(cert.by)+' on '+_rzEscSafe(_fdFmt(cert.at.slice(0,10)))+'.</div>';
+    h+='<div class="card" style="border-left:3px solid #22c55e;font-size:12px;color:var(--text2)">✓ '+_rzEscSafe(_fdMonthLabel(month))+' certified by '+_rzEscSafe(cert.by)+(cert.at?' on '+_rzEscSafe(_fdFmt(String(cert.at).slice(0,10))):'')+'.</div>';
   } else {
     h+='<div class="card" style="border-left:3px solid '+(monthEnded?'#f59e0b':'var(--border2)')+';display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
       '<div style="font-size:12px;color:var(--text2)">'+(monthEnded?'<b style="color:#f59e0b">This period needs certifying.</b> ':'')+'When '+_rzEscSafe(_fdMonthLabel(month))+' is complete, print, check, then certify the record.</div>'+

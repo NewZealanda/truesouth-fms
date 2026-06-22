@@ -319,6 +319,7 @@ async function _bizSyncMonthRezdy(ym){
 }
 window.bizPaxSyncRezdy=async function(ym,auto){
   if(typeof sbF!=='function')return;
+  if(typeof _rzMapBookings!=='function'||typeof _rzEffBreakdown!=='function'){if(!auto&&typeof toast==='function')toast('Booking tools not ready — open Operations once, then retry.','warn');return;} // don't wipe the month if we can't count
   var from=ym+'-01';var d=new Date(+ym.slice(0,4),+ym.slice(5,7),0);var to=ym+'-'+String(d.getDate()).padStart(2,'0');
   var cur=_bizDefaultPaxMonth();
   if(!auto&&typeof toast==='function')toast(ym>=cur?('Pulling all '+ym+' bookings from Rezdy — this can take a moment…'):'Pulling seats sold from Rezdy…','info');

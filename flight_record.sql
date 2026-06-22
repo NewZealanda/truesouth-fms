@@ -20,6 +20,7 @@ create table if not exists ts_flight_records (
   end_hours    numeric,                 -- confirmed TTIS at shutdown
   flight_time  numeric,                 -- hours added to TTIS (block time − taxi adjustment)
   landings     integer default 1,
+  done         boolean default false,   -- finalised (pilot tapped SAVE FLIGHT after confirming TTIS)
   manual       boolean default false,   -- entered manually (not auto-detected)
   note         text,
   updated_at   timestamptz default now(),

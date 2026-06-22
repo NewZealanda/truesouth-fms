@@ -412,7 +412,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v24.87';
+const APP_VER='v24.88';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1914,7 +1914,9 @@ async function reloadTable(table){
           if(row.key==='roster_colors'&&row.value&&!S._rosterColorEdit){try{var _rc=JSON.parse(row.value);if(_rc&&typeof _rc==='object'){S.rosterColors=_rc;changed=true;}}catch(e){}}
           if(row.key==='charter_wait_rate'&&row.value){S.charterWaitRate=parseFloat(row.value)||150;lsSet('ts_charter_wait_rate',S.charterWaitRate);changed=true;}
           if(row.key==='aero_featured'&&row.value){try{var fl=JSON.parse(row.value);if(Array.isArray(fl)){S._aeroFeatured=fl;lsSet('featured_aerodromes',fl);changed=true;}}catch(e){}}
-          if(row.key==='maintenance'&&row.value){
+          if(row.key==='maintenance'&&row.value&&!(typeof _maintSaving!=='undefined'&&_maintSaving)){
+            // Skip applying while a local save is in flight — otherwise it races the save's
+            // read-modify-write across its await and can drop an edit.
             try{const m=JSON.parse(row.value);if(m&&m.hist){
               // Only MERGE when this device has unsaved edits to preserve (S._maintBase set). With no
               // base, take the cloud copy directly — merging an empty default looked like "deleted

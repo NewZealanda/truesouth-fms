@@ -2998,11 +2998,14 @@ async function _maintMergeSave(){
     // If the base snapshot is somehow missing, fall back to current state as the base (→ no spurious
     // deletes; we just adopt the server copy) rather than diffing against the server itself.
     var merged=(fresh&&fresh.hist)?_maintMerge(fresh,oldBase||S.maintenance,S.maintenance):_mShape(_mClone(S.maintenance));
-    S.maintenance=merged;lsSet('ts_maintenance',merged);_maintSetBase(merged);
+    S.maintenance=merged;lsSet('ts_maintenance',merged);
     var r=await sbU('ts_settings',[{key:'maintenance',value:JSON.stringify(merged)}]);
-    if(r===null)toast('Maintenance save failed — not saved to server. Check connection and retry.','error');
+    // Only advance the base AFTER the write is confirmed — otherwise a failed save leaves the base
+    // ahead of the server and the edit is never re-pushed (silent loss).
+    if(r===null){toast('Maintenance save failed — not saved to server. Check connection and retry.','error');}
+    else{_maintSetBase(merged);}
     if(typeof safeRender==='function')safeRender();
-  }catch(e){}
+  }catch(e){console.error('[maintenance save]',e);}
   finally{_maintSaving=false;if(_maintResave){_maintResave=false;_maintMergeSave();}}
 }
 async function loadMaintenanceFromCloud(){

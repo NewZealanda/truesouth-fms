@@ -20,6 +20,8 @@ function _frAcShort(ac){return String(ac||'').replace(/^ZK-?/,'');}
 function _frAcList(){return Object.keys((S&&S.aircraft)||{});}
 function _frAcHours(ac){try{return (typeof maintGetLatest==='function')?maintGetLatest(ac):null;}catch(e){return null;}}
 function _frEsc(s){if(typeof _rzEscSafe==='function')return _rzEscSafe(s);if(typeof esc==='function')return esc(s);return String(s==null?'':s);}
+// Escape a value to sit safely inside a single-quoted JS string literal within a double-quoted onclick attribute.
+function _frJs(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');}
 
 // ── data ──
 function _frRows(uid){var out=[];var d=S._frData||{};Object.keys(d).forEach(function(k){var r=d[k];if(r&&r.user_id===uid)out.push(r);});out.sort(function(a,b){return (a.at||'')<(b.at||'')?-1:1;});return out;}
@@ -35,14 +37,14 @@ window.loadFlightRecords=async function(){
     var mgr=(typeof hasRolePerm==='function'&&hasRolePerm('flightrecord_manage'))||(S.user&&S.user.superAdmin);
     var scope=mgr?'':'&user_id=eq.'+encodeURIComponent((S.user&&S.user.id)||'');
     var rows=await sbF('ts_flight_records',scope,'updated_at');
-    if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.id]={id:r.id,user_id:r.user_id,fr_date:r.fr_date,aircraft:r.aircraft||'',product:r.product||'',from:r.route_from||'',to:r.route_to||'',pob:r.pob||0,off:r.off_blocks||'',on:r.on_blocks||'',startHours:r.start_hours,endHours:r.end_hours,flightTime:r.flight_time,landings:r.landings||1,manual:!!r.manual,note:r.note||'',done:!!(r.on_blocks&&r.end_hours!=null),at:r.updated_at||'',by:r.updated_by||''};});S._frData=d;try{lsSet&&lsSet('ts_flight_records_cache',d);}catch(e){}}
+    if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.id]={id:r.id,user_id:r.user_id,fr_date:r.fr_date,aircraft:r.aircraft||'',product:r.product||'',from:r.route_from||'',to:r.route_to||'',pob:r.pob||0,off:r.off_blocks||'',on:r.on_blocks||'',startHours:r.start_hours,endHours:r.end_hours,flightTime:r.flight_time,landings:r.landings||1,manual:!!r.manual,note:r.note||'',done:!!r.done,at:r.updated_at||'',by:r.updated_by||''};});S._frData=d;try{lsSet&&lsSet('ts_flight_records_cache',d);}catch(e){}}
   }catch(e){}
   if(typeof safeRender==='function')safeRender();
 };
 function _frSave(rec){
   S._frData=S._frData||{};S._frData[rec.id]=rec;
   try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}
-  if(typeof sbU==='function')sbU('ts_flight_records',[{id:rec.id,user_id:rec.user_id,fr_date:rec.fr_date,aircraft:rec.aircraft||null,product:rec.product||null,route_from:rec.from||null,route_to:rec.to||null,pob:+rec.pob||0,off_blocks:rec.off||null,on_blocks:rec.on||null,start_hours:rec.startHours!=null?+rec.startHours:null,end_hours:rec.endHours!=null?+rec.endHours:null,flight_time:rec.flightTime!=null?+rec.flightTime:null,landings:+rec.landings||1,manual:!!rec.manual,note:rec.note||null,updated_at:new Date().toISOString(),updated_by:(S.user&&S.user.name)||''}]).catch(function(){});
+  if(typeof sbU==='function')sbU('ts_flight_records',[{id:rec.id,user_id:rec.user_id,fr_date:rec.fr_date,aircraft:rec.aircraft||null,product:rec.product||null,route_from:rec.from||null,route_to:rec.to||null,pob:+rec.pob||0,off_blocks:rec.off||null,on_blocks:rec.on||null,start_hours:rec.startHours!=null?+rec.startHours:null,end_hours:rec.endHours!=null?+rec.endHours:null,flight_time:rec.flightTime!=null?+rec.flightTime:null,landings:+rec.landings||1,manual:!!rec.manual,note:rec.note||null,done:!!rec.done,updated_at:new Date().toISOString(),updated_by:(S.user&&S.user.name)||''}]).catch(function(){});
 }
 function _frSaveSettings(){if(typeof sbU==='function')sbU('ts_settings',[{key:'fr_settings',value:JSON.stringify(S._frSettings||{})}]).catch(function(){});}
 
@@ -63,7 +65,7 @@ function _frDayFlights(uid){
       var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
       var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):String(it.product||'');
       var key=ac+'|'+start+'|'+prod;var g=groups[key]||(groups[key]={ac:ac,start:start,prod:prod,pob:0});
-      var e=(typeof _rzEffBreakdown==='function')?_rzEffBreakdown(b):{a:0,c:0,i:0};g.pob+=(e.a+e.c+e.i);
+      g.pob+=(parseInt(it.quantity,10)||0); // per-item pax (avoids double-counting multi-item bookings)
     });
   });
   var out=[];
@@ -112,7 +114,7 @@ window.frOnBlocks=function(id){
   r.endHours=Math.round(((+r.startHours||0)+r.flightTime)*10)/10;
   _frSave(r);if(typeof toast==='function')toast('On blocks '+r.on+' ✓','ok');render();
 };
-window.frSetEndHours=function(id,val){var r=(S._frData||{})[id];if(!r)return;r.endHours=(val===''?null:Math.round((+val)*10)/10);if(r.endHours!=null)r.flightTime=Math.round((r.endHours-(+r.startHours||0))*10)/10;_frSave(r);if(typeof safeRender==='function')safeRender();};
+window.frSetEndHours=function(id,val){var r=(S._frData||{})[id];if(!r)return;if(val===''){r.endHours=null;}else{var v=Math.round((+val)*10)/10;if(v<(+r.startHours||0))v=(+r.startHours||0);r.endHours=v;r.flightTime=Math.round((v-(+r.startHours||0))*10)/10;}_frSave(r);if(typeof safeRender==='function')safeRender();};
 window.frAdjEndHours=function(id,delta){var r=(S._frData||{})[id];if(!r)return;var v=(parseFloat(r.endHours)||(+r.startHours||0))+delta;v=Math.round(v*10)/10;if(v<(+r.startHours||0))v=(+r.startHours||0);r.endHours=v;r.flightTime=Math.round((v-(+r.startHours||0))*10)/10;_frSave(r);render();};
 window.frFinish=function(id){var r=(S._frData||{})[id];if(!r)return;if(r.endHours==null){if(typeof toast==='function')toast('Confirm the TTIS hours first.','warn');return;}r.done=true;_frSave(r);if(typeof toast==='function')toast('Flight recorded ✓','ok');render();};
 window.frCancelFlight=function(id){if(typeof confirm==='function'&&!confirm('Discard this flight record?'))return;var r=(S._frData||{})[id];if(r){delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}if(typeof sbU!=='undefined'&&typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});}render();};
@@ -165,7 +167,7 @@ function _frRenderStart(uid){
   if(tab==='today'){
     if(!flights.length){h+='<div style="color:var(--text3);font-size:13px;padding:10px 2px">No allocated flights found for you today. Use Manual, or open Calendar to load the day.</div>';}
     flights.forEach(function(f){
-      h+='<button onclick="window.frUseFlight(\''+f.ac+'\',\''+_frEsc(f.prod)+'\',\''+_frEsc(f.from)+'\',\''+_frEsc(f.to)+'\','+f.pob+',false);window.frTab(\'auto\')" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;border:2px solid var(--border2);background:var(--card);color:var(--text1);cursor:pointer;margin-bottom:8px;text-align:left">'+
+      h+='<button onclick="window.frUseFlight(\''+_frJs(f.ac)+'\',\''+_frJs(f.prod)+'\',\''+_frJs(f.from)+'\',\''+_frJs(f.to)+'\','+f.pob+',false);window.frTab(\'auto\')" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;border:2px solid var(--border2);background:var(--card);color:var(--text1);cursor:pointer;margin-bottom:8px;text-align:left">'+
         '<span style="font-size:18px;font-weight:800;min-width:54px">'+_frEsc(f.start)+'</span>'+
         '<span style="font-size:17px;font-weight:800;color:#7c3aed">'+_frEsc(_frAcShort(f.ac))+'</span>'+
         '<span style="font-size:15px;font-weight:700">'+_frEsc((f.from||'')+(f.to?'→'+f.to:''))+'</span>'+
@@ -192,12 +194,12 @@ function _frRenderDraftForm(d,manual){
   // Aircraft (big tap grid)
   h+='<div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:6px 0 6px">Aircraft</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-bottom:14px">';
-  _frAcList().forEach(function(ac){h+=_frBigBtn(_frAcShort(ac),d.ac===ac,"window.frUseFlight('"+ac+"','"+_frEsc(d.product||'')+"','"+_frEsc(d.from||'')+"','"+_frEsc(d.to||'')+"',"+(+d.pob||1)+","+(manual?'true':'false')+")",_frAcHours(ac)!=null?(+_frAcHours(ac)).toFixed(1)+'h':'');});
+  _frAcList().forEach(function(ac){h+=_frBigBtn(_frAcShort(ac),d.ac===ac,"window.frUseFlight('"+_frJs(ac)+"','"+_frJs(d.product||'')+"','"+_frJs(d.from||'')+"','"+_frJs(d.to||'')+"',"+(+d.pob||1)+","+(manual?'true':'false')+")",_frAcHours(ac)!=null?(+_frAcHours(ac)).toFixed(1)+'h':'');});
   h+='</div>';
   // Product
   h+='<div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:6px 0 6px">Flight type</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:14px">';
-  _frProducts().forEach(function(pr){h+=_frBigBtn(_frEsc(pr),d.product===pr,"window.frDraftSet('product','"+_frEsc(pr)+"')");});
+  _frProducts().forEach(function(pr){h+=_frBigBtn(_frEsc(pr),d.product===pr,"window.frDraftSet('product','"+_frJs(pr)+"')");});
   h+='</div>';
   // Route (from → to) quick picks
   var locs=FR_LOCS_DEFAULT;
