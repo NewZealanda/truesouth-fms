@@ -3304,7 +3304,8 @@ function renderAdminPerms(){
     {k:'calendar',      lbl:'Calendar',       tip:'Access the Calendar tab'},
     {k:'flightduty',    lbl:'F&D',            tip:'Access Flight & Duty — own record + team summary'},
     {k:'flightduty_manage',lbl:'F&D Mgr',     tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'},
-    {k:'businessplan',  lbl:'Biz Plan',       tip:'View the confidential TSF Business Plan'}
+    {k:'businessplan',  lbl:'Biz Plan',       tip:'View the confidential TSF Business Plan'},
+    {k:'flightrecord',  lbl:'Flt Record',     tip:'Daily Flight Record card (in development — superadmin only)'}
     // (the old 'rezdy' column was retired in v24.16 — the Rezdy section no longer exists; Calendar
     //  has its own perm and Pickups live under Operations ▸ Ground gated by 'operations'.)
   ];
