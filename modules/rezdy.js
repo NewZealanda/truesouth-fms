@@ -144,6 +144,11 @@ var _RZ_PROD_CFG={
 function _rzProdCfg(code){return _RZ_PROD_CFG[String(code||'').toUpperCase()]||null;}
 // Destination {short, apt, scenic} for the seatmap label / loadsheet dest. null if unknown.
 function _rzProductDest(code){var c=_rzProdCfg(code);return c?{short:c.short,apt:c.apt,scenic:!!c.scenic}:null;}
+// Departure GROUPING code: same destination + time + aircraft = one flight, so bookings to the same
+// place combine even if they're different products (e.g. THH + STT both to Mt Cook). Flybacks keep
+// their own code (special return-leg handling). Falls back to the product code when unknown.
+function _rzGroupDest(prod){if(_rzIsFlyback(prod))return prod;var c=_rzProdCfg(prod);return (c&&c.short)?c.short:prod;}
+function _rzDepKey(ac,start,prod){return ac+'|'+start+'|'+_rzGroupDest(prod);}
 
 // ── Editable standard fuels & burns (per destination) ────────────────────────
 // The hardcoded _RZ_PROD_CFG above gives the built-in defaults. S._rzFuelOv holds the
@@ -341,7 +346,7 @@ function _rzDepCmp(a,b){var d=_rzDepSortMin(a)-_rzDepSortMin(b);return d!==0?d:S
 // "0930" → "09:30" for the schedule grid's HH:MM parser.
 function _rzHHMMcolon(s){var m=/^(\d{2})(\d{2})$/.exec(String(s||''));return m?m[1]+':'+m[2]:String(s||'');}
 // Flight block duration (minutes) by product: FCF = 4.5h; FJHH / MCEXP / THH = 5h; else 2h.
-function _rzProductDuration(p){var s=String(p||'').toUpperCase();if(/BRA|BRANCH/.test(s))return 30;if(/FCF|MILFORD.*FLY.*CRUISE.*FLY/.test(s))return 270;if(/\b(FJHH|MCEXP|THH)\b/.test(s))return 300;return 120;}
+function _rzProductDuration(p){var s=String(p||'').toUpperCase();if(/BRA|BRANCH/.test(s))return 30;if(/FCF|MILFORD.*FLY.*CRUISE.*FLY/.test(s))return 270;if(/\b(FJHH|MCEXP|THH|STT)\b/.test(s))return 300;return 120;}
 // Like above but returns 0 when the text names no known product (so we don't clobber a manual end).
 function _rzProductCodeDuration(t){var s=String(t||'').toUpperCase();if(/BRA|BRANCH/.test(s))return 30;if(/\bFCF\b/.test(s))return 270;if(/\b(FJHH|MCEXP|THH)\b/.test(s))return 300;return 0;}
 // A booking's primary departure time (first item), e.g. "0930"; "—" if none.
@@ -993,7 +998,7 @@ function _rzOrdersForBlockKey(key){
   (S._rezdyBookings||[]).forEach(function(b){
     if(_rzIsCancelled(b))return;
     var ac=_rzBookingAc(b,String(b.orderNumber||''))||'__unalloc__';
-    ((b.items)||[]).forEach(function(it){var t=_rzDepTime(it.startTimeLocal||'');if(!t)return;var start=_rzHHMMcolon(t);var prod=_rzProduct(it.product);if(ac+'|'+start+'|'+prod===key)out.push(String(b.orderNumber||''));});
+    ((b.items)||[]).forEach(function(it){var t=_rzDepTime(it.startTimeLocal||'');if(!t)return;var start=_rzHHMMcolon(t);var prod=_rzProduct(it.product);if(_rzDepKey(ac,start,prod)===key)out.push(String(b.orderNumber||''));});
   });
   return out;
 }
@@ -3764,8 +3769,9 @@ function _rzRenderSchedule(){
       var t=_rzDepTime(it.startTimeLocal||'');if(!t)return;
       var start=_rzHHMMcolon(t);if(_rzMinsFromHHMM(start)==null)return;
       var prod=_rzProduct(it.product);
-      var key=ac+'|'+start+'|'+prod;
-      var g=bkGroups[key]||(bkGroups[key]={aircraft:ac,start:start,product:prod,pax:0,bookings:[],owing:false,key:key,_fromBooking:true,_fb:[]});
+      var key=_rzDepKey(ac,start,prod);   // group by destination so same place+time+aircraft = one flight
+      var g=bkGroups[key]||(bkGroups[key]={aircraft:ac,start:start,product:prod,gcode:_rzGroupDest(prod),products:{},pax:0,bookings:[],owing:false,key:key,_fromBooking:true,_fb:[]});
+      g.products[prod]=true;
       g.pax+=parseInt(it.quantity,10)||0;g.bookings.push({b:b,it:it});if(owing)g.owing=true;
     });
   });
@@ -3779,7 +3785,11 @@ function _rzRenderSchedule(){
   });
   Object.keys(bkGroups).forEach(function(k){if(!bkGroups[k].bookings.length)delete bkGroups[k];});
   const bkBlocks=Object.keys(bkGroups).map(function(k){
-    var g=bkGroups[k];var sm=_rzMinsFromHHMM(g.start)||0;var em=sm+_rzProductDuration(g.product);
+    var g=bkGroups[k];var sm=_rzMinsFromHHMM(g.start)||0;
+    var _prods=Object.keys(g.products||{});if(!_prods.length)_prods=[g.product];
+    var _dur=Math.max.apply(null,_prods.map(function(p){return _rzProductDuration(p);})); // longest wins for a combined flight
+    g.disp=(_prods.length===1)?g.product:(g.gcode||g.product);                            // single product shows its code; mixed shows the destination
+    var em=sm+_dur;
     g.end=String(Math.floor(em/60)).padStart(2,'0')+':'+String(em%60).padStart(2,'0');
     // FLB/CCF seats are parked in the OUTBOUND (1200) Rezdy slot to hold them, but the flight
     // actually flies BACK at 15:30. On a 1200 session, show a 1-hour block 15:30–16:30 instead.
@@ -3789,7 +3799,7 @@ function _rzRenderSchedule(){
     var pilot=(S._schedPilots||{})[g.key]||null;
     g.bd=gbd;g.pilot=pilot;
     var fbStr=_rzFbSummary(g._fb);   // aggregated, e.g. " + 3A FLB"
-    g.label=(pilot?pilot+'/':'')+acLbl+' '+_rzBdCompact(gbd)+' '+g.product+fbStr;g.order=g.key;g._owing=g.owing;
+    g.label=(pilot?pilot+'/':'')+acLbl+' '+_rzBdCompact(gbd)+' '+(g.disp||g.product)+fbStr;g.order=g.key;g._owing=g.owing;
     return g;
   });
   const _totBk=bkBlocks.reduce(function(s,g){return s+g.bookings.length;},0);
@@ -3821,7 +3831,7 @@ function _rzRenderSchedule(){
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px">'+
           '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">'+
             '<span class="pill" style="background:'+_gcol+'22;border:1px solid '+_gcol+';color:'+_gcol+';font-size:12px;font-weight:800;padding:2px 10px;border-radius:12px">'+_rzEsc(_gac||'Unallocated')+'</span>'+
-            '<span style="font-size:14px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(_grp.start)+' · '+_rzEsc(_rzBdCompact(_grp.bd||{a:_grp.pax,c:0,i:0}))+' '+_rzEsc(_grp.product)+'<span style="color:#f59e0b">'+_rzEsc(_rzFbSummary(_grp._fb))+'</span></span>'+
+            '<span style="font-size:14px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(_grp.start)+' · '+_rzEsc(_rzBdCompact(_grp.bd||{a:_grp.pax,c:0,i:0}))+' '+_rzEsc(_grp.disp||_grp.product)+'<span style="color:#f59e0b">'+_rzEsc(_rzFbSummary(_grp._fb))+'</span></span>'+
             (_grp.pilot?'<span class="pill" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.5);color:#60a5fa;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">✈ '+_rzEsc(_grp.pilot)+' <span onclick="event.stopPropagation();window.rezdySchedClearPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
@@ -4056,7 +4066,7 @@ function _rzAcMovements(){
       var t=_rzDepTime(it.startTimeLocal||'');if(!t)return;
       var start=_rzHHMMcolon(t);if(_rzMinsFromHHMM(start)==null)return;
       var prod=_rzProduct(it.product);
-      var key=ac+'|'+start+'|'+prod;
+      var key=_rzDepKey(ac,start,prod);   // same destination+time+aircraft = one flight
       var g=groups[key]||(groups[key]={ac:ac,start:start,prod:prod,pax:0,order:String(b.orderNumber||''),key:key});
       g.pax+=parseInt(it.quantity,10)||0;
     });

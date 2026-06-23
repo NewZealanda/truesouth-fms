@@ -540,7 +540,7 @@ window.schedAutoPilots=function(){
       var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;
       var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;
       var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,o):null;if(!ac)return;
-      var pc=match.byAc[ac];if(pc)keys[ac+'|'+start+'|'+prod]=pc;
+      var pc=match.byAc[ac];if(pc)keys[(typeof _rzDepKey==='function')?_rzDepKey(ac,start,prod):(ac+'|'+start+'|'+prod)]=pc;
     });
   });
   var n=0;Object.keys(keys).forEach(function(k){S._schedPilots[k]=keys[k];n++;});
