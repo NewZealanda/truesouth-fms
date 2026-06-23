@@ -803,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.36';
+const APP_VER='v25.37';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -18901,7 +18901,23 @@ function _schedMaintCovers(date,ac){
 function _resEffState(date,ac){return _schedMaintCovers(date,ac)?'maint':_resState(date,ac);}
 
 window.resMonthNav=function(delta){S._resMonth=_resAddMonth(S._resMonth||_resYMnow(),delta);render();};
-window.resPickDay=function(date){S._resDay=date;S._resMonth=String(date).slice(0,7);render();};
+// Bookings available to the planner for a date: live set for the current Operations date, else the
+// per-date cache fetched when a resource day is picked (null = not loaded yet).
+function _schedBookingsFor(date){
+  if(date===S.rezdyDate)return S._rezdyBookings||[];
+  var c=(S._schedBkCache||{})[date];return Array.isArray(c)?c:null;
+}
+function _schedFetchDayBookings(date){
+  if(date===S.rezdyDate||typeof sbF!=='function')return;
+  S._schedBkCache=S._schedBkCache||{};S._schedBkLoading=S._schedBkLoading||{};
+  if(Array.isArray(S._schedBkCache[date])||S._schedBkLoading[date])return;   // cached or in flight
+  S._schedBkLoading[date]=true;
+  sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(date)).then(function(rows){
+    S._schedBkCache[date]=(typeof _rzMapBookings==='function')?(_rzMapBookings(rows)||[]):(rows||[]);
+    S._schedBkLoading[date]=false;if(typeof safeRender==='function')safeRender();else render();
+  }).catch(function(){S._schedBkLoading[date]=false;S._schedBkCache[date]=[];if(typeof render==='function')render();});
+}
+window.resPickDay=function(date){S._resDay=date;S._resMonth=String(date).slice(0,7);_schedFetchDayBookings(date);render();};
 window.resSetMode=function(date,ac,mode){var e=_resEnsure(date,ac);e.mode=mode;if(mode==='on'){e.from='';e.to='';}_resPrune(date,ac);_schedSave();render();};
 window.resSetTime=function(date,ac,field,val){var e=_resEnsure(date,ac);if(field==='from')e.from=val||'';else e.to=val||'';if(e.mode!=='off')e.mode=(e.from||e.to)?'custom':'on';_resPrune(date,ac);_schedSave();render();};
 window.resSetNote=function(date,ac,val){var e=_resEnsure(date,ac);e.note=String(val==null?'':val);_resPrune(date,ac);_schedSave();};
@@ -18999,7 +19015,8 @@ function renderResources(){
     h+='<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:6px">'+
       '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:6px">Recommended day plan <span style="font-weight:400;text-transform:none;letter-spacing:0">· preview, cost-optimised</span></div>';
     if(!dp.departures.length){
-      h+='<div style="font-size:12px;color:var(--text3)">No Milford departures loaded for this day'+(sel!==S.rezdyDate?' (open it in Calendar/Operations to load its bookings).':'.')+'</div>';
+      var _ld=(S._schedBkLoading||{})[sel]&&!Array.isArray((S._schedBkCache||{})[sel]);
+      h+='<div style="font-size:12px;color:var(--text3)">'+(_ld?'Loading bookings for this day…':'No Milford departures for this day.')+'</div>';
     } else {
       dp.departures.forEach(function(d){
         var acs=d.aircraft.map(function(a){var c=(typeof _rzAcCol==='function')?_rzAcCol(a.ac):'#888';
@@ -19208,8 +19225,8 @@ function _schedLoadedLeg(ac){var r=_schedRtCost(ac);return r==null?null:r/2;}
 function _schedEmptyLeg(ac){var f=_schedFerryCost(ac);if(f!=null)return f/2;var r=_schedRtCost(ac);return r==null?null:r/2;}
 // Passenger demand per departure time for a date (Milford scenic; skips flyback/cancel/no-show).
 function _schedDayDepartures(date){
-  if(date!==S.rezdyDate)return [];                 // bookings are only loaded for the current date
-  var bks=S._rezdyBookings||[];var g={};
+  var bks=_schedBookingsFor(date);if(!bks)return [];   // not loaded yet (fetch triggered on day-pick)
+  var g={};
   bks.forEach(function(b){
     if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
     var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
@@ -19254,8 +19271,8 @@ function _schedDepManualLock(date,time){return !!((_schedLockMap()[date]||{})[ti
 // The aircraft CURRENTLY assigned to a departure's bookings (manual/auto/comments) — used as the
 // fixed set for a locked departure.
 function _schedDepAssignedAc(date,time){
-  if(date!==S.rezdyDate)return [];
-  var bks=S._rezdyBookings||[];var seats={};
+  var bks=_schedBookingsFor(date);if(!bks)return [];
+  var seats={};
   bks.forEach(function(b){
     if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
     var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
