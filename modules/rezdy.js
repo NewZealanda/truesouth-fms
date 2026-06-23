@@ -4076,7 +4076,7 @@ function _rzAcMovements(){
       return;
     }
     var dur=_rzLegMins('QN',dest);
-    var block=Math.max(_rzProductDuration(g.prod)||270,2*dur+30); // never let the return overlap the outbound
+    var block=Math.max(_rzProductDuration(g.prod)||270,2*dur); // never let the return overlap the outbound (no extra ground buffer — short trips like Branches are back-to-back)
     ensure(g.ac).push({ac:g.ac,t:sm,from:'QN',to:dest,pob:g.pax,kind:'outbound',prod:g.prod});
     ensure(g.ac).push({ac:g.ac,t:sm+block-dur,from:dest,to:'QN',pob:g.pax,kind:'return',prod:g.prod});
   });
