@@ -1,4 +1,4 @@
-// === MODULE: scheduling.js === v25.31 ===
+// === MODULE: scheduling.js === v25.32 ===
 // ─────────────────────────────────────────────────────────────────────────────
 //  SCHEDULING — cost-aware aircraft allocation + resource board (Phase 1).
 //  Phase 1 (this build): the data foundation only —
@@ -67,7 +67,31 @@ function _schedCalc(){
   ['airvan','caravan','sdb'].forEach(function(k){var e=c.calc[k]||(c.calc[k]={});if(e.runhr==null)e.runhr=SCHED_CALC_DEFAULT[k].runhr;if(e.land==null)e.land=SCHED_CALC_DEFAULT[k].land;});
   return c.calc;
 }
-function _schedCalcCost(typeKey,hrs){var e=_schedCalc()[typeKey]||{};var r=_schedNum(e.runhr);if(r==null)return null;var l=_schedNum(e.land);return r*hrs+(l!=null?l:0);}
+// ── Live link to the Business Plan running costs (single source of truth) ──
+// run/hr: owned type-average (GA8/C208) or the SDB lease line; landings: the Milford round-trip
+// (lands at Milford + Queenstown) charges for the type. Returns null when the plan isn't loaded so
+// the manual figures below act as the fallback.
+function _schedBizRunHr(typeKey){
+  if(typeof _bizState!=='function'||!S._bizPlan)return null;
+  try{var p=_bizState();
+    if(typeKey==='sdb'){var sdb=(p.running.aircraft||[]).find(function(a){return String(a.code||'').toUpperCase()==='SDB';});return sdb?_bizRunCalc(sdb,p.running.fuel).totalHr:null;}
+    var av=_bizTypeAvg(typeKey==='airvan'?'GA8':'C208');return (av&&av.n)?av.totalHr:null;
+  }catch(e){return null;}
+}
+function _schedBizLandings(typeKey){
+  if(typeof _bizState!=='function'||!S._bizPlan)return null;
+  try{var p=_bizState();var locs=p.running.locations||[];
+    var qn=locs.find(function(l){return /queens/i.test(l.name||'');}),mf=locs.find(function(l){return /milford/i.test(l.name||'');});
+    if(!mf||typeof _bizLocFees!=='function')return null;
+    var t=(typeKey==='airvan')?'GA8':'C208';
+    var sum=function(loc){if(!loc)return 0;var f=_bizLocFees(loc,t);return f.ldg+f.conc+f.aw;};
+    return sum(mf)+sum(qn);                 // round trip lands at Milford + Queenstown
+  }catch(e){return null;}
+}
+function _schedRunHr(typeKey){var b=_schedBizRunHr(typeKey);if(b!=null)return b;return _schedNum((_schedCalc()[typeKey]||{}).runhr);}
+function _schedLandVal(typeKey){var b=_schedBizLandings(typeKey);if(b!=null)return b;return _schedNum((_schedCalc()[typeKey]||{}).land);}
+function _schedCostSource(typeKey){return _schedBizRunHr(typeKey)!=null?'biz':'manual';}
+function _schedCalcCost(typeKey,hrs){var r=_schedRunHr(typeKey);if(r==null)return null;var l=_schedLandVal(typeKey);return r*hrs+(l!=null?l:0);}
 // Effective Milford return / ferry cost for an aircraft — computed from its type's run/hr + landings.
 function _schedRtCost(ac){var tk=_schedTypeKey(ac);var v=_schedCalcCost(tk,SCHED_HRS.ret[tk]||1.1);return v!=null?v:_schedNum(_schedTail(ac).rt);}
 function _schedFerryCost(ac){var tk=_schedTypeKey(ac);var v=_schedCalcCost(tk,SCHED_HRS.fer[tk]||1.0);return v!=null?v:_schedNum(_schedTail(ac).ferry);}
@@ -77,6 +101,7 @@ function _schedMoney(n){if(n==null)return '—';return '$'+Number(n).toLocaleStr
 // ── persistence ──────────────────────────────────────────────────────────────
 window.loadScheduling=function(){
   try{var c=(typeof lsGet==='function')&&lsGet('ts_scheduling');if(c&&typeof c==='object')S._schedCfg=c;}catch(e){}
+  try{if(!S._bizPlan&&window.loadBusinessPlan){S._bizLoaded=true;window.loadBusinessPlan();}}catch(e){} // costs pull from the Business Plan running costs
   if(typeof SB==='undefined'){if(typeof safeRender==='function')safeRender();return;}
   try{fetch(SB+'/rest/v1/ts_settings?key=eq.'+SCHED_KEY+'&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
     try{var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string')v=JSON.parse(v);
@@ -126,18 +151,25 @@ function renderSchedulingSettings(){
     '</button></div>';
 
   // Cost calculator (per type) — run/hr + landings drive the Milford return & ferry figures live.
+  // When the Business Plan is loaded these are pulled from its running costs (read-only here); when
+  // it isn't, the manual fields below act as the fallback.
+  var _fromBiz=(_schedCostSource('caravan')==='biz');
   var _ni=function(type,field,val){return '<input type="number" min="0" inputmode="decimal" value="'+_schedEsc(val)+'" onchange="window.schedSetCalc(\''+type+'\',\''+field+'\',this.value)" style="width:96px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px">';};
+  var _ro=function(v){return '<span style="font-weight:700;color:var(--text1)">'+(v!=null?_schedMoney(v):'—')+'</span>';};
   h+='<div class="card" style="margin-bottom:14px"><div class="st">Cost calculator</div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Costs ex GST, less pilot (rostered = sunk cost). Enter <b>running cost $/hr</b> and <b>landings + fees</b> per type — change these when fuel / maintenance / fees move and every figure below (and the allocator) updates automatically. Hours: Milford <b>return</b> = airvan 1.2h, caravan/SDB 1.1h; <b>ferry</b> (empty) = 1.0h.</p>'+
+    '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Costs ex GST, less pilot (rostered = sunk cost). '+
+      (_fromBiz?'Run/hr &amp; landings are pulled live from <b>Business Plan ▸ Running costs</b> — edit fuel / maintenance / fees there and every figure here (and the allocator) updates automatically.':'Enter <b>run/hr</b> and <b>landings + fees</b> per type (Business Plan not loaded — using manual fallback).')+
+      ' Hours: Milford <b>return</b> = airvan 1.2h, caravan/SDB 1.1h; <b>ferry</b> (empty) = 1.0h.</p>'+
     '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:560px">'+
       '<thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em">'+
         '<th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Run/hr $</th><th style="padding:6px 8px">Landings+fees $</th><th style="padding:6px 8px">Milford return</th><th style="padding:6px 8px">Ferry</th></tr></thead><tbody>';
   [['airvan','Airvan (owned avg)'],['caravan','Caravan (owned avg)'],['sdb','SDB (lease)']].forEach(function(row){
-    var k=row[0];var e=_schedCalc()[k]||{};var rt=_schedCalcCost(k,SCHED_HRS.ret[k]),fer=_schedCalcCost(k,SCHED_HRS.fer[k]);
+    var k=row[0];var e=_schedCalc()[k]||{};var biz=(_schedCostSource(k)==='biz');
+    var rt=_schedCalcCost(k,SCHED_HRS.ret[k]),fer=_schedCalcCost(k,SCHED_HRS.fer[k]);
     h+='<tr style="border-top:1px solid var(--border2)">'+
-      '<td style="padding:6px 8px;font-weight:800;color:var(--text1)">'+row[1]+'<div style="font-size:10px;color:var(--text3);font-weight:400">'+(SCHED_HRS.ret[k])+'h ret · '+(SCHED_HRS.fer[k])+'h ferry</div></td>'+
-      '<td style="padding:6px 8px">'+_ni(k,'runhr',e.runhr)+'</td>'+
-      '<td style="padding:6px 8px">'+_ni(k,'land',e.land)+'</td>'+
+      '<td style="padding:6px 8px;font-weight:800;color:var(--text1)">'+row[1]+'<div style="font-size:10px;color:var(--text3);font-weight:400">'+(SCHED_HRS.ret[k])+'h ret · '+(SCHED_HRS.fer[k])+'h ferry'+(biz?' · from Business Plan':'')+'</div></td>'+
+      '<td style="padding:6px 8px">'+(biz?_ro(_schedRunHr(k)):_ni(k,'runhr',e.runhr))+'</td>'+
+      '<td style="padding:6px 8px">'+(biz?_ro(_schedLandVal(k)):_ni(k,'land',e.land))+'</td>'+
       '<td style="padding:6px 8px;font-weight:800;color:#22c55e">'+_schedMoney(rt)+'</td>'+
       '<td style="padding:6px 8px;font-weight:800;color:#f59e0b">'+_schedMoney(fer)+'</td>'+
     '</tr>';
