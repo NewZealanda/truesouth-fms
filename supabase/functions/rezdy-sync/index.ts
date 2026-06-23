@@ -177,25 +177,35 @@ serve(async (req) => {
   // time, and avoids any "range too wide" rejection from an absolute epoch.)
   const minCreated = `${Number(date.slice(0, 4)) - 5}-01-01T00:00:00Z`
 
+  // CRITICAL: Rezdy's booking search OMITS marketplace-channel orders (e.g. Viator sold via Rezdy
+  // Marketplace — source MARKETPLACE / MARKETPLACE_PREF_RATE) unless you request that `source`
+  // explicitly. With no source param it returns only the direct channels, so marketplace bookings
+  // silently vanished from the day (the real cause of the "missing Boxing Day bookings"). Fetch the
+  // default channels PLUS each marketplace source and MERGE (dedupe by order number) so every
+  // booking with a tour in the window is captured regardless of channel.
+  const SOURCES: (string | null)[] = [null, "MARKETPLACE", "MARKETPLACE_PREF_RATE"]
+  const baseUrl = `${REZDY_BASE}/bookings?apiKey=${REZDY_KEY}` +
+    `&minTourStartTime=${encodeURIComponent(minT)}` +
+    `&maxTourStartTime=${encodeURIComponent(maxT)}` +
+    `&minDateCreated=${encodeURIComponent(minCreated)}`
   const all: any[] = []
-  let offset = 0
-  for (let page = 0; page < 20; page++) {
-    const url = `${REZDY_BASE}/bookings?apiKey=${REZDY_KEY}` +
-      `&minTourStartTime=${encodeURIComponent(minT)}` +
-      `&maxTourStartTime=${encodeURIComponent(maxT)}` +
-      `&minDateCreated=${encodeURIComponent(minCreated)}` +
-      `&limit=100&offset=${offset}`
-    const r = await fetch(url)
-    if (!r.ok) {
-      const t = await r.text().catch(() => "")
-      return json({ ok: false, error: "rezdy_error", status: r.status, body: t.slice(0, 400) }, 502)
+  const seenIds = new Set<string>()
+  let fetchErr: { status: number; body: string; src: string | null } | null = null
+  for (const src of SOURCES) {
+    let offset = 0
+    for (let page = 0; page < 20; page++) {
+      const url = baseUrl + (src ? `&source=${encodeURIComponent(src)}` : "") + `&limit=100&offset=${offset}`
+      const r = await fetch(url)
+      if (!r.ok) { fetchErr = { status: r.status, body: (await r.text().catch(() => "")).slice(0, 200), src }; break } // skip this source, keep the rest
+      const j = await r.json().catch(() => ({}))
+      const bookings = j.bookings || j.data || []
+      for (const b of bookings) { const id = String((b && (b.orderNumber || b.id)) || ""); if (id && !seenIds.has(id)) { seenIds.add(id); all.push(b) } }
+      if (bookings.length < 100) break
+      offset += 100
     }
-    const j = await r.json().catch(() => ({}))
-    const bookings = j.bookings || j.data || []
-    all.push(...bookings)
-    if (bookings.length < 100) break
-    offset += 100
   }
+  // Only hard-fail if we got NOTHING and a request errored — a single source hiccup must not wipe the day.
+  if (!all.length && fetchErr) return json({ ok: false, error: "rezdy_error", status: fetchErr.status, body: fetchErr.body }, 502)
 
   const normAll = all.map(normalize).filter((n) => n.id)
 
