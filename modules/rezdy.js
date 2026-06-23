@@ -1745,7 +1745,8 @@ window.rezdyRefresh=async function(){
     return;
   }
   const n=(res.data&&(res.data.count!=null?res.data.count:(Array.isArray(res.data.bookings)?res.data.bookings.length:null)));
-  toast('Synced '+(n!=null?n:'')+' booking'+(n===1?'':'s')+' from Rezdy','ok');
+  const wc=res.data&&res.data.windowCount;
+  toast('Synced '+(n!=null?n:'')+' booking'+(n===1?'':'s')+' from Rezdy'+(wc!=null?' ('+wc+' in window)':''),'ok');
   await window.rezdyLoadBookings({noSync:true});
 };
 

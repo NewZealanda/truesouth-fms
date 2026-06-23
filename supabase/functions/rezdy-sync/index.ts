@@ -121,11 +121,13 @@ serve(async (req) => {
     const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + days)
     return t.toISOString().slice(0, 10)
   }
-  // The NZ day [00:00–24:00 local] in UTC is roughly [date-1 11:00Z .. date 12:00Z]
-  // (NZST +12) or one hour earlier (NZDT +13). Query date-1 10:00Z .. date 14:00Z — a
-  // ~28h window that fully contains the NZ day with margin, much tighter than ±1 full day.
-  const minT = `${shiftDay(date, -1)}T10:00:00Z`
-  const maxT = `${date}T14:00:00Z`
+  // Rezdy's min/maxTourStartTime bound the search, but Rezdy is inconsistent about whether these
+  // are UTC or the operator's LOCAL time. A tight UTC-only window (…date 14:00Z) was silently
+  // cutting off AFTERNOON NZ tours whenever Rezdy read the bound as local time. Query a FULL day
+  // either side so the whole NZ day is covered under EITHER interpretation; exact NZ-day membership
+  // is then decided locally by itemLocalDate(), so the wide window never over-includes.
+  const minT = `${shiftDay(date, -1)}T00:00:00Z`
+  const maxT = `${shiftDay(date, 1)}T23:59:59Z`
 
   const all: any[] = []
   let offset = 0
@@ -180,5 +182,5 @@ serve(async (req) => {
     }
   }
 
-  return json({ ok: true, date, count: norm.length, bookings: norm })
+  return json({ ok: true, date, count: norm.length, windowCount: all.length, bookings: norm })
 })
