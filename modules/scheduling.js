@@ -1,4 +1,4 @@
-// === MODULE: scheduling.js === v25.24 ===
+// === MODULE: scheduling.js === v25.25 ===
 // ─────────────────────────────────────────────────────────────────────────────
 //  SCHEDULING — cost-aware aircraft allocation + resource board (Phase 1).
 //  Phase 1 (this build): the data foundation only —
@@ -141,54 +141,115 @@ function renderSchedulingSettings(){
   return h;
 }
 
-// ── RESOURCE AVAILABILITY BOARD (tier-1 section) ───────────────────────────────
-function _schedStatusMeta(s){
-  if(s==='down')return {col:'#ef4444',bg:'rgba(239,68,68,.12)',lbl:'Unserviceable',dot:'#ef4444'};
-  if(s==='note')return {col:'#f59e0b',bg:'rgba(245,158,11,.12)',lbl:'Note',dot:'#f59e0b'};
-  return {col:'#22c55e',bg:'rgba(34,197,94,.10)',lbl:'Serviceable',dot:'#22c55e'};
+// ── RESOURCE AVAILABILITY BOARD — per-date month calendar ──────────────────────
+// Availability lives in cfg.avail[date][ac] = {mode:'on'|'custom'|'off', from, to, note}.
+// 'on' (default, no entry) = available all day. 'off' = not available that day. 'custom' =
+// available only within from/to (e.g. an aircraft back mid-morning → from 10:30).
+function _resToday(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function _resYMnow(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function _resAddMonth(ym,delta){var p=String(ym).split('-');var y=+p[0],m=(+p[1]-1)+delta;y+=Math.floor(m/12);m=((m%12)+12)%12;return y+'-'+String(m+1).padStart(2,'0');}
+function _resDateStr(y,m,d){return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');}
+function _resShiftDay(date,delta){var dt=new Date(date+'T00:00:00');dt.setDate(dt.getDate()+delta);return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');}
+function _resAll(){var c=_schedCfg();if(!c.avail||typeof c.avail!=='object')c.avail={};return c.avail;}
+function _resGet(date,ac){var a=_resAll()[date];return (a&&a[ac])||null;}
+function _resState(date,ac){var e=_resGet(date,ac);return (e&&e.mode)?e.mode:'on';}
+function _resEnsure(date,ac){var all=_resAll();var d=all[date]||(all[date]={});return d[ac]||(d[ac]={mode:'on',from:'',to:'',note:''});}
+function _resPrune(date,ac){var all=_resAll();var d=all[date];if(!d)return;var e=d[ac];if(e&&e.mode==='on'&&!e.from&&!e.to&&!e.note){delete d[ac];}if(d&&!Object.keys(d).length)delete all[date];}
+
+window.resMonthNav=function(delta){S._resMonth=_resAddMonth(S._resMonth||_resYMnow(),delta);render();};
+window.resPickDay=function(date){S._resDay=date;S._resMonth=String(date).slice(0,7);render();};
+window.resSetMode=function(date,ac,mode){var e=_resEnsure(date,ac);e.mode=mode;if(mode==='on'){e.from='';e.to='';}_resPrune(date,ac);_schedSave();render();};
+window.resSetTime=function(date,ac,field,val){var e=_resEnsure(date,ac);if(field==='from')e.from=val||'';else e.to=val||'';if(e.mode!=='off')e.mode=(e.from||e.to)?'custom':'on';_resPrune(date,ac);_schedSave();render();};
+window.resSetNote=function(date,ac,val){var e=_resEnsure(date,ac);e.note=String(val==null?'':val);_resPrune(date,ac);_schedSave();};
+window.resQuickToggle=function(date,ac){var st=_resState(date,ac);var e=_resEnsure(date,ac);e.mode=(st==='off')?'on':'off';if(e.mode==='on'){e.from='';e.to='';}_resPrune(date,ac);_schedSave();render();};
+
+// Short availability summary for a cell chip / editor.
+function _resChipStyle(state,col){
+  if(state==='off')return 'background:rgba(148,163,184,.12);border:1px solid var(--border2);color:var(--text3);text-decoration:line-through;opacity:.7';
+  if(state==='custom')return 'background:rgba(245,158,11,.14);border:1px solid #f59e0b;color:#f59e0b';
+  return 'background:'+col+'22;border:1px solid '+col+';color:'+col;
 }
+
 function renderResources(){
   if(typeof hasRolePerm==='function'&&!hasRolePerm('operations'))return '<div class="page"><div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div></div>';
   if(!_schedEnabled())return '<div class="page"><div class="card" style="text-align:center;padding:40px;color:var(--text3)">Cost-aware scheduling is OFF. Turn it on in Settings ▸ Operations ▸ Scheduling.</div></div>';
   var acIds=Object.keys((S&&S.aircraft)||{});
+  var today=_resToday();
+  var ym=S._resMonth||_resYMnow();S._resMonth=ym;
+  var sel=S._resDay||today;S._resDay=sel;
+  var p=ym.split('-');var Y=+p[0],M=+p[1];
+  var first=new Date(Y,M-1,1);var offset=(first.getDay()+6)%7;var dim=new Date(Y,M,0).getDate();
+  var monLbl=first.toLocaleString('en-NZ',{month:'long',year:'numeric'});
+
   var h='<div class="page">';
   h+='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
     '<div><div class="st" style="margin-bottom:0">Resource availability</div>'+
-      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">Fleet status &amp; today\'s pilots. Tap a status chip to cycle serviceable → note → unserviceable.</p></div></div>';
+      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">Tap a day to set times; tap an aircraft chip to toggle it off/on for that day. No entry = available all day.</p></div>'+
+    '<div style="display:flex;align-items:center;gap:6px">'+
+      '<button class="btn btn-ghost" style="font-size:13px;padding:5px 12px" onclick="window.resMonthNav(-1)">‹</button>'+
+      '<span style="font-size:14px;font-weight:800;color:var(--text1);min-width:140px;text-align:center">'+_schedEsc(monLbl)+'</span>'+
+      '<button class="btn btn-ghost" style="font-size:13px;padding:5px 12px" onclick="window.resMonthNav(1)">›</button>'+
+    '</div></div>';
 
-  // Pilots available today (from the roster, reused from the calendar pilot picker).
-  var pilots=[];try{if(typeof _rzAvailablePilots==='function')pilots=_rzAvailablePilots()||[];}catch(e){}
-  var onDuty=pilots.filter(function(p){return p.rostered;});
-  h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:8px">Pilots available today · '+onDuty.length+' rostered</div>';
-  if(!pilots.length)h+='<div style="font-size:12px;color:var(--text3)">No aircraft-rated pilots found (open the Roster once to load it).</div>';
-  else{h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
-    pilots.forEach(function(p){var off=!p.rostered;
-      h+='<span title="'+_schedEsc(p.name)+(off?' (not rostered today)':'')+'" style="display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:16px;background:rgba(96,165,250,'+(off?'.06':'.14')+');border:1px solid rgba(96,165,250,'+(off?'.28':'.5')+');font-size:12px;font-weight:800;color:#60a5fa;opacity:'+(off?'.55':'1')+'">✈ '+_schedEsc(p.code)+(off?' <span style="font-size:8px;font-weight:700">off</span>':'')+'</span>';});
-    h+='</div>';}
-  h+='<div style="font-size:11px;color:var(--text3);margin-top:8px">Call-in cost: <b style="color:var(--text2)">'+(_schedCallIn()!=null?_schedMoney(_schedCallIn())+'/day':'not set')+'</b></div></div>';
+  // Month grid
+  h+='<div class="card" style="padding:10px">';
+  h+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">';
+  ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(d){h+='<div style="text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">'+d+'</div>';});
+  h+='</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+  for(var b=0;b<offset;b++)h+='<div></div>';
+  for(var d=1;d<=dim;d++){
+    var date=_resDateStr(Y,M,d);var isT=(date===today);var isSel=(date===sel);
+    var chips='';
+    acIds.forEach(function(ac){var st=_resState(date,ac);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';var e=_resGet(date,ac);
+      var lbl=_schedAcShort(ac)+(st==='custom'?(' '+_schedEsc((e&&e.from)||'')):'');
+      chips+='<span onclick="event.stopPropagation();window.resQuickToggle(\''+date+'\',\''+_schedEsc(ac)+'\')" title="'+_schedEsc(_schedAcShort(ac)+': '+(st==='off'?'unavailable':(st==='custom'?('from '+((e&&e.from)||'?')+(e&&e.to?(' to '+e.to):'')):'available all day')))+'" style="cursor:pointer;font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px;'+_resChipStyle(st,col)+'">'+_schedEsc(lbl)+'</span>';
+    });
+    h+='<div onclick="window.resPickDay(\''+date+'\')" style="cursor:pointer;min-height:62px;border:1px solid '+(isSel?'var(--acc)':'var(--border2)')+';border-radius:8px;padding:4px;background:'+(isSel?'rgba(124,58,237,.08)':'transparent')+';outline:'+(isT?'2px solid rgba(96,165,250,.5);outline-offset:-2px':'none')+'">'+
+      '<div style="font-size:11px;font-weight:'+(isT?'900':'700')+';color:'+(isT?'#60a5fa':'var(--text2)')+';margin-bottom:3px">'+d+'</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:2px">'+chips+'</div>'+
+    '</div>';
+  }
+  h+='</div></div>';
 
-  // Fleet cards
-  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">';
-  if(!acIds.length)h+='<div class="card" style="color:var(--text3)">No aircraft configured.</div>';
+  // Day editor
+  var selObj=new Date(sel+'T00:00:00');
+  var selLbl=selObj.toLocaleDateString('en-NZ',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  h+='<div class="card">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
+      '<div class="st" style="margin:0">'+_schedEsc(selLbl)+(sel===today?' <span style="font-size:11px;color:#60a5fa;font-weight:700">· today</span>':'')+'</div>'+
+      '<div style="display:flex;gap:6px"><button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="window.resPickDay(\''+_resShiftDay(sel,-1)+'\')">‹ Prev</button>'+
+        '<button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="window.resPickDay(\''+_resShiftDay(sel,1)+'\')">Next ›</button></div>'+
+    '</div>';
+  if(!acIds.length)h+='<div style="color:var(--text3);font-size:13px">No aircraft configured.</div>';
   acIds.forEach(function(ac){
-    var t=_schedTail(ac);var m=_schedStatusMeta(t.status);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';
-    var toRun=null;try{if(typeof maintToRun==='function')toRun=maintToRun(ac);}catch(e){}
-    var hrs=null;try{if(typeof maintGetLatest==='function')hrs=maintGetLatest(ac);}catch(e){}
-    var maintCol=(toRun!=null&&toRun<=5)?'#ef4444':((toRun!=null&&toRun<=15)?'#f59e0b':'var(--text2)');
-    h+='<div class="card" style="margin:0;border-left:4px solid '+col+'">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">'+
-        '<span style="font-size:16px;font-weight:900;color:'+col+'">'+_schedEsc(_schedAcShort(ac))+'</span>'+
-        '<button onclick="window.schedCycleStatus(\''+_schedEsc(ac)+'\')" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;border:1px solid '+m.col+';background:'+m.bg+';color:'+m.col+';font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">'+
-          '<span style="width:8px;height:8px;border-radius:50%;background:'+m.dot+';display:inline-block"></span>'+m.lbl+'</button>'+
-      '</div>'+
-      '<div style="font-size:12px;color:var(--text3);line-height:1.7">'+
-        '<div>'+_schedAcType(ac)+' · <b style="color:var(--text2)">'+_schedEsc(t.cap)+' seats</b></div>'+
-        '<div>Milford return: <b style="color:var(--text2)">'+_schedMoney(_schedRtCost(ac))+'</b>'+(_schedFerryCost(ac)!=null?(' · ferry <b style="color:var(--text2)">'+_schedMoney(_schedFerryCost(ac))+'</b>'):'')+'</div>'+
-        '<div>Maintenance: '+(toRun!=null?('<b style="color:'+maintCol+'">'+toRun.toFixed(1)+' h to check</b>'):'<span style="color:var(--text3)">—</span>')+(hrs!=null?(' <span style="color:var(--text3)">('+Number(hrs).toFixed(1)+' TTIS)</span>'):'')+'</div>'+
-      '</div>'+
-      '<input type="text" value="'+_schedEsc(t.note)+'" onblur="window.schedSetTailField(\''+_schedEsc(ac)+'\',\'note\',this.value)" placeholder="Status note…" style="width:100%;box-sizing:border-box;margin-top:8px;padding:5px 8px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:12px">'+
+    var st=_resState(sel,ac);var e=_resGet(sel,ac);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';
+    var toRun=null;try{if(typeof maintToRun==='function')toRun=maintToRun(ac);}catch(_e){}
+    var maintCol=(toRun!=null&&toRun<=5)?'#ef4444':((toRun!=null&&toRun<=15)?'#f59e0b':'var(--text3)');
+    var btn=function(mode,lbl){var on=(st===mode);var c=(mode==='off')?'#ef4444':(mode==='custom'?'#f59e0b':'#22c55e');
+      return '<button onclick="window.resSetMode(\''+sel+'\',\''+_schedEsc(ac)+'\',\''+mode+'\')" style="cursor:pointer;font-size:11px;font-weight:800;padding:4px 11px;border-radius:13px;border:'+(on?'2px solid '+c:'1px solid var(--border2)')+';background:'+(on?c+'1f':'transparent')+';color:'+(on?c:'var(--text3)')+'">'+lbl+'</button>';};
+    h+='<div style="border-top:1px solid var(--border2);padding:9px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+      '<span style="font-size:14px;font-weight:900;color:'+col+';width:46px">'+_schedEsc(_schedAcShort(ac))+'</span>'+
+      '<div style="display:flex;gap:5px">'+btn('on','All day')+btn('custom','Custom')+btn('off','Off')+'</div>';
+    if(st==='custom'){
+      h+='<div style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text3)">from '+
+        '<input type="time" value="'+_schedEsc((e&&e.from)||'')+'" onchange="window.resSetTime(\''+sel+'\',\''+_schedEsc(ac)+'\',\'from\',this.value)" style="padding:4px 6px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:12px">'+
+        ' to <input type="time" value="'+_schedEsc((e&&e.to)||'')+'" onchange="window.resSetTime(\''+sel+'\',\''+_schedEsc(ac)+'\',\'to\',this.value)" style="padding:4px 6px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:12px"></div>';
+    }
+    if(toRun!=null)h+='<span style="font-size:11px;color:'+maintCol+';font-weight:700">'+toRun.toFixed(1)+'h to check</span>';
+    h+='<input type="text" value="'+_schedEsc((e&&e.note)||'')+'" onblur="window.resSetNote(\''+sel+'\',\''+_schedEsc(ac)+'\',this.value)" placeholder="note…" style="flex:1;min-width:120px;padding:4px 8px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:12px">'+
     '</div>';
   });
+  // Pilots — only today (the roster picker is today-based for now).
+  if(sel===today){
+    var pilots=[];try{if(typeof _rzAvailablePilots==='function')pilots=_rzAvailablePilots()||[];}catch(_e){}
+    var onDuty=pilots.filter(function(x){return x.rostered;});
+    h+='<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:4px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:6px">Pilots rostered today · '+onDuty.length+'</div>';
+    if(!pilots.length)h+='<div style="font-size:12px;color:var(--text3)">No rated pilots loaded (open the Roster once).</div>';
+    else{h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      pilots.forEach(function(x){var off=!x.rostered;h+='<span title="'+_schedEsc(x.name)+'" style="font-size:12px;font-weight:800;color:#60a5fa;padding:4px 10px;border-radius:14px;background:rgba(96,165,250,'+(off?'.06':'.14')+');border:1px solid rgba(96,165,250,'+(off?'.28':'.5')+');opacity:'+(off?'.55':'1')+'">✈ '+_schedEsc(x.code)+(off?' off':'')+'</span>';});
+      h+='</div>';}
+    h+='</div>';
+  }
   h+='</div></div>';
   return h;
 }
