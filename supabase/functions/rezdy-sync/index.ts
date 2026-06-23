@@ -150,12 +150,21 @@ serve(async (req) => {
   const minT = `${shiftDay(date, -1)}T00:00:00Z`
   const maxT = `${shiftDay(date, 1)}T23:59:59Z`
 
+  // CRITICAL: Rezdy's booking search filters by minDateCreated ("only load bookings created on or
+  // after this date") and DEFAULTS it to recently-created bookings. So advance bookings — placed
+  // months ahead for a future tour (the low / older order numbers) — were silently omitted even
+  // though their tour falls in the window. Pin the creation floor years back so EVERY booking with
+  // a tour in the window is returned regardless of when it was booked. (5y back ≫ any booking lead
+  // time, and avoids any "range too wide" rejection from an absolute epoch.)
+  const minCreated = `${Number(date.slice(0, 4)) - 5}-01-01T00:00:00Z`
+
   const all: any[] = []
   let offset = 0
   for (let page = 0; page < 20; page++) {
     const url = `${REZDY_BASE}/bookings?apiKey=${REZDY_KEY}` +
       `&minTourStartTime=${encodeURIComponent(minT)}` +
       `&maxTourStartTime=${encodeURIComponent(maxT)}` +
+      `&minDateCreated=${encodeURIComponent(minCreated)}` +
       `&limit=100&offset=${offset}`
     const r = await fetch(url)
     if (!r.ok) {
