@@ -198,21 +198,24 @@ function renderSchedulingSettings(){
   h+='<div class="card" style="margin-top:14px"><div class="st">Pilot priority</div>'+
     '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Drag pilots to set who gets allocated <b>first</b> (top) and <b>last</b> (bottom). The allocator fills aircraft in this order, respecting type ratings. <span style="color:#ef4444;font-weight:700">SDB</span> badge = also rated to fly the leased SDB — only these can crew it.</p>';
   var _col=function(typeKey,label){
-    var rows=_schedPilotList(typeKey);
+    var rows=_schedPilotList(typeKey);var ranks=_schedPilotRanks(typeKey);var tie=(_schedCfg().pilotTie||{})[typeKey]||{};
     var inner='<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:6px">'+label+'</div>';
     if(!rows.length)inner+='<div style="font-size:12px;color:var(--text3)">No rated pilots (set endorsements in Crew, or open the Roster once).</div>';
     inner+='<div ondragover="event.preventDefault()" ondrop="window.schedPilotDrop(\''+typeKey+'\',\'\')" style="display:flex;flex-direction:column;gap:5px;min-height:30px">';
     rows.forEach(function(p,i){
+      var tier=ranks[p.code];var tied=(i>0&&tie[p.code]);
+      var tieBtn=(i>0)?('<button onclick="event.stopPropagation();window.schedPilotTie(\''+typeKey+'\',\''+_schedEsc(p.code)+'\')" title="'+(tied?'Even priority with the one above — click to separate':'Make even priority with the one above')+'" style="font-size:11px;font-weight:800;padding:1px 7px;border-radius:9px;cursor:pointer;border:1px solid '+(tied?'#22c55e':'var(--border2)')+';background:'+(tied?'rgba(34,197,94,.14)':'transparent')+';color:'+(tied?'#22c55e':'var(--text3)')+'">=</button>'):'';
       inner+='<div draggable="true" ondragstart="window.schedPilotDragStart(\''+typeKey+'\',\''+_schedEsc(p.code)+'\',event)" ondragover="event.preventDefault()" ondrop="event.stopPropagation();window.schedPilotDrop(\''+typeKey+'\',\''+_schedEsc(p.code)+'\')" '+
-        'style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2,rgba(0,0,0,.04));cursor:grab">'+
-        '<span style="font-size:11px;color:var(--text3);font-weight:700;width:18px">'+(i+1)+'</span>'+
+        'style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid '+(tied?'rgba(34,197,94,.4)':'var(--border2)')+';background:var(--card2,rgba(0,0,0,.04));cursor:grab'+(tied?';margin-left:14px':'')+'">'+
+        '<span title="Priority tier" style="font-size:11px;color:var(--text3);font-weight:700;width:18px">'+(tier+1)+'</span>'+
         '<span style="font-size:13px;font-weight:800;color:#60a5fa">'+_schedEsc(p.code)+'</span>'+
         '<span style="font-size:12px;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_schedEsc(p.name||'')+'</span>'+
         (p.sdb?'<span title="Rated to fly SDB" style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:5px;background:rgba(239,68,68,.14);border:1px solid #ef4444;color:#ef4444">SDB</span>':'')+
+        tieBtn+
         '<span style="color:var(--text3);font-size:13px">⋮⋮</span>'+
       '</div>';
     });
-    inner+='</div>';
+    inner+='</div><div style="font-size:10px;color:var(--text3);margin-top:5px">Same tier number = even priority. The <b>=</b> button ties a pilot with the one above; drag to reorder.</div>';
     return '<div style="flex:1;min-width:220px">'+inner+'</div>';
   };
   h+='<div style="display:flex;gap:16px;flex-wrap:wrap">'+_col('c208','Caravan (C208B) pilots')+_col('ga8','Airvan (GA8) pilots')+'</div>';
@@ -683,15 +686,27 @@ function _schedDayPilots(date){
   return out;
 }
 function _schedPilotRates(code,ac){var en=(typeof _rzPilotEndorse==='function')?_rzPilotEndorse(code):null;return !en||!en.length||en.indexOf(ac)>=0;}
-// What a pilot can fly, from their endorsements (empty endorsements = rated for everything).
+// What a pilot can actually fly, from their ENDORSEMENTS — only counts known aircraft tails (a stray
+// non-aircraft endorsement no longer makes someone "caravan-rated"). No endorsement → flies nothing
+// here, so unrated pilots don't appear in the type lists.
 function _schedPilotCan(code){
   var en=(typeof _rzPilotEndorse==='function')?(_rzPilotEndorse(code)||[]):[];
-  if(!en.length)return {airvan:true,caravan:true,sdb:true};
-  var a=false,c=false,s=false;en.forEach(function(t){if(_schedIsAirvan(t))a=true;else c=true;if(_schedIsSDB(t))s=true;});
+  var a=false,c=false,s=false;
+  en.forEach(function(t){var sp=(typeof _acSpec==='function')?_acSpec(t):((S.aircraft||{})[t]);if(!sp)return;if(sp.layout==='ga8')a=true;else c=true;if(_schedIsSDB(t))s=true;});
   return {airvan:a,caravan:c,sdb:s};
 }
-// Allocation priority for a pilot on an aircraft's type (lower = earlier). Drag-set per type.
-function _schedPilotRank(code,ac){var tk=_schedIsAirvan(ac)?'ga8':'c208';var order=(_schedCfg().pilotOrder||{})[tk]||[];var i=order.indexOf(code);return i<0?9999:i;}
+// Priority TIERS per type: pilots in the same tier share a rank ("even priority"). cfg.pilotTie[type]
+// marks a pilot as tied with the one above it in the order; a new tier starts otherwise.
+function _schedPilotRanks(typeKey){
+  var order=_schedPilotList(typeKey).map(function(p){return p.code;});
+  var tie=(_schedCfg().pilotTie||{})[typeKey]||{};
+  var ranks={},tier=-1;
+  order.forEach(function(c,i){if(i===0||!tie[c])tier++;ranks[c]=tier;});
+  return ranks;
+}
+// Allocation priority for a pilot on an aircraft's type (lower = earlier; equal = even).
+function _schedPilotRank(code,ac){var r=_schedPilotRanks(_schedIsAirvan(ac)?'ga8':'c208');return (r[code]!=null)?r[code]:9999;}
+window.schedPilotTie=function(typeKey,code){var cfg=_schedCfg();cfg.pilotTie=cfg.pilotTie||{};var t=cfg.pilotTie[typeKey]||(cfg.pilotTie[typeKey]={});if(t[code])delete t[code];else t[code]=true;_schedSave();render();};
 // Rated pilots for a type ('c208'|'ga8'), ordered by the saved priority then name; flags SDB-rated.
 function _schedPilotList(typeKey){
   var want=(typeKey==='ga8')?'airvan':'caravan';
