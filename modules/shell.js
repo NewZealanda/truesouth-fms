@@ -145,6 +145,7 @@ function _sectionAllowed(sec){
     case 'businessplan':return (hasRolePerm('businessplan'))||!!(S.user&&S.user.superAdmin);
     case 'flightrecord':return (hasRolePerm('flightrecord'))||!!(S.user&&S.user.superAdmin);
     case 'resources':   return hasRolePerm('operations'); // gated further by the feature toggle in nav
+    case 'training':    return !!S.user; // training is available to every signed-in user
     case 'logbook':     return !!S.user; // every signed-in pilot has a personal logbook
     default:            return true;
   }
@@ -593,6 +594,10 @@ function renderDrawer(){
      var _onRes=sec==='resources';
      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'resources\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onRes?'rgba(34,197,94,.18)':'transparent')+';color:'+(_onRes?'#22c55e':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onRes?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🚦</span><span style="flex:1">Resources</span></button>';
    }}
+  // Training — guided tour, available to everyone signed in.
+  {if(S.user){var _onTr=sec==='training';
+     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'training\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onTr?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onTr?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onTr?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🎓</span><span style="flex:1">Training</span></button>';
+   }}
   // Settings pinned last (config / admin).
   {var _canUsers=hasRolePerm('admin_users');
    var _canCrew=hasRolePerm('admin_crew');
@@ -764,6 +769,10 @@ function renderApp(){
           if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-logbook">'+renderLogbook()+'</div>';
         }
+        if(_sec==='training'){
+          if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-training">'+renderTraining()+'</div>';
+        }
         if(_sec==='resources'){
           if(!hasRolePerm('operations'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-resources">'+renderResources()+'</div>';
@@ -771,7 +780,7 @@ function renderApp(){
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
-  </div>`;
+  </div>${(typeof renderTrainCoach==='function')?renderTrainCoach():''}`;
 }
 
 

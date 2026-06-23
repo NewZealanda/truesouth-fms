@@ -41,6 +41,7 @@ ORDER = [
     ('flightrecord','js'),
     ('businessplan','js'),
     ('scheduling',  'js'),
+    ('training',    'js'),
     ('tail',        'html'),
 ]
 
