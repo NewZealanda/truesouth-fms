@@ -335,7 +335,7 @@ function renderResources(){
       '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:6px">Recommended day plan <span style="font-weight:400;text-transform:none;letter-spacing:0">· preview, cost-optimised</span></div>';
     if(!dp.departures.length){
       var _ld=(S._schedBkLoading||{})[sel]&&!Array.isArray((S._schedBkCache||{})[sel]);
-      h+='<div style="font-size:12px;color:var(--text3)">'+(_ld?'Loading bookings for this day…':'No Milford departures for this day.')+'</div>';
+      h+='<div style="font-size:12px;color:var(--text3)">'+(_ld?'Loading bookings for this day…':'No departures for this day.')+'</div>';
     } else {
       dp.departures.forEach(function(d){
         var acs=d.aircraft.map(function(a){var c=(typeof _rzAcCol==='function')?_rzAcCol(a.ac):'#888';
