@@ -803,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.32';
+const APP_VER='v25.33';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -19013,27 +19013,39 @@ function renderResources(){
           '<span style="margin-left:auto">'+lockCtl+'</span></div>';
       });
       var ferries=dp.emptyLegs/2;
+      var ci=_schedCallInAnalysis(sel);
       h+='<div style="font-size:12px;color:var(--text2);margin-top:6px;display:flex;gap:14px;flex-wrap:wrap">'+
         '<span>Est. cost <b style="color:var(--text1)">'+_schedMoney(dp.cost)+'</b> ex GST</span>'+
         '<span>Aircraft <b style="color:var(--text1)">'+dp.aircraftUsed.length+'</b></span>'+
-        '<span>Pilots needed <b style="color:var(--text1)">'+dp.pilotsNeeded+'</b></span>'+
-        (dp.emptyLegs?('<span style="color:#f59e0b">'+ferries+' reposition leg'+(ferries===1?'':'s')+'</span>'):'<span style="color:#22c55e">no ferries</span>')+'</div>'+
-        '<div style="font-size:10px;color:var(--text3);margin-top:3px">⤳ = aircraft reused on a later departure (needs repositioning). Pilots/call-in advice coming next.</div>';
+        '<span>Pilots need <b style="color:'+(ci.callIn?'#ef4444':'var(--text1)')+'">'+dp.pilotsNeeded+'</b> · have <b style="color:var(--text1)">'+ci.pilotsAvail+'</b></span>'+
+        (dp.emptyLegs?('<span style="color:#f59e0b">'+ferries+' reposition leg'+(ferries===1?'':'s')+'</span>'):'<span style="color:#22c55e">no ferries</span>')+'</div>';
+      if(ci.callIn){
+        var savTxt=(ci.saving>0)?('Calling in saves ~<b>'+_schedMoney(ci.saving)+'</b> vs running short.'):((ci.cappedPaxShort>0)?('Without it you can\'t carry <b>'+ci.cappedPaxShort+'</b> pax.'):'Weigh it against running short.');
+        h+='<div style="margin-top:8px;padding:9px 11px;border-radius:9px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;font-size:12px;color:var(--text1)">'+
+          '<b style="color:#f59e0b">⚠ Call-in decision</b> — short <b>'+ci.shortfall+'</b> pilot'+(ci.shortfall===1?'':'s')+'. Call-in ≈ <b>'+_schedMoney(ci.callInCost)+'</b>. '+savTxt+
+          '<div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span style="color:var(--text3)">Add a pilot below to override, or</span>'+
+            '<button onclick="window.schedNotifyCallIn(\''+sel+'\')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:9px;cursor:pointer;border:1px solid #f59e0b;background:transparent;color:#f59e0b">📣 Notify management</button></div>'+
+        '</div>';
+      }
+      h+='<div style="font-size:10px;color:var(--text3);margin-top:4px">⤳ = aircraft reused on a later departure (needs repositioning).</div>';
     }
     h+='</div>';
   })();
 
-  // Pilots — only today (the roster picker is today-based for now).
-  if(sel===today){
-    var pilots=[];try{if(typeof _rzAvailablePilots==='function')pilots=_rzAvailablePilots()||[];}catch(_e){}
-    var onDuty=pilots.filter(function(x){return x.rostered;});
-    h+='<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:4px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:6px">Pilots rostered today · '+onDuty.length+'</div>';
-    if(!pilots.length)h+='<div style="font-size:12px;color:var(--text3)">No rated pilots loaded (open the Roster once).</div>';
-    else{h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
-      pilots.forEach(function(x){var off=!x.rostered;h+='<span title="'+_schedEsc(x.name)+'" style="font-size:12px;font-weight:800;color:#60a5fa;padding:4px 10px;border-radius:14px;background:rgba(96,165,250,'+(off?'.06':'.14')+');border:1px solid rgba(96,165,250,'+(off?'.28':'.5')+');opacity:'+(off?'.55':'1')+'">✈ '+_schedEsc(x.code)+(off?' off':'')+'</span>';});
-      h+='</div>';}
-    h+='</div>';
-  }
+  // Available pilots for the selected day = roster (today) + manual extras/call-ins. Add an extra to
+  // override a call-in suggestion (the optimiser then counts it).
+  (function(){
+    var pilots=_schedDayPilots(sel);
+    h+='<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:6px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:6px">Available pilots · '+pilots.length+(sel===today?' (incl. today\'s roster)':'')+'</div>';
+    h+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
+    if(!pilots.length)h+='<span style="font-size:12px;color:var(--text3)">none yet'+(sel!==today?' — add call-ins below (roster-by-date coming)':' (open the Roster once to load it)')+'</span>';
+    pilots.forEach(function(p){var col=p.extra?'#22c55e':'#60a5fa';
+      var rm=p.extra?(' <span onclick="event.stopPropagation();window.schedRemovePilot(\''+sel+'\',\''+_schedEsc(p.code)+'\')" title="Remove" style="cursor:pointer;opacity:.7;margin-left:1px">✕</span>'):'';
+      h+='<span title="'+_schedEsc(p.name)+(p.extra?' · call-in':' · rostered')+'" style="font-size:12px;font-weight:800;color:'+col+';padding:4px 10px;border-radius:14px;background:'+(p.extra?'rgba(34,197,94,.14)':'rgba(96,165,250,.14)')+';border:1px solid '+(p.extra?'rgba(34,197,94,.5)':'rgba(96,165,250,.5)')+'">'+(p.extra?'➕ ':'✈ ')+_schedEsc(p.code)+rm+'</span>';});
+    var all=_schedAllPilots().filter(function(x){return !pilots.some(function(p){return p.code===x.code;});});
+    if(all.length)h+='<select onchange="if(this.value){window.schedAddPilot(\''+sel+'\',this.value);}" style="font-size:12px;padding:4px 8px;border-radius:10px;border:1px dashed var(--border2);background:transparent;color:var(--text2)"><option value="">+ add call-in…</option>'+all.map(function(x){return '<option value="'+_schedEsc(x.code)+'">'+_schedEsc(x.code+(x.name?(' — '+x.name):''))+'</option>';}).join('')+'</select>';
+    h+='</div><div style="font-size:10px;color:var(--text3);margin-top:4px">➕ = extra/called-in pilot you\'ve added for this day — counted by the optimiser, overriding the call-in suggestion.</div></div>';
+  })();
   h+='</div></div>';
   return h;
 }
@@ -19229,9 +19241,10 @@ function _schedDepAssignedAc(date,time){
 }
 window.schedToggleLock=function(date,time){var lm=_schedLockMap();var d=lm[date]||(lm[date]={});if(d[time])delete d[time];else d[time]=true;if(!Object.keys(d).length)delete lm[date];_schedSave();render();};
 
-function _schedDayPlan(date){
+function _schedDayPlan(date,opts){
+  opts=opts||{};var maxAc=(opts.maxAircraft!=null)?opts.maxAircraft:Infinity;
   var deps=_schedDayDepartures(date);
-  var freeAt={},everUsed={},plan=[],cost=0,loadedLegs=0,emptyLegs=0;
+  var freeAt={},everUsed={},plan=[],cost=0,loadedLegs=0,emptyLegs=0,paxShort=0;
   deps.forEach(function(d){
     var dm=_schedMinOf(d.time)||0;
     var locked=_schedDepLocked(date,d.time);
@@ -19242,24 +19255,84 @@ function _schedDayPlan(date){
         var cap=_schedNum(_schedTail(a.ac).cap)||0;ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+SCHED_BLOCK_MIN;
         if(ll!=null){loadedLegs+=2;cost+=2*ll;if(out){emptyLegs+=2;cost+=2*el;}}
         ldAc.push({ac:a.ac,cap:cap,reused:out});});
+      if(ldCap<d.pax)paxShort+=(d.pax-ldCap);
       plan.push({time:d.time,pax:d.pax,aircraft:ldAc,cap:ldCap,short:ldCap<d.pax,locked:true,manualLock:_schedDepManualLock(date,d.time)});
       return;
     }
     var fleet=_schedFleetFor(date,d.time);
+    var maxNew=maxAc-Object.keys(everUsed).length;if(maxNew<0)maxNew=0;
     // An aircraft needs a FERRY only if it's still airborne from an earlier load at this departure
     // time (freeAt > now). One that never flew, or already returned to base, is free (fresh rotation).
     var cand=fleet.map(function(f){var ll=_schedLoadedLeg(f.ac),el=_schedEmptyLeg(f.ac);
       var out=(freeAt[f.ac]!=null&&freeAt[f.ac]>dm);
-      return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,ll:ll,el:el,inc:2*ll+(out?2*el:0)};});
-    var chosen=_schedPlanPick(d.pax,cand);
+      return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,isNew:!everUsed[f.ac],ll:ll,el:el,inc:2*ll+(out?2*el:0)};});
+    var chosen=_schedPlanPick(d.pax,cand,maxNew);
     var depAc=[];var depCap=0;
     chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+SCHED_BLOCK_MIN;depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
       loadedLegs+=2;cost+=2*c.ll;if(c.reused){emptyLegs+=2;cost+=2*c.el;}});
+    if(depCap<d.pax)paxShort+=(d.pax-depCap);
     plan.push({time:d.time,pax:d.pax,aircraft:depAc,cap:depCap,short:depCap<d.pax,locked:false,manualLock:_schedDepManualLock(date,d.time)});
   });
   var acUsed=Object.keys(everUsed);
-  return {date:date,departures:plan,cost:Math.round(cost),loadedLegs:loadedLegs,emptyLegs:emptyLegs,aircraftUsed:acUsed,pilotsNeeded:acUsed.length};
+  return {date:date,departures:plan,cost:Math.round(cost),loadedLegs:loadedLegs,emptyLegs:emptyLegs,paxShort:paxShort,aircraftUsed:acUsed,pilotsNeeded:acUsed.length};
 }
+
+// ── Pilots (roster + manual call-in/override extras) ───────────────────────────
+function _schedExtraMap(){var c=_schedCfg();if(!c.extraPilots||typeof c.extraPilots!=='object')c.extraPilots={};return c.extraPilots;}
+function _schedDayExtras(date){var a=_schedExtraMap()[date];return Array.isArray(a)?a:[];}
+window.schedAddPilot=function(date,code){if(!code)return;var m=_schedExtraMap();var a=m[date]||(m[date]=[]);if(a.indexOf(code)<0)a.push(code);_schedSave();render();};
+window.schedRemovePilot=function(date,code){var m=_schedExtraMap();var a=m[date];if(!a)return;var i=a.indexOf(code);if(i>=0)a.splice(i,1);if(!a.length)delete m[date];_schedSave();render();};
+function _schedAllPilots(){try{return (typeof _rzAvailablePilots==='function')?(_rzAvailablePilots()||[]):[];}catch(e){return [];}}
+// Available pilots for a date = rostered (today, from the roster) + manually-added extras/call-ins.
+function _schedDayPilots(date){
+  var out=[],seen={};
+  if(date===_resToday())_schedAllPilots().forEach(function(p){if(p.rostered&&!seen[p.code]){seen[p.code]=1;out.push({code:p.code,name:p.name,extra:false});}});
+  _schedDayExtras(date).forEach(function(code){if(!seen[code]){seen[code]=1;var pp=_schedAllPilots().find(function(x){return x.code===code;});out.push({code:code,name:(pp&&pp.name)||code,extra:true});}});
+  return out;
+}
+function _schedPilotRates(code,ac){var en=(typeof _rzPilotEndorse==='function')?_rzPilotEndorse(code):null;return !en||!en.length||en.indexOf(ac)>=0;}
+// Greedy match the plan's distinct aircraft to available pilots by endorsement; returns the shortfall.
+function _schedAssignPilots(acList,pilots){
+  var avail=pilots.slice(),byAc={},shortfall=0;
+  var acs=acList.slice().sort(function(a,b){return avail.filter(function(p){return _schedPilotRates(p.code,a);}).length-avail.filter(function(p){return _schedPilotRates(p.code,b);}).length;});
+  acs.forEach(function(ac){
+    var cands=avail.filter(function(p){return _schedPilotRates(p.code,ac);});
+    if(!cands.length){shortfall++;return;}
+    cands.sort(function(p,q){return acList.filter(function(x){return _schedPilotRates(p.code,x);}).length-acList.filter(function(x){return _schedPilotRates(q.code,x);}).length;});
+    byAc[ac]=cands[0].code;avail=avail.filter(function(p){return p.code!==cands[0].code;});
+  });
+  return {byAc:byAc,shortfall:shortfall};
+}
+// Call-in decision: cheapest plan (unlimited) vs pilots available. If short, compare against the
+// best plan capped at the crewable aircraft count and the call-in cost.
+function _schedCallInAnalysis(date){
+  var plan=_schedDayPlan(date);
+  var pilots=_schedDayPilots(date);
+  var match=_schedAssignPilots(plan.aircraftUsed,pilots);
+  var ci=_schedCallIn()||0;
+  var res={plan:plan,pilotsAvail:pilots.length,pilotsNeed:plan.pilotsNeeded,shortfall:match.shortfall,callIn:match.shortfall>0,callInCost:match.shortfall*ci};
+  if(match.shortfall>0){
+    var capped=_schedDayPlan(date,{maxAircraft:pilots.length});
+    res.cappedCost=capped.cost;res.cappedPaxShort=capped.paxShort;
+    res.saving=capped.cost-(plan.cost+match.shortfall*ci);   // >0 → calling in is cheaper overall
+  }
+  return res;
+}
+// Notify management (admin / superadmin / cx_manager) that a call-in may be worth it for a date.
+window.schedNotifyCallIn=async function(date){
+  try{
+    var a=_schedCallInAnalysis(date);if(!a.callIn){if(typeof toast==='function')toast('No call-in needed for '+date,'info');return;}
+    var msg='🧑‍✈️ '+date+': roster short by '+a.shortfall+' pilot'+(a.shortfall===1?'':'s')+'. Call-in ≈ '+_schedMoney(a.callInCost)+
+      (a.saving>0?(' — saves ~'+_schedMoney(a.saving)+' vs running short'):(a.cappedPaxShort>0?(' — without it you cannot carry '+a.cappedPaxShort+' pax'):''))+'. Open Resources to add a pilot or decline.';
+    var me=(S.user&&S.user.id)||null,seen={},recips=[];
+    (S.users||[]).forEach(function(u){if(!u||u.inactive||!u.id||u.id===me||seen[u.id])return;var role=String(u.role||'').toLowerCase();if(role==='admin'||role==='superadmin'||role==='cx_manager'){seen[u.id]=1;recips.push(u);}});
+    if(!recips.length){if(typeof toast==='function')toast('No managers to notify','warn');return;}
+    var now=new Date().toISOString();
+    var rows=recips.map(function(u){return {user_id:u.id,type:'scheduling',reference_id:null,message:msg,read:false,created_at:now};});
+    if(typeof sbU==='function')await sbU('ts_notifications',rows);
+    if(typeof toast==='function')toast('Management notified ('+recips.length+')','ok');
+  }catch(e){if(typeof toast==='function')toast('Notify failed','err');}
+};
 </script>
 </body>
 </html>
