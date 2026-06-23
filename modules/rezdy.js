@@ -576,7 +576,7 @@ function renderGround(){
 }
 // SETTINGS ▸ OPERATIONS — tier-3 operations settings (Pickup Locations for now; more to come).
 function renderAdminOperations(){
-  var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'vehicles',lbl:'🚐 Vehicles'},{id:'aerodromes',lbl:'🛬 Aerodromes'},{id:'fuels',lbl:'⛽ Fuels'},{id:'flightduty',lbl:'🕓 Flight & Duty'}];
+  var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'vehicles',lbl:'🚐 Vehicles'},{id:'aerodromes',lbl:'🛬 Aerodromes'},{id:'fuels',lbl:'⛽ Fuels'},{id:'flightduty',lbl:'🕓 Flight & Duty'},{id:'scheduling',lbl:'💲 Scheduling'}];
   var ids=tabs.map(function(t){return t.id;});
   var sub=(ids.indexOf(S._opsSettingsTab)>=0)?S._opsSettingsTab:'pickuplocs';S._opsSettingsTab=sub;
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
@@ -586,6 +586,7 @@ function renderAdminOperations(){
   else if(sub==='aerodromes')body=(typeof renderAerodromes==='function')?renderAerodromes():'';
   else if(sub==='fuels')body=(typeof renderAdminFuels==='function')?renderAdminFuels():'';
   else if(sub==='flightduty')body=(typeof renderFDLimits==='function')?renderFDLimits():'';
+  else if(sub==='scheduling')body=(typeof renderSchedulingSettings==='function')?renderSchedulingSettings():'';
   else body=_rzRenderPickupLocs();
   return bar+body;
 }

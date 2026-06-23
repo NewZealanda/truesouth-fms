@@ -803,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.23';
+const APP_VER='v25.24';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2298,7 +2298,7 @@ async function reloadTable(table){
     if(cr&&cr.length){S.charterRates=Object.fromEntries(cr.map(function(r){return[r.acId,(r.rates&&parseFloat(r.rates.perHour)>0)?r.rates:dc(CHARTER_RATES_DEF[r.acId]||{perHour:0,minHours:1})];}));lsSet('ts_charter_rates_cache',S.charterRates);return true;}
   } else if(table==='ts_settings'){
     try{
-      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames,rz_fuel_ov,rz_pickup_locs,rz_vehicles,roster,roster_colors,business_plan,fr_settings,fd_limits,aircraft_obs,charter_quotes)&select=key,value',{headers:SH});
+      const r=await fetch(SB+'/rest/v1/ts_settings?key=in.(role_perms,charter_wait_rate,maintenance,aero_featured,rz_depnames,rz_fuel_ov,rz_pickup_locs,rz_vehicles,roster,roster_colors,business_plan,fr_settings,fd_limits,aircraft_obs,charter_quotes,scheduling)&select=key,value',{headers:SH});
       if(r.ok){
         const rows=await r.json();let changed=false;
         rows.forEach(function(row){
@@ -2339,6 +2339,7 @@ async function reloadTable(table){
           if(row.key==='fd_limits'&&row.value){try{var _fdl=JSON.parse(row.value);if(_fdl&&typeof _fdl==='object'){S._fdLimits=_fdl;_sbSetBase('fd_limits',_fdl);changed=true;}}catch(e){}}
           if(row.key==='aircraft_obs'&&row.value){try{var _ao=JSON.parse(row.value);if(_ao&&typeof _ao==='object'){S.maintObs=_ao;lsSet('ts_aircraft_obs',_ao);_sbSetBase('aircraft_obs',_ao);changed=true;}}catch(e){}}
           if(row.key==='charter_quotes'&&row.value){try{var _cq=JSON.parse(row.value);if(Array.isArray(_cq)){lsSet('ts_charter_quotes_cache',_cq);_sbSetBase('charter_quotes',_cq);changed=true;}}catch(e){}}
+          if(row.key==='scheduling'&&row.value){try{var _sc=JSON.parse(row.value);if(_sc&&typeof _sc==='object'){S._schedCfg=_sc;_sbSetBase('scheduling',_sc);lsSet('ts_scheduling',_sc);changed=true;}}catch(e){}}
         });
         return changed;
       }
@@ -3136,6 +3137,7 @@ function _sectionAllowed(sec){
     case 'flightduty':  return (hasRolePerm('flightduty'))||!!(S.user&&S.user.superAdmin);
     case 'businessplan':return (hasRolePerm('businessplan'))||!!(S.user&&S.user.superAdmin);
     case 'flightrecord':return (hasRolePerm('flightrecord'))||!!(S.user&&S.user.superAdmin);
+    case 'resources':   return hasRolePerm('operations'); // gated further by the feature toggle in nav
     case 'logbook':     return !!S.user; // every signed-in pilot has a personal logbook
     default:            return true;
   }
@@ -3578,6 +3580,12 @@ function renderDrawer(){
     if(_canFD)h+=_fdNavBtn('Flight & Duty','flightduty','🕓');
     if(_canBP)h+=_fdNavBtn('Business Plan','businessplan','📈');
   }}
+  // Resource board — only when the cost-scheduling feature is toggled ON (snaps in/out during testing).
+  {if(S.user&&!S._schedLoaded){S._schedLoaded=true;if(window.loadScheduling)window.loadScheduling();}
+   if(typeof _schedEnabled==='function'&&_schedEnabled()&&hasRolePerm('operations')){
+     var _onRes=sec==='resources';
+     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'resources\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onRes?'rgba(34,197,94,.18)':'transparent')+';color:'+(_onRes?'#22c55e':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onRes?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🚦</span><span style="flex:1">Resources</span></button>';
+   }}
   // Settings pinned last (config / admin).
   {var _canUsers=hasRolePerm('admin_users');
    var _canCrew=hasRolePerm('admin_crew');
@@ -3748,6 +3756,10 @@ function renderApp(){
         if(_sec==='logbook'){
           if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-logbook">'+renderLogbook()+'</div>';
+        }
+        if(_sec==='resources'){
+          if(!hasRolePerm('operations'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-resources">'+renderResources()+'</div>';
         }
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
@@ -12584,7 +12596,7 @@ function renderGround(){
 }
 // SETTINGS ▸ OPERATIONS — tier-3 operations settings (Pickup Locations for now; more to come).
 function renderAdminOperations(){
-  var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'vehicles',lbl:'🚐 Vehicles'},{id:'aerodromes',lbl:'🛬 Aerodromes'},{id:'fuels',lbl:'⛽ Fuels'},{id:'flightduty',lbl:'🕓 Flight & Duty'}];
+  var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'vehicles',lbl:'🚐 Vehicles'},{id:'aerodromes',lbl:'🛬 Aerodromes'},{id:'fuels',lbl:'⛽ Fuels'},{id:'flightduty',lbl:'🕓 Flight & Duty'},{id:'scheduling',lbl:'💲 Scheduling'}];
   var ids=tabs.map(function(t){return t.id;});
   var sub=(ids.indexOf(S._opsSettingsTab)>=0)?S._opsSettingsTab:'pickuplocs';S._opsSettingsTab=sub;
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
@@ -12594,6 +12606,7 @@ function renderAdminOperations(){
   else if(sub==='aerodromes')body=(typeof renderAerodromes==='function')?renderAerodromes():'';
   else if(sub==='fuels')body=(typeof renderAdminFuels==='function')?renderAdminFuels():'';
   else if(sub==='flightduty')body=(typeof renderFDLimits==='function')?renderFDLimits():'';
+  else if(sub==='scheduling')body=(typeof renderSchedulingSettings==='function')?renderSchedulingSettings():'';
   else body=_rzRenderPickupLocs();
   return bar+body;
 }
@@ -18627,6 +18640,199 @@ function _bizPnlDefault(){return [{"id":"fy26pl","label":"FY26","startYM":"2024-
 
 // Pax tracker historical seed (daily 26 Pax / Last-Yr) from the Pax Carried sheet, Jun 2025+.
 function _bizPaxDefault(){return {"2025-06-01":{"p26":31},"2025-06-02":{"p25":32},"2025-06-03":{"p25":17},"2025-06-04":{"p25":21},"2025-06-05":{"p26":9,"p25":22},"2025-06-06":{"p26":12,"p25":20},"2025-06-07":{"p26":39,"p25":15},"2025-06-08":{"p26":28,"p25":24},"2025-06-09":{"p26":18},"2025-06-10":{"p26":27,"p25":13},"2025-06-11":{"p26":11,"p25":19},"2025-06-12":{"p26":15,"p25":20},"2025-06-13":{"p26":21},"2025-06-14":{"p26":18},"2025-06-15":{"p26":18},"2025-06-16":{"p26":34,"p25":18},"2025-06-17":{"p26":36,"p25":19},"2025-06-18":{"p26":36},"2025-06-19":{"p25":30},"2025-06-20":{"p26":4,"p25":8},"2025-06-21":{"p26":41},"2025-06-23":{"p26":29,"p25":19},"2025-06-24":{"p26":11,"p25":19},"2025-06-25":{"p25":2},"2025-06-26":{"p25":35},"2025-06-27":{"p26":28,"p25":29},"2025-06-29":{"p26":49,"p25":38},"2025-06-30":{"p26":33},"2025-07-01":{"p26":38},"2025-07-02":{"p26":41,"p25":13},"2025-07-03":{"p25":19},"2025-07-04":{"p26":44,"p25":57},"2025-07-05":{"p26":47,"p25":11},"2025-07-06":{"p26":4,"p25":50},"2025-07-07":{"p26":52,"p25":39},"2025-07-08":{"p26":52,"p25":32},"2025-07-09":{"p25":40},"2025-07-10":{"p26":4,"p25":35},"2025-07-11":{"p26":30,"p25":36},"2025-07-12":{"p25":41},"2025-07-13":{"p25":31},"2025-07-14":{"p26":49,"p25":25},"2025-07-15":{"p25":25},"2025-07-16":{"p26":84},"2025-07-17":{"p26":61,"p25":27},"2025-07-18":{"p26":9,"p25":46},"2025-07-19":{"p26":57,"p25":9},"2025-07-20":{"p26":46},"2025-07-21":{"p26":38,"p25":23},"2025-07-22":{"p26":42,"p25":15},"2025-07-23":{"p26":31,"p25":35},"2025-07-24":{"p26":42,"p25":22},"2025-07-25":{"p26":36,"p25":36},"2025-07-27":{"p26":25},"2025-07-30":{"p26":55},"2025-07-31":{"p26":42},"2025-08-01":{"p26":46,"p25":41},"2025-08-02":{"p26":46,"p25":25},"2025-08-03":{"p26":66,"p25":41},"2025-08-04":{"p26":47,"p25":14},"2025-08-05":{"p26":46,"p25":3},"2025-08-06":{"p26":7,"p25":6},"2025-08-08":{"p26":38,"p25":20},"2025-08-09":{"p26":30,"p25":55},"2025-08-10":{"p26":37,"p25":23},"2025-08-11":{"p26":43},"2025-08-12":{"p26":41},"2025-08-13":{"p26":57,"p25":41},"2025-08-14":{"p26":8,"p25":21},"2025-08-15":{"p26":29},"2025-08-17":{"p26":3,"p25":7},"2025-08-20":{"p26":62,"p25":54},"2025-08-21":{"p26":67,"p25":19},"2025-08-22":{"p26":42},"2025-08-23":{"p26":32},"2025-08-24":{"p26":35},"2025-08-25":{"p26":31},"2025-08-26":{"p26":40,"p25":48},"2025-08-27":{"p25":19},"2025-08-28":{"p25":4},"2025-08-31":{"p26":35,"p25":8},"2025-09-02":{"p26":43},"2025-09-03":{"p26":50,"p25":26},"2025-09-04":{"p25":31},"2025-09-05":{"p25":3},"2025-09-06":{"p26":42},"2025-09-07":{"p26":30},"2025-09-08":{"p26":87,"p25":26},"2025-09-11":{"p26":57,"p25":15},"2025-09-12":{"p26":6},"2025-09-13":{"p26":1,"p25":13},"2025-09-14":{"p26":41,"p25":57},"2025-09-16":{"p25":26},"2025-09-17":{"p25":78},"2025-09-18":{"p26":13,"p25":1},"2025-09-19":{"p26":108},"2025-09-22":{"p25":6},"2025-09-23":{"p26":73,"p25":16},"2025-09-24":{"p26":11},"2025-09-25":{"p26":26,"p25":52},"2025-09-27":{"p25":13},"2025-09-28":{"p25":25},"2025-09-29":{"p25":56},"2025-09-30":{"p25":24},"2025-10-01":{"p26":101,"p25":22},"2025-10-02":{"p26":10},"2025-10-03":{"p26":115},"2025-10-05":{"p25":60},"2025-10-06":{"p26":43,"p25":20},"2025-10-10":{"p26":38,"p25":86},"2025-10-12":{"p25":41},"2025-10-14":{"p26":100,"p25":57},"2025-10-15":{"p25":27},"2025-10-16":{"p26":3,"p25":46},"2025-10-17":{"p25":16},"2025-10-18":{"p25":33},"2025-10-19":{"p25":2},"2025-10-20":{"p25":47},"2025-10-21":{"p25":4},"2025-10-22":{"p25":13},"2025-10-25":{"p25":35},"2025-10-28":{"p26":74,"p25":13},"2025-10-29":{"p26":84,"p25":68},"2025-10-30":{"p25":35},"2025-10-31":{"p26":87},"2025-11-01":{"p26":76,"p25":12},"2025-11-02":{"p26":33},"2025-11-03":{"p26":49,"p25":53},"2025-11-04":{"p26":6},"2025-11-05":{"p26":80,"p25":52},"2025-11-06":{"p25":60},"2025-11-07":{"p26":97,"p25":12},"2025-11-09":{"p26":54,"p25":31},"2025-11-10":{"p25":49},"2025-11-11":{"p26":101,"p25":45},"2025-11-12":{"p26":75,"p25":66},"2025-11-13":{"p26":68,"p25":62},"2025-11-14":{"p26":1,"p25":18},"2025-11-15":{"p26":47,"p25":40},"2025-11-16":{"p26":101,"p25":65},"2025-11-17":{"p25":68},"2025-11-18":{"p25":64},"2025-11-19":{"p26":98},"2025-11-20":{"p26":63},"2025-11-21":{"p25":17},"2025-11-22":{"p26":100,"p25":66},"2025-11-23":{"p26":66,"p25":65},"2025-11-24":{"p26":62,"p25":30},"2025-11-25":{"p26":81,"p25":13},"2025-11-26":{"p25":54},"2025-11-28":{"p26":47},"2025-11-29":{"p25":56},"2025-11-30":{"p25":55},"2025-12-01":{"p25":12},"2025-12-02":{"p26":82,"p25":13},"2025-12-03":{"p26":25},"2025-12-04":{"p26":39},"2025-12-05":{"p25":38},"2025-12-06":{"p26":40,"p25":70},"2025-12-07":{"p25":73},"2025-12-08":{"p26":51},"2025-12-09":{"p26":88},"2025-12-10":{"p26":38},"2025-12-11":{"p26":38,"p25":28},"2025-12-12":{"p26":35},"2025-12-13":{"p26":58,"p25":25},"2025-12-14":{"p26":53},"2025-12-15":{"p25":62},"2025-12-16":{"p25":49},"2025-12-17":{"p26":79,"p25":111},"2025-12-18":{"p26":56,"p25":81},"2025-12-19":{"p25":77},"2025-12-20":{"p26":106,"p25":68},"2025-12-21":{"p26":118},"2025-12-22":{"p26":37},"2025-12-23":{"p26":87,"p25":24},"2025-12-24":{"p25":81},"2025-12-26":{"p25":30},"2025-12-27":{"p26":109,"p25":94},"2025-12-28":{"p26":119,"p25":92},"2025-12-29":{"p26":114},"2025-12-30":{"p26":20,"p25":57},"2025-12-31":{"p26":114,"p25":93},"2026-01-01":{"p26":97,"p25":79},"2026-01-02":{"p26":26,"p25":72},"2026-01-03":{"p26":125,"p25":12},"2026-01-04":{"p26":66,"p25":72},"2026-01-05":{"p26":103,"p25":33},"2026-01-06":{"p26":70,"p25":63},"2026-01-07":{"p26":20,"p25":40},"2026-01-08":{"p26":14,"p25":54},"2026-01-09":{"p26":100,"p25":79},"2026-01-10":{"p25":55},"2026-01-11":{"p25":45},"2026-01-12":{"p26":133,"p25":47},"2026-01-13":{"p26":20,"p25":44},"2026-01-14":{"p26":99,"p25":37},"2026-01-15":{"p26":97,"p25":57},"2026-01-16":{"p26":64,"p25":66},"2026-01-17":{"p26":62,"p25":52},"2026-01-18":{"p26":66,"p25":34},"2026-01-19":{"p26":97,"p25":50},"2026-01-20":{"p26":89,"p25":77},"2026-01-21":{"p26":51,"p25":72},"2026-01-22":{"p26":53,"p25":51},"2026-01-23":{"p26":7,"p25":4},"2026-01-24":{"p26":40,"p25":79},"2026-01-25":{"p26":15,"p25":20},"2026-01-26":{"p26":76,"p25":4},"2026-01-27":{"p26":71,"p25":78},"2026-01-28":{"p26":94,"p25":17},"2026-01-29":{"p25":52},"2026-01-30":{"p26":117,"p25":79},"2026-01-31":{"p26":77,"p25":74},"2026-02-01":{"p26":4,"p25":58},"2026-02-02":{"p25":77},"2026-02-03":{"p26":52,"p25":61},"2026-02-04":{"p26":127,"p25":71},"2026-02-05":{"p26":91,"p25":48},"2026-02-06":{"p26":81,"p25":34},"2026-02-07":{"p25":42},"2026-02-08":{"p26":118,"p25":19},"2026-02-09":{"p26":108},"2026-02-10":{"p25":42},"2026-02-11":{"p26":87,"p25":57},"2026-02-12":{"p26":135,"p25":54},"2026-02-13":{"p26":52,"p25":52},"2026-02-14":{"p26":11,"p25":77},"2026-02-15":{"p26":140,"p25":66},"2026-02-16":{"p26":79,"p25":32},"2026-02-17":{"p26":138,"p25":84},"2026-02-18":{"p26":125,"p25":7},"2026-02-19":{"p26":33},"2026-02-20":{"p26":12,"p25":41},"2026-02-21":{"p26":45,"p25":74},"2026-02-22":{"p26":153,"p25":14},"2026-02-23":{"p26":88,"p25":97},"2026-02-24":{"p26":124,"p25":50},"2026-02-25":{"p26":136,"p25":66},"2026-02-26":{"p25":92},"2026-02-27":{"p26":128,"p25":96},"2026-02-28":{"p26":111,"p25":93},"2026-03-01":{"p26":72},"2026-03-02":{"p26":53},"2026-03-03":{"p26":111},"2026-03-04":{"p26":96,"p25":97},"2026-03-05":{"p26":75,"p25":98},"2026-03-06":{"p25":97},"2026-03-07":{"p26":4,"p25":69},"2026-03-08":{"p26":4,"p25":51},"2026-03-09":{"p26":59,"p25":93},"2026-03-10":{"p26":117,"p25":75},"2026-03-11":{"p26":26,"p25":22},"2026-03-12":{"p25":2},"2026-03-13":{"p26":37,"p25":124},"2026-03-14":{"p26":40,"p25":42},"2026-03-15":{"p26":5,"p25":110},"2026-03-16":{"p26":13},"2026-03-17":{"p26":43},"2026-03-18":{"p26":103},"2026-03-19":{"p26":110},"2026-03-20":{"p26":102,"p25":95},"2026-03-21":{"p26":94,"p25":55},"2026-03-22":{"p26":55,"p25":3},"2026-03-23":{"p26":132,"p25":40},"2026-03-24":{"p26":111,"p25":69},"2026-03-25":{"p26":113,"p25":76},"2026-03-26":{"p26":67,"p25":61},"2026-03-28":{"p25":47},"2026-03-29":{"p25":67},"2026-03-30":{"p26":56},"2026-03-31":{"p26":149},"2026-04-01":{"p26":106,"p25":28},"2026-04-02":{"p26":96,"p25":27},"2026-04-03":{"p25":14},"2026-04-04":{"p25":2},"2026-04-05":{"p26":41,"p25":63},"2026-04-06":{"p26":95,"p25":27},"2026-04-07":{"p25":2},"2026-04-09":{"p25":60},"2026-04-10":{"p26":128,"p25":33},"2026-04-11":{"p26":122,"p25":7},"2026-04-12":{"p25":64},"2026-04-13":{"p25":55},"2026-04-15":{"p25":55},"2026-04-16":{"p25":73},"2026-04-17":{"p25":62},"2026-04-18":{"p25":25},"2026-04-19":{"p26":47},"2026-04-20":{"p26":12,"p25":36},"2026-04-21":{"p26":22,"p25":63},"2026-04-22":{"p26":88,"p25":53},"2026-04-23":{"p26":59,"p25":55},"2026-04-24":{"p26":70,"p25":62},"2026-04-25":{"p26":79,"p25":20},"2026-04-26":{"p25":34},"2026-04-27":{"p26":56},"2026-04-28":{"p25":2},"2026-04-29":{"p25":58},"2026-04-30":{"p26":94,"p25":14},"2026-05-01":{"p26":42},"2026-05-02":{"p26":48,"p25":28},"2026-05-03":{"p26":33,"p25":27},"2026-05-04":{"p26":50,"p25":44},"2026-05-05":{"p26":60,"p25":17},"2026-05-08":{"p26":20},"2026-05-09":{"p26":30,"p25":40},"2026-05-10":{"p25":2},"2026-05-11":{"p26":72,"p25":48},"2026-05-12":{"p26":40,"p25":3},"2026-05-13":{"p26":29,"p25":12},"2026-05-14":{"p26":25,"p25":33},"2026-05-15":{"p26":28},"2026-05-16":{"p26":30},"2026-05-17":{"p26":16,"p25":2},"2026-05-18":{"p26":31,"p25":38},"2026-05-19":{"p26":22,"p25":16},"2026-05-20":{"p26":7,"p25":27},"2026-05-21":{"p26":19,"p25":25},"2026-05-22":{"p26":32},"2026-05-23":{"p26":36,"p25":48},"2026-05-24":{"p26":33,"p25":23},"2026-05-26":{"p25":2},"2026-05-27":{"p26":38,"p25":34},"2026-05-28":{"p26":40},"2026-05-29":{"p26":26,"p25":4},"2026-05-30":{"p26":26,"p25":4},"2026-05-31":{"p25":6},"2026-06-01":{"p25":31},"2026-06-04":{"p25":4},"2026-06-05":{"p25":11},"2026-06-06":{"p25":12},"2026-06-07":{"p25":39},"2026-06-08":{"p25":23},"2026-06-09":{"p25":20},"2026-06-10":{"p25":27},"2026-06-11":{"p25":12},"2026-06-12":{"p25":15},"2026-06-13":{"p25":14},"2026-06-14":{"p25":15},"2026-06-15":{"p25":16},"2026-06-16":{"p25":29},"2026-06-17":{"p25":33},"2026-06-18":{"p25":35},"2026-06-20":{"p25":2},"2026-06-21":{"p25":34},"2026-06-22":{"p25":2},"2026-06-23":{"p25":29},"2026-06-24":{"p25":13},"2026-06-27":{"p25":21},"2026-06-28":{"p25":3},"2026-06-29":{"p25":48},"2026-06-30":{"p25":34}};}
+// ─────────────────────────────────────────────────────────────────────────────
+//  SCHEDULING — cost-aware aircraft allocation + resource board (Phase 1).
+//  Phase 1 (this build): the data foundation only —
+//    • Admin pricing/config page (Settings ▸ Operations ▸ Scheduling): a master ON/OFF
+//      toggle (so the feature can snap on/off while testing), per-tail capacity +
+//      Milford round-trip cost + empty-ferry cost, and the pilot call-in $/day.
+//    • Resource Availability board (its own nav section, only visible when the toggle is
+//      ON): a visual fleet board — serviceable / note / down, maintenance hours-to-check,
+//      capacity + Milford cost — plus today's available pilots from the roster.
+//  Phase 2/3 (later, on top of this): auto-allocate passengers to the cheapest aircraft
+//  combination as bookings come in, and a whole-day optimiser comparing run-SDB vs
+//  ferry-an-airvan vs call-in-a-pilot. Persisted to ts_settings key 'scheduling'.
+// ─────────────────────────────────────────────────────────────────────────────
+
+var SCHED_KEY='scheduling';
+function _schedEsc(s){if(typeof _rzEsc==='function')return _rzEsc(s);return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function _schedAcShort(ac){return String(ac||'').replace(/^ZK-?/,'');}
+function _schedIsAirvan(ac){var sp=(typeof _acSpec==='function')?_acSpec(ac):((S.aircraft||{})[ac]);return !!(sp&&sp.layout==='ga8');}
+function _schedAcType(ac){return _schedIsAirvan(ac)?'Airvan':'Caravan';}
+function _schedIsSDB(ac){return _schedAcShort(ac).toUpperCase()==='SDB';}
+// Seat capacity: SDB is an 11-seat lease; other caravans 13, airvans 7.
+function _schedDefaultCap(ac){if(_schedIsSDB(ac))return 11;return _schedIsAirvan(ac)?7:13;}
+// Seed Milford round-trip cost ($ ex GST, incl. landings + fees, less pilot) from the operator's
+// figures: GA8 (owned avg) $1,014.91 · C208B (owned avg) $1,650.35 · SDB (NEW lease) $2,658.47.
+function _schedSeedRt(ac){if(_schedIsSDB(ac))return 2658.47;return _schedIsAirvan(ac)?1014.91:1650.35;}
+// Seed ferry (empty) Milford return cost ($ ex GST) — the cost of dispatching an aircraft QN→MF→QN
+// empty to reposition/collect: GA8 $883.49 · C208B $1,540.15 · SDB (NEW lease) $2,456.62.
+function _schedSeedFerry(ac){if(_schedIsSDB(ac))return 2456.62;return _schedIsAirvan(ac)?883.49:1540.15;}
+var SCHED_SEED_CALLIN=550;   // call in an off-roster pilot — $550, no GST
+
+// The live config (defaults overlaid by the saved blob). Tails are ensured for the current fleet.
+// First-creation seeds the operator's known figures; once a tail exists we never re-seed (so a
+// cleared field stays cleared).
+function _schedCfg(){
+  var c=S._schedCfg;if(!c||typeof c!=='object')c=S._schedCfg={};
+  if(typeof c.enabled!=='boolean')c.enabled=false;
+  if(c.callInPerDay===undefined)c.callInPerDay=SCHED_SEED_CALLIN;
+  if(!c.tails||typeof c.tails!=='object')c.tails={};
+  Object.keys((S&&S.aircraft)||{}).forEach(function(ac){
+    if(!c.tails[ac]){
+      c.tails[ac]={cap:_schedDefaultCap(ac),rt:_schedSeedRt(ac),ferry:_schedSeedFerry(ac),status:'ok',note:''};
+    } else {
+      var t=c.tails[ac];
+      if(t.cap==null||t.cap==='')t.cap=_schedDefaultCap(ac);
+      if(t.rt==null)t.rt='';            // Milford round-trip cost ($)
+      if(t.ferry==null)t.ferry='';      // empty-ferry leg cost ($); blank → round-trip ÷ 2
+      if(!t.status)t.status='ok';       // ok | note | down
+      if(t.note==null)t.note='';
+    }
+  });
+  return c;
+}
+function _schedTail(ac){return _schedCfg().tails[ac]||{cap:_schedDefaultCap(ac),rt:'',ferry:'',status:'ok',note:''};}
+function _schedEnabled(){return !!_schedCfg().enabled;}
+function _schedNum(v){v=parseFloat(v);return isFinite(v)?v:null;}
+// Effective costs (null when not yet entered). Ferry is its own full QN→MF→QN empty round-trip
+// figure (not half the passenger trip).
+function _schedRtCost(ac){return _schedNum(_schedTail(ac).rt);}
+function _schedFerryCost(ac){return _schedNum(_schedTail(ac).ferry);}
+function _schedCallIn(){return _schedNum(_schedCfg().callInPerDay);}
+function _schedMoney(n){if(n==null)return '—';return '$'+Number(n).toLocaleString('en-NZ',{maximumFractionDigits:0});}
+
+// ── persistence ──────────────────────────────────────────────────────────────
+window.loadScheduling=function(){
+  try{var c=(typeof lsGet==='function')&&lsGet('ts_scheduling');if(c&&typeof c==='object')S._schedCfg=c;}catch(e){}
+  if(typeof SB==='undefined'){if(typeof safeRender==='function')safeRender();return;}
+  try{fetch(SB+'/rest/v1/ts_settings?key=eq.'+SCHED_KEY+'&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
+    try{var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string')v=JSON.parse(v);
+      if(v&&typeof v==='object'){S._schedCfg=v;try{lsSet&&lsSet('ts_scheduling',v);}catch(e){}if(typeof _sbSetBase==='function')_sbSetBase(SCHED_KEY,v);}
+    }catch(e){}
+    if(typeof safeRender==='function')safeRender();
+  }).catch(function(){});}catch(e){}
+};
+function _schedSave(){
+  _schedCfg();
+  try{lsSet&&lsSet('ts_scheduling',S._schedCfg);}catch(e){}
+  if(typeof sbMergeSave==='function'){
+    sbMergeSave(SCHED_KEY,S._schedCfg,function(m){S._schedCfg=m;try{lsSet&&lsSet('ts_scheduling',m);}catch(e){}}).then(function(r){
+      if(r===null&&typeof toast==='function')toast('Scheduling settings did not save to the server — check connection.','warn');
+    });
+  }
+}
+
+// ── handlers ───────────────────────────────────────────────────────────────────
+window.schedSetEnabled=function(v){_schedCfg().enabled=!!v;_schedSave();render();};
+window.schedToggleEnabled=function(){_schedCfg().enabled=!_schedEnabled();_schedSave();render();};
+window.schedSetCallIn=function(v){_schedCfg().callInPerDay=(v===''||v==null)?'':(_schedNum(v)!=null?_schedNum(v):'');_schedSave();};
+window.schedSetTailField=function(ac,field,v){var t=_schedCfg().tails[ac];if(!t)return;
+  if(field==='cap'){var n=_schedNum(v);t.cap=(n!=null?Math.max(0,Math.round(n)):'');}
+  else if(field==='rt'){var r=_schedNum(v);t.rt=(r!=null?r:'');}
+  else if(field==='ferry'){var f=_schedNum(v);t.ferry=(f!=null?f:'');}
+  else if(field==='note')t.note=String(v==null?'':v);
+  _schedSave();
+};
+// Cycle a tail's availability: ok → note → down → ok.
+window.schedCycleStatus=function(ac){var t=_schedCfg().tails[ac];if(!t)return;t.status=(t.status==='ok')?'note':(t.status==='note'?'down':'ok');_schedSave();render();};
+
+// ── SETTINGS ▸ OPERATIONS ▸ SCHEDULING (admin pricing/config) ───────────────────
+function renderSchedulingSettings(){
+  var cfg=_schedCfg();var on=_schedEnabled();
+  var acIds=Object.keys((S&&S.aircraft)||{});
+  var h='';
+  // Master toggle
+  h+='<div class="card" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">'+
+    '<div><div class="st" style="margin-bottom:2px">Cost-aware scheduling</div>'+
+      '<p style="font-size:12px;color:var(--text3);margin:0;max-width:560px">When ON, the Resource board appears and (later) bookings auto-allocate to the cheapest aircraft. Leave OFF to keep everything manual while we test.</p></div>'+
+    '<button onclick="window.schedToggleEnabled()" style="flex-shrink:0;display:inline-flex;align-items:center;gap:8px;cursor:pointer;border:none;background:transparent;padding:0">'+
+      '<span style="position:relative;width:52px;height:28px;border-radius:16px;background:'+(on?'#22c55e':'var(--border2)')+';transition:background .15s;display:inline-block">'+
+        '<span style="position:absolute;top:3px;left:'+(on?'27px':'3px')+';width:22px;height:22px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></span></span>'+
+      '<span style="font-size:13px;font-weight:800;color:'+(on?'#22c55e':'var(--text3)')+'">'+(on?'ON':'OFF')+'</span>'+
+    '</button></div>';
+
+  // Per-tail pricing
+  h+='<div class="card" style="margin-bottom:14px"><div class="st">Aircraft costs &amp; capacity</div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Costs ex GST, incl. landings + fees, less pilot (rostered = sunk cost). <b>Milford return</b> = QN→MF→QN with passengers; <b>Ferry return</b> = the same trip flown empty to reposition/collect. SDB carries its own (leased) figures.</p>';
+  if(!acIds.length)h+='<div style="color:var(--text3);font-size:13px">No aircraft configured.</div>';
+  else{
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:520px">'+
+      '<thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em">'+
+        '<th style="padding:6px 8px">Aircraft</th><th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Seats</th><th style="padding:6px 8px">Milford return $</th><th style="padding:6px 8px">Ferry return $</th></tr></thead><tbody>';
+    acIds.forEach(function(ac){var t=_schedTail(ac);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';
+      h+='<tr style="border-top:1px solid var(--border2)">'+
+        '<td style="padding:6px 8px;font-weight:800;color:'+col+'">'+_schedEsc(_schedAcShort(ac))+'</td>'+
+        '<td style="padding:6px 8px;color:var(--text2)">'+_schedAcType(ac)+'</td>'+
+        '<td style="padding:6px 8px"><input type="number" min="0" value="'+_schedEsc(t.cap)+'" onchange="window.schedSetTailField(\''+_schedEsc(ac)+'\',\'cap\',this.value)" style="width:64px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px"></td>'+
+        '<td style="padding:6px 8px"><input type="number" min="0" inputmode="decimal" placeholder="—" value="'+_schedEsc(t.rt)+'" onchange="window.schedSetTailField(\''+_schedEsc(ac)+'\',\'rt\',this.value)" style="width:104px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px"></td>'+
+        '<td style="padding:6px 8px"><input type="number" min="0" inputmode="decimal" placeholder="—" value="'+_schedEsc(t.ferry)+'" onchange="window.schedSetTailField(\''+_schedEsc(ac)+'\',\'ferry\',this.value)" style="width:104px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px"></td>'+
+      '</tr>';
+    });
+    h+='</tbody></table></div>';
+  }
+  h+='</div>';
+
+  // Pilot call-in
+  h+='<div class="card"><div class="st">Pilots</div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Rostered pilots are already paid (sunk cost). Enter only the extra cost of calling in an off-roster pilot — the optimiser uses this to decide whether a call-in is cheaper than running SDB or ferrying.</p>'+
+    '<label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Call-in cost ($/day)</label>'+
+    '<input type="number" min="0" inputmode="decimal" placeholder="—" value="'+_schedEsc(cfg.callInPerDay)+'" onchange="window.schedSetCallIn(this.value)" style="width:160px;padding:7px 9px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:14px">'+
+  '</div>';
+  return h;
+}
+
+// ── RESOURCE AVAILABILITY BOARD (tier-1 section) ───────────────────────────────
+function _schedStatusMeta(s){
+  if(s==='down')return {col:'#ef4444',bg:'rgba(239,68,68,.12)',lbl:'Unserviceable',dot:'#ef4444'};
+  if(s==='note')return {col:'#f59e0b',bg:'rgba(245,158,11,.12)',lbl:'Note',dot:'#f59e0b'};
+  return {col:'#22c55e',bg:'rgba(34,197,94,.10)',lbl:'Serviceable',dot:'#22c55e'};
+}
+function renderResources(){
+  if(typeof hasRolePerm==='function'&&!hasRolePerm('operations'))return '<div class="page"><div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div></div>';
+  if(!_schedEnabled())return '<div class="page"><div class="card" style="text-align:center;padding:40px;color:var(--text3)">Cost-aware scheduling is OFF. Turn it on in Settings ▸ Operations ▸ Scheduling.</div></div>';
+  var acIds=Object.keys((S&&S.aircraft)||{});
+  var h='<div class="page">';
+  h+='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
+    '<div><div class="st" style="margin-bottom:0">Resource availability</div>'+
+      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">Fleet status &amp; today\'s pilots. Tap a status chip to cycle serviceable → note → unserviceable.</p></div></div>';
+
+  // Pilots available today (from the roster, reused from the calendar pilot picker).
+  var pilots=[];try{if(typeof _rzAvailablePilots==='function')pilots=_rzAvailablePilots()||[];}catch(e){}
+  var onDuty=pilots.filter(function(p){return p.rostered;});
+  h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:8px">Pilots available today · '+onDuty.length+' rostered</div>';
+  if(!pilots.length)h+='<div style="font-size:12px;color:var(--text3)">No aircraft-rated pilots found (open the Roster once to load it).</div>';
+  else{h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    pilots.forEach(function(p){var off=!p.rostered;
+      h+='<span title="'+_schedEsc(p.name)+(off?' (not rostered today)':'')+'" style="display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:16px;background:rgba(96,165,250,'+(off?'.06':'.14')+');border:1px solid rgba(96,165,250,'+(off?'.28':'.5')+');font-size:12px;font-weight:800;color:#60a5fa;opacity:'+(off?'.55':'1')+'">✈ '+_schedEsc(p.code)+(off?' <span style="font-size:8px;font-weight:700">off</span>':'')+'</span>';});
+    h+='</div>';}
+  h+='<div style="font-size:11px;color:var(--text3);margin-top:8px">Call-in cost: <b style="color:var(--text2)">'+(_schedCallIn()!=null?_schedMoney(_schedCallIn())+'/day':'not set')+'</b></div></div>';
+
+  // Fleet cards
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">';
+  if(!acIds.length)h+='<div class="card" style="color:var(--text3)">No aircraft configured.</div>';
+  acIds.forEach(function(ac){
+    var t=_schedTail(ac);var m=_schedStatusMeta(t.status);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';
+    var toRun=null;try{if(typeof maintToRun==='function')toRun=maintToRun(ac);}catch(e){}
+    var hrs=null;try{if(typeof maintGetLatest==='function')hrs=maintGetLatest(ac);}catch(e){}
+    var maintCol=(toRun!=null&&toRun<=5)?'#ef4444':((toRun!=null&&toRun<=15)?'#f59e0b':'var(--text2)');
+    h+='<div class="card" style="margin:0;border-left:4px solid '+col+'">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">'+
+        '<span style="font-size:16px;font-weight:900;color:'+col+'">'+_schedEsc(_schedAcShort(ac))+'</span>'+
+        '<button onclick="window.schedCycleStatus(\''+_schedEsc(ac)+'\')" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;border:1px solid '+m.col+';background:'+m.bg+';color:'+m.col+';font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">'+
+          '<span style="width:8px;height:8px;border-radius:50%;background:'+m.dot+';display:inline-block"></span>'+m.lbl+'</button>'+
+      '</div>'+
+      '<div style="font-size:12px;color:var(--text3);line-height:1.7">'+
+        '<div>'+_schedAcType(ac)+' · <b style="color:var(--text2)">'+_schedEsc(t.cap)+' seats</b></div>'+
+        '<div>Milford return: <b style="color:var(--text2)">'+_schedMoney(_schedRtCost(ac))+'</b>'+(_schedFerryCost(ac)!=null?(' · ferry <b style="color:var(--text2)">'+_schedMoney(_schedFerryCost(ac))+'</b>'):'')+'</div>'+
+        '<div>Maintenance: '+(toRun!=null?('<b style="color:'+maintCol+'">'+toRun.toFixed(1)+' h to check</b>'):'<span style="color:var(--text3)">—</span>')+(hrs!=null?(' <span style="color:var(--text3)">('+Number(hrs).toFixed(1)+' TTIS)</span>'):'')+'</div>'+
+      '</div>'+
+      '<input type="text" value="'+_schedEsc(t.note)+'" onblur="window.schedSetTailField(\''+_schedEsc(ac)+'\',\'note\',this.value)" placeholder="Status note…" style="width:100%;box-sizing:border-box;margin-top:8px;padding:5px 8px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:12px">'+
+    '</div>';
+  });
+  h+='</div></div>';
+  return h;
+}
 </script>
 </body>
 </html>
