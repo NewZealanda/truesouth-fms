@@ -803,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.45';
+const APP_VER='v25.47';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -19531,23 +19531,23 @@ var TRAIN_MODULES={
     {title:'Roster & Leave',section:'roster',body:'Who\'s working each day. Leave requests and approvals live alongside it, and rostered pilots feed the scheduling tools.'},
     {title:'That\'s the tour',body:'You\'ve seen the main areas. Your day-to-day depends on your role — try the Desk/Operations or Pilot module next for the step-by-step. You can reopen Training any time from the menu.'}
   ]},
-  ops:{label:'Desk / Operations',icon:'🎧',desc:'The everyday flow for desk and operations staff, start of day to dispatch.',steps:[
-    {title:'Start of day · Bookings',section:'operations',tab:'bookings',body:'Open Operations ▸ Bookings. This is your worklist for the day. Confirm numbers, watch for the "$ TO PAY" and lunch flags, and add an internal note on any booking that needs one.'},
-    {title:'Checking passengers in',section:'operations',tab:'bookings',body:'Tap "Checked in" on a booking to enter names and actual weights. Use Wx if a passenger called about weather, and No-show to exclude someone who didn\'t turn up (it drops them from pickups and the seatmap).'},
-    {title:'Seat them',section:'operations',tab:'rseatmap',body:'On the Seatmap, drag each booking\'s passengers onto seats for their aircraft. Set the PIC. Everything you place here builds the loadsheet.'},
-    {title:'Loadsheet & sign-off',section:'operations',tab:'rloadsheets',body:'Check the weight & balance and fuel. If it flags below reserve, fix it before you push. The pilot signs the loadsheet — then it can be archived.'},
-    {title:'Transport',section:'operations',tab:'ground',groundTab:'pickups',body:'Allocate pickups (and the matching return drop-offs) to vans and drivers. Re-order stops, assign drivers, and they\'ll get their run on My Pickups.'},
-    {title:'Calendar',section:'calendar',body:'Use the Calendar to see the day\'s shape and to assign aircraft and pilots to flights (drag a pilot onto a block, or tap a block and pick one).'},
-    {title:'Resource board',section:'resources',body:'If cost-aware scheduling is on, the Resource board shows aircraft availability and a recommended day plan — the cheapest aircraft mix, pilots needed, and any call-in decision.'},
-    {title:'You\'re set',body:'That\'s the core desk flow: Bookings → check-in → Seatmap → Loadsheet → Transport, with the Calendar and Resource board to plan. Ask any time — and revisit this from the menu.'}
+  ops:{label:'Desk / Operations',icon:'🎧',desc:'The everyday desk flow — from the booking through weather calls, check-in and onto the seatmap.',steps:[
+    {title:'Bookings — the order',section:'operations',tab:'bookings',body:'Operations ▸ Bookings is the day\'s orders. Each card is a booking. Watch the "$ TO PAY" and lunch flags, and add an internal note on any booking that needs one.'},
+    {title:'Weather calls (Wx)',section:'operations',tab:'bookings',body:'When a passenger phones about the weather, tap Wx on their booking to record that they\'ve contacted us. That lets you see who HASN\'T called and ring them to confirm or cancel their flight due to weather.'},
+    {title:'Transport (ground staff)',section:'operations',tab:'ground',groundTab:'pickups',body:'Transport is generated from the bookings — it\'s us picking passengers up to bring them in to check in. Day to day this is run by the ground staff on the Transport board (vans, drivers, pickups & drop-offs).'},
+    {title:'Check passengers in',section:'operations',tab:'bookings',body:'When passengers arrive at the office, tap "Checked in" to enter names and actual weights, and hand out their lunch passes and lanyards for the aircraft they\'re flying on.'},
+    {title:'No-shows',section:'operations',tab:'bookings',body:'No-show means a passenger didn\'t turn up for their pickup — the driver or desk marks them No-show, which drops them from the run and the seatmap push.'},
+    {title:'Close check-in → push to seatmap',section:'operations',tab:'bookings',body:'When you\'re ready to close check-in, close it (you can close with the no-shows) and it pushes everyone onto the seatmap.'},
+    {title:'Seatmap — seat everyone',section:'operations',tab:'rseatmap',body:'Everyone lands on the Seatmap. Auto-allocate if they aren\'t already on an aircraft, or drag and drop to the right seats — adjusting for centre of gravity (C of G) and MAUW where needed.'},
+    {title:'That\'s the desk flow',body:'Booking → Wx (weather calls) → check-in (lunch passes + lanyards) → close & push → seatmap. Transport/pickups are handled by ground staff, and the pilot signs the loadsheet. Reopen this any time from the 🎓 menu.'}
   ]},
-  pilot:{label:'Pilot',icon:'🧑‍✈️',desc:'What pilots use day to day: loadsheets, flight records, logbook and currency.',steps:[
-    {title:'Your loadsheet',section:'operations',tab:'rloadsheets',body:'Before each flight, check your loadsheet: passenger and bag weights, fuel and burn, and the weight & balance. It won\'t let you sign below reserve. Sign it when you\'re happy.'},
-    {title:'Seatmap & PIC',section:'operations',tab:'rseatmap',body:'Confirm you\'re set as PIC on your aircraft and that the seated passengers and weights match what you\'re carrying.'},
-    {title:'Flight Record',section:'flightrecord',body:'Log each flight here — off/on blocks, airframe hours (TTIS), product, route and POB. The last PIC reviews the day and uploads it to the aircraft\'s maintenance hours.'},
-    {title:'Your Logbook',section:'logbook',body:'Your personal logbook builds automatically from the flights you fly — date, type, registration, route and flight time. Tap a row to adjust it.'},
+  pilot:{label:'Pilot',icon:'🧑‍✈️',desc:'What pilots use day to day: loadsheet, flight record, logbook and currency.',steps:[
+    {title:'Your loadsheet',section:'operations',tab:'rloadsheets',body:'Check your loadsheet — passenger and bag weights, fuel and burn, and the weight & balance. It won\'t let you sign below reserve. Sign it when you\'re happy, then load the aircraft accordingly. (No need to touch the allocator seatmap — your loadsheet is all you need.)'},
+    {title:'Flight Record — log each flight',section:'flightrecord',body:'Your flight is auto-populated and it\'s pretty intuitive. When you\'re about to taxi, check the selected flight details are correct and tap Off Blocks. Fly your flight, then tap On Blocks and make sure all the data is right. Add any notes. Keep logging your flights like this through the day.'},
+    {title:'End of day — submit',section:'flightrecord',body:'When the day\'s done, submit all your flights. That updates the aircraft\'s maintenance hours and your Flight & Duty — and each flight also drops into your personal logbook automatically.'},
+    {title:'Your Logbook',section:'logbook',body:'Your personal logbook builds itself from the flights you log — date, type, registration, route and flight time. Tap a row if you ever need to adjust it.'},
     {title:'Flight & Duty',section:'flightduty',body:'Your flight-and-duty and currency tracker (NZ rules): rolling flight/duty hours, days off, and 90-day type currency. Print and sign your month to make it a controlled record.'},
-    {title:'All yours',body:'Loadsheet → fly → flight record → logbook, with Flight & Duty keeping you current. Reopen this module any time from the menu.'}
+    {title:'All yours',body:'Loadsheet → sign → load → log each flight (off/on blocks) → submit at end of day. That feeds maintenance, Flight & Duty and your logbook. Reopen this any time from the 🎓 menu.'}
   ]}
 };
 
