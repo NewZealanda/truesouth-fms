@@ -3334,7 +3334,10 @@ function renderAdminPerms(){
     {k:'businessplan',  lbl:'Biz Plan',       tip:'View the confidential TSF Business Plan'},
     {k:'flightrecord',  lbl:'Flt Record',     tip:'Access the Flight Record (log flights, aircraft records)'},
     {k:'flightrecord_manage',lbl:'Flt Rec Mgr',tip:'Flight Record statistics + view/manage all pilots\' logbooks'},
-    {k:'resources',     lbl:'Scheduling',     tip:'Access the Resource board + cost-aware aircraft/pilot allocation'}
+    {k:'resources',     lbl:'Scheduling',     tip:'Access the Resource board + cost-aware aircraft/pilot allocation'},
+    {k:'sms',           lbl:'SMS',            tip:'Safety Management System (placeholder — coming soon)'},
+    {k:'ground',        lbl:'Ground',         tip:'Ground operations module (placeholder — coming soon)'},
+    {k:'training_mod',  lbl:'Training',       tip:'Training records module (placeholder — coming soon)'}
     // (the old 'rezdy' column was retired in v24.16 — the Rezdy section no longer exists; Calendar
     //  has its own perm and Pickups live under Operations ▸ Ground gated by 'operations'.)
   ];

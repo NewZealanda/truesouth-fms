@@ -149,6 +149,25 @@ function _rzProductDest(code){var c=_rzProdCfg(code);return c?{short:c.short,apt
 // their own code (special return-leg handling). Falls back to the product code when unknown.
 function _rzGroupDest(prod){if(_rzIsFlyback(prod))return prod;var c=_rzProdCfg(prod);return (c&&c.short)?c.short:prod;}
 function _rzDepKey(ac,start,prod){return ac+'|'+start+'|'+_rzGroupDest(prod);}
+// ── Maintenance status for scheduling ──────────────────────────────────────────
+// Hours to the next check (nextCheck − current TTIS). Negative = into the allowed extension.
+function _rzMaintRunHrs(ac){try{return (typeof maintToRun==='function')?maintToRun(ac):null;}catch(e){return null;}}
+// Per-type figures: a standard return flight's hours, the extension limit, and a 0.5h reserve kept
+// for the ferry to maintenance. Airvan: 1.2h return, −5.0 limit. Caravan/SDB: 1.1h return, −10.0.
+var _RZ_MX_FLT={airvan:1.2,caravan:1.1};
+function _rzMaintAirvan(ac){var sp=(typeof _acSpec==='function')?_acSpec(ac):null;return !!(sp&&sp.layout==='ga8');}
+function _rzMaintFloor(ac){return _rzMaintAirvan(ac)?-4.5:-9.5;}   // extension limit + 0.5h ferry reserve
+function _rzMaintFltHrs(ac){return _rzMaintAirvan(ac)?_RZ_MX_FLT.airvan:_RZ_MX_FLT.caravan;}
+// 'block' = a standard return wouldn't leave the 0.5h ferry reserve (don't schedule); 'warn' = under
+// 5h to the check (amber); else null. Flight-aware: airvan at −3.2 can still do a 1.2h Milford (→ −4.4,
+// inside −4.5), but −3.4 can't.
+function _rzMaintLevel(ac){
+  var tr=_rzMaintRunHrs(ac);if(tr==null)return null;
+  if(tr-_rzMaintFltHrs(ac)<_rzMaintFloor(ac))return 'block';
+  if(tr<5)return 'warn';
+  return null;
+}
+function _rzMaintTip(ac){var tr=_rzMaintRunHrs(ac);if(tr==null)return '';var lv=_rzMaintLevel(ac);if(!lv)return '';return (lv==='block'?'⚠ NO MORE FLIGHTS — ':'⚠ Maintenance due soon — ')+tr.toFixed(1)+'h to next check';}
 
 // ── Editable standard fuels & burns (per destination) ────────────────────────
 // The hardcoded _RZ_PROD_CFG above gives the built-in defaults. S._rzFuelOv holds the
@@ -3980,6 +3999,8 @@ function _rzRenderSchedule(){
   let colsH='';
   acIds.forEach(function(ac){
     const acCol=(ac==='__misc__')?'#94a3b8':_rzAcCol(ac);
+    var _mlvl=(ac==='__unalloc__'||ac==='__misc__')?null:_rzMaintLevel(ac);
+    var _mcol=(_mlvl==='block')?'#ef4444':'#f59e0b';var _mtip=_mlvl?_rzMaintTip(ac):'';
     // background row lines
     let rows='';
     for(let i=0;i<=slots;i++){
@@ -4013,9 +4034,9 @@ function _rzRenderSchedule(){
       // Any booking block can be dragged to another aircraft column (reassigns its bookings) or
       // onto a flight to combine a flyback/CCF.
       const _drag=isBk?(' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(String(b.order)).replace(/'/g,"\\'")+'\',event)"'):'';
-      blocksH+='<div'+_drag+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
-        'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
-        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
+      blocksH+='<div'+_drag+(_mlvl?' title="'+_rzEsc(_mtip)+'"':'')+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
+        'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
+        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+(isBk?'':'–'+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';
     });
@@ -4029,9 +4050,10 @@ function _rzRenderSchedule(){
     '<div style="width:'+_RZ_AXIS_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:1px solid var(--border)"></div>';
   acIds.forEach(function(ac){
     const acCol=(ac==='__unalloc__'||ac==='__misc__')?'#94a3b8':_rzAcCol(ac);
-    const lbl=ac==='__unalloc__'?'Unallocated':(ac==='__misc__'?'Misc  ＋':ac);
-    var _mc=(ac==='__misc__')?' onclick="window.schedNewMisc()" title="Add a meeting / note" style="cursor:pointer;':' style="';
-    headH+='<div'+_mc+'width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:2px solid '+acCol+';padding:6px 8px;text-align:center;font-weight:800;font-size:12px;color:'+acCol+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(lbl)+'</div>';
+    var _hml=(ac==='__unalloc__'||ac==='__misc__')?null:_rzMaintLevel(ac);
+    const lbl=_rzEsc(ac==='__unalloc__'?'Unallocated':(ac==='__misc__'?'Misc  ＋':ac))+(_hml?(' <span style="color:'+(_hml==='block'?'#ef4444':'#f59e0b')+'">⚠</span>'):'');
+    var _mc=(ac==='__misc__')?' onclick="window.schedNewMisc()" title="Add a meeting / note" style="cursor:pointer;':((_hml)?' title="'+_rzEsc(_rzMaintTip(ac))+'" style="':' style="');
+    headH+='<div'+_mc+'width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:2px solid '+acCol+';padding:6px 8px;text-align:center;font-weight:800;font-size:12px;color:'+acCol+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lbl+'</div>';
   });
   headH+='</div>';
 

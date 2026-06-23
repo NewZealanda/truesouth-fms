@@ -146,6 +146,9 @@ function _sectionAllowed(sec){
     case 'flightrecord':return (hasRolePerm('flightrecord'))||!!(S.user&&S.user.superAdmin);
     case 'resources':   return hasRolePerm('resources'); // gated further by the feature toggle in nav
     case 'training':    return !!S.user; // training is available to every signed-in user
+    case 'sms':         return hasRolePerm('sms');           // placeholders — off for everyone by default
+    case 'ground':      return hasRolePerm('ground');
+    case 'trainingmod': return hasRolePerm('training_mod');
     case 'logbook':     return !!S.user; // every signed-in pilot has a personal logbook
     default:            return true;
   }
@@ -154,6 +157,10 @@ function _firstAllowedSection(){
   var order=['operations','calendar','maintenance','roster','leave','settings'];
   for(var i=0;i<order.length;i++){if(_sectionAllowed(order[i]))return order[i];}
   return 'leave';
+}
+// Simple "coming soon" page for placeholder sections (reminders of what to build next).
+function _placeholderPage(title,sub){
+  return '<div class="page"><div class="card" style="text-align:center;padding:48px 24px"><div style="font-size:40px;margin-bottom:10px">🚧</div><div class="st" style="margin-bottom:4px">'+title+'</div><p style="font-size:13px;color:var(--text3);margin:0">'+sub+' — coming soon. Placeholder for a future build.</p></div></div>';
 }
 function _defaultTabFor(sec){
   return sec==='maintenance'?'maintenance':sec==='operations'?'bookings':sec==='settings'?'admin':sec;
@@ -633,6 +640,11 @@ function renderDrawer(){
      var _onRes=sec==='resources';
      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'resources\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onRes?'rgba(34,197,94,.18)':'transparent')+';color:'+(_onRes?'#22c55e':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onRes?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🚦</span><span style="flex:1">Resources</span></button>';
    }}
+  // Coming-soon placeholders (off for everyone by default — enable in Permissions to preview).
+  {[{s:'sms',p:'sms',l:'SMS',i:'🛡️'},{s:'ground',p:'ground',l:'Ground',i:'🚐'},{s:'trainingmod',p:'training_mod',l:'Training',i:'📚'}].forEach(function(x){
+     if(hasRolePerm(x.p)){var _onPh=sec===x.s;
+       h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+x.s+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onPh?'rgba(255,255,255,.12)':'transparent')+';color:'+(_onPh?'#fff':'rgba(255,255,255,.6)')+';font-size:14px;font-weight:'+(_onPh?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+x.i+'</span><span style="flex:1">'+x.l+'</span><span style="font-size:9px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.55);padding:1px 6px;border-radius:8px">soon</span></button>';
+     }});}
   // Settings pinned last (config / admin).
   {var _canUsers=hasRolePerm('admin_users');
    var _canCrew=hasRolePerm('admin_crew');
@@ -808,6 +820,9 @@ function renderApp(){
           if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-training">'+renderTraining()+'</div>';
         }
+        if(_sec==='sms'){if(!hasRolePerm('sms'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('SMS','Safety Management System');}
+        if(_sec==='ground'){if(!hasRolePerm('ground'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('Ground','Ground operations');}
+        if(_sec==='trainingmod'){if(!hasRolePerm('training_mod'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('Training','Training records');}
         if(_sec==='resources'){
           if(!hasRolePerm('resources'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-resources">'+renderResources()+'</div>';

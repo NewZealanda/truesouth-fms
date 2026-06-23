@@ -803,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.51';
+const APP_VER='v25.54';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3139,6 +3139,9 @@ function _sectionAllowed(sec){
     case 'flightrecord':return (hasRolePerm('flightrecord'))||!!(S.user&&S.user.superAdmin);
     case 'resources':   return hasRolePerm('resources'); // gated further by the feature toggle in nav
     case 'training':    return !!S.user; // training is available to every signed-in user
+    case 'sms':         return hasRolePerm('sms');           // placeholders — off for everyone by default
+    case 'ground':      return hasRolePerm('ground');
+    case 'trainingmod': return hasRolePerm('training_mod');
     case 'logbook':     return !!S.user; // every signed-in pilot has a personal logbook
     default:            return true;
   }
@@ -3147,6 +3150,10 @@ function _firstAllowedSection(){
   var order=['operations','calendar','maintenance','roster','leave','settings'];
   for(var i=0;i<order.length;i++){if(_sectionAllowed(order[i]))return order[i];}
   return 'leave';
+}
+// Simple "coming soon" page for placeholder sections (reminders of what to build next).
+function _placeholderPage(title,sub){
+  return '<div class="page"><div class="card" style="text-align:center;padding:48px 24px"><div style="font-size:40px;margin-bottom:10px">🚧</div><div class="st" style="margin-bottom:4px">'+title+'</div><p style="font-size:13px;color:var(--text3);margin:0">'+sub+' — coming soon. Placeholder for a future build.</p></div></div>';
 }
 function _defaultTabFor(sec){
   return sec==='maintenance'?'maintenance':sec==='operations'?'bookings':sec==='settings'?'admin':sec;
@@ -3626,6 +3633,11 @@ function renderDrawer(){
      var _onRes=sec==='resources';
      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'resources\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onRes?'rgba(34,197,94,.18)':'transparent')+';color:'+(_onRes?'#22c55e':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onRes?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🚦</span><span style="flex:1">Resources</span></button>';
    }}
+  // Coming-soon placeholders (off for everyone by default — enable in Permissions to preview).
+  {[{s:'sms',p:'sms',l:'SMS',i:'🛡️'},{s:'ground',p:'ground',l:'Ground',i:'🚐'},{s:'trainingmod',p:'training_mod',l:'Training',i:'📚'}].forEach(function(x){
+     if(hasRolePerm(x.p)){var _onPh=sec===x.s;
+       h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+x.s+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onPh?'rgba(255,255,255,.12)':'transparent')+';color:'+(_onPh?'#fff':'rgba(255,255,255,.6)')+';font-size:14px;font-weight:'+(_onPh?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+x.i+'</span><span style="flex:1">'+x.l+'</span><span style="font-size:9px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.55);padding:1px 6px;border-radius:8px">soon</span></button>';
+     }});}
   // Settings pinned last (config / admin).
   {var _canUsers=hasRolePerm('admin_users');
    var _canCrew=hasRolePerm('admin_crew');
@@ -3801,6 +3813,9 @@ function renderApp(){
           if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-training">'+renderTraining()+'</div>';
         }
+        if(_sec==='sms'){if(!hasRolePerm('sms'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('SMS','Safety Management System');}
+        if(_sec==='ground'){if(!hasRolePerm('ground'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('Ground','Ground operations');}
+        if(_sec==='trainingmod'){if(!hasRolePerm('training_mod'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('Training','Training records');}
         if(_sec==='resources'){
           if(!hasRolePerm('resources'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-resources">'+renderResources()+'</div>';
@@ -8942,7 +8957,10 @@ function renderAdminPerms(){
     {k:'businessplan',  lbl:'Biz Plan',       tip:'View the confidential TSF Business Plan'},
     {k:'flightrecord',  lbl:'Flt Record',     tip:'Access the Flight Record (log flights, aircraft records)'},
     {k:'flightrecord_manage',lbl:'Flt Rec Mgr',tip:'Flight Record statistics + view/manage all pilots\' logbooks'},
-    {k:'resources',     lbl:'Scheduling',     tip:'Access the Resource board + cost-aware aircraft/pilot allocation'}
+    {k:'resources',     lbl:'Scheduling',     tip:'Access the Resource board + cost-aware aircraft/pilot allocation'},
+    {k:'sms',           lbl:'SMS',            tip:'Safety Management System (placeholder — coming soon)'},
+    {k:'ground',        lbl:'Ground',         tip:'Ground operations module (placeholder — coming soon)'},
+    {k:'training_mod',  lbl:'Training',       tip:'Training records module (placeholder — coming soon)'}
     // (the old 'rezdy' column was retired in v24.16 — the Rezdy section no longer exists; Calendar
     //  has its own perm and Pickups live under Operations ▸ Ground gated by 'operations'.)
   ];
@@ -12251,6 +12269,25 @@ function _rzProductDest(code){var c=_rzProdCfg(code);return c?{short:c.short,apt
 // their own code (special return-leg handling). Falls back to the product code when unknown.
 function _rzGroupDest(prod){if(_rzIsFlyback(prod))return prod;var c=_rzProdCfg(prod);return (c&&c.short)?c.short:prod;}
 function _rzDepKey(ac,start,prod){return ac+'|'+start+'|'+_rzGroupDest(prod);}
+// ── Maintenance status for scheduling ──────────────────────────────────────────
+// Hours to the next check (nextCheck − current TTIS). Negative = into the allowed extension.
+function _rzMaintRunHrs(ac){try{return (typeof maintToRun==='function')?maintToRun(ac):null;}catch(e){return null;}}
+// Per-type figures: a standard return flight's hours, the extension limit, and a 0.5h reserve kept
+// for the ferry to maintenance. Airvan: 1.2h return, −5.0 limit. Caravan/SDB: 1.1h return, −10.0.
+var _RZ_MX_FLT={airvan:1.2,caravan:1.1};
+function _rzMaintAirvan(ac){var sp=(typeof _acSpec==='function')?_acSpec(ac):null;return !!(sp&&sp.layout==='ga8');}
+function _rzMaintFloor(ac){return _rzMaintAirvan(ac)?-4.5:-9.5;}   // extension limit + 0.5h ferry reserve
+function _rzMaintFltHrs(ac){return _rzMaintAirvan(ac)?_RZ_MX_FLT.airvan:_RZ_MX_FLT.caravan;}
+// 'block' = a standard return wouldn't leave the 0.5h ferry reserve (don't schedule); 'warn' = under
+// 5h to the check (amber); else null. Flight-aware: airvan at −3.2 can still do a 1.2h Milford (→ −4.4,
+// inside −4.5), but −3.4 can't.
+function _rzMaintLevel(ac){
+  var tr=_rzMaintRunHrs(ac);if(tr==null)return null;
+  if(tr-_rzMaintFltHrs(ac)<_rzMaintFloor(ac))return 'block';
+  if(tr<5)return 'warn';
+  return null;
+}
+function _rzMaintTip(ac){var tr=_rzMaintRunHrs(ac);if(tr==null)return '';var lv=_rzMaintLevel(ac);if(!lv)return '';return (lv==='block'?'⚠ NO MORE FLIGHTS — ':'⚠ Maintenance due soon — ')+tr.toFixed(1)+'h to next check';}
 
 // ── Editable standard fuels & burns (per destination) ────────────────────────
 // The hardcoded _RZ_PROD_CFG above gives the built-in defaults. S._rzFuelOv holds the
@@ -16082,6 +16119,8 @@ function _rzRenderSchedule(){
   let colsH='';
   acIds.forEach(function(ac){
     const acCol=(ac==='__misc__')?'#94a3b8':_rzAcCol(ac);
+    var _mlvl=(ac==='__unalloc__'||ac==='__misc__')?null:_rzMaintLevel(ac);
+    var _mcol=(_mlvl==='block')?'#ef4444':'#f59e0b';var _mtip=_mlvl?_rzMaintTip(ac):'';
     // background row lines
     let rows='';
     for(let i=0;i<=slots;i++){
@@ -16115,9 +16154,9 @@ function _rzRenderSchedule(){
       // Any booking block can be dragged to another aircraft column (reassigns its bookings) or
       // onto a flight to combine a flyback/CCF.
       const _drag=isBk?(' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(String(b.order)).replace(/'/g,"\\'")+'\',event)"'):'';
-      blocksH+='<div'+_drag+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
-        'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
-        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
+      blocksH+='<div'+_drag+(_mlvl?' title="'+_rzEsc(_mtip)+'"':'')+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
+        'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
+        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+(isBk?'':'–'+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';
     });
@@ -16131,9 +16170,10 @@ function _rzRenderSchedule(){
     '<div style="width:'+_RZ_AXIS_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:1px solid var(--border)"></div>';
   acIds.forEach(function(ac){
     const acCol=(ac==='__unalloc__'||ac==='__misc__')?'#94a3b8':_rzAcCol(ac);
-    const lbl=ac==='__unalloc__'?'Unallocated':(ac==='__misc__'?'Misc  ＋':ac);
-    var _mc=(ac==='__misc__')?' onclick="window.schedNewMisc()" title="Add a meeting / note" style="cursor:pointer;':' style="';
-    headH+='<div'+_mc+'width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:2px solid '+acCol+';padding:6px 8px;text-align:center;font-weight:800;font-size:12px;color:'+acCol+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(lbl)+'</div>';
+    var _hml=(ac==='__unalloc__'||ac==='__misc__')?null:_rzMaintLevel(ac);
+    const lbl=_rzEsc(ac==='__unalloc__'?'Unallocated':(ac==='__misc__'?'Misc  ＋':ac))+(_hml?(' <span style="color:'+(_hml==='block'?'#ef4444':'#f59e0b')+'">⚠</span>'):'');
+    var _mc=(ac==='__misc__')?' onclick="window.schedNewMisc()" title="Add a meeting / note" style="cursor:pointer;':((_hml)?' title="'+_rzEsc(_rzMaintTip(ac))+'" style="':' style="');
+    headH+='<div'+_mc+'width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:2px solid '+acCol+';padding:6px 8px;text-align:center;font-weight:800;font-size:12px;color:'+acCol+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lbl+'</div>';
   });
   headH+='</div>';
 
@@ -19443,6 +19483,14 @@ function _schedDayPlan(date,opts){
   opts=opts||{};var maxAc=(opts.maxAircraft!=null)?opts.maxAircraft:Infinity;
   var deps=_schedDayDepartures(date);
   var freeAt={},everUsed={},plan=[],cost=0,loadedLegs=0,emptyLegs=0,paxShort=0;
+  // Projected hours-to-the-next-check per aircraft, decremented as the day's flights are assigned.
+  // An aircraft is only eligible for a departure if the flight would still leave the 0.5h ferry
+  // reserve (runLeft − flightHrs ≥ floor). e.g. airvan at −3.2 can do a 1.2h Milford (→ −4.4 ≥ −4.5).
+  var runLeft={};Object.keys((S&&S.aircraft)||{}).forEach(function(ac){runLeft[ac]=(typeof _rzMaintRunHrs==='function')?_rzMaintRunHrs(ac):null;});
+  var _mxHrs=function(ac){return (typeof _rzMaintFltHrs==='function')?_rzMaintFltHrs(ac):(_schedIsAirvan(ac)?1.2:1.1);};
+  var _mxFloor=function(ac){return (typeof _rzMaintFloor==='function')?_rzMaintFloor(ac):(_schedIsAirvan(ac)?-4.5:-9.5);};
+  var _mxFits=function(ac){return runLeft[ac]==null||(runLeft[ac]-_mxHrs(ac))>=_mxFloor(ac);};
+  var _mxUse=function(ac){if(runLeft[ac]!=null)runLeft[ac]-=_mxHrs(ac);};
   deps.forEach(function(d){
     var dm=_schedMinOf(d.time)||0;
     var locked=_schedDepLocked(date,d.time);
@@ -19450,14 +19498,14 @@ function _schedDayPlan(date,opts){
       // Respect the committed aircraft; just position them so the rest of the day plans around it.
       var fixed=_schedDepAssignedAc(date,d.time);var ldAc=[],ldCap=0;
       fixed.forEach(function(a){var ll=_schedLoadedLeg(a.ac),el=_schedEmptyLeg(a.ac);var out=(freeAt[a.ac]!=null&&freeAt[a.ac]>dm);
-        var cap=_schedNum(_schedTail(a.ac).cap)||0;ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+SCHED_BLOCK_MIN;
+        var cap=_schedNum(_schedTail(a.ac).cap)||0;ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+SCHED_BLOCK_MIN;_mxUse(a.ac);
         if(ll!=null){loadedLegs+=2;cost+=2*ll;if(out){emptyLegs+=2;cost+=2*el;}}
         ldAc.push({ac:a.ac,cap:cap,reused:out});});
       if(ldCap<d.pax)paxShort+=(d.pax-ldCap);
       plan.push({time:d.time,pax:d.pax,aircraft:ldAc,cap:ldCap,short:ldCap<d.pax,locked:true,manualLock:_schedDepManualLock(date,d.time)});
       return;
     }
-    var fleet=_schedFleetFor(date,d.time);
+    var fleet=_schedFleetFor(date,d.time).filter(function(f){return _mxFits(f.ac);});   // drop aircraft that can't fit another flight before maintenance
     var maxNew=maxAc-Object.keys(everUsed).length;if(maxNew<0)maxNew=0;
     // An aircraft needs a FERRY only if it's still airborne from an earlier load at this departure
     // time (freeAt > now). One that never flew, or already returned to base, is free (fresh rotation).
@@ -19466,7 +19514,7 @@ function _schedDayPlan(date,opts){
       return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,isNew:!everUsed[f.ac],ll:ll,el:el,inc:2*ll+(out?2*el:0)};});
     var chosen=_schedPlanPick(d.pax,cand,maxNew);
     var depAc=[];var depCap=0;
-    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+SCHED_BLOCK_MIN;depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
+    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+SCHED_BLOCK_MIN;_mxUse(c.ac);depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
       loadedLegs+=2;cost+=2*c.ll;if(c.reused){emptyLegs+=2;cost+=2*c.el;}});
     if(depCap<d.pax)paxShort+=(d.pax-depCap);
     plan.push({time:d.time,pax:d.pax,aircraft:depAc,cap:depCap,short:depCap<d.pax,locked:false,manualLock:_schedDepManualLock(date,d.time)});

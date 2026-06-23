@@ -665,6 +665,14 @@ function _schedDayPlan(date,opts){
   opts=opts||{};var maxAc=(opts.maxAircraft!=null)?opts.maxAircraft:Infinity;
   var deps=_schedDayDepartures(date);
   var freeAt={},everUsed={},plan=[],cost=0,loadedLegs=0,emptyLegs=0,paxShort=0;
+  // Projected hours-to-the-next-check per aircraft, decremented as the day's flights are assigned.
+  // An aircraft is only eligible for a departure if the flight would still leave the 0.5h ferry
+  // reserve (runLeft − flightHrs ≥ floor). e.g. airvan at −3.2 can do a 1.2h Milford (→ −4.4 ≥ −4.5).
+  var runLeft={};Object.keys((S&&S.aircraft)||{}).forEach(function(ac){runLeft[ac]=(typeof _rzMaintRunHrs==='function')?_rzMaintRunHrs(ac):null;});
+  var _mxHrs=function(ac){return (typeof _rzMaintFltHrs==='function')?_rzMaintFltHrs(ac):(_schedIsAirvan(ac)?1.2:1.1);};
+  var _mxFloor=function(ac){return (typeof _rzMaintFloor==='function')?_rzMaintFloor(ac):(_schedIsAirvan(ac)?-4.5:-9.5);};
+  var _mxFits=function(ac){return runLeft[ac]==null||(runLeft[ac]-_mxHrs(ac))>=_mxFloor(ac);};
+  var _mxUse=function(ac){if(runLeft[ac]!=null)runLeft[ac]-=_mxHrs(ac);};
   deps.forEach(function(d){
     var dm=_schedMinOf(d.time)||0;
     var locked=_schedDepLocked(date,d.time);
@@ -672,14 +680,14 @@ function _schedDayPlan(date,opts){
       // Respect the committed aircraft; just position them so the rest of the day plans around it.
       var fixed=_schedDepAssignedAc(date,d.time);var ldAc=[],ldCap=0;
       fixed.forEach(function(a){var ll=_schedLoadedLeg(a.ac),el=_schedEmptyLeg(a.ac);var out=(freeAt[a.ac]!=null&&freeAt[a.ac]>dm);
-        var cap=_schedNum(_schedTail(a.ac).cap)||0;ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+SCHED_BLOCK_MIN;
+        var cap=_schedNum(_schedTail(a.ac).cap)||0;ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+SCHED_BLOCK_MIN;_mxUse(a.ac);
         if(ll!=null){loadedLegs+=2;cost+=2*ll;if(out){emptyLegs+=2;cost+=2*el;}}
         ldAc.push({ac:a.ac,cap:cap,reused:out});});
       if(ldCap<d.pax)paxShort+=(d.pax-ldCap);
       plan.push({time:d.time,pax:d.pax,aircraft:ldAc,cap:ldCap,short:ldCap<d.pax,locked:true,manualLock:_schedDepManualLock(date,d.time)});
       return;
     }
-    var fleet=_schedFleetFor(date,d.time);
+    var fleet=_schedFleetFor(date,d.time).filter(function(f){return _mxFits(f.ac);});   // drop aircraft that can't fit another flight before maintenance
     var maxNew=maxAc-Object.keys(everUsed).length;if(maxNew<0)maxNew=0;
     // An aircraft needs a FERRY only if it's still airborne from an earlier load at this departure
     // time (freeAt > now). One that never flew, or already returned to base, is free (fresh rotation).
@@ -688,7 +696,7 @@ function _schedDayPlan(date,opts){
       return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,isNew:!everUsed[f.ac],ll:ll,el:el,inc:2*ll+(out?2*el:0)};});
     var chosen=_schedPlanPick(d.pax,cand,maxNew);
     var depAc=[];var depCap=0;
-    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+SCHED_BLOCK_MIN;depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
+    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+SCHED_BLOCK_MIN;_mxUse(c.ac);depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
       loadedLegs+=2;cost+=2*c.ll;if(c.reused){emptyLegs+=2;cost+=2*c.el;}});
     if(depCap<d.pax)paxShort+=(d.pax-depCap);
     plan.push({time:d.time,pax:d.pax,aircraft:depAc,cap:depCap,short:depCap<d.pax,locked:false,manualLock:_schedDepManualLock(date,d.time)});
