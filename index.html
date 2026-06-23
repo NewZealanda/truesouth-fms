@@ -803,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.40';
+const APP_VER='v25.41';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3587,10 +3587,6 @@ function renderDrawer(){
      var _onRes=sec==='resources';
      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'resources\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onRes?'rgba(34,197,94,.18)':'transparent')+';color:'+(_onRes?'#22c55e':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onRes?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🚦</span><span style="flex:1">Resources</span></button>';
    }}
-  // Training — guided tour, available to everyone signed in.
-  {if(S.user){var _onTr=sec==='training';
-     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'training\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onTr?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onTr?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onTr?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🎓</span><span style="flex:1">Training</span></button>';
-   }}
   // Settings pinned last (config / admin).
   {var _canUsers=hasRolePerm('admin_users');
    var _canCrew=hasRolePerm('admin_crew');
@@ -3692,7 +3688,7 @@ function renderApp(){
             ${S.mobileView?'':`<span style="font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.04em">${APP_VER}</span>`}
           </div>
           ${(function(){var _unc=(S._notifications||[]).filter(function(n){return !n.read;}).length;return '<div style="position:relative;display:inline-block">'+'<button tabindex="-1" onclick="event.stopPropagation();S._notifOpen=!S._notifOpen;if(S._notifOpen)window.loadNotifications();render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:14px;color:rgba(255,255,255,.5);cursor:pointer;position:relative" title="Notifications">\u{1F514}</button>'+(_unc>0?'<span style="position:absolute;top:-3px;right:-3px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;pointer-events:none;min-width:14px;text-align:center">'+_unc+'</span>':'')+(S._notifOpen?('<div onclick="S._notifOpen=false;render()" style="position:fixed;inset:0;z-index:2050"></div>'+renderNotificationPanel()):'')+'</div>';})()}
-          ${S.mobileView?'':`<button tabindex="-1" onclick="event.stopPropagation();S._helpOpen=true;render()" style="background:rgba(255,255,255,.07);border:none;width:28px;height:28px;border-radius:6px;font-size:12px;color:rgba(255,255,255,.4);cursor:pointer;font-weight:700" title="Help">?</button>`}
+          <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=false;S._notifOpen=false;S.section='training';render()" style="background:rgba(124,58,237,.18);border:none;width:28px;height:28px;border-radius:6px;font-size:14px;color:#fff;cursor:pointer;font-weight:700" title="Training">🎓</button>
           <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 10px 5px 6px;border-radius:20px;cursor:pointer;font-size:11px;color:rgba(255,255,255,.75)" title="Profile & Settings">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${(S.user.name.match(/\b\w/g)||['?']).slice(0,2).join('').toUpperCase()}</div>
             <span style="white-space:nowrap">${S.user.name.split(' ')[0]}</span>
