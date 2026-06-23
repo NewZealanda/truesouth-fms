@@ -144,7 +144,7 @@ function _sectionAllowed(sec){
     case 'flightduty':  return (hasRolePerm('flightduty'))||!!(S.user&&S.user.superAdmin);
     case 'businessplan':return (hasRolePerm('businessplan'))||!!(S.user&&S.user.superAdmin);
     case 'flightrecord':return (hasRolePerm('flightrecord'))||!!(S.user&&S.user.superAdmin);
-    case 'resources':   return hasRolePerm('operations'); // gated further by the feature toggle in nav
+    case 'resources':   return hasRolePerm('resources'); // gated further by the feature toggle in nav
     case 'training':    return !!S.user; // training is available to every signed-in user
     case 'logbook':     return !!S.user; // every signed-in pilot has a personal logbook
     default:            return true;
@@ -522,10 +522,9 @@ function renderDrawer(){
   }
   var h='<div style="position:fixed;inset:0;z-index:1000;display:flex" onclick="S._drawerOpen=false;S._notifOpen=false;render()">';
   h+='<div onclick="event.stopPropagation()" style="width:min(270px,82vw);height:100%;background:linear-gradient(180deg,#080c17,#0d1526);border-right:1px solid rgba(255,255,255,.1);overflow-y:auto;display:flex;flex-direction:column;padding-top:max(0px,env(safe-area-inset-top));flex-shrink:0">';
-  h+='<div style="padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px">';
-  h+='<img src="'+_TS_LOGO+'" alt="True South Flights" style="height:30px;width:auto;max-width:175px;object-fit:contain;flex-shrink:0">';
-  h+='<div style="flex:1"></div>';
-  h+='<button onclick="S._drawerOpen=false;render()" style="background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;padding:5px 7px;border-radius:6px;flex-shrink:0;line-height:1">✕</button>';
+  h+='<div style="position:relative;padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center">';
+  h+='<img src="'+_TS_LOGO+'" alt="True South Flights" style="height:30px;width:auto;max-width:170px;object-fit:contain">';
+  h+='<button onclick="event.stopPropagation();S._drawerOpen=false;render()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;padding:5px 7px;border-radius:6px;line-height:1">✕</button>';
   h+='</div>';
   h+='<nav style="flex:1;padding:10px 8px">';
   // Calendar — its own tier-1 section (was Rezdy ▸ Calendar), gated on the 'calendar' permission.
@@ -590,7 +589,7 @@ function renderDrawer(){
   }}
   // Resource board — only when the cost-scheduling feature is toggled ON (snaps in/out during testing).
   {if(S.user&&!S._schedLoaded){S._schedLoaded=true;if(window.loadScheduling)window.loadScheduling();}
-   if(typeof _schedEnabled==='function'&&_schedEnabled()&&hasRolePerm('operations')){
+   if(typeof _schedEnabled==='function'&&_schedEnabled()&&hasRolePerm('resources')){
      var _onRes=sec==='resources';
      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'resources\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onRes?'rgba(34,197,94,.18)':'transparent')+';color:'+(_onRes?'#22c55e':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onRes?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🚦</span><span style="flex:1">Resources</span></button>';
    }}
@@ -770,7 +769,7 @@ function renderApp(){
           return '<div id="flash-training">'+renderTraining()+'</div>';
         }
         if(_sec==='resources'){
-          if(!hasRolePerm('operations'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          if(!hasRolePerm('resources'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-resources">'+renderResources()+'</div>';
         }
         return renderOperations();

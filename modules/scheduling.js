@@ -1,4 +1,4 @@
-// === MODULE: scheduling.js === v25.37 ===
+// === MODULE: scheduling.js === v25.43 ===
 // ─────────────────────────────────────────────────────────────────────────────
 //  SCHEDULING — cost-aware aircraft allocation + resource board (Phase 1).
 //  Phase 1 (this build): the data foundation only —
@@ -193,6 +193,30 @@ function renderSchedulingSettings(){
     '<label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Call-in cost ($/day)</label>'+
     '<input type="number" min="0" inputmode="decimal" placeholder="—" value="'+_schedEsc(cfg.callInPerDay)+'" onchange="window.schedSetCallIn(this.value)" style="width:160px;padding:7px 9px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:14px">'+
   '</div>';
+
+  // Pilot priority (drag to reorder) — separate Caravan and Airvan lists; SDB-rated pilots flagged.
+  h+='<div class="card" style="margin-top:14px"><div class="st">Pilot priority</div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Drag pilots to set who gets allocated <b>first</b> (top) and <b>last</b> (bottom). The allocator fills aircraft in this order, respecting type ratings. <span style="color:#ef4444;font-weight:700">SDB</span> badge = also rated to fly the leased SDB — only these can crew it.</p>';
+  var _col=function(typeKey,label){
+    var rows=_schedPilotList(typeKey);
+    var inner='<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:6px">'+label+'</div>';
+    if(!rows.length)inner+='<div style="font-size:12px;color:var(--text3)">No rated pilots (set endorsements in Crew, or open the Roster once).</div>';
+    inner+='<div ondragover="event.preventDefault()" ondrop="window.schedPilotDrop(\''+typeKey+'\',\'\')" style="display:flex;flex-direction:column;gap:5px;min-height:30px">';
+    rows.forEach(function(p,i){
+      inner+='<div draggable="true" ondragstart="window.schedPilotDragStart(\''+typeKey+'\',\''+_schedEsc(p.code)+'\',event)" ondragover="event.preventDefault()" ondrop="event.stopPropagation();window.schedPilotDrop(\''+typeKey+'\',\''+_schedEsc(p.code)+'\')" '+
+        'style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--card2,rgba(0,0,0,.04));cursor:grab">'+
+        '<span style="font-size:11px;color:var(--text3);font-weight:700;width:18px">'+(i+1)+'</span>'+
+        '<span style="font-size:13px;font-weight:800;color:#60a5fa">'+_schedEsc(p.code)+'</span>'+
+        '<span style="font-size:12px;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_schedEsc(p.name||'')+'</span>'+
+        (p.sdb?'<span title="Rated to fly SDB" style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:5px;background:rgba(239,68,68,.14);border:1px solid #ef4444;color:#ef4444">SDB</span>':'')+
+        '<span style="color:var(--text3);font-size:13px">⋮⋮</span>'+
+      '</div>';
+    });
+    inner+='</div>';
+    return '<div style="flex:1;min-width:220px">'+inner+'</div>';
+  };
+  h+='<div style="display:flex;gap:16px;flex-wrap:wrap">'+_col('c208','Caravan (C208B) pilots')+_col('ga8','Airvan (GA8) pilots')+'</div>';
+  h+='</div>';
   return h;
 }
 
@@ -251,7 +275,7 @@ function _resChipStyle(state,col){
 }
 
 function renderResources(){
-  if(typeof hasRolePerm==='function'&&!hasRolePerm('operations'))return '<div class="page"><div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div></div>';
+  if(typeof hasRolePerm==='function'&&!hasRolePerm('resources'))return '<div class="page"><div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div></div>';
   if(!_schedEnabled())return '<div class="page"><div class="card" style="text-align:center;padding:40px;color:var(--text3)">Cost-aware scheduling is OFF. Turn it on in Settings ▸ Operations ▸ Scheduling.</div></div>';
   var acIds=Object.keys((S&&S.aircraft)||{});
   var today=_resToday();
@@ -360,6 +384,7 @@ function renderResources(){
         var savTxt=(ci.saving>0)?('Calling in saves ~<b>'+_schedMoney(ci.saving)+'</b> vs running short.'):((ci.cappedPaxShort>0)?('Without it you can\'t carry <b>'+ci.cappedPaxShort+'</b> pax.'):'Weigh it against running short.');
         h+='<div style="margin-top:8px;padding:9px 11px;border-radius:9px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;font-size:12px;color:var(--text1)">'+
           '<b style="color:#f59e0b">⚠ Call-in decision</b> — short <b>'+ci.shortfall+'</b> pilot'+(ci.shortfall===1?'':'s')+'. Call-in ≈ <b>'+_schedMoney(ci.callInCost)+'</b>. '+savTxt+
+          (ci.sdbUncrewed?'<div style="margin-top:4px;color:#ef4444;font-weight:700">⚠ SDB has no qualified pilot available — it can\'t fly unless someone SDB-rated is added.</div>':'')+
           '<div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span style="color:var(--text3)">Add a pilot below to override, or</span>'+
             '<button onclick="window.schedNotifyCallIn(\''+sel+'\')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:9px;cursor:pointer;border:1px solid #f59e0b;background:transparent;color:#f59e0b">📣 Notify management</button></div>'+
         '</div>';
@@ -658,18 +683,53 @@ function _schedDayPilots(date){
   return out;
 }
 function _schedPilotRates(code,ac){var en=(typeof _rzPilotEndorse==='function')?_rzPilotEndorse(code):null;return !en||!en.length||en.indexOf(ac)>=0;}
-// Greedy match the plan's distinct aircraft to available pilots by endorsement; returns the shortfall.
+// What a pilot can fly, from their endorsements (empty endorsements = rated for everything).
+function _schedPilotCan(code){
+  var en=(typeof _rzPilotEndorse==='function')?(_rzPilotEndorse(code)||[]):[];
+  if(!en.length)return {airvan:true,caravan:true,sdb:true};
+  var a=false,c=false,s=false;en.forEach(function(t){if(_schedIsAirvan(t))a=true;else c=true;if(_schedIsSDB(t))s=true;});
+  return {airvan:a,caravan:c,sdb:s};
+}
+// Allocation priority for a pilot on an aircraft's type (lower = earlier). Drag-set per type.
+function _schedPilotRank(code,ac){var tk=_schedIsAirvan(ac)?'ga8':'c208';var order=(_schedCfg().pilotOrder||{})[tk]||[];var i=order.indexOf(code);return i<0?9999:i;}
+// Rated pilots for a type ('c208'|'ga8'), ordered by the saved priority then name; flags SDB-rated.
+function _schedPilotList(typeKey){
+  var want=(typeKey==='ga8')?'airvan':'caravan';
+  var list=_schedAllPilots().filter(function(p){return _schedPilotCan(p.code)[want];}).map(function(p){return {code:p.code,name:p.name,sdb:_schedPilotCan(p.code).sdb};});
+  var order=(_schedCfg().pilotOrder||{})[typeKey]||[];
+  list.sort(function(a,b){var ia=order.indexOf(a.code),ib=order.indexOf(b.code);ia=ia<0?9999:ia;ib=ib<0?9999:ib;if(ia!==ib)return ia-ib;return String(a.name||a.code).localeCompare(String(b.name||b.code));});
+  return list;
+}
+// Greedy match the plan's distinct aircraft to available pilots by endorsement; honours the priority
+// order, conserves flexible pilots (most-constrained aircraft — e.g. SDB — assigned first). Returns
+// the shortfall + which uncrewed aircraft are SDB (so we can flag the worst case).
 function _schedAssignPilots(acList,pilots){
   var avail=pilots.slice(),byAc={},shortfall=0;
   var acs=acList.slice().sort(function(a,b){return avail.filter(function(p){return _schedPilotRates(p.code,a);}).length-avail.filter(function(p){return _schedPilotRates(p.code,b);}).length;});
   acs.forEach(function(ac){
     var cands=avail.filter(function(p){return _schedPilotRates(p.code,ac);});
     if(!cands.length){shortfall++;return;}
-    cands.sort(function(p,q){return acList.filter(function(x){return _schedPilotRates(p.code,x);}).length-acList.filter(function(x){return _schedPilotRates(q.code,x);}).length;});
+    cands.sort(function(p,q){
+      var rp=_schedPilotRank(p.code,ac),rq=_schedPilotRank(q.code,ac);if(rp!==rq)return rp-rq;       // priority order first
+      var cp=acList.filter(function(x){return _schedPilotRates(p.code,x);}).length,cq=acList.filter(function(x){return _schedPilotRates(q.code,x);}).length;
+      if(cp!==cq)return cp-cq;                                                                          // then conserve flexible pilots
+      return String(p.code).localeCompare(String(q.code));
+    });
     byAc[ac]=cands[0].code;avail=avail.filter(function(p){return p.code!==cands[0].code;});
   });
-  return {byAc:byAc,shortfall:shortfall};
+  var sdbUncrewed=acList.some(function(a){return _schedIsSDB(a)&&!byAc[a];});
+  return {byAc:byAc,shortfall:shortfall,sdbUncrewed:sdbUncrewed};
 }
+// Drag-to-reorder the per-type pilot priority list.
+window.schedPilotDragStart=function(typeKey,code,e){S._schedPDrag={t:typeKey,c:code};try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',code);}catch(_){}};
+window.schedPilotDrop=function(typeKey,targetCode){
+  var d=S._schedPDrag;S._schedPDrag=null;if(!d||d.t!==typeKey||d.c===targetCode)return;
+  var order=_schedPilotList(typeKey).map(function(p){return p.code;});      // current display order
+  var from=order.indexOf(d.c);if(from<0)return;order.splice(from,1);
+  var to=targetCode?order.indexOf(targetCode):order.length;if(to<0)to=order.length;
+  order.splice(to,0,d.c);
+  var cfg=_schedCfg();cfg.pilotOrder=cfg.pilotOrder||{};cfg.pilotOrder[typeKey]=order;_schedSave();render();
+};
 // Call-in decision: cheapest plan (unlimited) vs pilots available. If short, compare against the
 // best plan capped at the crewable aircraft count and the call-in cost.
 function _schedCallInAnalysis(date){
@@ -677,7 +737,7 @@ function _schedCallInAnalysis(date){
   var pilots=_schedDayPilots(date);
   var match=_schedAssignPilots(plan.aircraftUsed,pilots);
   var ci=_schedCallIn()||0;
-  var res={plan:plan,pilotsAvail:pilots.length,pilotsNeed:plan.pilotsNeeded,shortfall:match.shortfall,callIn:match.shortfall>0,callInCost:match.shortfall*ci};
+  var res={plan:plan,pilotsAvail:pilots.length,pilotsNeed:plan.pilotsNeeded,shortfall:match.shortfall,callIn:match.shortfall>0,callInCost:match.shortfall*ci,sdbUncrewed:match.sdbUncrewed};
   if(match.shortfall>0){
     var capped=_schedDayPlan(date,{maxAircraft:pilots.length});
     res.cappedCost=capped.cost;res.cappedPaxShort=capped.paxShort;
