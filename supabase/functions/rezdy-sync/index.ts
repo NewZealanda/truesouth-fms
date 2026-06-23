@@ -191,18 +191,21 @@ serve(async (req) => {
   const all: any[] = []
   const seenIds = new Set<string>()
   let fetchErr: { status: number; body: string; src: string | null } | null = null
+  const srcStats: any[] = []
   for (const src of SOURCES) {
-    let offset = 0
+    let offset = 0, got = 0, errStr: string | null = null
     for (let page = 0; page < 20; page++) {
       const url = baseUrl + (src ? `&source=${encodeURIComponent(src)}` : "") + `&limit=100&offset=${offset}`
       const r = await fetch(url)
-      if (!r.ok) { fetchErr = { status: r.status, body: (await r.text().catch(() => "")).slice(0, 200), src }; break } // skip this source, keep the rest
+      if (!r.ok) { const bt = (await r.text().catch(() => "")).slice(0, 200); errStr = r.status + ": " + bt; fetchErr = { status: r.status, body: bt, src }; break } // skip this source, keep the rest
       const j = await r.json().catch(() => ({}))
       const bookings = j.bookings || j.data || []
+      got += bookings.length
       for (const b of bookings) { const id = String((b && (b.orderNumber || b.id)) || ""); if (id && !seenIds.has(id)) { seenIds.add(id); all.push(b) } }
       if (bookings.length < 100) break
       offset += 100
     }
+    srcStats.push({ src: src || "(default)", got, err: errStr })
   }
   // Only hard-fail if we got NOTHING and a request errored — a single source hiccup must not wipe the day.
   if (!all.length && fetchErr) return json({ ok: false, error: "rezdy_error", status: fetchErr.status, body: fetchErr.body }, 502)
@@ -218,7 +221,7 @@ serve(async (req) => {
   // is live) + the raw time fields for every booking in the window (no store).
   if ((body as any).diag) {
     return json({
-      ok: true, date, minCreated, minT, maxT, windowCount: all.length, count: norm.length,
+      ok: true, date, minCreated, minT, maxT, sources: SOURCES, srcStats, windowCount: all.length, count: norm.length,
       diag: all.map((b: any) => ({
         o: b.orderNumber,
         i: (b.items || []).map((it: any) => ({ stl: it.startTimeLocal ?? null, st: it.startTime ?? null, d: itemLocalDate({ startTimeLocal: nzLocal(it), startTime: it.startTime }) })),
