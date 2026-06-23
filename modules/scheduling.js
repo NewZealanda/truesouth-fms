@@ -1,4 +1,4 @@
-// === MODULE: scheduling.js === v25.30 ===
+// === MODULE: scheduling.js === v25.31 ===
 // ─────────────────────────────────────────────────────────────────────────────
 //  SCHEDULING — cost-aware aircraft allocation + resource board (Phase 1).
 //  Phase 1 (this build): the data foundation only —
@@ -54,10 +54,23 @@ function _schedCfg(){
 function _schedTail(ac){return _schedCfg().tails[ac]||{cap:_schedDefaultCap(ac),rt:'',ferry:'',status:'ok',note:''};}
 function _schedEnabled(){return !!_schedCfg().enabled;}
 function _schedNum(v){v=parseFloat(v);return isFinite(v)?v:null;}
-// Effective costs (null when not yet entered). Ferry is its own full QN→MF→QN empty round-trip
-// figure (not half the passenger trip).
-function _schedRtCost(ac){return _schedNum(_schedTail(ac).rt);}
-function _schedFerryCost(ac){return _schedNum(_schedTail(ac).ferry);}
+// ── Calculated costs (run/hr × hours + landings) ───────────────────────────────
+// Per TYPE (averaged owned Airvan / Caravan, plus the SDB lease) we hold a running cost $/hr and a
+// landings+fees figure. Milford RETURN = airvan 1.2h · caravan/SDB 1.1h; FERRY (empty) = 1.0h all.
+// rt = hrs_return × run/hr + landings; ferry = hrs_ferry × run/hr + landings. Because the allocator
+// reads these accessors, changing a run/hr (fuel/maintenance/fees) auto-updates every cost downstream.
+var SCHED_HRS={ret:{airvan:1.2,caravan:1.1,sdb:1.1},fer:{airvan:1.0,caravan:1.0,sdb:1.0}};
+var SCHED_CALC_DEFAULT={airvan:{runhr:657.07,land:226.42},caravan:{runhr:1102.03,land:438.12},sdb:{runhr:2018.50,land:438.12}};
+function _schedTypeKey(ac){return _schedIsSDB(ac)?'sdb':(_schedIsAirvan(ac)?'airvan':'caravan');}
+function _schedCalc(){
+  var c=_schedCfg();if(!c.calc||typeof c.calc!=='object')c.calc={};
+  ['airvan','caravan','sdb'].forEach(function(k){var e=c.calc[k]||(c.calc[k]={});if(e.runhr==null)e.runhr=SCHED_CALC_DEFAULT[k].runhr;if(e.land==null)e.land=SCHED_CALC_DEFAULT[k].land;});
+  return c.calc;
+}
+function _schedCalcCost(typeKey,hrs){var e=_schedCalc()[typeKey]||{};var r=_schedNum(e.runhr);if(r==null)return null;var l=_schedNum(e.land);return r*hrs+(l!=null?l:0);}
+// Effective Milford return / ferry cost for an aircraft — computed from its type's run/hr + landings.
+function _schedRtCost(ac){var tk=_schedTypeKey(ac);var v=_schedCalcCost(tk,SCHED_HRS.ret[tk]||1.1);return v!=null?v:_schedNum(_schedTail(ac).rt);}
+function _schedFerryCost(ac){var tk=_schedTypeKey(ac);var v=_schedCalcCost(tk,SCHED_HRS.fer[tk]||1.0);return v!=null?v:_schedNum(_schedTail(ac).ferry);}
 function _schedCallIn(){return _schedNum(_schedCfg().callInPerDay);}
 function _schedMoney(n){if(n==null)return '—';return '$'+Number(n).toLocaleString('en-NZ',{maximumFractionDigits:0});}
 
@@ -95,6 +108,7 @@ window.schedSetTailField=function(ac,field,v){var t=_schedCfg().tails[ac];if(!t)
 };
 // Cycle a tail's availability: ok → note → down → ok.
 window.schedCycleStatus=function(ac){var t=_schedCfg().tails[ac];if(!t)return;t.status=(t.status==='ok')?'note':(t.status==='note'?'down':'ok');_schedSave();render();};
+window.schedSetCalc=function(type,field,v){var e=_schedCalc()[type];if(!e)return;var n=_schedNum(v);e[field]=(n!=null?n:'');_schedSave();render();};
 
 // ── SETTINGS ▸ OPERATIONS ▸ SCHEDULING (admin pricing/config) ───────────────────
 function renderSchedulingSettings(){
@@ -111,25 +125,33 @@ function renderSchedulingSettings(){
       '<span style="font-size:13px;font-weight:800;color:'+(on?'#22c55e':'var(--text3)')+'">'+(on?'ON':'OFF')+'</span>'+
     '</button></div>';
 
-  // Per-tail pricing
-  h+='<div class="card" style="margin-bottom:14px"><div class="st">Aircraft costs &amp; capacity</div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Costs ex GST, incl. landings + fees, less pilot (rostered = sunk cost). <b>Milford return</b> = QN→MF→QN with passengers; <b>Ferry return</b> = the same trip flown empty to reposition/collect. SDB carries its own (leased) figures.</p>';
-  if(!acIds.length)h+='<div style="color:var(--text3);font-size:13px">No aircraft configured.</div>';
-  else{
-    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:520px">'+
+  // Cost calculator (per type) — run/hr + landings drive the Milford return & ferry figures live.
+  var _ni=function(type,field,val){return '<input type="number" min="0" inputmode="decimal" value="'+_schedEsc(val)+'" onchange="window.schedSetCalc(\''+type+'\',\''+field+'\',this.value)" style="width:96px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px">';};
+  h+='<div class="card" style="margin-bottom:14px"><div class="st">Cost calculator</div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Costs ex GST, less pilot (rostered = sunk cost). Enter <b>running cost $/hr</b> and <b>landings + fees</b> per type — change these when fuel / maintenance / fees move and every figure below (and the allocator) updates automatically. Hours: Milford <b>return</b> = airvan 1.2h, caravan/SDB 1.1h; <b>ferry</b> (empty) = 1.0h.</p>'+
+    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:560px">'+
       '<thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em">'+
-        '<th style="padding:6px 8px">Aircraft</th><th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Seats</th><th style="padding:6px 8px">Milford return $</th><th style="padding:6px 8px">Ferry return $</th></tr></thead><tbody>';
+        '<th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Run/hr $</th><th style="padding:6px 8px">Landings+fees $</th><th style="padding:6px 8px">Milford return</th><th style="padding:6px 8px">Ferry</th></tr></thead><tbody>';
+  [['airvan','Airvan (owned avg)'],['caravan','Caravan (owned avg)'],['sdb','SDB (lease)']].forEach(function(row){
+    var k=row[0];var e=_schedCalc()[k]||{};var rt=_schedCalcCost(k,SCHED_HRS.ret[k]),fer=_schedCalcCost(k,SCHED_HRS.fer[k]);
+    h+='<tr style="border-top:1px solid var(--border2)">'+
+      '<td style="padding:6px 8px;font-weight:800;color:var(--text1)">'+row[1]+'<div style="font-size:10px;color:var(--text3);font-weight:400">'+(SCHED_HRS.ret[k])+'h ret · '+(SCHED_HRS.fer[k])+'h ferry</div></td>'+
+      '<td style="padding:6px 8px">'+_ni(k,'runhr',e.runhr)+'</td>'+
+      '<td style="padding:6px 8px">'+_ni(k,'land',e.land)+'</td>'+
+      '<td style="padding:6px 8px;font-weight:800;color:#22c55e">'+_schedMoney(rt)+'</td>'+
+      '<td style="padding:6px 8px;font-weight:800;color:#f59e0b">'+_schedMoney(fer)+'</td>'+
+    '</tr>';
+  });
+  h+='</tbody></table></div></div>';
+
+  // Per-tail seat capacity (SDB is 11; other caravans 13, airvans 7).
+  h+='<div class="card" style="margin-bottom:14px"><div class="st">Aircraft seats</div>';
+  if(!acIds.length)h+='<div style="color:var(--text3);font-size:13px">No aircraft configured.</div>';
+  else{h+='<div style="display:flex;flex-wrap:wrap;gap:10px">';
     acIds.forEach(function(ac){var t=_schedTail(ac);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';
-      h+='<tr style="border-top:1px solid var(--border2)">'+
-        '<td style="padding:6px 8px;font-weight:800;color:'+col+'">'+_schedEsc(_schedAcShort(ac))+'</td>'+
-        '<td style="padding:6px 8px;color:var(--text2)">'+_schedAcType(ac)+'</td>'+
-        '<td style="padding:6px 8px"><input type="number" min="0" value="'+_schedEsc(t.cap)+'" onchange="window.schedSetTailField(\''+_schedEsc(ac)+'\',\'cap\',this.value)" style="width:64px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px"></td>'+
-        '<td style="padding:6px 8px"><input type="number" min="0" inputmode="decimal" placeholder="—" value="'+_schedEsc(t.rt)+'" onchange="window.schedSetTailField(\''+_schedEsc(ac)+'\',\'rt\',this.value)" style="width:104px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px"></td>'+
-        '<td style="padding:6px 8px"><input type="number" min="0" inputmode="decimal" placeholder="—" value="'+_schedEsc(t.ferry)+'" onchange="window.schedSetTailField(\''+_schedEsc(ac)+'\',\'ferry\',this.value)" style="width:104px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px"></td>'+
-      '</tr>';
-    });
-    h+='</tbody></table></div>';
-  }
+      h+='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:800;color:'+col+'">'+_schedEsc(_schedAcShort(ac))+'</span>'+
+        '<input type="number" min="0" value="'+_schedEsc(t.cap)+'" onchange="window.schedSetTailField(\''+_schedEsc(ac)+'\',\'cap\',this.value)" style="width:58px;padding:4px 6px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px"><span style="font-size:11px;color:var(--text3)">'+_schedAcType(ac)+'</span></div>';});
+    h+='</div>';}
   h+='</div>';
 
   // Pilot call-in
@@ -371,7 +393,7 @@ function _schedSig(date,bks){
     (b.items||[]).forEach(function(it){parts.push(o+ns+c+'@'+(it.startTimeLocal||'')+'='+(it.quantity||0));});});
   try{parts.push(JSON.stringify((_resAll()||{})[date]||{}));}catch(e){}
   try{Object.keys((S.maintenance&&S.maintenance.bookings)||{}).forEach(function(ac){((S.maintenance.bookings[ac])||[]).forEach(function(b){if(b&&b.date&&date>=b.date&&date<=(b.end||b.date))parts.push('M'+ac);});});}catch(e){}
-  Object.keys((S&&S.aircraft)||{}).forEach(function(ac){var t=_schedTail(ac);parts.push(ac+':'+t.cap+':'+t.rt);});
+  Object.keys((S&&S.aircraft)||{}).forEach(function(ac){parts.push(ac+':'+(_schedNum(_schedTail(ac).cap)||'')+':'+_schedRtCost(ac)+':'+_schedFerryCost(ac));});
   return parts.join('|');
 }
 // Compute the day's order→aircraft map (memoised). Skips cancelled/no-show + flybacks (the latter
@@ -448,17 +470,20 @@ function _schedDayDepartures(date){
 }
 // Min total-incremental-cost subset of candidates covering pax (tie-break: fewer ferries, fewer
 // aircraft, priority, less waste). Candidates carry {cap,inc,reused,priority}.
-function _schedPlanPick(pax,cand){
-  var n=cand.length;if(!n)return [];var best=null;
+// maxNew caps how many NOT-yet-used aircraft this departure may introduce (for the "if we don't
+// call in a pilot" comparison, which limits the day to the crewable aircraft count).
+function _schedPlanPick(pax,cand,maxNew){
+  var n=cand.length;if(!n)return [];if(maxNew==null)maxNew=Infinity;
+  var best=null,partial=null;
   for(var mask=1;mask<(1<<n);mask++){
-    var cap=0,inc=0,cnt=0,fer=0,pri=0;
-    for(var i=0;i<n;i++)if(mask&(1<<i)){var c=cand[i];cap+=c.cap;inc+=c.inc;cnt++;if(c.reused)fer++;if(c.priority)pri++;}
-    if(cap<pax)continue;
-    var score=[+inc.toFixed(2),fer,cnt,-pri,cap];
-    if(!best||_schedScoreLt(score,best.score))best={mask:mask,score:score};
+    var cap=0,inc=0,cnt=0,fer=0,pri=0,nw=0;
+    for(var i=0;i<n;i++)if(mask&(1<<i)){var c=cand[i];cap+=c.cap;inc+=c.inc;cnt++;if(c.reused)fer++;if(c.priority)pri++;if(c.isNew)nw++;}
+    if(nw>maxNew)continue;
+    if(cap>=pax){var sc=[+inc.toFixed(2),fer,cnt,-pri,cap];if(!best||_schedScoreLt(sc,best.score))best={mask:mask,score:sc};}
+    else{var sp=[-cap,+inc.toFixed(2),fer];if(!partial||_schedScoreLt(sp,partial.score))partial={mask:mask,score:sp};} // can't cover → carry the most
   }
-  if(!best)return cand.slice();
-  var sel=[];for(var j=0;j<n;j++)if(best.mask&(1<<j))sel.push(cand[j]);return sel;
+  var pick=best||partial;if(!pick)return [];
+  var sel=[];for(var j=0;j<n;j++)if(pick.mask&(1<<j))sel.push(cand[j]);return sel;
 }
 var SCHED_BLOCK_MIN=270;   // Milford rotation ~4.5h: an aircraft is back at QN block-minutes after it departs
 function _schedNowMin(){var n=new Date();return n.getHours()*60+n.getMinutes();}
