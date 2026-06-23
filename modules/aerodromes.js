@@ -92,6 +92,7 @@ const NZ_AERODROMES=[
   {icao:'NZMW',name:'Makarora',lat:-44.2183,lon:169.2408,elev:1083},
   {icao:'NZQN',name:'Queenstown',lat:-45.0211,lon:168.7392,elev:1171},
   {icao:'NZGY',name:'Glenorchy',lat:-44.8667,lon:168.3833,elev:1220},
+  {icao:'BRCH',name:'Branches Station',lat:-44.744321,lon:168.726819,elev:1400},
   {icao:'NZDN',name:'Dunedin',lat:-45.9281,lon:170.1983,elev:4},
   {icao:'NZTI',name:'Taieri (Mosgiel)',lat:-45.9275,lon:170.1983,elev:4},
   {icao:'NZLX',name:'Alexandra',lat:-45.2117,lon:169.3731,elev:758},
