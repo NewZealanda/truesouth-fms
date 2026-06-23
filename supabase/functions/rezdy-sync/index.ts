@@ -142,6 +142,8 @@ serve(async (req) => {
         out.push({
           o: on, httpStatus: r.status, orderStatus: (bk && (bk.status || bk.orderStatus)) || null,
           source: (bk && bk.source) || null,
+          dateCreated: (bk && (bk.dateCreated || bk.createdDate || bk.dateConfirmed)) || null,
+          resellerId: (bk && (bk.resellerId || bk.resellerAlias || bk.agentId)) || null,
           items: ((bk && bk.items) || []).map((it: any) => ({ stl: it.startTimeLocal ?? null, st: it.startTime ?? null, product: it.productName || it.productCode || null })),
         })
       } catch (e) { out.push({ o: on, error: String(e) }) }
