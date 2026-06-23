@@ -1,4 +1,4 @@
-// === MODULE: scheduling.js === v25.33 ===
+// === MODULE: scheduling.js === v25.34 ===
 // ─────────────────────────────────────────────────────────────────────────────
 //  SCHEDULING — cost-aware aircraft allocation + resource board (Phase 1).
 //  Phase 1 (this build): the data foundation only —
@@ -355,7 +355,8 @@ function renderResources(){
   // override a call-in suggestion (the optimiser then counts it).
   (function(){
     var pilots=_schedDayPilots(sel);
-    h+='<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:6px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:6px">Available pilots · '+pilots.length+(sel===today?' (incl. today\'s roster)':'')+'</div>';
+    var _apBtn=(sel===S.rezdyDate)?'<button onclick="window.schedAutoPilots()" title="Assign type-rated pilots to today\'s blocks from the plan — you can override any on the calendar." style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:9px;cursor:pointer;border:1px solid rgba(96,165,250,.5);background:rgba(96,165,250,.12);color:#60a5fa">🧑‍✈️ Auto-allocate pilots</button>':'';
+    h+='<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:6px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px"><span style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700">Available pilots · '+pilots.length+(sel===today?' (incl. today\'s roster)':'')+'</span>'+_apBtn+'</div>';
     h+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
     if(!pilots.length)h+='<span style="font-size:12px;color:var(--text3)">none yet'+(sel!==today?' — add call-ins below (roster-by-date coming)':' (open the Roster once to load it)')+'</span>';
     pilots.forEach(function(p){var col=p.extra?'#22c55e':'#60a5fa';
@@ -440,43 +441,71 @@ function _schedSig(date,bks){
   Object.keys((S&&S.aircraft)||{}).forEach(function(ac){parts.push(ac+':'+(_schedNum(_schedTail(ac).cap)||'')+':'+_schedRtCost(ac)+':'+_schedFerryCost(ac));});
   return parts.join('|');
 }
-// Compute the day's order→aircraft map (memoised). Skips cancelled/no-show + flybacks (the latter
-// ride a return leg — handled later). An aircraft can serve different time slots, but not two
-// departures at the SAME time.
+// Live order→aircraft map (memoised). The per-departure aircraft SETS come from the whole-day
+// optimiser (_schedDayPlan — idle-first, ferry-aware, lock-aware); bookings are then packed into
+// each departure's set. Locked departures are left as committed. Skips cancelled/no-show + flybacks.
+// A re-entry guard prevents recursion (the plan reads _rzBookingAc for locked departures).
 function _schedEnsureAuto(){
   if(!_schedEnabled()){if(S._schedAutoAc&&Object.keys(S._schedAutoAc).length)S._schedAutoAc={};S._schedAutoKey='';return;}
+  if(S._schedAutoBusy)return;                       // re-entry from the plan's locked-dep lookup
   var date=S.rezdyDate;var bks=S._rezdyBookings||[];
   var sig=_schedSig(date,bks);
   if(S._schedAutoKey===sig&&S._schedAutoAc)return;
-  var groups={};
+  S._schedAutoBusy=true;
+  try{
+    // bookings per departure time (orders → seats)
+    var byTime={};
+    bks.forEach(function(b){
+      if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
+      var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
+      (b.items||[]).forEach(function(it){
+        var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
+        var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;
+        var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';
+        if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;
+        var g=byTime[start]||(byTime[start]={});g[o]=(g[o]||0)+(parseInt(it.quantity,10)||0);
+      });
+    });
+    var dp=_schedDayPlan(date);
+    var map={};
+    dp.departures.forEach(function(d){
+      if(d.locked)return;                            // committed — keep current assignment
+      var orders=byTime[d.time]||{};
+      var groupsArr=Object.keys(orders).map(function(o){return {order:o,size:orders[o]};});
+      if(!groupsArr.length||!d.aircraft.length)return;
+      var chosen=d.aircraft.map(function(a){return {ac:a.ac,cap:a.cap,priority:_schedIsPriority(a.ac)};});
+      var packed=_schedPack(groupsArr,chosen);
+      Object.keys(packed).forEach(function(o){map[o]=packed[o];});
+    });
+    S._schedAutoAc=map;S._schedAutoKey=sig;
+  }finally{S._schedAutoBusy=false;}
+}
+// ── Auto-allocate pilots (one-shot, overridable) ───────────────────────────────
+// Writes a type-rated pilot onto each of the day's calendar blocks (ac|time|prod) from the plan's
+// pilot↔aircraft match. It writes into the SAME store the manual calendar pickers use, so the
+// operator can override any pilot afterwards. One press = apply; not a live overlay.
+window.schedAutoPilots=function(){
+  if(!_schedEnabled())return;
+  var date=S.rezdyDate;var dp=_schedDayPlan(date);
+  var match=_schedAssignPilots(dp.aircraftUsed,_schedDayPilots(date));
+  S._schedPilots=S._schedPilots||{};var bks=S._rezdyBookings||[];var keys={};
   bks.forEach(function(b){
     if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
-    var o=String(b.orderNumber||'');
-    if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
+    var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
     (b.items||[]).forEach(function(it){
       var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
       var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;
-      var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):String(it.product||'');
-      if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;     // flybacks handled later
-      var key=start+'|'+prod;
-      var g=groups[key]||(groups[key]={time:start,items:{}});
-      g.items[o]=(g.items[o]||0)+(parseInt(it.quantity,10)||0);
+      var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;
+      var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,o):null;if(!ac)return;
+      var pc=match.byAc[ac];if(pc)keys[ac+'|'+start+'|'+prod]=pc;
     });
   });
-  var map={};var usedByTime={};
-  Object.keys(groups).sort(function(a,b){return (_schedMinOf(groups[a].time)||0)-(_schedMinOf(groups[b].time)||0);}).forEach(function(k){
-    var g=groups[k];var time=g.time;var used=usedByTime[time]||(usedByTime[time]={});
-    var fleet=_schedFleetFor(date,time).filter(function(f){return !used[f.ac];});
-    var groupsArr=Object.keys(g.items).map(function(o){return {order:o,size:g.items[o]};});
-    var pax=groupsArr.reduce(function(s,x){return s+x.size;},0);
-    if(!pax||!fleet.length)return;
-    var chosen=_schedPickFleet(pax,fleet);
-    chosen.forEach(function(c){used[c.ac]=true;});
-    var packed=_schedPack(groupsArr,chosen);
-    Object.keys(packed).forEach(function(o){map[o]=packed[o];});
-  });
-  S._schedAutoAc=map;S._schedAutoKey=sig;
-}
+  var n=0;Object.keys(keys).forEach(function(k){S._schedPilots[k]=keys[k];n++;});
+  if(window.pickupSave)window.pickupSave(true);
+  if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
+  if(typeof toast==='function')toast(n?('Pilots auto-allocated to '+n+' block'+(n===1?'':'s')+' — edit any on the calendar'):'No blocks to allocate','ok');
+  render();
+};
 // The auto-allocated aircraft for one booking (null when the feature is off or none assigned).
 function _schedAutoAcFor(order){
   if(!_schedEnabled())return null;
