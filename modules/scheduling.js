@@ -1,4 +1,4 @@
-// === MODULE: scheduling.js === v25.26 ===
+// === MODULE: scheduling.js === v25.27 ===
 // ─────────────────────────────────────────────────────────────────────────────
 //  SCHEDULING — cost-aware aircraft allocation + resource board (Phase 1).
 //  Phase 1 (this build): the data foundation only —
@@ -155,6 +155,14 @@ function _resGet(date,ac){var a=_resAll()[date];return (a&&a[ac])||null;}
 function _resState(date,ac){var e=_resGet(date,ac);return (e&&e.mode)?e.mode:'on';}
 function _resEnsure(date,ac){var all=_resAll();var d=all[date]||(all[date]={});return d[ac]||(d[ac]={mode:'on',from:'',to:'',note:''});}
 function _resPrune(date,ac){var all=_resAll();var d=all[date];if(!d)return;var e=d[ac];if(e&&e.mode==='on'&&!e.from&&!e.to&&!e.note){delete d[ac];}if(d&&!Object.keys(d).length)delete all[date];}
+// A maintenance booking covering this date for this aircraft (start..end inclusive; end blank = go day).
+function _schedMaintCovers(date,ac){
+  var bks=(S.maintenance&&S.maintenance.bookings&&S.maintenance.bookings[ac])||[];
+  for(var i=0;i<bks.length;i++){var b=bks[i];if(!b||!b.date)continue;var go=b.date,ret=b.end||b.date;if(date>=go&&date<=ret)return b;}
+  return null;
+}
+// Effective availability state: a maintenance booking forces 'maint' (overrides manual avail).
+function _resEffState(date,ac){return _schedMaintCovers(date,ac)?'maint':_resState(date,ac);}
 
 window.resMonthNav=function(delta){S._resMonth=_resAddMonth(S._resMonth||_resYMnow(),delta);render();};
 window.resPickDay=function(date){S._resDay=date;S._resMonth=String(date).slice(0,7);render();};
@@ -165,6 +173,7 @@ window.resQuickToggle=function(date,ac){var st=_resState(date,ac);var e=_resEnsu
 
 // Short availability summary for a cell chip / editor.
 function _resChipStyle(state,col){
+  if(state==='maint')return 'background:rgba(239,68,68,.14);border:1px solid #ef4444;color:#ef4444';
   if(state==='off')return 'background:rgba(148,163,184,.12);border:1px solid var(--border2);color:var(--text3);text-decoration:line-through;opacity:.7';
   if(state==='custom')return 'background:rgba(245,158,11,.14);border:1px solid #f59e0b;color:#f59e0b';
   return 'background:'+col+'22;border:1px solid '+col+';color:'+col;
@@ -200,9 +209,12 @@ function renderResources(){
   for(var d=1;d<=dim;d++){
     var date=_resDateStr(Y,M,d);var isT=(date===today);var isSel=(date===sel);
     var chips='';
-    acIds.forEach(function(ac){var st=_resState(date,ac);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';var e=_resGet(date,ac);
-      var lbl=_schedAcShort(ac)+(st==='custom'?(' '+_schedEsc((e&&e.from)||'')):'');
-      chips+='<span onclick="event.stopPropagation();window.resQuickToggle(\''+date+'\',\''+_schedEsc(ac)+'\')" title="'+_schedEsc(_schedAcShort(ac)+': '+(st==='off'?'unavailable':(st==='custom'?('from '+((e&&e.from)||'?')+(e&&e.to?(' to '+e.to):'')):'available all day')))+'" style="cursor:pointer;font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px;'+_resChipStyle(st,col)+'">'+_schedEsc(lbl)+'</span>';
+    acIds.forEach(function(ac){var st=_resEffState(date,ac);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';var e=_resGet(date,ac);
+      var isM=(st==='maint');
+      var lbl=(isM?'🔧':'')+_schedAcShort(ac)+(st==='custom'?(' '+_schedEsc((e&&e.from)||'')):'');
+      var click=isM?'':('event.stopPropagation();window.resQuickToggle(\''+date+'\',\''+_schedEsc(ac)+'\')');
+      var tip=_schedAcShort(ac)+': '+(isM?'in maintenance':(st==='off'?'unavailable':(st==='custom'?('from '+((e&&e.from)||'?')+(e&&e.to?(' to '+e.to):'')):'available all day')));
+      chips+='<span'+(click?' onclick="'+click+'"':'')+' title="'+_schedEsc(tip)+'" style="'+(click?'cursor:pointer;':'')+'font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px;'+_resChipStyle(st,col)+'">'+_schedEsc(lbl)+'</span>';
     });
     h+='<div onclick="window.resPickDay(\''+date+'\')" style="cursor:pointer;min-height:62px;border:1px solid '+(isSel?'var(--acc)':'var(--border2)')+';border-radius:8px;padding:4px;background:'+(isSel?'rgba(124,58,237,.08)':'transparent')+';outline:'+(isT?'2px solid rgba(96,165,250,.5);outline-offset:-2px':'none')+'">'+
       '<div style="font-size:11px;font-weight:'+(isT?'900':'700')+';color:'+(isT?'#60a5fa':'var(--text2)')+';margin-bottom:3px">'+d+'</div>'+
@@ -222,14 +234,20 @@ function renderResources(){
     '</div>';
   if(!acIds.length)h+='<div style="color:var(--text3);font-size:13px">No aircraft configured.</div>';
   acIds.forEach(function(ac){
-    var st=_resState(sel,ac);var e=_resGet(sel,ac);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';
+    var st=_resEffState(sel,ac);var e=_resGet(sel,ac);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';
     var toRun=null;try{if(typeof maintToRun==='function')toRun=maintToRun(ac);}catch(_e){}
     var maintCol=(toRun!=null&&toRun<=5)?'#ef4444':((toRun!=null&&toRun<=15)?'#f59e0b':'var(--text3)');
+    var mb=_schedMaintCovers(sel,ac);
     var btn=function(mode,lbl){var on=(st===mode);var c=(mode==='off')?'#ef4444':(mode==='custom'?'#f59e0b':'#22c55e');
       return '<button onclick="window.resSetMode(\''+sel+'\',\''+_schedEsc(ac)+'\',\''+mode+'\')" style="cursor:pointer;font-size:11px;font-weight:800;padding:4px 11px;border-radius:13px;border:'+(on?'2px solid '+c:'1px solid var(--border2)')+';background:'+(on?c+'1f':'transparent')+';color:'+(on?c:'var(--text3)')+'">'+lbl+'</button>';};
     h+='<div style="border-top:1px solid var(--border2);padding:9px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
-      '<span style="font-size:14px;font-weight:900;color:'+col+';width:46px">'+_schedEsc(_schedAcShort(ac))+'</span>'+
-      '<div style="display:flex;gap:5px">'+btn('on','All day')+btn('custom','Custom')+btn('off','Off')+'</div>';
+      '<span style="font-size:14px;font-weight:900;color:'+col+';width:46px">'+_schedEsc(_schedAcShort(ac))+'</span>';
+    if(mb){
+      h+='<span style="font-size:12px;font-weight:800;color:#ef4444;display:inline-flex;align-items:center;gap:5px">🔧 In maintenance'+((mb.end&&mb.end!==mb.date)?(' '+_schedEsc(mb.date)+'→'+_schedEsc(mb.end)):'')+'</span>'+
+        '<span style="font-size:11px;color:var(--text3)">set in Maintenance ▸ Bookings</span></div>';
+      return;
+    }
+    h+='<div style="display:flex;gap:5px">'+btn('on','All day')+btn('custom','Custom')+btn('off','Off')+'</div>';
     if(st==='custom'){
       h+='<div style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text3)">from '+
         '<input type="time" value="'+_schedEsc((e&&e.from)||'')+'" onchange="window.resSetTime(\''+sel+'\',\''+_schedEsc(ac)+'\',\'from\',this.value)" style="padding:4px 6px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:12px">'+
@@ -267,8 +285,8 @@ function _schedIsPriority(ac){return _schedPriorityList().indexOf(ac)>=0;}
 function _schedMinOf(t){var m=/^(\d{1,2}):(\d{2})$/.exec(String(t||''));return m?(+m[1])*60+(+m[2]):null;}
 // Available that date (resource board) and, if a time is given, within any custom from/to window.
 function _schedAvailAt(date,ac,time){
-  var st=_resState(date,ac);
-  if(st==='off')return false;
+  var st=_resEffState(date,ac);
+  if(st==='off'||st==='maint')return false;
   if(st==='custom'){var e=_resGet(date,ac);var dm=_schedMinOf(time);if(dm!=null){var fm=_schedMinOf(e&&e.from),to=_schedMinOf(e&&e.to);if(fm!=null&&dm<fm)return false;if(to!=null&&dm>to)return false;}}
   return true;
 }
@@ -321,6 +339,7 @@ function _schedSig(date,bks){
     var ns=((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))?'n':'';
     (b.items||[]).forEach(function(it){parts.push(o+ns+c+'@'+(it.startTimeLocal||'')+'='+(it.quantity||0));});});
   try{parts.push(JSON.stringify((_resAll()||{})[date]||{}));}catch(e){}
+  try{Object.keys((S.maintenance&&S.maintenance.bookings)||{}).forEach(function(ac){((S.maintenance.bookings[ac])||[]).forEach(function(b){if(b&&b.date&&date>=b.date&&date<=(b.end||b.date))parts.push('M'+ac);});});}catch(e){}
   Object.keys((S&&S.aircraft)||{}).forEach(function(ac){var t=_schedTail(ac);parts.push(ac+':'+t.cap+':'+t.rt);});
   return parts.join('|');
 }

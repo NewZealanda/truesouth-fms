@@ -625,9 +625,10 @@ function renderMaintBookings(){
             onchange="window.saveMaintCheck('${ac}','propToRun',this.value===''?null:parseFloat(this.value))" style="font-size:12px"></div>
       </div>
       <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Maintenance Bookings</div>
-      ${bks.map((b,bi)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;background:var(--card2);padding:6px 8px;border-radius:6px">
-        <input type="date" class="fi" value="${b.date}" onchange="window.editBooking('${ac}',${bi},'date',this.value)" style="width:120px;font-size:11px">
-        <input type="text" class="fi" value="${b.notes||''}" onchange="window.editBooking('${ac}',${bi},'notes',this.value)" placeholder="Notes" style="flex:1;font-size:11px">
+      ${bks.map((b,bi)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;background:var(--card2);padding:6px 8px;border-radius:6px;flex-wrap:wrap">
+        <label style="font-size:10px;color:var(--text3)">Go<br><input type="date" class="fi" value="${b.date||''}" onchange="window.editBooking('${ac}',${bi},'date',this.value)" style="width:118px;font-size:11px"></label>
+        <label style="font-size:10px;color:var(--text3)">Return<br><input type="date" class="fi" value="${b.end||''}" min="${b.date||''}" onchange="window.editBooking('${ac}',${bi},'end',this.value)" style="width:118px;font-size:11px"></label>
+        <input type="text" class="fi" value="${b.notes||''}" onchange="window.editBooking('${ac}',${bi},'notes',this.value)" placeholder="Notes" style="flex:1;min-width:90px;font-size:11px">
         <label style="display:flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap">
           <input type="checkbox" ${b.confirmed?'checked':''} onchange="window.editBooking('${ac}',${bi},'confirmed',this.checked)"> Confirmed
         </label>
@@ -1046,22 +1047,27 @@ window._notifyMaintBooking=async function(ac,dateStr,action){
 // Open the Maintenance overview from a notification.
 window.openMaintFromNotif=function(){S._notifOpen=false;S.maintTab='overview';if(typeof window.setTab==='function')window.setTab('maintenance');else{S.section='maintenance';render();}};
 
+function _maintBkId(){return 'mbk_'+Date.now()+'_'+Math.floor(Math.random()*1e5);}
 window.addBooking=function(ac){
   if(!_maintBookGuard())return;
   initMaintenance();
   S.maintenance.bookings=S.maintenance.bookings||{};
   S.maintenance.bookings[ac]=S.maintenance.bookings[ac]||[];
-  S.maintenance.bookings[ac].push({date:(typeof _todayLocal==='function'?_todayLocal():new Date().toISOString().slice(0,10)),notes:'',confirmed:false});
-  saveMaintenance();render();
+  var bk={id:_maintBkId(),date:(typeof _todayLocal==='function'?_todayLocal():new Date().toISOString().slice(0,10)),end:'',notes:'',confirmed:false};
+  S.maintenance.bookings[ac].push(bk);
+  saveMaintenance();
+  _maintSyncFerry(ac,bk);     // create the QN→WF / WF→QN ferry blocks immediately (date defaults to today)
+  render();
 };
 
 window.editBooking=function(ac,idx,field,val){
   if(!_maintBookGuard())return;
   initMaintenance();
   var bk=S.maintenance.bookings?.[ac]?.[idx];if(!bk)return;
+  if(!bk.id)bk.id=_maintBkId();                  // backfill an id for older bookings
   var oldVal=bk[field];
   bk[field]=val;saveMaintenance();
-  // Notify on a date set/move or a confirmation (not on every notes keystroke).
+  // Notify on a (start) date set/move or a confirmation (not on every notes keystroke).
   if(field==='date'&&val&&val!==oldVal){
     var action=bk._announced?'moved':'booked';bk._announced=true;saveMaintenance();
     if(window._notifyMaintBooking)window._notifyMaintBooking(ac,val,action);
@@ -1069,6 +1075,8 @@ window.editBooking=function(ac,idx,field,val){
     bk._announced=true;saveMaintenance(); // so a later delete still fires the 'cancelled' notice
     if(window._notifyMaintBooking)window._notifyMaintBooking(ac,bk.date,'confirmed');
   }
+  // Keep the calendar ferry blocks (QN→WF on the go day, WF→QN on the return day) in step.
+  if(field==='date'||field==='end')_maintSyncFerry(ac,bk);
   render();
 };
 
@@ -1076,11 +1084,39 @@ window.deleteBooking=function(ac,idx){
   if(!_maintBookGuard())return;
   initMaintenance();
   var bk=S.maintenance.bookings?.[ac]?.[idx];var _d=bk&&bk.date,_ann=bk&&bk._announced;
+  if(bk)_maintDeleteFerry(bk);                    // remove its auto ferry blocks
   S.maintenance.bookings[ac].splice(idx,1);
   saveMaintenance();
   if(_ann&&_d&&window._notifyMaintBooking)window._notifyMaintBooking(ac,_d,'cancelled'); // only if it had been announced
   render();
 };
+
+// ── Maintenance → calendar ferry blocks ────────────────────────────────────────
+// A maintenance booking ferries the aircraft to Wanaka (WF): QN→WF 08:00 on the GO day and
+// WF→QN 16:00 on the RETURN day (= end date, or the go day if no end). Stored as normal editable
+// calendar blocks in ts_schedule (deterministic ids keyed to the booking) so the operator can
+// change the times/dates or delete them like any other block.
+async function _maintSyncFerry(ac,bk){
+  try{
+    if(!bk||!bk.id||!bk.date||typeof sbU!=='function')return;
+    var go=bk.date,ret=bk.end||bk.date;
+    var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#888';
+    var rows=[
+      {id:'maintfer_'+bk.id+'_out', block_date:go, data:{aircraft:ac,label:'QN-WF',start:'08:00',end:'08:30',color:col,notes:'Maintenance ferry → WF',ftype:'Ferry'}},
+      {id:'maintfer_'+bk.id+'_back',block_date:ret,data:{aircraft:ac,label:'WF-QN',start:'16:00',end:'16:30',color:col,notes:'Maintenance ferry ← WF',ftype:'Ferry'}}
+    ];
+    await sbU('ts_schedule',rows);
+    if((S.rezdyDate===go||S.rezdyDate===ret)&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
+  }catch(e){}
+}
+async function _maintDeleteFerry(bk){
+  try{
+    if(!bk||!bk.id||typeof sbDel!=='function')return;
+    await sbDel('ts_schedule','maintfer_'+bk.id+'_out');
+    await sbDel('ts_schedule','maintfer_'+bk.id+'_back');
+    if(window.rezdyLoadSchedule&&S.rezdyDate)window.rezdyLoadSchedule();
+  }catch(e){}
+}
 
 window.toggleMaintPriority=function(ac){
   if(!_maintGuard())return;
