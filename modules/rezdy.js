@@ -737,7 +737,9 @@ function _rzBookingAcPills(b,order){
   // Explicit "None" / unallocated pill.
   var noneOn=(manual==='__none__');
   pills+='<button onclick="window.rezdyBookingSetAc(\''+oE+'\',\'__none__\')" class="pill" title="Unallocated — no aircraft" style="cursor:pointer;opacity:'+(noneOn?'1':'.38')+';border:1.5px solid '+(noneOn?'#94a3b8':'var(--border2)')+';background:'+(noneOn?'#475569':'transparent')+';color:'+(noneOn?'#fff':'var(--text3)')+';font-weight:800;font-size:11px;padding:3px 10px;border-radius:14px">None</button>';
-  var note=noneOn?'<span style="font-size:10px;color:var(--text3);margin-left:2px">unallocated</span>':(cur?'<span style="font-size:10px;color:'+(isAuto?'#22c55e':'var(--text3)')+';margin-left:2px">'+(manual?'set':(isAuto?'⚙ auto-allocated':'from comments'))+'</span>':'');
+  var _autoAc=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;
+  var _chg=(manual&&manual!=='__none__'&&_autoAc&&manual!==_autoAc);
+  var note=noneOn?'<span style="font-size:10px;color:var(--text3);margin-left:2px">unallocated</span>':(cur?'<span title="'+(_chg?('Auto-allocation chose '+_rzEsc(_autoAc.replace('ZK-',''))):'')+'" style="font-size:10px;color:'+(_chg?'#f59e0b':(isAuto?'#22c55e':'var(--text3)'))+';margin-left:2px">'+(_chg?'✏ user change from auto':(manual?'set':(isAuto?'⚙ auto-allocated':'from comments')))+'</span>':'');
   return '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:7px 10px">'+
     '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Aircraft</span>'+pills+note+'</div>';
 }
@@ -750,7 +752,10 @@ function _rzBookingAcBadge(b,order){
   if(!cur)return '';
   var col=_rzAcCol(cur);
   var auto=_rzBookingAcIsAuto(b,order);
-  return '<div style="padding:4px 10px;display:flex;align-items:center;gap:5px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800">Aircraft</span><span class="pill" style="background:'+col+';color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">'+_rzEsc(cur.replace('ZK-',''))+'</span>'+(auto?'<span title="Auto-allocated (cost-aware). Tap a pill in the dropdown to override." style="font-size:10px;font-weight:800;color:#22c55e">⚙ auto</span>':'')+'</div>';
+  var _autoAc=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;
+  var _chg=(manual&&manual!=='__none__'&&_autoAc&&manual!==_autoAc);
+  var mark=_chg?'<span title="User change from auto allocation — auto chose '+_rzEsc(_autoAc.replace("ZK-",""))+'" style="font-size:10px;font-weight:800;color:#f59e0b">✏ changed</span>':(auto?'<span title="Auto-allocated (cost-aware). Tap a pill in the dropdown to override." style="font-size:10px;font-weight:800;color:#22c55e">⚙ auto</span>':'');
+  return '<div style="padding:4px 10px;display:flex;align-items:center;gap:5px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800">Aircraft</span><span class="pill" style="background:'+col+';color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">'+_rzEsc(cur.replace('ZK-',''))+'</span>'+mark+'</div>';
 }
 window.rezdyBookingSetAc=function(order,ac){
   order=String(order);S._rzBookingAc=S._rzBookingAc||{};
@@ -2542,6 +2547,7 @@ function _rzSchedPilotFor(acId,dep){
   var prefix=acId+'|'+tc+'|',found=null;
   Object.keys(sp).forEach(function(k){if(!found&&k.indexOf(prefix)===0&&sp[k])found=sp[k];});
   if(!found)(S._schedBlocks||[]).forEach(function(b){if(!found&&b&&b.aircraft===acId&&String(b.start)===tc&&sp[String(b.id)])found=sp[String(b.id)];});
+  if(!found&&typeof _schedAutoPilotFor==='function')found=_schedAutoPilotFor(acId);   // auto allocation fallback
   return found;
 }
 function _rzRenderManifest(){
@@ -3811,8 +3817,10 @@ function _rzRenderSchedule(){
     if(_rzIsFlyback(g.product)&&sm===720){g.start='15:30';g.end='16:30';}
     var acLbl=g.aircraft==='__unalloc__'?'?':g.aircraft.replace(/^ZK-?/,'');
     var gbd={a:0,c:0,i:0};g.bookings.forEach(function(bk){var e=_rzEffBreakdown(bk.b);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
-    var pilot=(S._schedPilots||{})[g.key]||null;
-    g.bd=gbd;g.pilot=pilot;
+    var _manP=(S._schedPilots||{})[g.key]||null;
+    var _autoP=(typeof _schedAutoPilotFor==='function')?_schedAutoPilotFor(g.aircraft):null;
+    var pilot=_manP||_autoP||null;
+    g.bd=gbd;g.pilot=pilot;g.pilotAuto=(!_manP&&!!_autoP);g.pilotChanged=(!!_manP&&!!_autoP&&_manP!==_autoP);g.pilotAutoWas=_autoP;
     var fbStr=_rzFbSummary(g._fb);   // aggregated, e.g. " + 3A FLB"
     g.label=(pilot?pilot+'/':'')+acLbl+' '+_rzBdCompact(gbd)+' '+(g.disp||g.product)+fbStr;g.order=g.key;g._owing=g.owing;
     return g;
@@ -3847,7 +3855,7 @@ function _rzRenderSchedule(){
           '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">'+
             '<span class="pill" style="background:'+_gcol+'22;border:1px solid '+_gcol+';color:'+_gcol+';font-size:12px;font-weight:800;padding:2px 10px;border-radius:12px">'+_rzEsc(_gac||'Unallocated')+'</span>'+
             '<span style="font-size:14px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(_grp.start)+' · '+_rzEsc(_rzBdCompact(_grp.bd||{a:_grp.pax,c:0,i:0}))+' '+_rzEsc(_grp.disp||_grp.product)+'<span style="color:#f59e0b">'+_rzEsc(_rzFbSummary(_grp._fb))+'</span></span>'+
-            (_grp.pilot?'<span class="pill" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.5);color:#60a5fa;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">✈ '+_rzEsc(_grp.pilot)+' <span onclick="event.stopPropagation();window.rezdySchedClearPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
+            (_grp.pilot?'<span class="pill" title="'+(_grp.pilotChanged?('User change from auto allocation — auto chose '+_rzEsc(_grp.pilotAutoWas)):(_grp.pilotAuto?'Auto-allocated pilot':''))+'" style="background:rgba(96,165,250,.15);border:1px solid '+(_grp.pilotChanged?'#f59e0b':'rgba(96,165,250,.5)')+';color:'+(_grp.pilotChanged?'#f59e0b':'#60a5fa')+';font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">✈ '+_rzEsc(_grp.pilot)+(_grp.pilotChanged?' ✏':(_grp.pilotAuto?' ⚙':''))+' <span onclick="event.stopPropagation();window.rezdySchedClearPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
       // Click-to-set pilot picker — tap a pilot to assign (tap again to clear). Only type-rated

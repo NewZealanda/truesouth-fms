@@ -359,7 +359,7 @@ function renderResources(){
   (function(){
     var dp=_schedDayPlan(sel);
     h+='<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:6px">'+
-      '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:6px">Recommended day plan <span style="font-weight:400;text-transform:none;letter-spacing:0">· preview, cost-optimised</span></div>';
+      '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:6px">Today\'s plan <span style="font-weight:400;text-transform:none;letter-spacing:0">· auto-applied (aircraft + pilots)</span></div>';
     if(!dp.departures.length){
       var _ld=(S._schedBkLoading||{})[sel]&&!Array.isArray((S._schedBkCache||{})[sel]);
       h+='<div style="font-size:12px;color:var(--text3)">'+(_ld?'Loading bookings for this day…':'No departures for this day.')+'</div>';
@@ -401,8 +401,7 @@ function renderResources(){
   // override a call-in suggestion (the optimiser then counts it).
   (function(){
     var pilots=_schedDayPilots(sel);
-    var _apBtn=(sel===S.rezdyDate)?'<button onclick="window.schedAutoPilots()" title="Assign type-rated pilots to today\'s blocks from the plan — you can override any on the calendar." style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:9px;cursor:pointer;border:1px solid rgba(96,165,250,.5);background:rgba(96,165,250,.12);color:#60a5fa">🧑‍✈️ Auto-allocate pilots</button>':'';
-    h+='<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:6px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px"><span style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700">Available pilots · '+pilots.length+' (roster + call-ins)</span>'+_apBtn+'</div>';
+    h+='<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:6px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px"><span style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700">Available pilots · '+pilots.length+' (roster + call-ins)</span></div>';
     h+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
     if(!pilots.length)h+='<span style="font-size:12px;color:var(--text3)">none rostered — add a call-in, or check the Roster</span>';
     pilots.forEach(function(p){var col=p.extra?'#22c55e':'#60a5fa';
@@ -485,8 +484,34 @@ function _schedSig(date,bks){
   try{parts.push(JSON.stringify((_resAll()||{})[date]||{}));}catch(e){}
   try{Object.keys((S.maintenance&&S.maintenance.bookings)||{}).forEach(function(ac){((S.maintenance.bookings[ac])||[]).forEach(function(b){if(b&&b.date&&date>=b.date&&date<=(b.end||b.date))parts.push('M'+ac);});});}catch(e){}
   Object.keys((S&&S.aircraft)||{}).forEach(function(ac){parts.push(ac+':'+(_schedNum(_schedTail(ac).cap)||'')+':'+_schedRtCost(ac)+':'+_schedFerryCost(ac));});
+  try{parts.push('P:'+_schedDayPilots(date).map(function(p){return p.code;}).join(','));}catch(e){}   // roster + call-ins
+  try{var c=_schedCfg();parts.push('T:'+JSON.stringify(c.pilotOrder||{})+JSON.stringify(c.pilotTie||{}));}catch(e){}
+  try{parts.push('MP:'+JSON.stringify(S._schedPilots||{}));}catch(e){}   // manual pilot picks
   return parts.join('|');
 }
+// The pilot a user has MANUALLY picked for an aircraft on the calendar (any of its blocks), or null.
+function _schedManualPilotForAc(ac){var sp=S._schedPilots||{};var pre=ac+'|',found=null;Object.keys(sp).forEach(function(k){if(!found&&k.indexOf(pre)===0&&sp[k])found=sp[k];});return found;}
+// Sticky auto pilot→aircraft assignment for the day: keep last time's pilots where still valid, only
+// (re)assign the rest. Manual picks win and are never overridden; their pilot is reserved.
+function _schedComputeAutoPilots(date,aircraftUsed){
+  if(!_schedEnabled())return {};
+  var avail=_schedDayPilots(date);
+  var manualTaken={};aircraftUsed.forEach(function(ac){var m=_schedManualPilotForAc(ac);if(m)manualTaken[m]=true;});
+  var prev=(S._schedAutoPilotsDate===date)?(S._schedAutoPilots||{}):{};
+  var out={},used={};
+  aircraftUsed.forEach(function(ac){
+    if(_schedManualPilotForAc(ac))return;                        // manual handles this aircraft
+    var p=prev[ac];
+    if(p&&!used[p]&&!manualTaken[p]&&_schedPilotRates(p,ac)&&avail.some(function(x){return x.code===p;})){out[ac]=p;used[p]=true;}
+  });
+  var need=aircraftUsed.filter(function(ac){return !_schedManualPilotForAc(ac)&&!out[ac];});
+  var free=avail.filter(function(x){return !used[x.code]&&!manualTaken[x.code];});
+  var m=_schedAssignPilots(need,free);
+  Object.keys(m.byAc).forEach(function(ac){out[ac]=m.byAc[ac];});
+  return out;
+}
+// The auto-assigned pilot for an aircraft on the current day (null when off / different date).
+function _schedAutoPilotFor(ac){if(!_schedEnabled()||S._schedAutoPilotsDate!==S.rezdyDate)return null;return (S._schedAutoPilots||{})[ac]||null;}
 // Live order→aircraft map (memoised). The per-departure aircraft SETS come from the whole-day
 // optimiser (_schedDayPlan — idle-first, ferry-aware, lock-aware); bookings are then packed into
 // each departure's set. Locked departures are left as committed. Skips cancelled/no-show + flybacks.
@@ -524,6 +549,7 @@ function _schedEnsureAuto(){
       Object.keys(packed).forEach(function(o){map[o]=packed[o];});
     });
     S._schedAutoAc=map;S._schedAutoKey=sig;
+    S._schedAutoPilots=_schedComputeAutoPilots(date,dp.aircraftUsed);S._schedAutoPilotsDate=date;  // sticky auto pilots
   }finally{S._schedAutoBusy=false;}
 }
 // ── Auto-allocate pilots (one-shot, overridable) ───────────────────────────────
