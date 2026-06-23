@@ -205,6 +205,10 @@ window.lsSeatEditPopup=function(idx){
     var _plusIdx=_rawNm.indexOf(' + ');
     var newNm=_plusIdx>0?_rawNm.slice(0,_plusIdx).trim():_rawNm;
     var newInfant=_plusIdx>0?_rawNm.slice(_plusIdx+3).trim():'';
+    if(newInfant&&typeof _lsInfantFrontBlocked==='function'&&_lsInfantFrontBlocked(f,idx,true)){
+      if(typeof toast==='function')toast('Infants can’t sit in the front seat (beside the pilot). Put '+(newNm||'this passenger')+' in another row.','warn');
+      return;
+    }
     var newWt=document.getElementById('lsSpWt').value.trim();
     var newBg=document.getElementById('lsSpBag').value.trim();
     var newGrp=document.getElementById('lsSpGrp').value.trim();
@@ -567,11 +571,13 @@ function renderLoadsheet(){
             // Two buttons side by side. Save Draft is for UNSIGNED work (disabled once signed);
             // Submit only enables once a signature is drawn (and W&B/PIC are OK).
             const signed=!!f.sig;
-            const canSubmit=signed&&canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0&&!_belowRes;
+            const _infFront=!!(f.infantNames&&f.infantNames[1]&&!f.coPilot); // lap infant in the front seat (seat 1)
+            const infWarn=_infFront?`<div style="padding:8px 12px;background:rgba(239,68,68,.12);border:1px solid #ef4444;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fca5a5;font-weight:600">&#x26d4; An infant is in the front seat. Move the infant (and the adult holding them) to another row before submitting.</div>`:'';
+            const canSubmit=signed&&canSign&&allOk&&f.pic&&!fwdCog&&_overCap===0&&!_belowRes&&!_infFront;
             const saveDisabled=signed||_overCap>0;
             const saveBtn=`<button class="btn-full btn-secondary" style="flex:1;padding:13px;font-size:13px;font-weight:700${saveDisabled?';opacity:.45':''}" onclick="saveUnsigned()" ${saveDisabled?'disabled':''}>${_overCap>0?'&#x26d4; Over-capacity':'&#x1f4be; Save Draft'}</button>`;
-            const submitBtn=`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="flex:1;padding:13px;font-size:13px;font-weight:700${canSubmit?'':';opacity:.55'}" onclick="window.submitLsInPlace()" ${canSubmit?'':'disabled'}>${!signed?'&#x270d; Sign to submit':!f.pic?'&#x26a0; Select PIC':fwdCog?'&#x26a0; Fix CoG':!allOk?'&#x26a0; Fix W&amp;B':_overCap>0?'&#x26d4; Over-capacity':'&#x2713; Submit'}</button>`;
-            return fwdWarn+`<div style="display:flex;gap:8px">${saveBtn}${submitBtn}</div>`;
+            const submitBtn=`<button class="btn-full ${canSubmit?'btn-primary':'btn-secondary'}" style="flex:1;padding:13px;font-size:13px;font-weight:700${canSubmit?'':';opacity:.55'}" onclick="window.submitLsInPlace()" ${canSubmit?'':'disabled'}>${!signed?'&#x270d; Sign to submit':!f.pic?'&#x26a0; Select PIC':fwdCog?'&#x26a0; Fix CoG':!allOk?'&#x26a0; Fix W&amp;B':_overCap>0?'&#x26d4; Over-capacity':_infFront?'&#x26d4; Infant in front':'&#x2713; Submit'}</button>`;
+            return fwdWarn+infWarn+`<div style="display:flex;gap:8px">${saveBtn}${submitBtn}</div>`;
           })()}
         </div>
         <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">${a.doc}</div>

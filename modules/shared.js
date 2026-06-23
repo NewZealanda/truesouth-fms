@@ -472,7 +472,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.56';
+const APP_VER='v25.57';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -565,6 +565,45 @@ function rowPairsForAc(acId,coSeat1){
   idxs.forEach(i=>{if(!a.seats[i])return;const k=a.seats[i].arm.toFixed(4);if(!byArm[k])byArm[k]=[];byArm[k].push(i);});
   return Object.entries(byArm).sort((a,b)=>parseFloat(a[0])-parseFloat(b[0])).map(([,v])=>[...v].sort((a,b)=>a-b));
 }
+
+// ── Lap-infant seating rule ──────────────────────────────────────────────────
+// A lap infant (and the adult holding it) must NOT occupy the front passenger seat
+// (seat 1 — beside the pilot). Auto-seating prefers the LAST ROW for an infant host
+// when weight & balance still checks out.
+function _lsFrontSeatIdx(){return 1;}                       // front pax seat (beside the pilot)
+function _lsInfantFrontBlocked(form,toIdx,hasInfant){return parseInt(toIdx,10)===_lsFrontSeatIdx()&&!!hasInfant;}
+// Rearmost passenger seats (last physical row).
+function _lastRowSeats(acId,coSeat1){var rows=rowPairsForAc(acId,coSeat1);return rows.length?rows[rows.length-1].slice():[];}
+// Swap EVERY per-seat field between two seats (names/weights/bags/groups/infants/type/pay) so a
+// passenger never leaves part of itself behind (the recurring "move-bug" class).
+function _lsSwapSeats(form,i,j){['names','seats','bags','paxGroups','infantNames','paxType','paxPaymentReq'].forEach(function(m){var o=form[m];if(!o)return;var hi=Object.prototype.hasOwnProperty.call(o,i),hj=Object.prototype.hasOwnProperty.call(o,j),a=hi?o[i]:undefined,b=hj?o[j]:undefined;if(hj)o[i]=b;else delete o[i];if(hi)o[j]=a;else delete o[j];});}
+// W&B within all limits for a form?
+function _lsWBOk(form){var r=calcFormWB(form);return !!(r&&r.towOk&&r.lwOk&&r.cogOk);}
+// HARD: vacate the front seat if a lap-infant host landed there. Prefer a rear, W&B-OK target; if
+// none keeps W&B, still move it (the front-seat bar is mandatory) to the rearmost free seat.
+function _lsInfantFrontGuard(form,acId,coSeat1){
+  var front=_lsFrontSeatIdx();if(coSeat1)return;            // seat 1 is the co-pilot — no pax there
+  if(!form||!form.infantNames||!form.infantNames[front])return;
+  var a=_acSpec(acId);if(!a||!a.seats)return;var removed=a.removedSeats||[];
+  var cands=[];for(var s=2;s<a.seats.length;s++){if(removed.indexOf(s)>=0)continue;cands.push(s);}
+  cands.sort(function(x,y){return (a.seats[y].arm||0)-(a.seats[x].arm||0);});  // rear first
+  var k,j;
+  for(k=0;k<cands.length;k++){j=cands[k];if(form.infantNames[j])continue;_lsSwapSeats(form,front,j);if(_lsWBOk(form))return;_lsSwapSeats(form,front,j);}
+  for(k=0;k<cands.length;k++){j=cands[k];if(form.infantNames[j])continue;_lsSwapSeats(form,front,j);return;}  // mandatory move (W&B may need a manual fix)
+}
+// SOFT: move each lap-infant host to the last row when W&B still checks out.
+function _lsInfantRearPref(form,acId,coSeat1){
+  var a=_acSpec(acId);if(!a||!a.seats||!form||!form.infantNames)return;
+  var lastRow=_lastRowSeats(acId,coSeat1);if(!lastRow.length)return;
+  var inLast={};lastRow.forEach(function(s){inLast[s]=1;});
+  var hosts=Object.keys(form.infantNames).filter(function(i){return form.infantNames[i]!=null&&form.infantNames[i]!=='';}).map(function(i){return parseInt(i,10);});
+  hosts.forEach(function(i){
+    if(inLast[i])return;
+    for(var k=0;k<lastRow.length;k++){var j=lastRow[k];if(j===i||j===0)continue;if(coSeat1&&j===1)continue;if(form.infantNames[j])continue;
+      _lsSwapSeats(form,i,j);if(_lsWBOk(form))return;_lsSwapSeats(form,i,j);}
+  });
+}
+window._lsInfantFrontBlocked=_lsInfantFrontBlocked;window._lsInfantFrontGuard=_lsInfantFrontGuard;window._lsInfantRearPref=_lsInfantRearPref;
 
 // CoG status → pill class (shared by the loadsheet W&B readout). Relocated from the retired
 // legacy manifest module so loadsheet.js keeps a live home for it.
@@ -1135,15 +1174,18 @@ function assignSeatsHeavyFront(acId, paxList, opts){
     }
   });
 
-  // Sort even groups heaviest-pair-first (sum of group weights)
-  evenGroups.sort((a,b)=>
-    b.reduce((s,p)=>s+parseFloat(p.weight||0)+parseFloat(p.bag||0),0)-
-    a.reduce((s,p)=>s+parseFloat(p.weight||0)+parseFloat(p.bag||0),0));
+  // Sort even groups heaviest-pair-first (sum of group weights); a group carrying a lap infant
+  // sinks to the BACK of the queue so it fills the rearmost rows (infants prefer the last row).
+  evenGroups.sort((a,b)=>{
+    const ai=a.some(p=>p.infant)?1:0,bi=b.some(p=>p.infant)?1:0;if(ai!==bi)return ai-bi;
+    return b.reduce((s,p)=>s+parseFloat(p.weight||0)+parseFloat(p.bag||0),0)-
+           a.reduce((s,p)=>s+parseFloat(p.weight||0)+parseFloat(p.bag||0),0);});
 
-  // Sort seat1Queue heaviest first (heaviest odd-member or solo gets seat1)
-  seatOneQueue.sort((a,b)=>
-    (parseFloat(b.weight||0)+parseFloat(b.bag||0))-
-    (parseFloat(a.weight||0)+parseFloat(a.bag||0)));
+  // Sort seat1Queue heaviest first (heaviest odd-member or solo gets seat1); infant hosts go last
+  // so they never win the front seat and tend to land in rear rows.
+  seatOneQueue.sort((a,b)=>{
+    const ai=a.infant?1:0,bi=b.infant?1:0;if(ai!==bi)return ai-bi;
+    return (parseFloat(b.weight||0)+parseFloat(b.bag||0))-(parseFloat(a.weight||0)+parseFloat(a.bag||0));});
 
   // Get pair rows (exclude seat1 slot)
   const rows=rowPairsForAc(acId,_co); // [[1],[2,3],[4,5]...]
@@ -1169,8 +1211,8 @@ function assignSeatsHeavyFront(acId, paxList, opts){
   // ── Phase 2: Place seat1 queue ──
   // Best candidate for seat1: heaviest of seatOneQueue
   if(hasSeat1&&seat1Row&&seatOneQueue.length>0){
-    const s1pax=seatOneQueue.shift(); // heaviest
-    result[seat1Row[0]]=s1pax.id; placed.add(s1pax.id);
+    const s1i=seatOneQueue.findIndex(p=>!p.infant); // never seat a lap-infant host in the front seat
+    if(s1i>=0){const s1pax=seatOneQueue.splice(s1i,1)[0];result[seat1Row[0]]=s1pax.id;placed.add(s1pax.id);}
   }
 
   // ── Phase 3: Fill remaining pair rows with leftover seatOneQueue pax ──
@@ -1189,6 +1231,18 @@ function assignSeatsHeavyFront(acId, paxList, opts){
   const unplaced=byWeight.filter(p=>!placed.has(p.id));
   const emptySeats=seatsByArm.filter(si=>result[si]==null);
   unplaced.forEach((p,i)=>{ if(i<emptySeats.length){ result[emptySeats[i]]=p.id; }});
+
+  // ── Final guard: keep a lap-infant host out of the front passenger seat ──
+  // (only relevant when seat 1 actually holds a passenger, i.e. no co-pilot).
+  if(hasSeat1&&result[seat1Idx]!=null){
+    const _isInf=id=>{const p=paxList.find(x=>x.id===id);return !!(p&&p.infant);};
+    if(_isInf(result[seat1Idx])){
+      const others=Object.keys(result).map(Number).filter(s=>s!==seat1Idx&&!_isInf(result[s]));
+      others.sort((x,y)=>(a.seats[y]?.arm||0)-(a.seats[x]?.arm||0)); // rearmost non-infant first
+      if(others.length){const j=others[0],t=result[seat1Idx];result[seat1Idx]=result[j];result[j]=t;}
+      else{const empt=seatsByArm.filter(s=>s!==seat1Idx&&result[s]==null);empt.sort((x,y)=>(a.seats[y]?.arm||0)-(a.seats[x]?.arm||0));if(empt.length){result[empt[0]]=result[seat1Idx];delete result[seat1Idx];}}
+    }
+  }
 
   return result;
 }

@@ -970,6 +970,10 @@ window.tapFormSeat=(seatIdx,acId,ev)=>{
     const ua=_uaPool();
     if(ua&&ua[S._selUnalloc]){
       const p=ua[S._selUnalloc];
+      if(p&&p.infant&&typeof _lsInfantFrontBlocked==='function'&&_lsInfantFrontBlocked(f,seatIdx,true)){
+        if(typeof toast==='function')toast('Infants can’t sit in the front seat (beside the pilot). Choose another seat.','warn');
+        S._selUnalloc=null;S._selFormSeat=null;render();return;
+      }
       if(nm){ua.push({name:nm,weight:f.seats[seatIdx]||'',bag:f.bags[seatIdx]||'',infant:(f.infantNames||{})[seatIdx]||'',group:(f.paxGroups||{})[seatIdx]||'',paymentReq:!!((f.paxPaymentReq||{})[seatIdx]),type:((f.paxType||{})[seatIdx]==='C'?'child':'adult')});}
       f.names[seatIdx]=p.name;f.seats[seatIdx]=p.weight;f.bags[seatIdx]=p.bag;
       if(!f.infantNames)f.infantNames={};
@@ -985,6 +989,10 @@ window.tapFormSeat=(seatIdx,acId,ev)=>{
   if(S._selFormSeat!=null){
     const from=S._selFormSeat;
     if(from!==seatIdx){
+      if((f.infantNames||{})[from]&&typeof _lsInfantFrontBlocked==='function'&&_lsInfantFrontBlocked(f,seatIdx,true)){
+        if(typeof toast==='function')toast('Infants can’t sit in the front seat (beside the pilot). Choose another seat.','warn');
+        S._selFormSeat=null;render();return;
+      }
       const swp=(obj,a,b)=>{const t=obj[a];obj[a]=obj[b];obj[b]=t;};
       swp(f.names,from,seatIdx);swp(f.seats,from,seatIdx);
       swp(f.bags,from,seatIdx);
@@ -1078,6 +1086,10 @@ window.lsDropOnSeat=function(toIdx,e){
     const ua=_uaPool();
     if(!ua||ua[S._dragUnalloc]==null){S._dragUnalloc=null;return;}
     const p=ua[S._dragUnalloc];
+    if(p&&p.infant&&typeof _lsInfantFrontBlocked==='function'&&_lsInfantFrontBlocked(f,toIdx,true)){
+      if(typeof toast==='function')toast('Infants can’t sit in the front seat (beside the pilot). Choose another seat.','warn');
+      S._dragUnalloc=null;S._selUnalloc=null;render();return;
+    }
     const curNm=f.names[toIdx]||'';
     // Bump existing occupant back to unallocated
     if(curNm&&curNm!==f.coPilot){ua.push({name:curNm,weight:f.seats[toIdx]||'',bag:f.bags[toIdx]||'',infant:(f.infantNames||{})[toIdx]||'',group:(f.paxGroups||{})[toIdx]||'',paymentReq:!!((f.paxPaymentReq||{})[toIdx]),type:((f.paxType||{})[toIdx]==='C'?'child':'adult')});}
@@ -1091,6 +1103,10 @@ window.lsDropOnSeat=function(toIdx,e){
     ua.splice(S._dragUnalloc,1);
     S._dragUnalloc=null;S._selUnalloc=null;
   } else if(S._dragSeat!=null&&S._dragSeat!==toIdx){
+    if((f.infantNames||{})[S._dragSeat]&&typeof _lsInfantFrontBlocked==='function'&&_lsInfantFrontBlocked(f,toIdx,true)){
+      if(typeof toast==='function')toast('Infants can’t sit in the front seat (beside the pilot). Choose another seat.','warn');
+      S._dragSeat=null;render();return;
+    }
     // Swap two seats
     const swp=(obj,a,b)=>{const t=obj[a];obj[a]=obj[b];obj[b]=t;};
     swp(f.names,S._dragSeat,toIdx);swp(f.seats,S._dragSeat,toIdx);swp(f.bags,S._dragSeat,toIdx);

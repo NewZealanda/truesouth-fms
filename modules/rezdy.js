@@ -3242,10 +3242,12 @@ window.rezdyManReseat=function(dep,acId){
   var _declMode=(typeof _rzManDeclMode==='function')?_rzManDeclMode(dep,acId):false;
   // Use the EFFECTIVE weight (actual if captured, else declared) so the heavy-front solver can
   // balance CoG even before actual weights are entered.
+  var _allPax=S._rzManPax||[];
   var paxList=list.map(function(p){
     var w=parseFloat((typeof _rzPaxWeight==='function')?_rzPaxWeight(p,_declMode):p.weight);
     if(isNaN(w)){var d=parseFloat(p.declared);w=isNaN(d)?0:d;}
-    return {id:p.id,weight:w,bag:0,group:p.group||''};
+    var hasInf=!!(p.infantName)||_allPax.some(function(x){return x.infantOf===p.id;}); // host of a lap infant
+    return {id:p.id,weight:w,bag:0,group:p.group||'',infant:hasInf};
   });
   var _coPic=!!(S._rzManCoPic||{})[acId];
   // Heavier passengers/groups go FORWARD to keep the centre of gravity in balance (groups still sit
@@ -3562,6 +3564,9 @@ window.rezdyManCreateLoadsheet=function(acId,dep){
   });
   if(overflow&&typeof toast==='function')toast(overflow+' pax over seat capacity — adjust on the loadsheet','warn');
   var mcargo=_rzManCargoFor(dep,phys);form.cargo=form.cargo||{};Object.keys(mcargo).forEach(function(zi){form.cargo[zi]=String(mcargo[zi]);});
+  // Lap-infant rule: never in the front seat; prefer the last row when W&B still checks out.
+  try{if(typeof _lsInfantFrontGuard==='function')_lsInfantFrontGuard(form,phys,_hasCo);}catch(e){}
+  try{if(typeof _lsInfantRearPref==='function')_lsInfantRearPref(form,phys,_hasCo);}catch(e){}
   // Open as a new loadsheet tab + persist to the shared list (mirrors duplicateSaved).
   var newId='ls_rz_'+phys.replace('ZK-','')+'_'+Date.now();
   var savedAt=new Date().toISOString();
