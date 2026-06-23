@@ -913,7 +913,7 @@ function _rzFbSummary(fbArr){
 // crew profile, so this reads from S.crew (every aircraft-approved crew member), NOT just login
 // accounts. Each carries a `rostered` flag (rostered-on for the day) so the UI can sort/dim the
 // off-duty ones; everyone approved still appears so they can be assigned. Shared by seatmap + calendar.
-function _rzAvailablePilots(){
+function _rzAvailablePilots(dsOverride){
   // The roster is normally loaded by the Roster page. When the seatmap/pickups pilot list is the
   // first thing seen (e.g. after a refresh landing on Operations), lazy-load it the same way so
   // pilots aren't all shown "off" against an empty roster.
@@ -922,7 +922,7 @@ function _rzAvailablePilots(){
     try{var _loc=lsGet('ts_roster');if(_loc&&typeof _loc==='object')S.roster=_loc;}catch(e){}
     window.loadRosterFromCloud(); // async; re-renders when the cloud copy arrives
   }
-  var ds=S.rezdyDate,roster=S.roster||{},off={rdo:1,off:1,leave:1,ul:1,sick:1,training:1};
+  var ds=dsOverride||S.rezdyDate,roster=S.roster||{},off={rdo:1,off:1,leave:1,ul:1,sick:1,training:1};
   var out=[],seen={};
   (S.crew||[]).forEach(function(cr){
     if(!cr||!(cr.endorse||[]).some(function(e){return String(e).indexOf('ZK-')===0;}))return; // aircraft-approved only

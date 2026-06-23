@@ -1,4 +1,4 @@
-// === MODULE: scheduling.js === v25.34 ===
+// === MODULE: scheduling.js === v25.35 ===
 // ─────────────────────────────────────────────────────────────────────────────
 //  SCHEDULING — cost-aware aircraft allocation + resource board (Phase 1).
 //  Phase 1 (this build): the data foundation only —
@@ -102,6 +102,7 @@ function _schedMoney(n){if(n==null)return '—';return '$'+Number(n).toLocaleStr
 window.loadScheduling=function(){
   try{var c=(typeof lsGet==='function')&&lsGet('ts_scheduling');if(c&&typeof c==='object')S._schedCfg=c;}catch(e){}
   try{if(!S._bizPlan&&window.loadBusinessPlan){S._bizLoaded=true;window.loadBusinessPlan();}}catch(e){} // costs pull from the Business Plan running costs
+  try{if(typeof _schedStartAutoNotify==='function')_schedStartAutoNotify();}catch(e){} // 2pm day-before call-in check
   if(typeof SB==='undefined'){if(typeof safeRender==='function')safeRender();return;}
   try{fetch(SB+'/rest/v1/ts_settings?key=eq.'+SCHED_KEY+'&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
     try{var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string')v=JSON.parse(v);
@@ -356,9 +357,9 @@ function renderResources(){
   (function(){
     var pilots=_schedDayPilots(sel);
     var _apBtn=(sel===S.rezdyDate)?'<button onclick="window.schedAutoPilots()" title="Assign type-rated pilots to today\'s blocks from the plan — you can override any on the calendar." style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:9px;cursor:pointer;border:1px solid rgba(96,165,250,.5);background:rgba(96,165,250,.12);color:#60a5fa">🧑‍✈️ Auto-allocate pilots</button>':'';
-    h+='<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:6px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px"><span style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700">Available pilots · '+pilots.length+(sel===today?' (incl. today\'s roster)':'')+'</span>'+_apBtn+'</div>';
+    h+='<div style="border-top:1px solid var(--border2);padding-top:10px;margin-top:6px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px"><span style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700">Available pilots · '+pilots.length+' (roster + call-ins)</span>'+_apBtn+'</div>';
     h+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
-    if(!pilots.length)h+='<span style="font-size:12px;color:var(--text3)">none yet'+(sel!==today?' — add call-ins below (roster-by-date coming)':' (open the Roster once to load it)')+'</span>';
+    if(!pilots.length)h+='<span style="font-size:12px;color:var(--text3)">none rostered — add a call-in, or check the Roster</span>';
     pilots.forEach(function(p){var col=p.extra?'#22c55e':'#60a5fa';
       var rm=p.extra?(' <span onclick="event.stopPropagation();window.schedRemovePilot(\''+sel+'\',\''+_schedEsc(p.code)+'\')" title="Remove" style="cursor:pointer;opacity:.7;margin-left:1px">✕</span>'):'';
       h+='<span title="'+_schedEsc(p.name)+(p.extra?' · call-in':' · rostered')+'" style="font-size:12px;font-weight:800;color:'+col+';padding:4px 10px;border-radius:14px;background:'+(p.extra?'rgba(34,197,94,.14)':'rgba(96,165,250,.14)')+';border:1px solid '+(p.extra?'rgba(34,197,94,.5)':'rgba(96,165,250,.5)')+'">'+(p.extra?'➕ ':'✈ ')+_schedEsc(p.code)+rm+'</span>';});
@@ -631,11 +632,12 @@ function _schedDayExtras(date){var a=_schedExtraMap()[date];return Array.isArray
 window.schedAddPilot=function(date,code){if(!code)return;var m=_schedExtraMap();var a=m[date]||(m[date]=[]);if(a.indexOf(code)<0)a.push(code);_schedSave();render();};
 window.schedRemovePilot=function(date,code){var m=_schedExtraMap();var a=m[date];if(!a)return;var i=a.indexOf(code);if(i>=0)a.splice(i,1);if(!a.length)delete m[date];_schedSave();render();};
 function _schedAllPilots(){try{return (typeof _rzAvailablePilots==='function')?(_rzAvailablePilots()||[]):[];}catch(e){return [];}}
-// Available pilots for a date = rostered (today, from the roster) + manually-added extras/call-ins.
+// Available pilots for ANY date = rostered that day (roster is date-addressable) + manual extras/call-ins.
 function _schedDayPilots(date){
   var out=[],seen={};
-  if(date===_resToday())_schedAllPilots().forEach(function(p){if(p.rostered&&!seen[p.code]){seen[p.code]=1;out.push({code:p.code,name:p.name,extra:false});}});
-  _schedDayExtras(date).forEach(function(code){if(!seen[code]){seen[code]=1;var pp=_schedAllPilots().find(function(x){return x.code===code;});out.push({code:code,name:(pp&&pp.name)||code,extra:true});}});
+  var rost=[];try{rost=(typeof _rzAvailablePilots==='function')?(_rzAvailablePilots(date)||[]):[];}catch(e){}
+  rost.forEach(function(p){if(p.rostered&&!seen[p.code]){seen[p.code]=1;out.push({code:p.code,name:p.name,extra:false});}});
+  _schedDayExtras(date).forEach(function(code){if(!seen[code]){seen[code]=1;var pp=rost.find(function(x){return x.code===code;});out.push({code:code,name:(pp&&pp.name)||code,extra:true});}});
   return out;
 }
 function _schedPilotRates(code,ac){var en=(typeof _rzPilotEndorse==='function')?_rzPilotEndorse(code):null;return !en||!en.length||en.indexOf(ac)>=0;}
@@ -667,9 +669,10 @@ function _schedCallInAnalysis(date){
   return res;
 }
 // Notify management (admin / superadmin / cx_manager) that a call-in may be worth it for a date.
-window.schedNotifyCallIn=async function(date){
+// `pre` = a precomputed analysis (used by the 2pm auto-check, which evaluates a non-current date).
+window.schedNotifyCallIn=async function(date,pre){
   try{
-    var a=_schedCallInAnalysis(date);if(!a.callIn){if(typeof toast==='function')toast('No call-in needed for '+date,'info');return;}
+    var a=pre||_schedCallInAnalysis(date);if(!a.callIn){if(typeof toast==='function')toast('No call-in needed for '+date,'info');return;}
     var msg='🧑‍✈️ '+date+': roster short by '+a.shortfall+' pilot'+(a.shortfall===1?'':'s')+'. Call-in ≈ '+_schedMoney(a.callInCost)+
       (a.saving>0?(' — saves ~'+_schedMoney(a.saving)+' vs running short'):(a.cappedPaxShort>0?(' — without it you cannot carry '+a.cappedPaxShort+' pax'):''))+'. Open Resources to add a pilot or decline.';
     var me=(S.user&&S.user.id)||null,seen={},recips=[];
@@ -681,3 +684,31 @@ window.schedNotifyCallIn=async function(date){
     if(typeof toast==='function')toast('Management notified ('+recips.length+')','ok');
   }catch(e){if(typeof toast==='function')toast('Notify failed','err');}
 };
+
+// ── Automatic day-before call-in check (fires from 2pm) ────────────────────────
+// From 2pm each day, the first device with the app open checks TOMORROW's plan against the rostered
+// pilots; if a call-in would be needed it notifies management — once per target day (cfg.lastCallInNotify).
+// (No server cron in this app, so it runs in-app; an ops desk is normally open at 2pm.)
+function _schedPad2(n){return (n<10?'0':'')+n;}
+async function _schedAutoNotifyTick(){
+  try{
+    if(!_schedEnabled()||!S.user)return;
+    var now=new Date();if(now.getHours()<14)return;                 // 2pm onward
+    if(!S._rosterLoaded){try{_rzAvailablePilots();}catch(e){}return;} // need the roster first; try next tick
+    var d=new Date(now.getTime()+86400000);                          // tomorrow (local)
+    var tomorrow=d.getFullYear()+'-'+_schedPad2(d.getMonth()+1)+'-'+_schedPad2(d.getDate());
+    var cfg=_schedCfg();
+    if(cfg.lastCallInNotify===tomorrow)return;                       // already handled tomorrow
+    if(typeof sbF!=='function')return;
+    var rows=await sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(tomorrow));
+    var bks=(typeof _rzMapBookings==='function')?(_rzMapBookings(rows)||[]):[];
+    // Evaluate tomorrow without disturbing the current view: swap globals, compute, restore.
+    var sd=S.rezdyDate,sb=S._rezdyBookings,sk=S._schedAutoKey,sm=S._schedAutoAc,sbsy=S._schedAutoBusy;
+    var a=null;
+    try{S.rezdyDate=tomorrow;S._rezdyBookings=bks;S._schedAutoBusy=false;S._schedAutoKey='';a=_schedCallInAnalysis(tomorrow);}
+    finally{S.rezdyDate=sd;S._rezdyBookings=sb;S._schedAutoKey=sk;S._schedAutoAc=sm;S._schedAutoBusy=sbsy;}
+    cfg.lastCallInNotify=tomorrow;_schedSave();                      // mark handled (so it won't re-run all afternoon)
+    if(a&&a.callIn&&a.plan&&a.plan.departures.length)await window.schedNotifyCallIn(tomorrow,a);
+  }catch(e){}
+}
+function _schedStartAutoNotify(){if(S._schedNotifyTimer)return;S._schedNotifyTimer=setInterval(_schedAutoNotifyTick,5*60*1000);setTimeout(_schedAutoNotifyTick,8000);}
