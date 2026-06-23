@@ -3951,9 +3951,9 @@ function _rzRenderSchedule(){
   }
   axis+='</div>';
 
-  // one column per aircraft. Columns widen to fit cascaded (overlapping) blocks so each block keeps
-  // a readable width instead of shrinking. Per-column width is stored so the header lines up.
-  var colWByAc={};var OFF=15;var BLKW=_RZ_COL_W-8;
+  // one column per aircraft (uniform width). Overlapping blocks cascade right and get a little
+  // narrower (click one to bring it forward / see the full title).
+  var OFF=15;
   let colsH='';
   acIds.forEach(function(ac){
     const acCol=(ac==='__misc__')?'#94a3b8':_rzAcCol(ac);
@@ -3975,8 +3975,6 @@ function _rzRenderSchedule(){
       b._cols=Math.max(1,ov.length);
       b._idx=ov.filter(function(o){const os=_rzMinsFromHHMM(o.start)||0;return os<s||(os===s&&_bkey(o)<_bkey(b));}).length;
     });
-    var _maxCols=1;_acBlocks.forEach(function(b){_maxCols=Math.max(_maxCols,b._cols||1);});
-    var _colW=_RZ_COL_W+(_maxCols-1)*OFF;colWByAc[ac]=_colW;
     _acBlocks.forEach(function(b){
       const isBk=!!b._fromBooking;
       const col=b.color||(ac==='__unalloc__'?'#94a3b8':acCol);
@@ -3986,7 +3984,7 @@ function _rzRenderSchedule(){
       // wide/readable and the ones beneath still peek out on the left; click brings one forward.
       const n=Math.max(1,b._cols||1),idx=b._idx||0;
       const sel=isBk&&String(S._schedGroupKey||'')===String(b.order);
-      const _pos='left:'+(2+idx*OFF)+'px;width:'+BLKW+'px;z-index:'+(sel?50:idx+1)+';'+(idx>0?'box-shadow:-3px 1px 7px rgba(0,0,0,.3);':'');
+      const _pos='left:'+(2+idx*OFF)+'px;width:calc(100% - '+((n-1)*OFF+4)+'px);z-index:'+(sel?50:idx+1)+';'+(n>1?'box-shadow:-3px 1px 7px rgba(0,0,0,.3);':'');
       const _click=isBk?('window.rezdySchedShowGroup(\''+_rzEsc(b.order).replace(/'/g,"\\'")+'\')'):('window.schedEditBlock(\''+_rzEsc(b.id).replace(/'/g,"\\'")+'\')');
       const _dropKey=(isBk?b.order:b.id);
       // Any booking block can be dragged to another aircraft column (reassigns its bookings) or
@@ -3999,7 +3997,7 @@ function _rzRenderSchedule(){
         '</div>';
     });
     var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
-    colsH+='<div style="width:'+colWByAc[ac]+'px;flex-shrink:0;border-right:1px solid var(--border)">'+
+    colsH+='<div style="width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border)">'+
       '<div ondragover="event.preventDefault()" ondrop="window.rezdySchedDropBlockToAc(\''+_acJs+'\',event)" style="position:relative;height:'+gridH+'px">'+rows+blocksH+'</div></div>';
   });
 
@@ -4010,7 +4008,7 @@ function _rzRenderSchedule(){
     const acCol=(ac==='__unalloc__'||ac==='__misc__')?'#94a3b8':_rzAcCol(ac);
     const lbl=ac==='__unalloc__'?'Unallocated':(ac==='__misc__'?'Misc  ＋':ac);
     var _mc=(ac==='__misc__')?' onclick="window.schedNewMisc()" title="Add a meeting / note" style="cursor:pointer;':' style="';
-    headH+='<div'+_mc+'width:'+colWByAc[ac]+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:2px solid '+acCol+';padding:6px 8px;text-align:center;font-weight:800;font-size:12px;color:'+acCol+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(lbl)+'</div>';
+    headH+='<div'+_mc+'width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:2px solid '+acCol+';padding:6px 8px;text-align:center;font-weight:800;font-size:12px;color:'+acCol+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(lbl)+'</div>';
   });
   headH+='</div>';
 

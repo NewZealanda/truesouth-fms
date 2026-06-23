@@ -158,6 +158,43 @@ function _firstAllowedSection(){
 function _defaultTabFor(sec){
   return sec==='maintenance'?'maintenance':sec==='operations'?'bookings':sec==='settings'?'admin':sec;
 }
+// ── "Open the app to" preference (per device, in localStorage 'ts_home') ────────
+var HOME_OPTIONS=[
+  {id:'bookings',label:'Bookings',section:'operations',tab:'bookings'},
+  {id:'rseatmap',label:'Seatmap',section:'operations',tab:'rseatmap'},
+  {id:'rloadsheets',label:'Loadsheets',section:'operations',tab:'rloadsheets'},
+  {id:'ground',label:'Transport (Ground)',section:'operations',tab:'ground'},
+  {id:'calendar',label:'Calendar',section:'calendar'},
+  {id:'maintenance',label:'Maintenance',section:'maintenance'},
+  {id:'roster',label:'Roster',section:'roster'},
+  {id:'leave',label:'Leave',section:'leave'},
+  {id:'flightrecord',label:'Flight Record',section:'flightrecord'},
+  {id:'logbook',label:'Logbook',section:'logbook'},
+  {id:'flightduty',label:'Flight & Duty',section:'flightduty'},
+  {id:'resources',label:'Resource board',section:'resources'},
+  {id:'businessplan',label:'Business Plan',section:'businessplan'},
+  {id:'settings',label:'Settings',section:'settings',tab:'admin'},
+  {id:'training',label:'Training',section:'training'}
+];
+function _homeOptAll(){return HOME_OPTIONS.filter(function(o){return (typeof _sectionAllowed!=='function')||_sectionAllowed(o.section);});}
+function _homeGet(){try{return (typeof lsGet==='function'&&lsGet('ts_home'))||'';}catch(e){return '';}}
+function _homeOpt(id){for(var i=0;i<HOME_OPTIONS.length;i++)if(HOME_OPTIONS[i].id===id)return HOME_OPTIONS[i];return null;}
+function _applyHomePref(){var o=_homeOpt(_homeGet());if(!o)return;if((typeof _sectionAllowed==='function')&&!_sectionAllowed(o.section))return;S.section=o.section;S.tab=o.tab||_defaultTabFor(o.section);}
+window.homeSetSearch=function(v){S._homeSearch=v;render();};
+window.homeSet=function(id){try{if(id)lsSet('ts_home',id);else localStorage.removeItem('ts_home');}catch(e){}if(typeof toast==='function')toast(id?('Opens to '+((_homeOpt(id)||{}).label||id)):'Opens to your default page','ok');render();};
+function _renderHomePicker(){
+  var cur=_homeGet();var q=String(S._homeSearch||'').toLowerCase();
+  var opts=_homeOptAll().filter(function(o){return !q||o.label.toLowerCase().indexOf(q)>=0;});
+  var h='<div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:2px 0 8px">Open the app to</div>';
+  h+='<input id="home_search" type="text" oninput="window.homeSetSearch(this.value)" placeholder="Search pages…" value="'+String(S._homeSearch||'').replace(/"/g,'&quot;')+'" style="width:100%;box-sizing:border-box;padding:8px 11px;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none;margin-bottom:6px">';
+  h+='<div style="max-height:170px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:16px">';
+  var defOn=!cur;
+  h+='<button onclick="window.homeSet(\'\')" style="text-align:left;padding:8px 11px;border-radius:8px;border:1px solid '+(defOn?'var(--accent)':'var(--border2)')+';background:'+(defOn?'rgba(124,58,237,.12)':'transparent')+';color:var(--text2);font-size:13px;font-weight:600;cursor:pointer">'+(defOn?'✓ ':'')+'Default (first available page)</button>';
+  opts.forEach(function(o){var on=o.id===cur;h+='<button onclick="window.homeSet(\''+o.id+'\')" style="text-align:left;padding:8px 11px;border-radius:8px;border:1px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.12)':'transparent')+';color:var(--text2);font-size:13px;font-weight:'+(on?'800':'600')+';cursor:pointer">'+(on?'✓ ':'')+o.label+'</button>';});
+  if(!opts.length)h+='<div style="font-size:12px;color:var(--text3);padding:6px">No pages match.</div>';
+  h+='</div>';
+  return h;
+}
 function render(){
   const r=document.getElementById('root');
   if(!r)return;
@@ -238,6 +275,8 @@ function render(){
   // role — no hardcoded role gates). If the user is on a section they're not permitted to
   // (default boot, a stale last-view, or a revoked permission), bounce them to their first
   // allowed section. Superadmin passes everything via DEFAULT_ROLE_PERMS; admin follows the grid.
+  // Per-user "open the app to" preference — applied once on the first authed render.
+  if(S.user&&!S._homeApplied){S._homeApplied=true;if(typeof _applyHomePref==='function')_applyHomePref();}
   if(S.user&&!_sectionAllowed(S.section||'operations')){var _fs=_firstAllowedSection();S.section=_fs;S.tab=_defaultTabFor(_fs);}
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
@@ -397,7 +436,8 @@ function renderAccountModal(){
       ${changePwMsg?`<div style="padding:8px 12px;border-radius:7px;margin-bottom:12px;font-size:13px;font-weight:600;background:${changePwMsg.ok?'var(--ok-bg)':'var(--err-bg)'};color:${changePwMsg.ok?'var(--ok-text)':'var(--err-text)'};border:1px solid ${changePwMsg.ok?'var(--ok-border)':'var(--err-border)'}">${changePwMsg.text}</div>`:''}
       <button onclick="window.toggleTheme()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">${(typeof _themeIsLight==='function'&&_themeIsLight())?'\u{1F319} Switch to dark mode':'☀️ Switch to light mode'}</button>
       <button onclick="window.goToMyProfile()" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">&#x270F; Edit My Profile</button>
-      <button onclick="logout();S.showAccount=false;" style="width:100%;padding:10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#f87171;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px">Sign Out</button>
+      <button onclick="S._homeApplied=false;logout();S.showAccount=false;" style="width:100%;padding:10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#f87171;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px">Sign Out</button>
+      ${_renderHomePicker()}
       <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Change Password</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         <input id="acc_cur" type="password" placeholder="Current password" autocomplete="current-password"
