@@ -2128,6 +2128,21 @@ function _rzChimeBeep(){
     });
   }catch(e){}
 }
+// A single, more prominent chime when a NEW notification arrives — a 3-note rising triangle tone,
+// louder than the (two-note sine) pickup-ack chime so it stands out. Shares the same audio context.
+function _notifChime(){
+  try{_rzEnsureAudio();}catch(e){}
+  if(!_rzAudioCtx||_rzAudioCtx.state!=='running')return;
+  try{
+    var t=_rzAudioCtx.currentTime;
+    [659.25,880,1318.5].forEach(function(freq,i){ // E5 → A5 → E6
+      var o=_rzAudioCtx.createOscillator(),g=_rzAudioCtx.createGain(),s=t+i*0.14;
+      o.type='triangle';o.frequency.value=freq;o.connect(g);g.connect(_rzAudioCtx.destination);
+      g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.55,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.45);
+      o.start(s);o.stop(s+0.47);
+    });
+  }catch(e){}
+}
 function _rzDriverHasUnacked(){
   var me=((S.user&&S.user.name)||'').trim();if(!me)return false;
   var has=false,deps=_rzAllDeps();

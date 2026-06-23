@@ -803,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.49';
+const APP_VER='v25.50';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -12054,7 +12054,8 @@ window.loadNotifications=async function(){
         // session just seeds the "seen" set (so we don't replay history as a burst of pop-ups).
         try{
           if(!S._notifSeenIds){S._notifSeenIds={};(data||[]).forEach(function(n){S._notifSeenIds[String(n.id)]=1;});}
-          else{(data||[]).forEach(function(n){var k=String(n.id);if(!S._notifSeenIds[k]){S._notifSeenIds[k]=1;if(!n.read&&typeof _osNotify==='function')_osNotify(n);}});}
+          else{var _newUnread=false;(data||[]).forEach(function(n){var k=String(n.id);if(!S._notifSeenIds[k]){S._notifSeenIds[k]=1;if(!n.read){_newUnread=true;if(typeof _osNotify==='function')_osNotify(n);}}});
+            if(_newUnread&&typeof _notifChime==='function')_notifChime();}   // one prominent chime per arrival
         }catch(_){}
         S.__notifStr=_s;S._notifications=data;safeRender();
       } // only re-render when something changed
@@ -14226,6 +14227,21 @@ function _rzChimeBeep(){
       o.type='sine';o.frequency.value=freq;o.connect(g);g.connect(_rzAudioCtx.destination);
       g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.3,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.35);
       o.start(s);o.stop(s+0.37);
+    });
+  }catch(e){}
+}
+// A single, more prominent chime when a NEW notification arrives — a 3-note rising triangle tone,
+// louder than the (two-note sine) pickup-ack chime so it stands out. Shares the same audio context.
+function _notifChime(){
+  try{_rzEnsureAudio();}catch(e){}
+  if(!_rzAudioCtx||_rzAudioCtx.state!=='running')return;
+  try{
+    var t=_rzAudioCtx.currentTime;
+    [659.25,880,1318.5].forEach(function(freq,i){ // E5 → A5 → E6
+      var o=_rzAudioCtx.createOscillator(),g=_rzAudioCtx.createGain(),s=t+i*0.14;
+      o.type='triangle';o.frequency.value=freq;o.connect(g);g.connect(_rzAudioCtx.destination);
+      g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.55,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.45);
+      o.start(s);o.stop(s+0.47);
     });
   }catch(e){}
 }

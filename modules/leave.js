@@ -831,7 +831,8 @@ window.loadNotifications=async function(){
         // session just seeds the "seen" set (so we don't replay history as a burst of pop-ups).
         try{
           if(!S._notifSeenIds){S._notifSeenIds={};(data||[]).forEach(function(n){S._notifSeenIds[String(n.id)]=1;});}
-          else{(data||[]).forEach(function(n){var k=String(n.id);if(!S._notifSeenIds[k]){S._notifSeenIds[k]=1;if(!n.read&&typeof _osNotify==='function')_osNotify(n);}});}
+          else{var _newUnread=false;(data||[]).forEach(function(n){var k=String(n.id);if(!S._notifSeenIds[k]){S._notifSeenIds[k]=1;if(!n.read){_newUnread=true;if(typeof _osNotify==='function')_osNotify(n);}}});
+            if(_newUnread&&typeof _notifChime==='function')_notifChime();}   // one prominent chime per arrival
         }catch(_){}
         S.__notifStr=_s;S._notifications=data;safeRender();
       } // only re-render when something changed
