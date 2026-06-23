@@ -62,11 +62,32 @@ function itemLocalDate(it: any): string {
   } catch (_) { return raw.slice(0, 10).replace(/\//g, "-") }
 }
 
+// Canonical NZ-local datetime ("YYYY-MM-DD HH:mm:ss") for an order item. Rezdy's startTimeLocal is
+// unreliable on some (older / agent / Viator) bookings — it can carry a UTC time, which mis-dates
+// the booking by a day. The UTC `startTime` instant is the dependable field, so we render THAT in
+// the Pacific/Auckland zone (DST-proof) and use it as the local time everywhere. Falls back to the
+// raw startTimeLocal only when there's no usable startTime.
+function nzLocal(it: any): string {
+  const utc = String((it && it.startTime) || "")
+  if (utc) {
+    const d = new Date(/[zZ]|[+\-]\d{2}:?\d{2}$/.test(utc) ? utc : utc + "Z") // assume UTC when no zone
+    if (!isNaN(d.getTime())) {
+      try {
+        const p = new Intl.DateTimeFormat("en-CA", { timeZone: "Pacific/Auckland", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(d)
+        const g = (t: string) => (p.find((x: any) => x.type === t) || { value: "" }).value
+        if (g("year")) return `${g("year")}-${g("month")}-${g("day")} ${g("hour")}:${g("minute")}:${g("second")}`
+      } catch (_) { /* fall through */ }
+    }
+  }
+  return String((it && it.startTimeLocal) || "")
+}
+
 function normalize(b: any) {
   const c = b.customer || {}
   const items = (b.items || []).map((it: any) => ({
     product: it.productName || it.productCode || "",
-    startTimeLocal: it.startTimeLocal || it.startTime || "",
+    startTimeLocal: nzLocal(it),
+    startTime: it.startTime || "",
     quantity: it.totalQuantity || (it.quantities || []).reduce((s: number, q: any) => s + (q.value || 0), 0),
     // Keep the per-price-option breakdown (Adult / Child / Infant …) for the A/C/i counts.
     quantities: (it.quantities || []).map((q: any) => ({ label: q.optionLabel || q.label || q.priceOptionLabel || "", value: q.value || 0 })),
