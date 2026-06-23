@@ -1497,6 +1497,11 @@ function _rzRenderBookings(){
     grp.sort(function(a,b){
       if(_bkSort==='az')return String(a.customerName||'').localeCompare(String(b.customerName||''),undefined,{sensitivity:'base'});
       if(_bkSort==='booked')return (parseInt(String(a.orderNumber||'').replace(/\D/g,''),10)||0)-(parseInt(String(b.orderNumber||'').replace(/\D/g,''),10)||0);
+      if(_bkSort==='ac'){
+        var aa=_rzBookingAc(a,a.orderNumber)||'',bb=_rzBookingAc(b,b.orderNumber)||'';     // allocated aircraft
+        if(aa!==bb){if(!aa)return 1;if(!bb)return -1;return acDisp(aa).localeCompare(acDisp(bb));} // unallocated last
+        return String(a.customerName||'').localeCompare(String(b.customerName||''),undefined,{sensitivity:'base'}); // then by name within an aircraft
+      }
       var ca=(S._rzBookingCheckedIn||{})[String(a.orderNumber||'')]?1:0,cb=(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')]?1:0;return ca-cb; // default: checked-in to the bottom
     });
     var gbd={a:0,c:0,i:0};grp.forEach(function(x){var e=_rzEffBreakdown(x);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
@@ -1504,7 +1509,7 @@ function _rzRenderBookings(){
     body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 <span onclick="window.rezdyRenameDep(\''+_rzEsc(depFilter).replace(/\'/g,"\\'")+'\')" title="Click to rename this heading" style="cursor:pointer;border-bottom:1px dashed var(--border2)">'+_rzEsc(_rzDepDisplay(depFilter))+'</span>'+((_rzDepShowProduct(depFilter)&&prod)?' '+_rzEsc(prod):'')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+'</span></div>';
     // Sort control: Default (checked-in last) · A–Z by name · Booked (booking order).
     body+='<div style="display:flex;gap:6px;align-items:center;margin:0 0 10px;flex-wrap:wrap"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Sort</span>'+
-      [['','Default','Default order — checked-in passengers shown last'],['az','A–Z','By customer name, A → Z'],['booked','Booked','Booking order: first booked (oldest order) first → most recently booked last']].map(function(o){var act=_bkSort===o[0];return '<button title="'+_rzEsc(o[2])+'" onclick="S._bkSort=\''+o[0]+'\';render()" style="font-size:11px;font-weight:700;padding:4px 11px;border-radius:14px;cursor:pointer;border:1px solid '+(act?'var(--accent)':'var(--border2)')+';background:'+(act?'var(--accent)':'transparent')+';color:'+(act?'#fff':'var(--text2)')+'">'+o[1]+'</button>';}).join('')+'</div>';
+      [['','Default','Default order — checked-in passengers shown last'],['az','A–Z','By customer name, A → Z'],['booked','Booked','Booking order: first booked (oldest order) first → most recently booked last'],['ac','Aircraft','Group by allocated aircraft (unallocated last)']].map(function(o){var act=_bkSort===o[0];return '<button title="'+_rzEsc(o[2])+'" onclick="S._bkSort=\''+o[0]+'\';render()" style="font-size:11px;font-weight:700;padding:4px 11px;border-radius:14px;cursor:pointer;border:1px solid '+(act?'var(--accent)':'var(--border2)')+';background:'+(act?'var(--accent)':'transparent')+';color:'+(act?'#fff':'var(--text2)')+'">'+o[1]+'</button>';}).join('')+'</div>';
     grp.forEach(function(b){body+=_rzBookingCard(b);});
     // Cancelled bookings for THIS departure (collapsed).
     var depCancelled=cancelledRows.filter(function(b){return _rzBookingDep(b)===depFilter;});

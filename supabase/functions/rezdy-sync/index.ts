@@ -44,6 +44,24 @@ function participant(p: any) {
   return { name, weight: wKey ? f[wKey] : "", age: ageKey ? f[ageKey] : "", fields: f }
 }
 
+// Robust NZ-local tour date for an order item. Prefer Rezdy's startTimeLocal (already local,
+// e.g. "2026-12-26 09:00:00" / "2026-12-26T09:00:00"); but if that's missing or is actually a UTC
+// stamp (ends with Z / carries a +HH:MM offset), convert via the Pacific/Auckland zone so a
+// morning NZ tour isn't mis-dated onto the previous UTC day. Returns "YYYY-MM-DD" or "".
+function itemLocalDate(it: any): string {
+  const sl = String((it && it.startTimeLocal) || "")
+  if (/^\d{4}-\d{2}-\d{2}/.test(sl) && !/[zZ]$|[+\-]\d{2}:?\d{2}$/.test(sl)) {
+    return sl.slice(0, 10).replace(/\//g, "-")
+  }
+  const raw = sl || String((it && it.startTime) || "")
+  if (!raw) return ""
+  const d = new Date(raw)
+  if (isNaN(d.getTime())) return raw.slice(0, 10).replace(/\//g, "-")
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Pacific/Auckland", year: "numeric", month: "2-digit", day: "2-digit" }).format(d)
+  } catch (_) { return raw.slice(0, 10).replace(/\//g, "-") }
+}
+
 function normalize(b: any) {
   const c = b.customer || {}
   const items = (b.items || []).map((it: any) => ({
@@ -130,21 +148,34 @@ serve(async (req) => {
 
   const normAll = all.map(normalize).filter((n) => n.id)
 
-  // Keep only bookings whose LOCAL tour start date matches the requested NZ day.
-  // startTimeLocal looks like "2026-06-21 09:30:00" or "2026-06-21T09:30:00".
-  const localDate = (s: string) => String(s || "").slice(0, 10).replace(/\//g, "-")
+  // A booking belongs to this date if ANY of its order items starts on that NZ-local day.
   const norm = normAll.filter((n) =>
-    (n.items || []).some((it: any) => localDate(it.startTimeLocal) === date)
+    (n.items || []).some((it: any) => itemLocalDate(it) === date)
   )
 
   if (body.store !== false) {
-    // This sync is authoritative for the date: clear the date's existing rows first so any
-    // previously mis-dated bookings (the off-by-one) are removed, then write the fresh set
-    // in a SINGLE batched upsert (one round-trip) instead of one request per booking.
-    try { await admin.from("ts_rezdy_bookings").delete().eq("tour_date", date) } catch (_) { /* keep going */ }
-    if (norm.length) {
-      const now = new Date().toISOString()
-      const rows = norm.map((n) => ({ id: n.id, order_number: n.orderNumber, tour_date: date, data: n, updated_at: now }))
+    // Store ONE row per (order, local item-date) so a MULTI-DATE order (items spread over several
+    // days) appears under EVERY date it touches. Previously rows were keyed by order number alone
+    // (one tour_date), so a multi-date order could only live under a single date and went missing
+    // from the others — e.g. bookings absent on Boxing Day.
+    //
+    // Refresh is ORDER-scoped, not date-scoped: delete every existing row for the orders we just
+    // fetched (across all dates) and rewrite them. We deliberately do NOT blanket-delete by
+    // tour_date — that would wipe a multi-date order's rows for the OTHER dates this per-date sync
+    // didn't return (the bug). A booking hard-deleted in Rezdy is re-cleaned whenever its order is
+    // next returned by a sync; cancellations come back with status=CANCELLED (filtered client-side).
+    const seen = [...new Set(norm.map((n) => n.orderNumber).filter(Boolean))]
+    if (seen.length) {
+      try { await admin.from("ts_rezdy_bookings").delete().in("order_number", seen) } catch (_) { /* keep going */ }
+    }
+    const now = new Date().toISOString()
+    const rows: any[] = []
+    for (const n of norm) {
+      const ds = [...new Set((n.items || []).map((it: any) => itemLocalDate(it)).filter((d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d)))]
+      if (!ds.includes(date)) ds.push(date) // safety net: always index under the synced date
+      for (const d of ds) rows.push({ id: `${n.orderNumber}__${d}`, order_number: n.orderNumber, tour_date: d, data: n, updated_at: now })
+    }
+    if (rows.length) {
       try { await admin.from("ts_rezdy_bookings").upsert(rows, { onConflict: "id" }) } catch (_) { /* keep going */ }
     }
   }
