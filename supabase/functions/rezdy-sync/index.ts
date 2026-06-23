@@ -185,22 +185,6 @@ serve(async (req) => {
     (n.items || []).some((it: any) => itemLocalDate(it) === date)
   )
 
-  // Diagnostic: POST {date, diag:true} returns the RAW time fields Rezdy sends for every booking
-  // in the window (no store), so we can see why some get classified off the requested day.
-  if ((body as any).diag) {
-    return json({
-      ok: true, date, windowCount: all.length, count: norm.length,
-      diag: all.map((b: any) => ({
-        o: b.orderNumber,
-        i: (b.items || []).map((it: any) => ({
-          stl: it.startTimeLocal ?? null,   // raw Rezdy startTimeLocal
-          st: it.startTime ?? null,         // raw Rezdy startTime (UTC)
-          d: itemLocalDate({ startTimeLocal: nzLocal(it), startTime: it.startTime }), // classified date
-        })),
-      })),
-    })
-  }
-
   if (body.store !== false) {
     // Store ONE row per (order, local item-date) so a MULTI-DATE order (items spread over several
     // days) appears under EVERY date it touches. Previously rows were keyed by order number alone
