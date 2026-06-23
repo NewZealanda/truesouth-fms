@@ -472,7 +472,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.57';
+const APP_VER='v25.58';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -604,6 +604,25 @@ function _lsInfantRearPref(form,acId,coSeat1){
   });
 }
 window._lsInfantFrontBlocked=_lsInfantFrontBlocked;window._lsInfantFrontGuard=_lsInfantFrontGuard;window._lsInfantRearPref=_lsInfantRearPref;
+// Keep a lap-infant host out of the front passenger seat on a raw seat map (idx → pax id). Used
+// for engines that don't guard internally (assignSeats). paxList entries carry an `infant` flag.
+function _seatMapInfantGuard(sm,acId,paxList,coSeat1){
+  var a=_acSpec(acId);if(!a||!a.seats||!sm)return sm;
+  var idxs=paxSeatIdxs(acId,coSeat1);if(!idxs.length)return sm;
+  var seatsByArm=idxs.slice().sort(function(x,y){return ((a.seats[x]&&a.seats[x].arm)||999)-((a.seats[y]&&a.seats[y].arm)||999);});
+  var front=seatsByArm[0];
+  var hasSeat1=(coSeat1!=null)?!coSeat1:!seat1IsCoPilot(acId);
+  if(!hasSeat1)return sm;                                     // co-pilot occupies the front seat — no pax there
+  var isInf=function(id){var p=(paxList||[]).find(function(x){return x.id===id;});return !!(p&&p.infant);};
+  if(sm[front]!=null&&isInf(sm[front])){
+    var others=Object.keys(sm).map(Number).filter(function(s){return s!==front&&!isInf(sm[s]);});
+    others.sort(function(x,y){return ((a.seats[y]&&a.seats[y].arm)||0)-((a.seats[x]&&a.seats[x].arm)||0);});
+    if(others.length){var j=others[0],t=sm[front];sm[front]=sm[j];sm[j]=t;}
+    else{var empt=seatsByArm.filter(function(s){return s!==front&&sm[s]==null;});empt.sort(function(x,y){return ((a.seats[y]&&a.seats[y].arm)||0)-((a.seats[x]&&a.seats[x].arm)||0);});if(empt.length){sm[empt[0]]=sm[front];delete sm[front];}}
+  }
+  return sm;
+}
+window._seatMapInfantGuard=_seatMapInfantGuard;
 
 // CoG status → pill class (shared by the loadsheet W&B readout). Relocated from the retired
 // legacy manifest module so loadsheet.js keeps a live home for it.

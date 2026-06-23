@@ -3215,7 +3215,7 @@ function _rzManDeclMode(dep,acId){
 // declared mode and a declared value exists).
 function _rzPaxWeight(p,declMode){return (declMode&&p&&p.declared!=null)?p.declared:(p?p.weight:'');}
 // Build a loadsheet form for one departure's aircraft so we can run the shared W&B engine.
-function _rzManAcForm(dep,acId){
+function _rzManAcForm(dep,acId,smOverride){
   var a=S.aircraft[acId];if(!a)return null;
   var form=bF_ac(acId);form.date=S.rezdyDate||form.date;
   var picCode=(S._rzManPic||{})[acId];
@@ -3228,13 +3228,16 @@ function _rzManAcForm(dep,acId){
   var fuelDisp=(S._rzManFuel&&S._rzManFuel[acId]!=null&&S._rzManFuel[acId]!=='')?S._rzManFuel[acId]:fromKg(_rzManDefFuelKg(dep,acId),acId);
   form.fuel=String(toKg(fuelDisp,acId));
   var _pbd=_rzProdBurnDisp(_rzManAcProd(dep,acId),acId);if(_pbd!=null)form.burnOff=String(_pbd);
-  var seats=_rzManSeatsFor(dep,acId);
+  var seats=smOverride||_rzManSeatsFor(dep,acId);
   var declMode=_rzManDeclMode(dep,acId);
   Object.keys(seats).forEach(function(idx){if(coCode&&String(idx)==='1')return;var p=(S._rzManPax||[]).find(function(x){return x.id===seats[idx];});if(!p)return;form.names[idx]=p.name||'';var wv=_rzPaxWeight(p,declMode);form.seats[idx]=(wv!=null&&wv!=='')?String(wv):'';if(p.type==='child')form.paxType[idx]='C';});
   var cargo=_rzManCargoFor(dep,acId);form.cargo=form.cargo||{};Object.keys(cargo).forEach(function(zi){form.cargo[zi]=String(cargo[zi]);});
   return form;
 }
 function _rzManAcWB(dep,acId){try{var f=_rzManAcForm(dep,acId);return f?calcFormWB(f):null;}catch(e){return null;}}
+// Would a CANDIDATE seat map (idx → pax id) keep this aircraft within W&B limits? Builds the same
+// form the loadsheet would, but seats from the candidate plan rather than the committed one.
+function _rzCandWBOk(dep,acId,sm){try{if(!sm||!Object.keys(sm).length)return false;var f=_rzManAcForm(dep,acId,sm);if(!f)return false;var r=calcFormWB(f);return !!(r&&r.towOk&&r.lwOk&&r.cogOk);}catch(e){return false;}}
 // Re-seat one departure's aircraft using the shared seat-assignment engine (groups together,
 // front-to-back). Returns the seat map.
 window.rezdyManReseat=function(dep,acId){
@@ -3250,10 +3253,19 @@ window.rezdyManReseat=function(dep,acId){
     return {id:p.id,weight:w,bag:0,group:p.group||'',infant:hasInf};
   });
   var _coPic=!!(S._rzManCoPic||{})[acId];
-  // Heavier passengers/groups go FORWARD to keep the centre of gravity in balance (groups still sit
-  // together). Falls back to the order-preserving seater only if heavy-front throws.
-  var sm={};try{sm=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};}catch(e){try{sm=assignSeats(acId,paxList,{coSeat1:_coPic})||{};}catch(e2){sm={};}}
+  // Prefer keeping booking groups in CONSECUTIVE rows (the groups-first seater), but only when that
+  // arrangement still keeps weight & balance within limits. Otherwise fall back to the heavy-front
+  // seater (heaviest forward) which optimises CoG even if it splits a group.
+  var sm={};
+  try{
+    var smG=assignSeats(acId,paxList,{coSeat1:_coPic})||{};            // groups-first → consecutive rows
+    if(Object.keys(smG).length&&_rzCandWBOk(dep,acId,smG)){sm=smG;}
+    else{var smH=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};sm=Object.keys(smH).length?smH:smG;}
+  }catch(e){try{sm=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};}catch(e2){sm={};}}
   if(_coPic)_rzReserveCoSeat(sm,acId); // safety: ensure seat 1 stays clear for the co-pilot
+  // Lap-infant rule on the seatmap: keep an infant host out of the front seat (the groups-first
+  // seater doesn't guard internally; heavy-front already does).
+  try{sm=_seatMapInfantGuard(sm,acId,paxList,_coPic)||sm;}catch(e){}
   // Any passenger who couldn't get a seat (cabin full — e.g. a co-pilot just took seat 1) is
   // bumped back to the UNALLOCATED pool rather than left allocated-but-seatless (which carries no
   // W&B contribution and confuses the count). Clearing .ac returns them to the pool.

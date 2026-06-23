@@ -174,7 +174,7 @@ function renderAerodromes(){
   var h='<div class="card" style="margin-bottom:14px">';
   h+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">';
   h+='<div class="st" style="margin:0">Aerodromes ('+all.length+' &mdash; '+NZ_AERODROMES.length+' AIP NZ + '+custom.length+' custom)</div>';
-  h+='<input class="fi" type="text" placeholder="Search ICAO or name..." value="'+(S._aeroSearch||'')+'" oninput="window.aeroSearch(this.value)" style="width:200px">';
+  h+='<input id="aero-search" class="fi" type="text" placeholder="Search ICAO or name..." value="'+(S._aeroSearch||'')+'" oninput="window.aeroSearch(this.value)" style="width:200px">';
   h+='</div>';
   h+=selInfo;
   // Two-column layout: list left, map right
