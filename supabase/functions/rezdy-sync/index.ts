@@ -11,7 +11,7 @@
 // minTourStartTime / maxTourStartTime — a space-separated datetime is rejected.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0"
 
 const SB_URL = Deno.env.get("SUPABASE_URL") ?? ""
 const SB_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -184,6 +184,18 @@ serve(async (req) => {
   const norm = normAll.filter((n) =>
     (n.items || []).some((it: any) => itemLocalDate(it) === date)
   )
+
+  // Diagnostic: POST {date, diag:true} → echoes the exact query params used (to confirm which code
+  // is live) + the raw time fields for every booking in the window (no store).
+  if ((body as any).diag) {
+    return json({
+      ok: true, date, minCreated, minT, maxT, windowCount: all.length, count: norm.length,
+      diag: all.map((b: any) => ({
+        o: b.orderNumber,
+        i: (b.items || []).map((it: any) => ({ stl: it.startTimeLocal ?? null, st: it.startTime ?? null, d: itemLocalDate({ startTimeLocal: nzLocal(it), startTime: it.startTime }) })),
+      })),
+    })
+  }
 
   if (body.store !== false) {
     // Store ONE row per (order, local item-date) so a MULTI-DATE order (items spread over several
