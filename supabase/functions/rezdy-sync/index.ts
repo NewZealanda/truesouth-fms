@@ -130,6 +130,25 @@ serve(async (req) => {
 
   let body: { date?: string; store?: boolean }
   try { body = await req.json() } catch (_) { return json({ ok: false, error: "bad_request" }, 400) }
+  // Probe: POST {probe:["TSF...","..."]} fetches each booking DIRECTLY by order number and returns
+  // its raw item times + status — to see what Rezdy stores for bookings the tour-time search misses.
+  if (Array.isArray((body as any).probe)) {
+    const out: any[] = []
+    for (const on of (body as any).probe) {
+      try {
+        const r = await fetch(`${REZDY_BASE}/bookings/${encodeURIComponent(String(on))}?apiKey=${REZDY_KEY}`)
+        const j: any = await r.json().catch(() => ({}))
+        const bk = j.booking || j.data || j
+        out.push({
+          o: on, httpStatus: r.status, orderStatus: (bk && (bk.status || bk.orderStatus)) || null,
+          source: (bk && bk.source) || null,
+          items: ((bk && bk.items) || []).map((it: any) => ({ stl: it.startTimeLocal ?? null, st: it.startTime ?? null, product: it.productName || it.productCode || null })),
+        })
+      } catch (e) { out.push({ o: on, error: String(e) }) }
+    }
+    return json({ ok: true, probe: out })
+  }
+
   const date = (body.date || "").trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ ok: false, error: "missing_or_bad_date" }, 400)
 
