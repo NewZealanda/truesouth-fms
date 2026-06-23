@@ -1,4 +1,4 @@
-// === MODULE: scheduling.js === v25.25 ===
+// === MODULE: scheduling.js === v25.26 ===
 // ─────────────────────────────────────────────────────────────────────────────
 //  SCHEDULING — cost-aware aircraft allocation + resource board (Phase 1).
 //  Phase 1 (this build): the data foundation only —
@@ -252,4 +252,118 @@ function renderResources(){
   }
   h+='</div></div>';
   return h;
+}
+
+// ── AUTO-ALLOCATION (Phase 2) ──────────────────────────────────────────────────
+// As bookings come in, assign each departure's passengers to the CHEAPEST aircraft combination
+// that fits, using only aircraft available that day/time (resource board) and preferring the
+// priority caravan/airvan (the maintenance ★ flag). The result is a reversible overlay
+// (S._schedAutoAc) consumed by _rzBookingAc only when the feature toggle is ON — a manual pill
+// always wins, and turning the toggle OFF restores the original (Rezdy-comment) aircraft. The
+// emergent behaviour reproduces the operator's rules (<7 airvan, ≤13 caravan, 14=2 airvans,
+// 15-20 airvan+caravan, 21-26 two caravans) and keeps SDB (most expensive) for last.
+function _schedPriorityList(){var p=(S.maintenance&&S.maintenance.priority)||[];return Array.isArray(p)?p:[];}
+function _schedIsPriority(ac){return _schedPriorityList().indexOf(ac)>=0;}
+function _schedMinOf(t){var m=/^(\d{1,2}):(\d{2})$/.exec(String(t||''));return m?(+m[1])*60+(+m[2]):null;}
+// Available that date (resource board) and, if a time is given, within any custom from/to window.
+function _schedAvailAt(date,ac,time){
+  var st=_resState(date,ac);
+  if(st==='off')return false;
+  if(st==='custom'){var e=_resGet(date,ac);var dm=_schedMinOf(time);if(dm!=null){var fm=_schedMinOf(e&&e.from),to=_schedMinOf(e&&e.to);if(fm!=null&&dm<fm)return false;if(to!=null&&dm>to)return false;}}
+  return true;
+}
+// Fleet usable for a departure: serviceable + priced + available at the time.
+function _schedFleetFor(date,time){
+  var out=[];
+  Object.keys((S&&S.aircraft)||{}).forEach(function(ac){
+    var cost=_schedRtCost(ac);if(cost==null)return;          // no Milford price → can't cost it
+    if(!_schedAvailAt(date,ac,time))return;
+    out.push({ac:ac,cap:(_schedNum(_schedTail(ac).cap)||_schedDefaultCap(ac)),cost:cost,airvan:_schedIsAirvan(ac),priority:_schedIsPriority(ac)});
+  });
+  return out;
+}
+function _schedScoreLt(a,b){for(var i=0;i<a.length;i++){if(a[i]<b[i])return true;if(a[i]>b[i])return false;}return false;}
+// Cheapest subset of `fleet` covering `pax`. Tie-break: fewer aircraft, more priority aircraft,
+// less wasted capacity. If nothing can cover pax, returns the whole fleet (max lift, best effort).
+function _schedPickFleet(pax,fleet){
+  var n=fleet.length;if(!n)return [];
+  var best=null;
+  for(var mask=1;mask<(1<<n);mask++){
+    var cap=0,cost=0,cnt=0,pri=0;
+    for(var i=0;i<n;i++)if(mask&(1<<i)){cap+=fleet[i].cap;cost+=fleet[i].cost;cnt++;if(fleet[i].priority)pri++;}
+    if(cap<pax)continue;
+    var score=[+cost.toFixed(2),cnt,-pri,cap];
+    if(!best||_schedScoreLt(score,best.score))best={mask:mask,score:score};
+  }
+  if(!best)return fleet.slice();                              // can't cover → use everything available
+  var sel=[];for(var j=0;j<n;j++)if(best.mask&(1<<j))sel.push(fleet[j]);
+  return sel;
+}
+// Pack whole booking groups into the chosen aircraft (best-fit, priority aircraft fill first).
+function _schedPack(groups,chosen){
+  var bins=chosen.map(function(a){return {ac:a.ac,rem:a.cap,priority:a.priority?1:0};});
+  bins.sort(function(x,y){return (y.priority-x.priority)||(y.rem-x.rem);});
+  var gs=groups.slice().sort(function(a,b){return b.size-a.size;});
+  var map={};
+  gs.forEach(function(g){
+    var pick=null;
+    bins.forEach(function(bn){if(bn.rem>=g.size){if(!pick||bn.priority>pick.priority||(bn.priority===pick.priority&&bn.rem<pick.rem))pick=bn;}});
+    if(!pick)bins.forEach(function(bn){if(!pick||bn.rem>pick.rem)pick=bn;});   // group too big → most room
+    if(pick){map[g.order]=pick.ac;pick.rem-=g.size;}
+  });
+  return map;
+}
+// Light change-signature so the day's allocation is only recomputed when something relevant moves.
+function _schedSig(date,bks){
+  var parts=[date,_schedEnabled()?'1':'0',_schedPriorityList().join(',')];
+  (bks||[]).forEach(function(b){var o=String(b.orderNumber||'');
+    var c=((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))?'x':'';
+    var ns=((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))?'n':'';
+    (b.items||[]).forEach(function(it){parts.push(o+ns+c+'@'+(it.startTimeLocal||'')+'='+(it.quantity||0));});});
+  try{parts.push(JSON.stringify((_resAll()||{})[date]||{}));}catch(e){}
+  Object.keys((S&&S.aircraft)||{}).forEach(function(ac){var t=_schedTail(ac);parts.push(ac+':'+t.cap+':'+t.rt);});
+  return parts.join('|');
+}
+// Compute the day's order→aircraft map (memoised). Skips cancelled/no-show + flybacks (the latter
+// ride a return leg — handled later). An aircraft can serve different time slots, but not two
+// departures at the SAME time.
+function _schedEnsureAuto(){
+  if(!_schedEnabled()){if(S._schedAutoAc&&Object.keys(S._schedAutoAc).length)S._schedAutoAc={};S._schedAutoKey='';return;}
+  var date=S.rezdyDate;var bks=S._rezdyBookings||[];
+  var sig=_schedSig(date,bks);
+  if(S._schedAutoKey===sig&&S._schedAutoAc)return;
+  var groups={};
+  bks.forEach(function(b){
+    if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
+    var o=String(b.orderNumber||'');
+    if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
+    (b.items||[]).forEach(function(it){
+      var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
+      var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;
+      var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):String(it.product||'');
+      if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;     // flybacks handled later
+      var key=start+'|'+prod;
+      var g=groups[key]||(groups[key]={time:start,items:{}});
+      g.items[o]=(g.items[o]||0)+(parseInt(it.quantity,10)||0);
+    });
+  });
+  var map={};var usedByTime={};
+  Object.keys(groups).sort(function(a,b){return (_schedMinOf(groups[a].time)||0)-(_schedMinOf(groups[b].time)||0);}).forEach(function(k){
+    var g=groups[k];var time=g.time;var used=usedByTime[time]||(usedByTime[time]={});
+    var fleet=_schedFleetFor(date,time).filter(function(f){return !used[f.ac];});
+    var groupsArr=Object.keys(g.items).map(function(o){return {order:o,size:g.items[o]};});
+    var pax=groupsArr.reduce(function(s,x){return s+x.size;},0);
+    if(!pax||!fleet.length)return;
+    var chosen=_schedPickFleet(pax,fleet);
+    chosen.forEach(function(c){used[c.ac]=true;});
+    var packed=_schedPack(groupsArr,chosen);
+    Object.keys(packed).forEach(function(o){map[o]=packed[o];});
+  });
+  S._schedAutoAc=map;S._schedAutoKey=sig;
+}
+// The auto-allocated aircraft for one booking (null when the feature is off or none assigned).
+function _schedAutoAcFor(order){
+  if(!_schedEnabled())return null;
+  try{_schedEnsureAuto();}catch(e){return null;}
+  return (S._schedAutoAc||{})[String(order)]||null;
 }

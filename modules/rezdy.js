@@ -705,13 +705,16 @@ function _rzNewBookingModal(){
 }
 // The aircraft assigned to a booking: a manual pill override, else whatever the comments note.
 // The '__none__' sentinel means explicitly unallocated (overrides any comment).
-function _rzBookingAc(b,order){var ov=(S._rzBookingAc||{})[String(order)];if(ov==='__none__')return null;return ov||_rzAircraftFromComments(b);}
+function _rzBookingAc(b,order){order=String(order);var ov=(S._rzBookingAc||{})[order];if(ov==='__none__')return null;if(ov)return ov;var auto=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;if(auto)return auto;return _rzAircraftFromComments(b);}
+// True when a booking's aircraft is coming from cost-aware auto-allocation (no manual override).
+function _rzBookingAcIsAuto(b,order){order=String(order);if((S._rzBookingAc||{})[order])return false;return !!((typeof _schedAutoAcFor==='function')&&_schedAutoAcFor(order));}
 // Aircraft selector pills for one booking. Comments supply the default; a pill overrides it; the
 // "None" pill explicitly unallocates (turns the aircraft off).
 function _rzBookingAcPills(b,order){
   var fleet=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
   var manual=(S._rzBookingAc||{})[String(order)];
-  var cur=(manual==='__none__')?null:(manual||_rzAircraftFromComments(b));
+  var cur=(manual==='__none__')?null:_rzBookingAc(b,order);
+  var isAuto=_rzBookingAcIsAuto(b,order);
   var oE=_rzEsc(String(order)).replace(/'/g,"\\'");
   var pills='';
   fleet.forEach(function(id){
@@ -721,7 +724,7 @@ function _rzBookingAcPills(b,order){
   // Explicit "None" / unallocated pill.
   var noneOn=(manual==='__none__');
   pills+='<button onclick="window.rezdyBookingSetAc(\''+oE+'\',\'__none__\')" class="pill" title="Unallocated — no aircraft" style="cursor:pointer;opacity:'+(noneOn?'1':'.38')+';border:1.5px solid '+(noneOn?'#94a3b8':'var(--border2)')+';background:'+(noneOn?'#475569':'transparent')+';color:'+(noneOn?'#fff':'var(--text3)')+';font-weight:800;font-size:11px;padding:3px 10px;border-radius:14px">None</button>';
-  var note=noneOn?'<span style="font-size:10px;color:var(--text3);margin-left:2px">unallocated</span>':(cur?'<span style="font-size:10px;color:var(--text3);margin-left:2px">'+(manual?'set':'from comments')+'</span>':'');
+  var note=noneOn?'<span style="font-size:10px;color:var(--text3);margin-left:2px">unallocated</span>':(cur?'<span style="font-size:10px;color:'+(isAuto?'#22c55e':'var(--text3)')+';margin-left:2px">'+(manual?'set':(isAuto?'⚙ auto-allocated':'from comments'))+'</span>':'');
   return '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:7px 10px">'+
     '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Aircraft</span>'+pills+note+'</div>';
 }
@@ -730,10 +733,11 @@ function _rzBookingAcPills(b,order){
 function _rzBookingAcBadge(b,order){
   var manual=(S._rzBookingAc||{})[String(order)];
   if(manual==='__none__')return '<div style="padding:4px 10px;display:flex;align-items:center;gap:5px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800">Aircraft</span><span class="pill" style="background:#475569;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">None</span></div>';
-  var cur=manual||_rzAircraftFromComments(b);
+  var cur=_rzBookingAc(b,order);
   if(!cur)return '';
   var col=_rzAcCol(cur);
-  return '<div style="padding:4px 10px;display:flex;align-items:center;gap:5px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800">Aircraft</span><span class="pill" style="background:'+col+';color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">'+_rzEsc(cur.replace('ZK-',''))+'</span></div>';
+  var auto=_rzBookingAcIsAuto(b,order);
+  return '<div style="padding:4px 10px;display:flex;align-items:center;gap:5px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800">Aircraft</span><span class="pill" style="background:'+col+';color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">'+_rzEsc(cur.replace('ZK-',''))+'</span>'+(auto?'<span title="Auto-allocated (cost-aware). Tap a pill in the dropdown to override." style="font-size:10px;font-weight:800;color:#22c55e">⚙ auto</span>':'')+'</div>';
 }
 window.rezdyBookingSetAc=function(order,ac){
   order=String(order);S._rzBookingAc=S._rzBookingAc||{};
