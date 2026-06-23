@@ -232,7 +232,7 @@ function _schedFetchDayBookings(date){
   if(Array.isArray(S._schedBkCache[date])||S._schedBkLoading[date])return;   // cached or in flight
   S._schedBkLoading[date]=true;
   sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(date)).then(function(rows){
-    S._schedBkCache[date]=(typeof _rzMapBookings==='function')?(_rzMapBookings(rows)||[]):(rows||[]);
+    S._schedBkCache[date]=(typeof _rzMapBookings==='function')?(_rzMapBookings(rows,date)||[]):(rows||[]);
     S._schedBkLoading[date]=false;if(typeof safeRender==='function')safeRender();else render();
   }).catch(function(){S._schedBkLoading[date]=false;S._schedBkCache[date]=[];if(typeof render==='function')render();});
 }
@@ -718,7 +718,7 @@ async function _schedAutoNotifyTick(){
     if(cfg.lastCallInNotify===tomorrow)return;                       // already handled tomorrow
     if(typeof sbF!=='function')return;
     var rows=await sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(tomorrow));
-    var bks=(typeof _rzMapBookings==='function')?(_rzMapBookings(rows)||[]):[];
+    var bks=(typeof _rzMapBookings==='function')?(_rzMapBookings(rows,tomorrow)||[]):[];
     // Evaluate tomorrow without disturbing the current view: swap globals, compute, restore.
     var sd=S.rezdyDate,sb=S._rezdyBookings,sk=S._schedAutoKey,sm=S._schedAutoAc,sbsy=S._schedAutoBusy;
     var a=null;

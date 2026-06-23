@@ -402,8 +402,16 @@ function _rzIsSupplierDup(b){
   var rawCode=String((b&&b.sourceCode)||'');
   return (!rawCode||/MARKETPLACE/i.test(rawCode));
 }
-function _rzMapBookings(rows){
-  return (rows||[]).map(_rzRow).filter(Boolean).filter(function(b){return !_rzIsSupplierDup(b);});
+// The date portion of an item's start time ("2026-06-24T11:00:00" → "2026-06-24"); '' if none.
+function _rzItemDate(it){var m=/^(\d{4}-\d{2}-\d{2})/.exec(String((it&&it.startTimeLocal)||''));return m?m[1]:'';}
+function _rzItemOnDate(it,date){var d=_rzItemDate(it);return !d||!date||d===date;}   // keep items with no date
+// When `date` is given, keep only each booking's items for THAT day. A single order can hold items
+// on several dates (e.g. two Branches flights on different days); a day's view must show only that
+// day's items, not every item on the order.
+function _rzMapBookings(rows,date){
+  var list=(rows||[]).map(_rzRow).filter(Boolean).filter(function(b){return !_rzIsSupplierDup(b);});
+  if(date)list.forEach(function(b){if(Array.isArray(b.items))b.items=b.items.filter(function(it){return _rzItemOnDate(it,date);});});
+  return list;
 }
 // Manually-created (walk-in / phone) bookings live alongside the Rezdy-synced ones. They're
 // persisted per-date in the pickup blob (manualBk) so a Rezdy sync never wipes them. This
@@ -1654,7 +1662,7 @@ window.rezdyLoadBookings=async function(opts){
   opts=opts||{};
   S._rezdyLoading=true;safeRender();
   const rows=await sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(S.rezdyDate));
-  S._rezdyBookings=_rzMapBookings(rows);_rzApplyManualBk();
+  S._rezdyBookings=_rzMapBookings(rows,S.rezdyDate);_rzApplyManualBk();
   S._pickupVans=null; // re-derive van layout from fresh bookings
   S._rezdyLoading=false;
   render();
@@ -1679,7 +1687,7 @@ function _rzBgSync(force){
     if(res&&res.ok){
       sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(date)).then(function(rows){
         if(date!==S.rezdyDate)return;
-        S._rezdyBookings=_rzMapBookings(rows);_rzApplyManualBk();
+        S._rezdyBookings=_rzMapBookings(rows,S.rezdyDate);_rzApplyManualBk();
         // Do NOT null S._pickupVans here — that discarded the SAVED van layout (manual placement)
         // and forced a full auto-allocate on every background sync, which is why pickups "reverted
         // after a little bit" / on refresh. _rzEnsureVans already reconciles the saved layout
@@ -4242,7 +4250,7 @@ window.rezdyLoadSchedule=async function(){
   // The Calendar shows booking-derived blocks too, so make sure the day's bookings are loaded.
   if(!S._rezdyBookings){
     const brows=await sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(S.rezdyDate));
-    S._rezdyBookings=_rzMapBookings(brows);_rzApplyManualBk();
+    S._rezdyBookings=_rzMapBookings(brows,S.rezdyDate);_rzApplyManualBk();
   }
   // Pull the saved pickup-list row (pilots / pax meta live there) so pilot allocation persists.
   if(window.rezdyLoadPickups)window.rezdyLoadPickups();
