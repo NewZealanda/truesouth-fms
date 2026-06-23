@@ -434,7 +434,7 @@ function _rzItemOnDate(it,date){var d=_rzItemDate(it);return !d||!date||d===date
 // day's items, not every item on the order.
 function _rzMapBookings(rows,date){
   var list=(rows||[]).map(_rzRow).filter(Boolean).filter(function(b){return !_rzIsSupplierDup(b);});
-  if(date)list.forEach(function(b){if(Array.isArray(b.items))b.items=b.items.filter(function(it){return _rzItemOnDate(it,date);});});
+  if(date)list=list.map(function(b){if(!Array.isArray(b.items))return b;var f=b.items.filter(function(it){return _rzItemOnDate(it,date);});if(f.length===b.items.length)return b;var nb=Object.assign({},b);nb.items=f;return nb;});  // shallow-copy when filtering so we never mutate a shared booking object
   return list;
 }
 // Manually-created (walk-in / phone) bookings live alongside the Rezdy-synced ones. They're
