@@ -341,9 +341,9 @@ function _rzDepCmp(a,b){var d=_rzDepSortMin(a)-_rzDepSortMin(b);return d!==0?d:S
 // "0930" → "09:30" for the schedule grid's HH:MM parser.
 function _rzHHMMcolon(s){var m=/^(\d{2})(\d{2})$/.exec(String(s||''));return m?m[1]+':'+m[2]:String(s||'');}
 // Flight block duration (minutes) by product: FCF = 4.5h; FJHH / MCEXP / THH = 5h; else 2h.
-function _rzProductDuration(p){var s=String(p||'').toUpperCase();if(/FCF|MILFORD.*FLY.*CRUISE.*FLY/.test(s))return 270;if(/\b(FJHH|MCEXP|THH)\b/.test(s))return 300;return 120;}
+function _rzProductDuration(p){var s=String(p||'').toUpperCase();if(/BRA|BRANCH/.test(s))return 30;if(/FCF|MILFORD.*FLY.*CRUISE.*FLY/.test(s))return 270;if(/\b(FJHH|MCEXP|THH)\b/.test(s))return 300;return 120;}
 // Like above but returns 0 when the text names no known product (so we don't clobber a manual end).
-function _rzProductCodeDuration(t){var s=String(t||'').toUpperCase();if(/\bFCF\b/.test(s))return 270;if(/\b(FJHH|MCEXP|THH)\b/.test(s))return 300;return 0;}
+function _rzProductCodeDuration(t){var s=String(t||'').toUpperCase();if(/BRA|BRANCH/.test(s))return 30;if(/\bFCF\b/.test(s))return 270;if(/\b(FJHH|MCEXP|THH)\b/.test(s))return 300;return 0;}
 // A booking's primary departure time (first item), e.g. "0930"; "—" if none.
 function _rzBookingDep(b){if(_rzBookingIsFlyback(b))return RZ_FLYBACK_DEP;var it=((b&&b.items)||[])[0]||{};return _rzDepTime(it.startTimeLocal||'')||'—';}
 // Display name for a departure heading/pill: a user rename override, else 'FLB' for the flyback
@@ -4030,7 +4030,7 @@ function _rzRenderSchedule(){
 function _rzLegMins(from,to){
   var f=String(from||'').toUpperCase(),t=String(to||'').toUpperCase();
   var away=(f==='QN')?t:f;                       // the non-Queenstown end drives the duration
-  var m={MF:40,MC:60,FJ:70};
+  var m={MF:40,MC:60,FJ:70,BRA:15};
   return m[away]||40;
 }
 function _rzMinToHHMM(min){min=((Math.round(min)%1440)+1440)%1440;return String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');}

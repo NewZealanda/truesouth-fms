@@ -288,7 +288,7 @@ function renderMaintOverview(){
       ${bk.length?'<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">'+
         bk.map(b=>`<div style="font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px;padding:3px 0">
           <span style="color:${b.confirmed?'#22c55e':'#f59e0b'};font-size:13px">${b.confirmed?'●':'◑'}</span>
-          <span style="font-weight:600">${fmtMaintDate(b.date)}</span>
+          <span style="font-weight:600">${fmtMaintDate(b.date)}${(b.end&&b.end!==b.date)?(' – '+fmtMaintDate(b.end)):''}</span>
           <span style="color:var(--text2)">— ${b.notes||'Maintenance'}</span>
           <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:${b.confirmed?'rgba(34,197,94,.15)':'rgba(245,158,11,.15)'};color:${b.confirmed?'#22c55e':'#f59e0b'}">${b.confirmed?'Confirmed':'Pencilled'}</span>
         </div>`).join('')+
