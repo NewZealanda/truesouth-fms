@@ -4045,19 +4045,6 @@ function _rzRenderSchedule(){
       _gpick.forEach(function(p){var on=_grp.pilot===p.code;var off=!p.rostered;
         detailH+='<button onclick="event.stopPropagation();window.rezdySchedSetPilot(\''+_gkey+'\',\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(off?' (not rostered on today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid #60a5fa':'1px solid rgba(96,165,250,'+(off?'.28':'.5')+')')+';background:rgba(96,165,250,'+(on?'.22':(off?'.05':'.1'))+');color:#60a5fa;font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'✈ ')+_rzEsc(p.code)+(off?' <span style="font-size:8px;font-weight:700">off</span>':'')+'</button>';});
       detailH+='</div>';
-      // ⚙ TEMP DIAGNOSTIC — reveals what the auto-allocator decided for this aircraft, so we can see
-      // why a flight stays uncrewed. (Remove once the pilot allocation is confirmed working.)
-      if(_gac){
-        try{var _da=(S._schedAutoPilots||{});var _av=(typeof _schedDayPilots==='function')?_schedDayPilots(S.rezdyDate):[];
-          var _dl=[];
-          _dl.push('sched='+(((typeof _schedEnabled==='function')&&_schedEnabled())?'ON':'OFF'));
-          _dl.push('dateOK='+(S._schedAutoPilotsDate===S.rezdyDate?'y':'n'));
-          _dl.push('autoHere='+(_da[_grp.key]||_da[_gac]||'—'));
-          _dl.push('allKeys=['+Object.keys(_da).map(function(k){return String(k).replace(/^ZK-?/,'')+':'+_da[k];}).join(' ')+']');
-          _dl.push('avail='+_av.map(function(p){return p.code+(((typeof _pilotRatedForAc==='function')&&_pilotRatedForAc(p.code,_gac))?'+':'-');}).join(','));
-          detailH+='<div style="font-size:10px;color:#b45309;font-family:monospace;background:rgba(245,158,11,.10);padding:6px 8px;border-radius:6px;margin:0 0 8px;word-break:break-all">⚙ '+_rzEsc(_dl.join(' · '))+'</div>';
-        }catch(_e){}
-      }
       // Full product title(s) at the top — the real Rezdy product name, not just the short code.
       var _allBk=_grp.bookings.concat(_grp._fb||[]);
       var _titles=[];_allBk.forEach(function(bk){var t=String((bk.it&&bk.it.product)||'').trim();if(t&&_titles.indexOf(t)<0)_titles.push(t);});
