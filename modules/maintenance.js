@@ -953,7 +953,7 @@ window.addMaintEntry=function(){
   if(adasSel==='done'){if(!S.maintenance.adas)S.maintenance.adas={};var _ada=S.maintenance.adas[ac]||[];if(!Array.isArray(_ada))_ada=_ada?[_ada]:[];if(!_ada.includes(date))_ada.push(date);S.maintenance.adas[ac]=_ada;}
   saveMaintenance();
   S.maintEditDate=null;   // exit "Update Entry" mode after saving (form returns to Add)
-  toast('Entry saved: '+ac+' '+hours+'hrs on '+fmtMaintDate(date),'ok');auditLog('maint_entry_add',{date:date,ac:ac,ttis:hours,starts:starts,landings:landings,oil:oil});S.appMsg=null;render();
+  toast('Entry saved: '+ac+' '+hours+'hrs on '+fmtMaintDate(date),'ok');auditLog('maint_entry_add',{date:date,ac:ac,ttis:hours,starts:starts,landings:landings,oil:oil});render();
 };
 window.toggleCWLog=function(date,ac){
   if(!_maintTickGuard())return;

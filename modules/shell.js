@@ -827,10 +827,6 @@ function renderApp(){
     </div>`:''}
     <div class="page">
       ${renderTier2Bar()}
-      ${S.appMsg?`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;margin-bottom:10px;font-size:13px;font-weight:600;background:${S.appMsg.type==='ok'?'var(--ok-bg)':'var(--err-bg)'};border:1px solid ${S.appMsg.type==='ok'?'var(--ok-border)':'var(--err-border)'};color:${S.appMsg.type==='ok'?'var(--ok-text)':'var(--err-text)'}">
-        <span>${S.appMsg.text}</span>
-        <button onclick="S.appMsg=null;render()" style="padding:2px 8px;border-radius:4px;border:1px solid currentColor;background:transparent;cursor:pointer;font-size:11px;color:inherit">✕</button>
-      </div>`:''}
       ${(function(){try{
         const _sec=S.section||'operations';
         if(_sec==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';

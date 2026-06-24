@@ -2480,7 +2480,7 @@ window.uploadToDrive=async function(sheet,preToken){
     var fileLink='https://drive.google.com/file/d/'+result.id+'/view';
     var folderLink='https://drive.google.com/drive/folders/'+monthId;
     S.driveStatus='ok:'+fname;S.driveLastLink=fileLink;S.driveLastFile=fname;S.driveLastFolder=folderLink;
-    S.appMsg={type:'ok',text:'Saved to Drive: '+fname+' — <a href="'+fileLink+'" target="_blank" style="color:inherit">Open ↗</a> &nbsp; <a href="'+folderLink+'" target="_blank" style="color:inherit">Folder ↗</a>'};
+    if(typeof toast==='function')toast('Saved to Drive: '+fname,'ok');
     // Mark as uploaded in Supabase — updates drive_uploaded column on ts_loadsheets row. AWAIT it (with
     // one retry) so the archive flag is committed before we move on; a fire-and-forget patch could lose
     // the race with a page refresh, bouncing the sheet back to Signed.
@@ -2493,7 +2493,7 @@ window.uploadToDrive=async function(sheet,preToken){
     render();
     // No popup - status banner handles it
   }else{
-    S.driveStatus='error:'+r.status;S.appMsg={type:'err',text:'Drive upload failed ('+r.status+'): '+respText.slice(0,120)};render();
+    S.driveStatus='error:'+r.status;if(typeof toast==='function')toast('Drive upload failed ('+r.status+'): '+respText.slice(0,120),'err');render();
     // No popup - status banner shows error
   }
 };

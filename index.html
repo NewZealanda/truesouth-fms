@@ -850,7 +850,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.15';
+const APP_VER='v26.16';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3979,10 +3979,6 @@ function renderApp(){
     </div>`:''}
     <div class="page">
       ${renderTier2Bar()}
-      ${S.appMsg?`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;margin-bottom:10px;font-size:13px;font-weight:600;background:${S.appMsg.type==='ok'?'var(--ok-bg)':'var(--err-bg)'};border:1px solid ${S.appMsg.type==='ok'?'var(--ok-border)':'var(--err-border)'};color:${S.appMsg.type==='ok'?'var(--ok-text)':'var(--err-text)'}">
-        <span>${S.appMsg.text}</span>
-        <button onclick="S.appMsg=null;render()" style="padding:2px 8px;border-radius:4px;border:1px solid currentColor;background:transparent;cursor:pointer;font-size:11px;color:inherit">✕</button>
-      </div>`:''}
       ${(function(){try{
         const _sec=S.section||'operations';
         if(_sec==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';
@@ -8318,7 +8314,7 @@ window.uploadToDrive=async function(sheet,preToken){
     var fileLink='https://drive.google.com/file/d/'+result.id+'/view';
     var folderLink='https://drive.google.com/drive/folders/'+monthId;
     S.driveStatus='ok:'+fname;S.driveLastLink=fileLink;S.driveLastFile=fname;S.driveLastFolder=folderLink;
-    S.appMsg={type:'ok',text:'Saved to Drive: '+fname+' — <a href="'+fileLink+'" target="_blank" style="color:inherit">Open ↗</a> &nbsp; <a href="'+folderLink+'" target="_blank" style="color:inherit">Folder ↗</a>'};
+    if(typeof toast==='function')toast('Saved to Drive: '+fname,'ok');
     // Mark as uploaded in Supabase — updates drive_uploaded column on ts_loadsheets row. AWAIT it (with
     // one retry) so the archive flag is committed before we move on; a fire-and-forget patch could lose
     // the race with a page refresh, bouncing the sheet back to Signed.
@@ -8331,7 +8327,7 @@ window.uploadToDrive=async function(sheet,preToken){
     render();
     // No popup - status banner handles it
   }else{
-    S.driveStatus='error:'+r.status;S.appMsg={type:'err',text:'Drive upload failed ('+r.status+'): '+respText.slice(0,120)};render();
+    S.driveStatus='error:'+r.status;if(typeof toast==='function')toast('Drive upload failed ('+r.status+'): '+respText.slice(0,120),'err');render();
     // No popup - status banner shows error
   }
 };
@@ -10308,7 +10304,7 @@ window.addMaintEntry=function(){
   if(adasSel==='done'){if(!S.maintenance.adas)S.maintenance.adas={};var _ada=S.maintenance.adas[ac]||[];if(!Array.isArray(_ada))_ada=_ada?[_ada]:[];if(!_ada.includes(date))_ada.push(date);S.maintenance.adas[ac]=_ada;}
   saveMaintenance();
   S.maintEditDate=null;   // exit "Update Entry" mode after saving (form returns to Add)
-  toast('Entry saved: '+ac+' '+hours+'hrs on '+fmtMaintDate(date),'ok');auditLog('maint_entry_add',{date:date,ac:ac,ttis:hours,starts:starts,landings:landings,oil:oil});S.appMsg=null;render();
+  toast('Entry saved: '+ac+' '+hours+'hrs on '+fmtMaintDate(date),'ok');auditLog('maint_entry_add',{date:date,ac:ac,ttis:hours,starts:starts,landings:landings,oil:oil});render();
 };
 window.toggleCWLog=function(date,ac){
   if(!_maintTickGuard())return;
