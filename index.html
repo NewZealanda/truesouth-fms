@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.24';
+const APP_VER='v26.25';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3535,6 +3535,7 @@ function render(){
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
   if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')||(S._rzLsActiveId&&S.activeTabId&&S.tab==='rloadsheets')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest&&S._lsMapOpen)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
+  if(S._fdSign&&typeof _fdSetupSig==='function')_fdSetupSig(); // wire the Flight & Duty certify signature pad
   // ── Restore focus after re-render ──
   // Force-focus (set by Tab handler) takes priority over activeElement detection
   if(_ffRow!==null){
@@ -4098,7 +4099,7 @@ function renderApp(){
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
-  </div>${(typeof renderTrainCoach==='function')?renderTrainCoach():''}`;
+  </div>${(typeof renderTrainCoach==='function')?renderTrainCoach():''}${(typeof _fdSignModal==='function')?_fdSignModal():''}`;
 }
 
 
@@ -17490,14 +17491,60 @@ window.fdTimeAdj=function(uid,ds,field,delta){
 // 15-minute time options (realistic duty window 04:00–22:00; any out-of-range existing value is added).
 var _FD_TIMES=(function(){var a=[];for(var t=4*60;t<=22*60;t+=15)a.push(String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'));return a;})();
 window.fdToggle=function(uid,ds,field){var r=_fdRow(uid,ds)||{};var p={};p[field]=!r[field];window.fdSaveRow(uid,ds,p);};
-window.fdCertify=function(uid,month){
+// ── Certify with a drawn signature (mirrors the loadsheet sign box) ──
+// Tap "Certify & sign" → opens a modal with a signature canvas; once drawn, the signature is saved on
+// the cert and embedded in the printout.
+window.fdCertifyOpen=function(uid,month){if(!uid||!month)return;S._fdSign={uid:uid,month:month,sig:''};render();};
+window.fdSignCancel=function(){S._fdSign=null;render();};
+window.fdSignClear=function(){var c=document.getElementById('fdSigCanvas');if(c)c.getContext('2d').clearRect(0,0,c.width,c.height);if(S._fdSign)S._fdSign.sig='';render();};
+window.fdSignConfirm=function(){
+  if(!S._fdSign)return;
+  if(!S._fdSign.sig){if(typeof toast==='function')toast('Please sign in the box first.','warn');return;}
+  window.fdCertify(S._fdSign.uid,S._fdSign.month,S._fdSign.sig);
+};
+window.fdCertify=async function(uid,month,sig){
   if(!uid||!month)return;
   S._fdCerts=S._fdCerts||{};var k=uid+'|'+month;
-  S._fdCerts[k]={at:new Date().toISOString(),by:(S.user&&S.user.name)||''};
-  if(typeof sbU==='function')sbU('ts_fd_certs',[{id:k,user_id:uid,period:month,certified_at:S._fdCerts[k].at,certified_by:S._fdCerts[k].by}]).catch(function(){});
+  S._fdCerts[k]={at:new Date().toISOString(),by:(S.user&&S.user.name)||'',sig:sig||''};
+  S._fdSign=null;render();
+  if(typeof sbU==='function'){
+    var row={id:k,user_id:uid,period:month,certified_at:S._fdCerts[k].at,certified_by:S._fdCerts[k].by};
+    if(sig)row.signature=sig;
+    var ok=await sbU('ts_fd_certs',[row]);
+    // The `signature` column may not be applied yet — if the write was rejected, record the cert
+    // WITHOUT the signature so certification still persists (apply flightduty.sql to keep the sig).
+    if(ok===null&&sig)await sbU('ts_fd_certs',[{id:k,user_id:uid,period:month,certified_at:S._fdCerts[k].at,certified_by:S._fdCerts[k].by}]);
+  }
   if(typeof toast==='function')toast('Period '+_fdMonthLabel(month)+' certified ✓','ok');
-  render();
 };
+// Wire the certify signature canvas (called from the post-render hook in shell.js).
+function _fdSetupSig(){
+  var c=document.getElementById('fdSigCanvas');if(!c||c._fdWired)return;c._fdWired=true;var ctx=c.getContext('2d');
+  if(S._fdSign&&S._fdSign.sig){var img=new Image();img.onload=function(){ctx.drawImage(img,0,0,c.width,c.height);};img.src=S._fdSign.sig;}
+  var drawing=false;
+  var pos=function(e){var r=c.getBoundingClientRect(),s=e.touches?e.touches[0]:e,sx=c.width/r.width,sy=c.height/r.height;return{x:(s.clientX-r.left)*sx,y:(s.clientY-r.top)*sy};};
+  c.onmousedown=c.ontouchstart=function(e){e.preventDefault();drawing=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);};
+  c.onmousemove=c.ontouchmove=function(e){if(!drawing)return;e.preventDefault();var p=pos(e);ctx.lineWidth=2.5;ctx.lineCap='round';ctx.strokeStyle='#1e293b';ctx.lineTo(p.x,p.y);ctx.stroke();ctx.beginPath();ctx.moveTo(p.x,p.y);};
+  c.onmouseup=c.onmouseleave=c.ontouchend=function(){if(drawing){drawing=false;var had=!!(S._fdSign&&S._fdSign.sig);if(S._fdSign)S._fdSign.sig=c.toDataURL('image/png');if(!had)render();}};
+}
+function _fdSignModal(){
+  if(!S._fdSign)return '';
+  var u=(S.users||[]).find(function(x){return x.id===S._fdSign.uid;});var nm=(u&&u.name)||'';
+  return '<div onclick="window.fdSignCancel()" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9100;display:flex;align-items:center;justify-content:center;padding:16px">'+
+    '<div onclick="event.stopPropagation()" style="background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:480px;width:100%;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.5)">'+
+      '<div style="font-size:15px;font-weight:800;color:var(--text1);margin-bottom:2px">Certify '+_rzEscSafe(_fdMonthLabel(S._fdSign.month))+'</div>'+
+      '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">'+_rzEscSafe(nm)+' — sign below to certify this month’s flight &amp; duty record as correct and complete.</div>'+
+      '<div style="position:relative;border:1px solid var(--border2);border-radius:8px;background:#fff;overflow:hidden;touch-action:none">'+
+        '<canvas id="fdSigCanvas" width="600" height="150" style="width:100%;height:150px;display:block;cursor:crosshair"></canvas>'+
+        (!S._fdSign.sig?'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:#94a3b8;font-size:14px;letter-spacing:.1em">DRAW SIGNATURE HERE</div>':'')+
+      '</div>'+
+      '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-wrap:wrap">'+
+        '<button onclick="window.fdSignClear()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">Clear</button>'+
+        '<button onclick="window.fdSignCancel()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:13px;cursor:pointer">Cancel</button>'+
+        '<button onclick="window.fdSignConfirm()" style="padding:8px 16px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-size:13px;font-weight:800;cursor:pointer">✓ Certify &amp; sign</button>'+
+      '</div>'+
+    '</div></div>';
+}
 // Remove a month's certification so it can be edited and re-signed (deletes the ts_fd_certs row).
 window.fdUncertify=async function(uid,month){
   if(!uid||!month)return;
@@ -17544,7 +17591,7 @@ window.loadFlightDuty=async function(){
     var rows=await sbF('ts_flightduty',_scope,'fd_date');
     if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.user_id+'|'+r.fd_date]={ds:r.duty_start||'',de:r.duty_end||'',ft:r.flight_time||0,lc:r.ldg_c208||0,lg:r.ldg_ga8||0,ext:!!r.extended,ov:!!r.override,ovr:r.override_reason||'',note:r.note||'',by:r.updated_by||'',at:r.updated_at||''};});S._fdData=d;try{lsSet&&lsSet('ts_flightduty_cache',d);}catch(e){}}
     var certs=await sbF('ts_fd_certs',_scope,'certified_at');
-    if(Array.isArray(certs)){var cc={};certs.forEach(function(r){cc[r.user_id+'|'+r.period]={at:r.certified_at,by:r.certified_by||''};});S._fdCerts=cc;}
+    if(Array.isArray(certs)){var cc={};certs.forEach(function(r){cc[r.user_id+'|'+r.period]={at:r.certified_at,by:r.certified_by||'',sig:r.signature||''};});S._fdCerts=cc;}
     fetch(SB+'/rest/v1/ts_settings?key=eq.fd_limits&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value){S._fdLimits=JSON.parse(s[0].value);if(typeof _sbSetBase==='function')_sbSetBase('fd_limits',S._fdLimits);}}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});
   }catch(e){}
   if(typeof safeRender==='function')safeRender();
@@ -17762,7 +17809,9 @@ function _fdRenderRecord(canManage){
   var monthEnded=month<_fdMonth(_fdToday());
   if(cert){
     h+='<div class="card" style="border-left:3px solid #22c55e;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
-      '<div style="font-size:12px;color:var(--text2)">✓ '+_rzEscSafe(_fdMonthLabel(month))+' certified by '+_rzEscSafe(cert.by)+(cert.at?' on '+_rzEscSafe(_fdFmt(String(cert.at).slice(0,10))):'')+'.</div>'+
+      '<div style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:10px">'+
+        (cert.sig?'<img src="'+cert.sig+'" alt="signature" style="height:34px;width:auto;background:#fff;border:1px solid var(--border2);border-radius:4px;padding:1px 3px">':'')+
+        '<span>✓ '+_rzEscSafe(_fdMonthLabel(month))+' certified by '+_rzEscSafe(cert.by)+(cert.at?' on '+_rzEscSafe(_fdFmt(String(cert.at).slice(0,10))):'')+'.</span></div>'+
       '<div style="display:flex;gap:6px;flex-shrink:0">'+
         '<button class="btn btn-ghost" style="font-size:12px" onclick="window.fdPrint(\''+uid+'\',\''+month+'\')">🖨 Print</button>'+
         '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(245,158,11,.5);color:#f59e0b" onclick="window.fdUncertify(\''+uid+'\',\''+month+'\')">↩ Uncertify</button>'+
@@ -17772,7 +17821,7 @@ function _fdRenderRecord(canManage){
       '<div style="font-size:12px;color:var(--text2)">'+(monthEnded?'<b style="color:#f59e0b">This period needs certifying.</b> ':'')+'When '+_rzEscSafe(_fdMonthLabel(month))+' is complete, print, check, then certify the record.</div>'+
       '<div style="display:flex;gap:6px;flex-shrink:0">'+
         '<button class="btn btn-ghost" style="font-size:12px" onclick="window.fdPrint(\''+uid+'\',\''+month+'\')">🖨 Print</button>'+
-        '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.fdCertify(\''+uid+'\',\''+month+'\')">✓ Certify &amp; sign</button>'+
+        '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.fdCertifyOpen(\''+uid+'\',\''+month+'\')">✓ Certify &amp; sign</button>'+
       '</div></div>';
   }
   return h;
@@ -17846,7 +17895,7 @@ window.fdPrint=function(uid,month){
     '<tr class="tot"><td colspan="3">Month totals</td><td class="c">'+(Math.round(totD*10)/10)+'</td><td class="c">'+(Math.round(totF*10)/10)+'</td><td class="c"></td><td class="c"></td></tr>'+
     '</tbody></table>'+
     '<div class="sub">Rolling at period end — Duty/30 days: '+(Math.round(d30*10)/10)+' / '+L.duty_30.val+' h · Flight/30 days: '+(Math.round(f30*10)/10)+' / '+L.flt_30.val+' h</div>'+
-    '<div class="sign">'+(cert?'<div>Certified by '+_rzEscSafe(cert.by)+(cert.at?' on '+_rzEscSafe(_fdFmt(String(cert.at).slice(0,10))):'')+'</div>':'<div>Pilot signature &amp; date</div>')+'</div>'+
+    '<div class="sign">'+(cert?('<div>'+(cert.sig?'<img src="'+cert.sig+'" style="max-height:64px;width:auto;display:block;margin-bottom:3px">':'')+'Certified by '+_rzEscSafe(cert.by)+(cert.at?' on '+_rzEscSafe(_fdFmt(String(cert.at).slice(0,10))):'')+'</div>'):'<div>Pilot signature &amp; date</div>')+'</div>'+
     '<div class="note">+ = duty extended to '+FD_DUTY_EXT+'h to complete a disrupted schedule. I certify the above flight and duty times are correct and complete.</div>'+
     '<script>window.onload=function(){window.print();}<\/script></body></html>');
   w.document.close();

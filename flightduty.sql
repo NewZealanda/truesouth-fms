@@ -30,8 +30,11 @@ create table if not exists ts_fd_certs (
   user_id       text not null,
   period        text not null,    -- "YYYY-MM"
   certified_at  timestamptz,
-  certified_by  text
+  certified_by  text,
+  signature     text              -- drawn signature as a base64 PNG data URL (v26.24)
 );
+-- If the table already exists, add the signature column:
+alter table ts_fd_certs add column if not exists signature text;
 
 -- 3) Crew profile additions used by Flight & Duty
 alter table ts_crew add column if not exists dob          date;
