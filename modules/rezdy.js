@@ -3885,8 +3885,9 @@ window.rezdyLsCloseDelete=function(id){
   var s=(S.saved||[]).find(function(x){return x.id===id;});
   if(s){ // soft-delete to the Bin (recoverable), matching the app's delete model
     s.form=s.form||{};s.form._prevStatus=s.status;s.status='deleted';
+    if(window._lsStickyMark)window._lsStickyMark(s.id,'deleted',true);
     if(typeof lsSet==='function')lsSet('ts_loadsheets_cache',S.saved);
-    if(typeof sbU==='function')sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted'}]).catch(function(){});
+    if(typeof sbU==='function')sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]).catch(function(){});
   }
   if(typeof toast==='function')toast('Loadsheet moved to Bin','warn');
   window.rezdyCloseLsTab(id);

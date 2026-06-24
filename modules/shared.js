@@ -186,8 +186,11 @@ async function _syncFlush(){
   var q=_syncQGet();if(!q.length)return;
   _syncFlushing=true;var done=0,remaining=[];
   try{
-    for(var i=0;i<q.length;i++){var e=q[i],ok=false;
-      try{var r=await _sbFetch(SB+'/rest/v1/'+e.table,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify([e.row])});ok=!!(r&&r.ok);}catch(_e){ok=false;}
+    for(var i=0;i<q.length;i++){var e=q[i],ok=false,_row=e.row;
+      // Replay the CURRENT local truth, not the stale captured payload — so a queued 'unsigned' save
+      // can never resurrect a sheet that's since been binned (status reconciled from live S.saved).
+      if(e.table==='ts_loadsheets'&&_row&&_row.id!=null){var _lv=(S.saved||[]).find(function(s){return s.id===_row.id;});if(_lv)_row=Object.assign({},_row,{status:_lv.status||_row.status,drive_uploaded:!!_lv.driveUploaded});}
+      try{var r=await _sbFetch(SB+'/rest/v1/'+e.table,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify([_row])});ok=!!(r&&r.ok);}catch(_e){ok=false;}
       if(ok)done++;else remaining.push(e);
     }
   }finally{
@@ -204,6 +207,19 @@ if(typeof window!=='undefined'){
   }
 }
 const sbDel=async(t,id)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:{...SH}});return r.ok;}catch{return false;}};
+// ── Loadsheet "sticky" state ──────────────────────────────────────────────────
+// A tiny, independent source of truth for two forward-only facts the user just set: a sheet is in the
+// Bin ('deleted'), or has been uploaded to Drive ('uploaded'). It lives under its OWN localStorage key
+// that ONLY bin/restore/upload touch — so unlike the loadsheets cache (rewritten on every reload) it
+// can't be clobbered by a stale realtime reload, an autosave, or the offline queue. Applied over every
+// load so a binned/archived sheet never bounces back to Active/Signed on a refresh.
+function _lsStickyGet(){try{var v=lsGet('ts_ls_sticky');return (v&&typeof v==='object')?v:{};}catch(e){return {};}}
+function _lsStickySet(m){try{lsSet('ts_ls_sticky',m);}catch(e){}}
+function _lsStickyMark(id,field,on){if(!id)return;var m=_lsStickyGet();m[id]=m[id]||{};if(on)m[id][field]=1;else delete m[id][field];if(!Object.keys(m[id]).length)delete m[id];_lsStickySet(m);}
+window._lsStickyMark=_lsStickyMark;
+// Apply the sticky facts onto a freshly-loaded saved-sheet object (mutates + returns it).
+function _lsApplySticky(s){if(!s||!s.id)return s;var st=(_lsStickyGet())[s.id];if(!st)return s;if(st.deleted)s.status='deleted';if(st.uploaded)s.driveUploaded=true;return s;}
+window._lsApplySticky=_lsApplySticky;
 
 // ── Phase A auth cutover (DEFAULT OFF) ──────────────────────────────────────
 // Flip ON only AFTER (1) deploying the verify-login / set-password / confirm-reset
@@ -521,7 +537,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.18';
+const APP_VER='v26.19';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1540,7 +1556,7 @@ async function loadAll(){
       // from-bin updates the cache to a non-deleted status, so it's never stuck deleted. uploadedBy/At are
       // local-only (not in DB) so carry them too.
       var _luCache=lsGet('ts_loadsheets_cache')||[];var _luPrev={};_luCache.forEach(function(s){if(s&&s.id)_luPrev[s.id]=s;});
-      S.saved=ls.map(function(r){var _p=_luPrev[r.id]||{};return{id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''};});
+      S.saved=ls.map(function(r){var _p=_luPrev[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
       lsSet('ts_loadsheets_cache',S.saved);
     } else {
       const cached=lsGet('ts_loadsheets_cache');
@@ -2038,9 +2054,10 @@ async function reloadTable(table){
     if(ls){
       // Forward-only Bin + Archive (else a realtime reload/reconnect that reads stale data bounces a
       // just-binned sheet back to Active, or an archived one back to Signed): keep the locally-known
-      // 'deleted' status and driveUploaded over the DB value. uploadedBy/At are local-only.
-      var _prevLs={};(S.saved||[]).forEach(function(s){if(s&&s.id)_prevLs[s.id]=s;});
-      var _fresh=ls.map(function(r){var _p=_prevLs[r.id]||{};return{id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''};});
+      // 'deleted' status and driveUploaded over the DB value. We consult BOTH the persistent cache and
+      // in-memory S.saved (in-memory wins) so an earlier reload that reset S.saved can't lose the flag.
+      var _prevLs={};(lsGet('ts_loadsheets_cache')||[]).forEach(function(s){if(s&&s.id)_prevLs[s.id]=s;});(S.saved||[]).forEach(function(s){if(s&&s.id)_prevLs[s.id]=s;});
+      var _fresh=ls.map(function(r){var _p=_prevLs[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
       // Preserve any currently-open loadsheet tabs whose saved row falls outside the
       // fetch window, so a realtime refresh can't drop a tab the user still has open.
       var _freshIds={};_fresh.forEach(function(s){_freshIds[s.id]=1;});

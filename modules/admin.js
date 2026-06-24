@@ -1322,7 +1322,7 @@ window.bulkDeleteSaved=async function(){
   if(!confirm('Move '+ids.length+' item(s) to Bin?'))return;
   const lsIds=ids.filter(function(id){return S.saved.find(function(s){return s.id===id;});});
   const mIds=ids.filter(function(id){return S.manifests.find(function(m){return m.id===id;});});
-  S.saved.forEach(function(s){if(lsIds.indexOf(s.id)>=0){s.form._prevStatus=s.status;s.status='deleted';}});
+  S.saved.forEach(function(s){if(lsIds.indexOf(s.id)>=0){s.form._prevStatus=s.status;s.status='deleted';if(window._lsStickyMark)window._lsStickyMark(s.id,'deleted',true);}});
   S.manifests.forEach(function(m){if(mIds.indexOf(m.id)>=0){if(!m.data)m.data={};m.data._deleted=true;m._deleted=true;}});
   lsSet('ts_loadsheets_cache',S.saved);
   lsSet('ts_manifests_cache',S.manifests);
@@ -2203,15 +2203,15 @@ window.openSelectedSaved=function(){
   window.scrollTo(0,0);render();
   toast('Opened '+(nLs+nMf)+' item'+((nLs+nMf)!==1?'s':''),'ok');
 };
-window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]);};
+window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';if(window._lsStickyMark)window._lsStickyMark(id,'deleted',true);lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]);};
 window.restoreFromBin=async function(id){
   var s=S.saved.find(function(x){return x.id===id;});
-  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status,drive_uploaded:!!s.driveUploaded}]);return;}
+  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;if(window._lsStickyMark)window._lsStickyMark(id,'deleted',false);lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status,drive_uploaded:!!s.driveUploaded}]);return;}
   var m=S.manifests.find(function(x){return x.id===id;});
   if(m){if(m.data)delete m.data._deleted;m._deleted=false;lsSet('ts_manifests_cache',S.manifests);render();await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);}
 };
-window.permDeleteFromBin=async function(id){if(!confirm('Permanently delete? This cannot be undone.'))return;S.saved=S.saved.filter(function(s){return s.id!==id;});S.manifests=S.manifests.filter(function(m){return m.id!==id;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_loadsheets',id).catch(function(){});await sbDel('ts_manifests',id).catch(function(){});};
-window.emptyBin=async function(){var bLs=S.saved.filter(function(s){return s.status==='deleted';});var bMs=S.manifests.filter(function(m){return m._deleted;});if(!bLs.length&&!bMs.length){toast('Bin is already empty','info');return;}if(!confirm('Permanently delete all '+(bLs.length+bMs.length)+' item(s)? This cannot be undone.'))return;S.saved=S.saved.filter(function(s){return s.status!=='deleted';});S.manifests=S.manifests.filter(function(m){return!m._deleted;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();for(var i=0;i<bLs.length;i++)await sbDel('ts_loadsheets',bLs[i].id).catch(function(){});for(var j=0;j<bMs.length;j++)await sbDel('ts_manifests',bMs[j].id).catch(function(){});};
+window.permDeleteFromBin=async function(id){if(!confirm('Permanently delete? This cannot be undone.'))return;if(window._lsStickyMark){window._lsStickyMark(id,'deleted',false);window._lsStickyMark(id,'uploaded',false);}S.saved=S.saved.filter(function(s){return s.id!==id;});S.manifests=S.manifests.filter(function(m){return m.id!==id;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_loadsheets',id).catch(function(){});await sbDel('ts_manifests',id).catch(function(){});};
+window.emptyBin=async function(){var bLs=S.saved.filter(function(s){return s.status==='deleted';});var bMs=S.manifests.filter(function(m){return m._deleted;});if(!bLs.length&&!bMs.length){toast('Bin is already empty','info');return;}if(!confirm('Permanently delete all '+(bLs.length+bMs.length)+' item(s)? This cannot be undone.'))return;if(window._lsStickyMark)bLs.forEach(function(x){window._lsStickyMark(x.id,'deleted',false);window._lsStickyMark(x.id,'uploaded',false);});S.saved=S.saved.filter(function(s){return s.status!=='deleted';});S.manifests=S.manifests.filter(function(m){return!m._deleted;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();for(var i=0;i<bLs.length;i++)await sbDel('ts_loadsheets',bLs[i].id).catch(function(){});for(var j=0;j<bMs.length;j++)await sbDel('ts_manifests',bMs[j].id).catch(function(){});};
 window.restoreLsOriginal=function(){
   if(!confirm('Restore to the version loaded from saved? Any unsaved edits will be lost.'))return;
   var tab=S.lsTabs.find(function(t){return t.id===S.activeTabId;});
@@ -2485,6 +2485,7 @@ window.uploadToDrive=async function(sheet,preToken){
     // archive flag rides the offline write-queue (retried until it lands) — a fire-and-forget PATCH
     // could lose the race with a page refresh and bounce the sheet back to Signed.
     if(sheet&&sheet.id){
+      if(window._lsStickyMark)window._lsStickyMark(sheet.id,'uploaded',true);
       var _sh=S.saved.find(function(s){return s.id===sheet.id;});
       if(_sh){_sh.driveUploaded=true;_sh.uploadedBy=(S.user&&S.user.name)||'';_sh.uploadedAt=new Date().toISOString();lsSet('ts_loadsheets_cache',S.saved);}
       var _ar=_sh||sheet;

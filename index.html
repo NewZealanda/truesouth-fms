@@ -524,8 +524,11 @@ async function _syncFlush(){
   var q=_syncQGet();if(!q.length)return;
   _syncFlushing=true;var done=0,remaining=[];
   try{
-    for(var i=0;i<q.length;i++){var e=q[i],ok=false;
-      try{var r=await _sbFetch(SB+'/rest/v1/'+e.table,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify([e.row])});ok=!!(r&&r.ok);}catch(_e){ok=false;}
+    for(var i=0;i<q.length;i++){var e=q[i],ok=false,_row=e.row;
+      // Replay the CURRENT local truth, not the stale captured payload — so a queued 'unsigned' save
+      // can never resurrect a sheet that's since been binned (status reconciled from live S.saved).
+      if(e.table==='ts_loadsheets'&&_row&&_row.id!=null){var _lv=(S.saved||[]).find(function(s){return s.id===_row.id;});if(_lv)_row=Object.assign({},_row,{status:_lv.status||_row.status,drive_uploaded:!!_lv.driveUploaded});}
+      try{var r=await _sbFetch(SB+'/rest/v1/'+e.table,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify([_row])});ok=!!(r&&r.ok);}catch(_e){ok=false;}
       if(ok)done++;else remaining.push(e);
     }
   }finally{
@@ -542,6 +545,19 @@ if(typeof window!=='undefined'){
   }
 }
 const sbDel=async(t,id)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:{...SH}});return r.ok;}catch{return false;}};
+// ── Loadsheet "sticky" state ──────────────────────────────────────────────────
+// A tiny, independent source of truth for two forward-only facts the user just set: a sheet is in the
+// Bin ('deleted'), or has been uploaded to Drive ('uploaded'). It lives under its OWN localStorage key
+// that ONLY bin/restore/upload touch — so unlike the loadsheets cache (rewritten on every reload) it
+// can't be clobbered by a stale realtime reload, an autosave, or the offline queue. Applied over every
+// load so a binned/archived sheet never bounces back to Active/Signed on a refresh.
+function _lsStickyGet(){try{var v=lsGet('ts_ls_sticky');return (v&&typeof v==='object')?v:{};}catch(e){return {};}}
+function _lsStickySet(m){try{lsSet('ts_ls_sticky',m);}catch(e){}}
+function _lsStickyMark(id,field,on){if(!id)return;var m=_lsStickyGet();m[id]=m[id]||{};if(on)m[id][field]=1;else delete m[id][field];if(!Object.keys(m[id]).length)delete m[id];_lsStickySet(m);}
+window._lsStickyMark=_lsStickyMark;
+// Apply the sticky facts onto a freshly-loaded saved-sheet object (mutates + returns it).
+function _lsApplySticky(s){if(!s||!s.id)return s;var st=(_lsStickyGet())[s.id];if(!st)return s;if(st.deleted)s.status='deleted';if(st.uploaded)s.driveUploaded=true;return s;}
+window._lsApplySticky=_lsApplySticky;
 
 // ── Phase A auth cutover (DEFAULT OFF) ──────────────────────────────────────
 // Flip ON only AFTER (1) deploying the verify-login / set-password / confirm-reset
@@ -859,7 +875,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.18';
+const APP_VER='v26.19';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1878,7 +1894,7 @@ async function loadAll(){
       // from-bin updates the cache to a non-deleted status, so it's never stuck deleted. uploadedBy/At are
       // local-only (not in DB) so carry them too.
       var _luCache=lsGet('ts_loadsheets_cache')||[];var _luPrev={};_luCache.forEach(function(s){if(s&&s.id)_luPrev[s.id]=s;});
-      S.saved=ls.map(function(r){var _p=_luPrev[r.id]||{};return{id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''};});
+      S.saved=ls.map(function(r){var _p=_luPrev[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
       lsSet('ts_loadsheets_cache',S.saved);
     } else {
       const cached=lsGet('ts_loadsheets_cache');
@@ -2376,9 +2392,10 @@ async function reloadTable(table){
     if(ls){
       // Forward-only Bin + Archive (else a realtime reload/reconnect that reads stale data bounces a
       // just-binned sheet back to Active, or an archived one back to Signed): keep the locally-known
-      // 'deleted' status and driveUploaded over the DB value. uploadedBy/At are local-only.
-      var _prevLs={};(S.saved||[]).forEach(function(s){if(s&&s.id)_prevLs[s.id]=s;});
-      var _fresh=ls.map(function(r){var _p=_prevLs[r.id]||{};return{id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''};});
+      // 'deleted' status and driveUploaded over the DB value. We consult BOTH the persistent cache and
+      // in-memory S.saved (in-memory wins) so an earlier reload that reset S.saved can't lose the flag.
+      var _prevLs={};(lsGet('ts_loadsheets_cache')||[]).forEach(function(s){if(s&&s.id)_prevLs[s.id]=s;});(S.saved||[]).forEach(function(s){if(s&&s.id)_prevLs[s.id]=s;});
+      var _fresh=ls.map(function(r){var _p=_prevLs[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
       // Preserve any currently-open loadsheet tabs whose saved row falls outside the
       // fetch window, so a realtime refresh can't drop a tab the user still has open.
       var _freshIds={};_fresh.forEach(function(s){_freshIds[s.id]=1;});
@@ -7173,7 +7190,7 @@ window.bulkDeleteSaved=async function(){
   if(!confirm('Move '+ids.length+' item(s) to Bin?'))return;
   const lsIds=ids.filter(function(id){return S.saved.find(function(s){return s.id===id;});});
   const mIds=ids.filter(function(id){return S.manifests.find(function(m){return m.id===id;});});
-  S.saved.forEach(function(s){if(lsIds.indexOf(s.id)>=0){s.form._prevStatus=s.status;s.status='deleted';}});
+  S.saved.forEach(function(s){if(lsIds.indexOf(s.id)>=0){s.form._prevStatus=s.status;s.status='deleted';if(window._lsStickyMark)window._lsStickyMark(s.id,'deleted',true);}});
   S.manifests.forEach(function(m){if(mIds.indexOf(m.id)>=0){if(!m.data)m.data={};m.data._deleted=true;m._deleted=true;}});
   lsSet('ts_loadsheets_cache',S.saved);
   lsSet('ts_manifests_cache',S.manifests);
@@ -8054,15 +8071,15 @@ window.openSelectedSaved=function(){
   window.scrollTo(0,0);render();
   toast('Opened '+(nLs+nMf)+' item'+((nLs+nMf)!==1?'s':''),'ok');
 };
-window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]);};
+window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';if(window._lsStickyMark)window._lsStickyMark(id,'deleted',true);lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]);};
 window.restoreFromBin=async function(id){
   var s=S.saved.find(function(x){return x.id===id;});
-  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status,drive_uploaded:!!s.driveUploaded}]);return;}
+  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;if(window._lsStickyMark)window._lsStickyMark(id,'deleted',false);lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status,drive_uploaded:!!s.driveUploaded}]);return;}
   var m=S.manifests.find(function(x){return x.id===id;});
   if(m){if(m.data)delete m.data._deleted;m._deleted=false;lsSet('ts_manifests_cache',S.manifests);render();await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);}
 };
-window.permDeleteFromBin=async function(id){if(!confirm('Permanently delete? This cannot be undone.'))return;S.saved=S.saved.filter(function(s){return s.id!==id;});S.manifests=S.manifests.filter(function(m){return m.id!==id;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_loadsheets',id).catch(function(){});await sbDel('ts_manifests',id).catch(function(){});};
-window.emptyBin=async function(){var bLs=S.saved.filter(function(s){return s.status==='deleted';});var bMs=S.manifests.filter(function(m){return m._deleted;});if(!bLs.length&&!bMs.length){toast('Bin is already empty','info');return;}if(!confirm('Permanently delete all '+(bLs.length+bMs.length)+' item(s)? This cannot be undone.'))return;S.saved=S.saved.filter(function(s){return s.status!=='deleted';});S.manifests=S.manifests.filter(function(m){return!m._deleted;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();for(var i=0;i<bLs.length;i++)await sbDel('ts_loadsheets',bLs[i].id).catch(function(){});for(var j=0;j<bMs.length;j++)await sbDel('ts_manifests',bMs[j].id).catch(function(){});};
+window.permDeleteFromBin=async function(id){if(!confirm('Permanently delete? This cannot be undone.'))return;if(window._lsStickyMark){window._lsStickyMark(id,'deleted',false);window._lsStickyMark(id,'uploaded',false);}S.saved=S.saved.filter(function(s){return s.id!==id;});S.manifests=S.manifests.filter(function(m){return m.id!==id;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_loadsheets',id).catch(function(){});await sbDel('ts_manifests',id).catch(function(){});};
+window.emptyBin=async function(){var bLs=S.saved.filter(function(s){return s.status==='deleted';});var bMs=S.manifests.filter(function(m){return m._deleted;});if(!bLs.length&&!bMs.length){toast('Bin is already empty','info');return;}if(!confirm('Permanently delete all '+(bLs.length+bMs.length)+' item(s)? This cannot be undone.'))return;if(window._lsStickyMark)bLs.forEach(function(x){window._lsStickyMark(x.id,'deleted',false);window._lsStickyMark(x.id,'uploaded',false);});S.saved=S.saved.filter(function(s){return s.status!=='deleted';});S.manifests=S.manifests.filter(function(m){return!m._deleted;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();for(var i=0;i<bLs.length;i++)await sbDel('ts_loadsheets',bLs[i].id).catch(function(){});for(var j=0;j<bMs.length;j++)await sbDel('ts_manifests',bMs[j].id).catch(function(){});};
 window.restoreLsOriginal=function(){
   if(!confirm('Restore to the version loaded from saved? Any unsaved edits will be lost.'))return;
   var tab=S.lsTabs.find(function(t){return t.id===S.activeTabId;});
@@ -8336,6 +8353,7 @@ window.uploadToDrive=async function(sheet,preToken){
     // archive flag rides the offline write-queue (retried until it lands) — a fire-and-forget PATCH
     // could lose the race with a page refresh and bounce the sheet back to Signed.
     if(sheet&&sheet.id){
+      if(window._lsStickyMark)window._lsStickyMark(sheet.id,'uploaded',true);
       var _sh=S.saved.find(function(s){return s.id===sheet.id;});
       if(_sh){_sh.driveUploaded=true;_sh.uploadedBy=(S.user&&S.user.name)||'';_sh.uploadedAt=new Date().toISOString();lsSet('ts_loadsheets_cache',S.saved);}
       var _ar=_sh||sheet;
@@ -16274,8 +16292,9 @@ window.rezdyLsCloseDelete=function(id){
   var s=(S.saved||[]).find(function(x){return x.id===id;});
   if(s){ // soft-delete to the Bin (recoverable), matching the app's delete model
     s.form=s.form||{};s.form._prevStatus=s.status;s.status='deleted';
+    if(window._lsStickyMark)window._lsStickyMark(s.id,'deleted',true);
     if(typeof lsSet==='function')lsSet('ts_loadsheets_cache',S.saved);
-    if(typeof sbU==='function')sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted'}]).catch(function(){});
+    if(typeof sbU==='function')sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]).catch(function(){});
   }
   if(typeof toast==='function')toast('Loadsheet moved to Bin','warn');
   window.rezdyCloseLsTab(id);
