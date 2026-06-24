@@ -389,7 +389,9 @@ window.bizPaxSyncRezdy=async function(ym,auto){
     var byDate={};
     rows.forEach(function(r){
       var ds=String(r.tour_date||'').slice(0,10);if(!ds)return;
-      var b=null;try{b=(typeof _rzMapBookings==='function')?_rzMapBookings([r])[0]:null;}catch(e){}
+      // Pass the row's tour_date so a round-trip order's items are filtered to THIS day — otherwise a
+      // flyback/return leg dated later (e.g. Sat/Sun) leaks its seats into today's count (4 vs 2).
+      var b=null;try{b=(typeof _rzMapBookings==='function')?_rzMapBookings([r],ds)[0]:null;}catch(e){}
       if(!b)return;
       if(/cancel/i.test(b.status||''))return; // exclude cancellations (matches the Bookings page)
       var seats=0;try{var e=_rzEffBreakdown(b);seats=(e.a||0)+(e.c||0);}catch(e){}
