@@ -803,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.79';
+const APP_VER='v25.80';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16127,6 +16127,13 @@ function _rzRenderSchedule(){
     }
   });
   Object.keys(bkGroups).forEach(function(k){if(!bkGroups[k].bookings.length)delete bkGroups[k];});
+  // Allocate auto-pilots over EXACTLY the aircraft the calendar is about to draw flights on (manual
+  // splits and all) — guaranteed to match what's on screen, unlike deriving the set separately.
+  if(typeof _schedEnabled==='function'&&_schedEnabled()&&typeof _schedComputeAutoPilots==='function'){
+    try{var _calAcs={};Object.keys(bkGroups).forEach(function(k){var _a=bkGroups[k].aircraft;if(_a&&_a!=='__unalloc__'&&_a!=='__misc__'&&((S&&S.aircraft)||{})[_a])_calAcs[_a]=1;});
+      S._schedAutoPilots=_schedComputeAutoPilots(S.rezdyDate,Object.keys(_calAcs));S._schedAutoPilotsDate=S.rezdyDate;
+    }catch(_e){}
+  }
   const bkBlocks=Object.keys(bkGroups).map(function(k){
     var g=bkGroups[k];var sm=_rzMinsFromHHMM(g.start)||0;
     var _prods=Object.keys(g.products||{});if(!_prods.length)_prods=[g.product];
@@ -19732,13 +19739,10 @@ function _schedComputeAutoPilots(date,aircraftUsed){
   return out;
 }
 // The auto-assigned pilot for an aircraft on the current day (null when off / different date).
+// S._schedAutoPilots is computed directly in the calendar render over the aircraft it actually draws
+// flights on (so manual splits are covered); just read it here.
 function _schedAutoPilotFor(ac){
-  if(!_schedEnabled())return null;
-  // Ensure the day's allocation is current — otherwise a day where EVERY booking was manually placed
-  // never triggers _schedEnsureAuto (it only fires while resolving an auto aircraft), so no auto pilots
-  // are computed at all. The sig cache makes repeat calls cheap.
-  try{if(typeof _schedEnsureAuto==='function')_schedEnsureAuto();}catch(e){}
-  if(S._schedAutoPilotsDate!==S.rezdyDate)return null;
+  if(!_schedEnabled()||S._schedAutoPilotsDate!==S.rezdyDate)return null;
   return (S._schedAutoPilots||{})[ac]||null;
 }
 // Live order→aircraft map (memoised). The per-departure aircraft SETS come from the whole-day

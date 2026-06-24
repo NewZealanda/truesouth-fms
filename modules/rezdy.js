@@ -3911,6 +3911,13 @@ function _rzRenderSchedule(){
     }
   });
   Object.keys(bkGroups).forEach(function(k){if(!bkGroups[k].bookings.length)delete bkGroups[k];});
+  // Allocate auto-pilots over EXACTLY the aircraft the calendar is about to draw flights on (manual
+  // splits and all) — guaranteed to match what's on screen, unlike deriving the set separately.
+  if(typeof _schedEnabled==='function'&&_schedEnabled()&&typeof _schedComputeAutoPilots==='function'){
+    try{var _calAcs={};Object.keys(bkGroups).forEach(function(k){var _a=bkGroups[k].aircraft;if(_a&&_a!=='__unalloc__'&&_a!=='__misc__'&&((S&&S.aircraft)||{})[_a])_calAcs[_a]=1;});
+      S._schedAutoPilots=_schedComputeAutoPilots(S.rezdyDate,Object.keys(_calAcs));S._schedAutoPilotsDate=S.rezdyDate;
+    }catch(_e){}
+  }
   const bkBlocks=Object.keys(bkGroups).map(function(k){
     var g=bkGroups[k];var sm=_rzMinsFromHHMM(g.start)||0;
     var _prods=Object.keys(g.products||{});if(!_prods.length)_prods=[g.product];
