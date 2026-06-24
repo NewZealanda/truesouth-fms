@@ -850,7 +850,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.14';
+const APP_VER='v26.15';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -20717,12 +20717,51 @@ window.trainNext=function(){if(!S._train)return;var m=_trainMod();if(!m)return;i
 window.trainBack=function(){if(!S._train)return;if(S._train.idx<=0)return;S._train.idx--;_trainNav(_trainStep());};
 window.trainExit=function(done){S._train=null;if(done&&typeof toast==='function')toast('Training complete ✓','ok');if(typeof render==='function')render();};
 
+// ── Tips & Tricks — hidden shortcuts / sneaky features people might not know about ──────────────
+var _TRAIN_TIPS=[
+  {icon:'👆',title:'Quad-tap to your Flight Record',body:'Tap any blank space on the screen four times quickly and you jump straight to your Flight Record — handy on the apron. Taps on buttons, fields or cards don\'t count, only empty space.'},
+  {icon:'⬅➡',title:'Arrow keys cycle the page',body:'On a keyboard, ← and → move around the section you\'re in: Operations flips through its sub-tabs (Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved ↔ Ground), Maintenance flips its tabs, the Roster shifts a week, and the Calendar steps a day.'},
+  {icon:'⌘',title:'⌘ / Ctrl + arrows change the day',body:'Hold ⌘ (Mac) or Ctrl (Windows) with ← / → to step the DATE one day at a time on Bookings, Seatmap, Loadsheets, Ground and the Calendar — the same as the ◁ ▷ buttons.'},
+  {icon:'👉',title:'Swipe to switch (phone)',body:'On a phone, a firm sideways swipe cycles the sub-tabs in Operations, or the day on the Calendar. Swipe left for the next one, right to go back.'},
+  {icon:'🗓',title:'Drag calendar blocks',body:'On the Calendar, drag a flight block\'s TOP edge to set its departure, its BOTTOM edge to set the return, or grab the MIDDLE to move it — drop it on another aircraft\'s column to reassign. A single tap just opens it.'},
+  {icon:'🧑‍✈',title:'Hold a pilot on the ground',body:'In Pilot movements, tap a pilot\'s ＋ to add an all-day note/meeting and the allocator will keep them off the aircraft — e.g. holding your SDB-rated pilot in reserve. The allocator also does this automatically for SDB when there\'s spare crew.'},
+  {icon:'🏠',title:'Set your start page',body:'Tap your name (top-right) and choose which page the app opens to, so you always land on Bookings, the Calendar, your Flight Record — whatever you use most.'},
+  {icon:'🎒',title:'Everything pilot in one place',body:'Flight Record, Logbooks and Flight & Duty all live together under Pilot Bag in the menu.'},
+  {icon:'📶',title:'Logs survive no reception',body:'Start a flight log, fly out of coverage, land and tap On Blocks — it\'s all saved on your device and uploads itself automatically once you\'re back in range.'},
+  {icon:'⏭',title:'Skip the intro',body:'The mountains-and-plane loading animation has a Skip button in the corner when you\'re in a hurry.'}
+];
+window.trainTipsOpen=function(){S._trainTips=true;render();};
+window.trainTipsClose=function(){S._trainTips=false;render();};
+function _renderTrainTips(){
+  var h='<div class="page">';
+  h+='<div class="card" style="display:flex;align-items:center;gap:10px">'+
+    '<button onclick="window.trainTipsClose()" style="padding:7px 13px;border-radius:9px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">‹ Back</button>'+
+    '<div><div class="st" style="margin-bottom:2px">💡 Tips &amp; Tricks</div>'+
+    '<p style="font-size:13px;color:var(--text3);margin:0">Little shortcuts and hidden features that make the app quicker once you know them.</p></div></div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
+  _TRAIN_TIPS.forEach(function(t){
+    h+='<div class="card" style="margin:0;display:flex;gap:12px;align-items:flex-start">'+
+      '<div style="font-size:24px;flex-shrink:0;line-height:1.2">'+t.icon+'</div>'+
+      '<div><div style="font-size:14px;font-weight:800;color:var(--text1);margin-bottom:3px">'+_trainEsc(t.title)+'</div>'+
+      '<div style="font-size:12.5px;color:var(--text3);line-height:1.55">'+_trainEsc(t.body)+'</div></div>'+
+    '</div>';
+  });
+  h+='</div></div>';
+  return h;
+}
 // ── Training landing page (module picker) ──────────────────────────────────────
 function renderTraining(){
   if(!S.user)return '<div class="page"><div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div></div>';
+  if(S._trainTips)return _renderTrainTips();
   var h='<div class="page">';
   h+='<div class="card"><div class="st" style="margin-bottom:2px">Training</div>'+
     '<p style="font-size:13px;color:var(--text3);margin:0">Pick a module and I\'ll walk you through the real screens, one step at a time. Use it as often as you like.</p></div>';
+  // Tips & Tricks — sneaky features / shortcuts.
+  h+='<div class="card" onclick="window.trainTipsOpen()" style="cursor:pointer;display:flex;align-items:center;gap:12px;border:1px solid rgba(124,58,237,.35)">'+
+    '<div style="font-size:26px;flex-shrink:0">💡</div>'+
+    '<div style="flex:1"><div style="font-size:15px;font-weight:800;color:var(--text1)">Tips &amp; Tricks</div>'+
+    '<div style="font-size:12px;color:var(--text3)">Hidden shortcuts &amp; sneaky features — quad-tap, arrow keys, swipes and more.</div></div>'+
+    '<div style="font-size:20px;color:var(--text3)">›</div></div>';
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">';
   Object.keys(TRAIN_MODULES).forEach(function(k){var m=TRAIN_MODULES[k];
     h+='<div class="card" style="margin:0;display:flex;flex-direction:column;gap:8px">'+
