@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.39';
+const APP_VER='v26.40';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -10717,7 +10717,7 @@ function _mfBlankWO(ac){
     id:'wo_'+Date.now()+'_'+Math.floor(Math.random()*1e4),
     form_type:'work_order', aircraft:ac||'', status:'open', drive_uploaded:false,
     data:{
-      instructionsTo:'', woNo:'', acType:_mfAcType(ac), acReg:ac||'', onDate:t, orDate:'',
+      instructionsTo:'Performance Aviation New Zealand', woNo:'', acType:_mfAcType(ac), acReg:ac||'', onDate:t, orDate:'',
       routine:{items:[]}, unscheduled:{items:[]}, defect:{items:[]},
       oil:{lastChange:_mfOilChangeDate(ac), updateChange:false, note:''},
       notify:'', notifyPrice:'Y', notifyDelays:'Y', notifyExtra:'Y',
@@ -11079,7 +11079,7 @@ function renderMaintFormEditor(id){
     '</div></div>';
   h+='<div style="font-size:11px;color:var(--text3);margin-bottom:10px">SLA 13 (Rev 3) · auto-saves &amp; syncs across devices. Last edit by '+_mfEsc(f.updated_by||'—')+'.</div>';
   h+='<div class="card" style="margin-bottom:10px"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px">'+
-    fld('2. Work Order No','woNo',d.woNo)+fld('1. Instructions To','instructionsTo',d.instructionsTo)+
+    fld('1. Work Order No','woNo',d.woNo)+fld('2. Instructions To','instructionsTo',d.instructionsTo)+
     fld('3. Aircraft Type','acType',d.acType)+fld('4. Aircraft Registration','acReg',d.acReg||f.aircraft)+
     dt('5a. On Date','onDate',d.onDate)+dt('5b. Or Date','orDate',d.orDate)+'</div></div>';
   h+='<div class="card" style="margin-bottom:10px"><div class="st" style="font-size:13px;margin-bottom:8px">Please carry out the following</div>'+
