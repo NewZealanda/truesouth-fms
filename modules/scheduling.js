@@ -92,9 +92,21 @@ function _schedRunHr(typeKey){var b=_schedBizRunHr(typeKey);if(b!=null)return b;
 function _schedLandVal(typeKey){var b=_schedBizLandings(typeKey);if(b!=null)return b;return _schedNum((_schedCalc()[typeKey]||{}).land);}
 function _schedCostSource(typeKey){return _schedBizRunHr(typeKey)!=null?'biz':'manual';}
 function _schedCalcCost(typeKey,hrs){var r=_schedRunHr(typeKey);if(r==null)return null;var l=_schedLandVal(typeKey);return r*hrs+(l!=null?l:0);}
-// Effective Milford return / ferry cost for an aircraft — computed from its type's run/hr + landings.
-function _schedRtCost(ac){var tk=_schedTypeKey(ac);var v=_schedCalcCost(tk,SCHED_HRS.ret[tk]||1.1);return v!=null?v:_schedNum(_schedTail(ac).rt);}
-function _schedFerryCost(ac){var tk=_schedTypeKey(ac);var v=_schedCalcCost(tk,SCHED_HRS.fer[tk]||1.0);return v!=null?v:_schedNum(_schedTail(ac).ferry);}
+// Flat per-DESTINATION round-trip costs (ex GST), editable in the cost table, seeded with operator
+// figures. Milford ('MF' / null) is NOT flat — it stays run/hr × hours-derived above. A non-Milford
+// destination's ferry LEG = half its round-trip (an empty leg flies the same time as a loaded one).
+var SCHED_DEST_COST_DEFAULT={MC:{airvan:1700.85,caravan:2469.21,sdb:2469.21}};
+function _schedDestCostCfg(){var c=_schedCfg();if(!c.destCost||typeof c.destCost!=='object')c.destCost={};return c.destCost;}
+function _schedDestRt(dest,typeKey){
+  if(!dest||dest==='MF')return null;                                   // Milford → hours-derived, not flat
+  var cfg=(_schedDestCostCfg()[dest])||{};var v=_schedNum(cfg[typeKey]);if(v!=null)return v;
+  var d=SCHED_DEST_COST_DEFAULT[dest];return d?_schedNum(d[typeKey]):null;
+}
+// Effective return / ferry cost for an aircraft on a destination — Milford computed from run/hr +
+// landings; other destinations use the flat figures (ferry round = round-trip, i.e. leg = half).
+function _schedRtCost(ac,dest){var tk=_schedTypeKey(ac);var flat=_schedDestRt(dest,tk);if(flat!=null)return flat;var v=_schedCalcCost(tk,SCHED_HRS.ret[tk]||1.1);return v!=null?v:_schedNum(_schedTail(ac).rt);}
+function _schedFerryCost(ac,dest){var tk=_schedTypeKey(ac);var flat=_schedDestRt(dest,tk);if(flat!=null)return flat;var v=_schedCalcCost(tk,SCHED_HRS.fer[tk]||1.0);return v!=null?v:_schedNum(_schedTail(ac).ferry);}
+window.schedSetDestCost=function(dest,type,v){var dc=_schedDestCostCfg();var e=dc[dest]||(dc[dest]={});var n=_schedNum(v);e[type]=(n!=null?n:'');_schedSave();render();};
 function _schedCallIn(){return _schedNum(_schedCfg().callInPerDay);}
 function _schedMoney(n){if(n==null||isNaN(n))return '—';return '$'+Number(n).toLocaleString('en-NZ',{maximumFractionDigits:0});}
 
@@ -156,14 +168,16 @@ function renderSchedulingSettings(){
   // it isn't, the manual fields below act as the fallback.
   var _fromBiz=(_schedCostSource('caravan')==='biz');
   var _ni=function(type,field,val){return '<input type="number" min="0" inputmode="decimal" value="'+_schedEsc(val)+'" onchange="window.schedSetCalc(\''+type+'\',\''+field+'\',this.value)" style="width:96px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px">';};
+  var _nd=function(dest,type,val){return '<input type="number" min="0" inputmode="decimal" value="'+_schedEsc(val)+'" onchange="window.schedSetDestCost(\''+dest+'\',\''+type+'\',this.value)" style="width:96px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px">';};
   var _ro=function(v){return '<span style="font-weight:700;color:var(--text1)">'+(v!=null?_schedMoney(v):'—')+'</span>';};
   h+='<div class="card" style="margin-bottom:14px"><div class="st">Cost calculator</div>'+
     '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Costs ex GST, less pilot (rostered = sunk cost). '+
       (_fromBiz?'Run/hr &amp; landings are pulled live from <b>Business Plan ▸ Running costs</b> — edit fuel / maintenance / fees there and every figure here (and the allocator) updates automatically.':'Enter <b>run/hr</b> and <b>landings + fees</b> per type (Business Plan not loaded — using manual fallback).')+
-      ' Hours: Milford <b>return</b> = airvan 1.2h, caravan/SDB 1.1h; <b>ferry</b> (empty) = 1.0h.</p>'+
-    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:560px">'+
+      ' Hours: Milford <b>return</b> = airvan 1.2h, caravan/SDB 1.1h; <b>ferry</b> (empty) = 1.0h. '+
+      '<b>Mt Cook</b> uses the flat round-trip you enter (ferry leg = half the round-trip).</p>'+
+    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:680px">'+
       '<thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em">'+
-        '<th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Run/hr $</th><th style="padding:6px 8px">Landings+fees $</th><th style="padding:6px 8px">Milford return</th><th style="padding:6px 8px">Ferry</th></tr></thead><tbody>';
+        '<th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Run/hr $</th><th style="padding:6px 8px">Landings+fees $</th><th style="padding:6px 8px">Milford return</th><th style="padding:6px 8px">Milford ferry</th><th style="padding:6px 8px">Mt Cook return</th></tr></thead><tbody>';
   [['airvan','Airvan (owned avg)'],['caravan','Caravan (owned avg)'],['sdb','SDB (lease)']].forEach(function(row){
     var k=row[0];var e=_schedCalc()[k]||{};var biz=(_schedCostSource(k)==='biz');
     var rt=_schedCalcCost(k,SCHED_HRS.ret[k]),fer=_schedCalcCost(k,SCHED_HRS.fer[k]);
@@ -173,6 +187,7 @@ function renderSchedulingSettings(){
       '<td style="padding:6px 8px">'+(biz?_ro(_schedLandVal(k)):_ni(k,'land',e.land))+'</td>'+
       '<td style="padding:6px 8px;font-weight:800;color:#22c55e">'+_schedMoney(rt)+'</td>'+
       '<td style="padding:6px 8px;font-weight:800;color:#f59e0b">'+_schedMoney(fer)+'</td>'+
+      '<td style="padding:6px 8px">'+_nd('MC',k,_schedDestRt('MC',k))+'</td>'+
     '</tr>';
   });
   h+='</tbody></table></div></div>';
@@ -372,6 +387,7 @@ function renderResources(){
         else lockCtl='<button onclick="window.schedToggleLock(\''+sel+'\',\''+_schedEsc(d.time)+'\')" title="'+(d.manualLock?'Locked — optimiser won\'t change it. Click to unlock.':'Lock this departure so the optimiser leaves it and only re-plans the rest of the day.')+'" style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;cursor:pointer;border:1px solid '+(d.manualLock?'#f59e0b':'var(--border2)')+';background:'+(d.manualLock?'rgba(245,158,11,.12)':'transparent')+';color:'+(d.manualLock?'#f59e0b':'var(--text3)')+'">'+(d.manualLock?'🔒 locked':'🔓 lock')+'</button>';
         h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-bottom:4px;'+(d.locked?'opacity:.72;':'')+'">'+
           '<b style="color:var(--text1);min-width:46px">'+_schedEsc(d.time)+'</b>'+
+          (d.dest?'<span style="font-size:10px;font-weight:800;color:var(--text3)">'+_schedEsc(d.dest)+'</span>':'')+
           '<span style="color:var(--text3)">'+d.pax+' pax →</span>'+acs+
           (d.short?'<span style="color:#ef4444;font-weight:700;font-size:11px">⚠ short '+(d.pax-d.cap)+'</span>':'')+
           '<span style="margin-left:auto">'+lockCtl+'</span></div>';
@@ -484,6 +500,7 @@ function _schedSig(date,bks){
   try{parts.push(JSON.stringify((_resAll()||{})[date]||{}));}catch(e){}
   try{Object.keys((S.maintenance&&S.maintenance.bookings)||{}).forEach(function(ac){((S.maintenance.bookings[ac])||[]).forEach(function(b){if(b&&b.date&&date>=b.date&&date<=(b.end||b.date))parts.push('M'+ac);});});}catch(e){}
   Object.keys((S&&S.aircraft)||{}).forEach(function(ac){parts.push(ac+':'+(_schedNum(_schedTail(ac).cap)||'')+':'+_schedRtCost(ac)+':'+_schedFerryCost(ac));});
+  try{parts.push('DC:'+JSON.stringify(_schedDestCostCfg()));}catch(e){}   // per-destination flat costs
   try{parts.push('P:'+_schedDayPilots(date).map(function(p){return p.code;}).join(','));}catch(e){}   // roster + call-ins
   try{var c=_schedCfg();parts.push('T:'+JSON.stringify(c.pilotOrder||{})+JSON.stringify(c.pilotTie||{}));}catch(e){}
   try{parts.push('MP:'+JSON.stringify(S._schedPilots||{}));}catch(e){}   // manual pilot picks
@@ -524,8 +541,8 @@ function _schedEnsureAuto(){
   if(S._schedAutoKey===sig&&S._schedAutoAc)return;
   S._schedAutoBusy=true;
   try{
-    // bookings per departure time (orders → seats)
-    var byTime={};
+    // bookings per (departure time, destination) → seats, matching the plan's per-(time,dest) flights.
+    var byKey={};
     bks.forEach(function(b){
       if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
       var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
@@ -534,14 +551,16 @@ function _schedEnsureAuto(){
         var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;
         var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';
         if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;
-        var g=byTime[start]||(byTime[start]={});g[o]=(g[o]||0)+(parseInt(it.quantity,10)||0);
+        var dst=(typeof _rzGroupDest==='function')?_rzGroupDest(prod):'MF';
+        var k=_schedDepKeyTD(start,dst);
+        var g=byKey[k]||(byKey[k]={});g[o]=(g[o]||0)+(parseInt(it.quantity,10)||0);
       });
     });
     var dp=_schedDayPlan(date);
     var map={};
     dp.departures.forEach(function(d){
       if(d.locked)return;                            // committed — keep current assignment
-      var orders=byTime[d.time]||{};
+      var orders=byKey[d.key]||{};
       var groupsArr=Object.keys(orders).map(function(o){return {order:o,size:orders[o]};});
       if(!groupsArr.length||!d.aircraft.length)return;
       var chosen=d.aircraft.map(function(a){return {ac:a.ac,cap:a.cap,priority:_schedIsPriority(a.ac)};});
@@ -594,12 +613,15 @@ function _schedAutoAcFor(order){
 // aircraft vs run-SDB by counting the actual extra legs. Per-leg = round-trip ÷ 2 (empty = ferry
 // round-trip ÷ 2). Greedy per departure in time order (optimal per departure given prior commitments;
 // fleet is tiny). Pilots/call-in/auto-apply come next.
-function _schedLoadedLeg(ac){var r=_schedRtCost(ac);return r==null?null:r/2;}
-function _schedEmptyLeg(ac){var f=_schedFerryCost(ac);if(f!=null)return f/2;var r=_schedRtCost(ac);return r==null?null:r/2;}
+function _schedLoadedLeg(ac,dest){var r=_schedRtCost(ac,dest);return r==null?null:r/2;}
+function _schedEmptyLeg(ac,dest){var f=_schedFerryCost(ac,dest);if(f!=null)return f/2;var r=_schedRtCost(ac,dest);return r==null?null:r/2;}
 // Passenger demand per departure time for a date (Milford scenic; skips flyback/cancel/no-show).
+// One departure per (TIME, DESTINATION): a Milford and a Mt Cook at the same time are SEPARATE flights
+// needing separate aircraft — they must never be merged onto one plane. Key = "HH:MM|DEST".
+function _schedDepKeyTD(time,dest){return time+'|'+dest;}
 function _schedDayDepartures(date){
   var bks=_schedBookingsFor(date);if(!bks)return [];   // not loaded yet (fetch triggered on day-pick)
-  var g={},dests={};
+  var g={};
   bks.forEach(function(b){
     if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
     var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
@@ -608,11 +630,13 @@ function _schedDayDepartures(date){
       var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;
       var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';
       if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;
-      g[start]=(g[start]||0)+(parseInt(it.quantity,10)||0);
-      var dst=(typeof _rzGroupDest==='function')?_rzGroupDest(prod):'MF';(dests[start]||(dests[start]={}))[dst]=1;
+      var dst=(typeof _rzGroupDest==='function')?_rzGroupDest(prod):'MF';
+      var key=_schedDepKeyTD(start,dst);
+      var e=g[key]||(g[key]={time:start,dest:dst,key:key,pax:0,dests:[dst]});
+      e.pax+=(parseInt(it.quantity,10)||0);
     });
   });
-  return Object.keys(g).map(function(t){return {time:t,pax:g[t],dests:Object.keys(dests[t]||{})};}).sort(function(a,b){return _schedMinOf(a.time)-_schedMinOf(b.time);});
+  return Object.keys(g).map(function(k){return g[k];}).sort(function(a,b){var d=(_schedMinOf(a.time)||0)-(_schedMinOf(b.time)||0);return d!==0?d:String(a.dest).localeCompare(String(b.dest));});
 }
 // Flight hours for a return to a destination, by type. Milford 1.2/1.1; Mt Cook 2.1/1.8; Franz 2.2/1.9.
 var SCHED_DEST_HRS={MF:{airvan:1.2,caravan:1.1},MC:{airvan:2.1,caravan:1.8},FJ:{airvan:2.2,caravan:1.9}};
@@ -649,7 +673,7 @@ function _schedDepLocked(date,time){
 function _schedDepManualLock(date,time){return !!((_schedLockMap()[date]||{})[time]);}
 // The aircraft CURRENTLY assigned to a departure's bookings (manual/auto/comments) — used as the
 // fixed set for a locked departure.
-function _schedDepAssignedAc(date,time){
+function _schedDepAssignedAc(date,time,dest){
   var bks=_schedBookingsFor(date);if(!bks)return [];
   var seats={};
   bks.forEach(function(b){
@@ -659,6 +683,7 @@ function _schedDepAssignedAc(date,time){
       var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
       var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;if(start!==time)return;
       var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;
+      if(dest){var dst=(typeof _rzGroupDest==='function')?_rzGroupDest(prod):'MF';if(dst!==dest)return;}   // this (time,destination) only
       var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,o):null;if(!ac)return;
       seats[ac]=(seats[ac]||0)+(parseInt(it.quantity,10)||0);
     });
@@ -670,7 +695,7 @@ window.schedToggleLock=function(date,time){var lm=_schedLockMap();var d=lm[date]
 function _schedDayPlan(date,opts){
   opts=opts||{};var maxAc=(opts.maxAircraft!=null)?opts.maxAircraft:Infinity;
   var deps=_schedDayDepartures(date);
-  var freeAt={},everUsed={},plan=[],cost=0,loadedLegs=0,emptyLegs=0,paxShort=0;
+  var freeAt={},everUsed={},plan=[],cost=0,loadedLegs=0,emptyLegs=0,paxShort=0,usedAtTime={};
   // Projected hours-to-the-next-check per aircraft, decremented as the day's flights are assigned.
   // An aircraft is only eligible for a departure if the flight would still leave the 0.5h ferry
   // reserve (runLeft − flightHrs ≥ floor). e.g. airvan at −3.2 can do a 1.2h Milford (→ −4.4 ≥ −4.5).
@@ -681,30 +706,33 @@ function _schedDayPlan(date,opts){
   deps.forEach(function(d){
     var dm=_schedMinOf(d.time)||0;
     var locked=_schedDepLocked(date,d.time);
+    var _ut=usedAtTime[d.time]||(usedAtTime[d.time]={});   // aircraft already flying at THIS exact time (other destination)
     if(locked){
       // Respect the committed aircraft; just position them so the rest of the day plans around it.
-      var fixed=_schedDepAssignedAc(date,d.time);var ldAc=[],ldCap=0;
-      fixed.forEach(function(a){var ll=_schedLoadedLeg(a.ac),el=_schedEmptyLeg(a.ac);var out=(freeAt[a.ac]!=null&&freeAt[a.ac]>dm);
-        var cap=_schedNum(_schedTail(a.ac).cap)||_schedDefaultCap(a.ac);ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+SCHED_BLOCK_MIN;_mxUse(a.ac,_schedDepFltHrs(d.dests,_schedIsAirvan(a.ac)));
+      var fixed=_schedDepAssignedAc(date,d.time,d.dest);var ldAc=[],ldCap=0;
+      fixed.forEach(function(a){var ll=_schedLoadedLeg(a.ac,d.dest),el=_schedEmptyLeg(a.ac,d.dest);var out=(freeAt[a.ac]!=null&&freeAt[a.ac]>dm);
+        var cap=_schedNum(_schedTail(a.ac).cap)||_schedDefaultCap(a.ac);ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+SCHED_BLOCK_MIN;_ut[a.ac]=1;_mxUse(a.ac,_schedDepFltHrs(d.dests,_schedIsAirvan(a.ac)));
         if(ll!=null){loadedLegs+=2;cost+=2*ll;if(out){emptyLegs+=2;cost+=2*el;}}
         ldAc.push({ac:a.ac,cap:cap,reused:out});});
       if(ldCap<d.pax)paxShort+=(d.pax-ldCap);
-      plan.push({time:d.time,pax:d.pax,aircraft:ldAc,cap:ldCap,short:ldCap<d.pax,locked:true,manualLock:_schedDepManualLock(date,d.time)});
+      plan.push({time:d.time,dest:d.dest,key:d.key,pax:d.pax,aircraft:ldAc,cap:ldCap,short:ldCap<d.pax,locked:true,manualLock:_schedDepManualLock(date,d.time)});
       return;
     }
-    var fleet=_schedFleetFor(date,d.time).filter(function(f){return _mxFits(f.ac,_schedDepFltHrs(d.dests,f.airvan));});   // drop aircraft that can't fit this flight before maintenance
+    // Exclude aircraft already assigned to another flight at this exact time — one plane can't fly two
+    // departures at once (this is what stops a Milford and a Mt Cook 0800 sharing an aircraft).
+    var fleet=_schedFleetFor(date,d.time).filter(function(f){return !_ut[f.ac]&&_mxFits(f.ac,_schedDepFltHrs(d.dests,f.airvan));});
     var maxNew=maxAc-Object.keys(everUsed).length;if(maxNew<0)maxNew=0;
     // An aircraft needs a FERRY only if it's still airborne from an earlier load at this departure
     // time (freeAt > now). One that never flew, or already returned to base, is free (fresh rotation).
-    var cand=fleet.map(function(f){var ll=_schedLoadedLeg(f.ac),el=_schedEmptyLeg(f.ac);
+    var cand=fleet.map(function(f){var ll=_schedLoadedLeg(f.ac,d.dest),el=_schedEmptyLeg(f.ac,d.dest);
       var out=(freeAt[f.ac]!=null&&freeAt[f.ac]>dm);
       return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,isNew:!everUsed[f.ac],ll:ll,el:el,inc:2*ll+(out?2*el:0)};});
     var chosen=_schedPlanPick(d.pax,cand,maxNew);
     var depAc=[];var depCap=0;
-    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+SCHED_BLOCK_MIN;_mxUse(c.ac,_schedDepFltHrs(d.dests,c.airvan));depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
+    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+SCHED_BLOCK_MIN;_ut[c.ac]=1;_mxUse(c.ac,_schedDepFltHrs(d.dests,c.airvan));depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
       loadedLegs+=2;cost+=2*c.ll;if(c.reused){emptyLegs+=2;cost+=2*c.el;}});
     if(depCap<d.pax)paxShort+=(d.pax-depCap);
-    plan.push({time:d.time,pax:d.pax,aircraft:depAc,cap:depCap,short:depCap<d.pax,locked:false,manualLock:_schedDepManualLock(date,d.time)});
+    plan.push({time:d.time,dest:d.dest,key:d.key,pax:d.pax,aircraft:depAc,cap:depCap,short:depCap<d.pax,locked:false,manualLock:_schedDepManualLock(date,d.time)});
   });
   var acUsed=Object.keys(everUsed);
   return {date:date,departures:plan,cost:Math.round(cost),loadedLegs:loadedLegs,emptyLegs:emptyLegs,paxShort:paxShort,aircraftUsed:acUsed,pilotsNeeded:acUsed.length};
