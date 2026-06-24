@@ -34,7 +34,31 @@ are **no top-level name collisions** across the single shared scope.
   hours/fees. Added BRA (location "Branches Station", alias "branch", 0.5h round trip) so a Branches
   departure is costed as the short near-base trip it is.
 
-## OPEN backlog (prioritised, not yet changed)
+## Update — backlog cleared in v25.98
+
+All OPEN items below were addressed in **v25.98** (plus 3 requested feature tweaks):
+- **M1 done** — one flight-keyed, time-aware pilot writer (`_schedComputeBlockPilots` fed by the new
+  shared `_schedDayFlights`), used by BOTH the calendar render and `_schedEnsureAuto`. The old
+  aircraft-keyed `_schedComputeAutoPilots` is removed, so the seatmap PIC and the calendar agree.
+- **F1 done** — `_schedDayFlights` includes manual schedule blocks (maintenance ferries etc.), so they
+  get an auto pilot; `_rzManBlockTitle` now shows the manual-or-auto pilot.
+- **C1 done** — `ts_flight_records`, `ts_flightduty`, `ts_fd_certs` added to the realtime subscription
+  + `reloadTable` handlers (re-pull via the loaders). NB: still needs those tables in the Supabase
+  realtime publication server-side to actually fire.
+- **C2 done** — scheduling realtime apply now skips a ~4s window after a local `_schedSave` (timestamp
+  guard) so an in-flight edit isn't clobbered.
+- **C3 done** — `_rzTickNowLine` now `clearInterval`s `_rzNowTimer` once off the calendar.
+- **A5 done** — removed dead `rezdySchedBlockDragStart`, `rezdySchedEdgeDragStart`,
+  `_schedComputeAutoPilots`, and the `.ts-logo-spin`/`@keyframes ts-spin` CSS.
+- **M2 reconciled (no code change)** — the cost-plan away-time (`_schedDepDurMin`, dest-based) and the
+  pilot-rotation away-time (`_schedDayFlights`, product-based) already agree on the real routes
+  (MF 270 / MC 360 / FJ 300 / BRA 30); they intentionally differ in granularity for rare scenic
+  products, where the product-based figure is the more accurate one. Forcing a single function would
+  regress scenic durations, so left as-is.
+- Feature tweaks: flight-log "Add a flight" button de-cluttered (removed "(paper / missed)"), and the
+  "Add a logbook entry" button removed from Aircraft records.
+
+## OPEN backlog (addressed in v25.98 — see above; original list kept for reference)
 
 - **M1 (MED) — two writers to `S._schedAutoPilots` with different keying.** The calendar render
   writes a flight-keyed, time-aware map (`_schedComputeBlockPilots`); `_schedEnsureAuto` writes an

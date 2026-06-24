@@ -472,7 +472,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.97';
+const APP_VER='v25.98';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1662,7 +1662,7 @@ function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
   // Under Phase A, ts_users SELECT is revoked so it can't be subscribed — drop it.
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
     var _rtThisWs=_rtWs;   // guard: a reconnect/refresh may replace _rtWs before this socket opens
@@ -1992,6 +1992,13 @@ async function reloadTable(table){
       lsSet('ts_loadsheets_cache',S.saved);
       return true;
     }
+  } else if(table==='ts_flight_records'){
+    // Live-sync flight records across devices (only if this user has the module open).
+    if(S._frLoaded&&typeof window.loadFlightRecords==='function'){window.loadFlightRecords();}
+    return false;   // the loader re-pulls + safeRenders on its own
+  } else if(table==='ts_flightduty'||table==='ts_fd_certs'){
+    if(S._fdLoaded&&typeof window.loadFlightDuty==='function'){window.loadFlightDuty();}
+    return false;
   } else if(table==='ts_scratchpads'){
     const ps=await sbF('ts_scratchpads','','saved_at');
     if(ps){S.pads=ps.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});return true;}
@@ -2081,7 +2088,7 @@ async function reloadTable(table){
           if(row.key==='fd_limits'&&row.value){try{var _fdl=JSON.parse(row.value);if(_fdl&&typeof _fdl==='object'){S._fdLimits=_fdl;_sbSetBase('fd_limits',_fdl);changed=true;}}catch(e){}}
           if(row.key==='aircraft_obs'&&row.value){try{var _ao=JSON.parse(row.value);if(_ao&&typeof _ao==='object'){S.maintObs=_ao;lsSet('ts_aircraft_obs',_ao);_sbSetBase('aircraft_obs',_ao);changed=true;}}catch(e){}}
           if(row.key==='charter_quotes'&&row.value){try{var _cq=JSON.parse(row.value);if(Array.isArray(_cq)){lsSet('ts_charter_quotes_cache',_cq);_sbSetBase('charter_quotes',_cq);changed=true;}}catch(e){}}
-          if(row.key==='scheduling'&&row.value){try{var _sc=JSON.parse(row.value);if(_sc&&typeof _sc==='object'){S._schedCfg=_sc;_sbSetBase('scheduling',_sc);lsSet('ts_scheduling',_sc);changed=true;}}catch(e){}}
+          if(row.key==='scheduling'&&row.value&&!(S._schedSaving&&Date.now()-S._schedSaving<4000)){try{var _sc=JSON.parse(row.value);if(_sc&&typeof _sc==='object'){S._schedCfg=_sc;_sbSetBase('scheduling',_sc);lsSet('ts_scheduling',_sc);changed=true;}}catch(e){}}
         });
         return changed;
       }

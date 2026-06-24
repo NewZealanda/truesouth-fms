@@ -320,10 +320,8 @@ input[type=number]::-webkit-outer-spin-button {
   margin: 0;
 }
 input[type=number] { -moz-appearance: textfield; }
-@keyframes ts-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 @keyframes ts-fade-in{0%{opacity:0}100%{opacity:1}}
 #loading-overlay{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background-size:cover;background-position:center;animation:ts-fade-in .2s ease}
-#loading-overlay .ts-logo-spin{width:72px;height:72px;animation:ts-spin 1.1s linear infinite;filter:drop-shadow(0 0 18px rgba(255,255,255,.35))}
 /* Mountains-draw + plane-takeoff loading animation */
 #loading-overlay .ts-scene{position:relative;width:300px;height:170px;animation:tsm-fade 5.5s ease-in-out infinite}
 #loading-overlay .ts-mtns{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
@@ -812,7 +810,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.97';
+const APP_VER='v25.98';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2002,7 +2000,7 @@ function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
   // Under Phase A, ts_users SELECT is revoked so it can't be subscribed — drop it.
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
     var _rtThisWs=_rtWs;   // guard: a reconnect/refresh may replace _rtWs before this socket opens
@@ -2332,6 +2330,13 @@ async function reloadTable(table){
       lsSet('ts_loadsheets_cache',S.saved);
       return true;
     }
+  } else if(table==='ts_flight_records'){
+    // Live-sync flight records across devices (only if this user has the module open).
+    if(S._frLoaded&&typeof window.loadFlightRecords==='function'){window.loadFlightRecords();}
+    return false;   // the loader re-pulls + safeRenders on its own
+  } else if(table==='ts_flightduty'||table==='ts_fd_certs'){
+    if(S._fdLoaded&&typeof window.loadFlightDuty==='function'){window.loadFlightDuty();}
+    return false;
   } else if(table==='ts_scratchpads'){
     const ps=await sbF('ts_scratchpads','','saved_at');
     if(ps){S.pads=ps.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});return true;}
@@ -2421,7 +2426,7 @@ async function reloadTable(table){
           if(row.key==='fd_limits'&&row.value){try{var _fdl=JSON.parse(row.value);if(_fdl&&typeof _fdl==='object'){S._fdLimits=_fdl;_sbSetBase('fd_limits',_fdl);changed=true;}}catch(e){}}
           if(row.key==='aircraft_obs'&&row.value){try{var _ao=JSON.parse(row.value);if(_ao&&typeof _ao==='object'){S.maintObs=_ao;lsSet('ts_aircraft_obs',_ao);_sbSetBase('aircraft_obs',_ao);changed=true;}}catch(e){}}
           if(row.key==='charter_quotes'&&row.value){try{var _cq=JSON.parse(row.value);if(Array.isArray(_cq)){lsSet('ts_charter_quotes_cache',_cq);_sbSetBase('charter_quotes',_cq);changed=true;}}catch(e){}}
-          if(row.key==='scheduling'&&row.value){try{var _sc=JSON.parse(row.value);if(_sc&&typeof _sc==='object'){S._schedCfg=_sc;_sbSetBase('scheduling',_sc);lsSet('ts_scheduling',_sc);changed=true;}}catch(e){}}
+          if(row.key==='scheduling'&&row.value&&!(S._schedSaving&&Date.now()-S._schedSaving<4000)){try{var _sc=JSON.parse(row.value);if(_sc&&typeof _sc==='object'){S._schedCfg=_sc;_sbSetBase('scheduling',_sc);lsSet('ts_scheduling',_sc);changed=true;}}catch(e){}}
         });
         return changed;
       }
@@ -13265,13 +13270,6 @@ function _rzOrdersForBlockKey(key){
   });
   return out;
 }
-window.rezdySchedBlockDragStart=function(key,e){
-  S._rzSchedBlockDrag=key;
-  // Remember WHERE in the block you grabbed, so the block's TOP (its start time) tracks the cursor —
-  // not the cursor pinning to the block's top and making it jump half a block on drop.
-  try{var br=e&&e.currentTarget&&e.currentTarget.getBoundingClientRect?e.currentTarget.getBoundingClientRect():null;S._rzSchedBlockGrabDy=br?Math.max(0,(e.clientY||0)-br.top):0;}catch(_){S._rzSchedBlockGrabDy=0;}
-  try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','block');}catch(_){}
-};
 // ── Editable flyback (FLB/CCF) return time ──────────────────────────────────────
 // A flyback's seats are parked in its OUTBOUND (held) Rezdy slot; what we actually need is the time
 // they FLY BACK. That defaults to 15:30, but the operator can override it per flyback group in the
@@ -13434,12 +13432,7 @@ function _rzCalUp(e){
   if(col2&&col2!==m.ac&&col2!==_curAc&&typeof _rzReassignBlockToAc==='function'){if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();_rzReassignBlockToAc(m.key,col2);}
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
 }
-// Drag the TOP or BOTTOM edge of a booking block to set its departure / return time independently.
-window.rezdySchedEdgeDragStart=function(key,e){
-  S._rzSchedBlockDrag=key;S._rzSchedBlockGrabDy=0;          // the edge tracks the cursor exactly
-  if(e&&e.stopPropagation)e.stopPropagation();
-  try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','edge');}catch(_){}
-};
+// Set just the departure (top) or return (bottom) time of a booking block (called by the pointer drag).
 window.rezdySchedSetEdge=function(prod,origStart,edge,val){
   var k=String(prod||'')+'|'+String(origStart||'');
   if(edge==='top'){S._rzDepTimeOv=S._rzDepTimeOv||{};if(val)S._rzDepTimeOv[k]=val;else delete S._rzDepTimeOv[k];}
@@ -16205,8 +16198,8 @@ function _rzMinsFromHHMM(s){const m=/^(\d{1,2}):(\d{2})$/.exec(s||'');if(!m)retu
 // Per-minute "now" line update — repositions the existing element directly (no re-render → no
 // flash). Does nothing if the calendar isn't on screen or the day isn't today.
 function _rzTickNowLine(){
-  if(S.rezdyDate!==_rzToday())return;
-  var el=document.getElementById('rzNowLine');if(!el)return;
+  if(S.rezdyDate!==_rzToday()){if(S._rzNowTimer){clearInterval(S._rzNowTimer);S._rzNowTimer=null;}return;}
+  var el=document.getElementById('rzNowLine');if(!el){if(S._rzNowTimer){clearInterval(S._rzNowTimer);S._rzNowTimer=null;}return;} // left the calendar → stop the timer
   var n=new Date(),nm=n.getHours()*60+n.getMinutes();
   if(nm<_RZ_SCH_START*60||nm>_RZ_SCH_END*60){el.style.display='none';return;}
   el.style.display='block';
@@ -16216,6 +16209,42 @@ function _rzTickNowLine(){
 }
 function _rzSchTop(start){const mins=_rzMinsFromHHMM(start);if(mins==null)return 0;return Math.max(0,(mins-_RZ_SCH_START*60)*_RZ_PX_PER_MIN);}
 function _rzSchHeight(start,end){const a=_rzMinsFromHHMM(start),b=_rzMinsFromHHMM(end);if(a==null||b==null||b<=a)return _RZ_PX_PER_SLOT*2;return (b-a)*_RZ_PX_PER_MIN;}
+
+// The day's FLIGHTS for pilot allocation — booking departures AND manual schedule blocks (maintenance
+// ferries, training, hire) on a real aircraft. Each is {key, ac, depMin, endMin} honouring flyback
+// time + the operator's top/bottom edge overrides. ONE source used by both the calendar render and
+// _schedEnsureAuto (so the calendar and the seatmap PIC agree). Only meaningful for the current date.
+function _schedDayFlights(date){
+  var flights=[];if(date!==S.rezdyDate)return flights;
+  var bks=S._rezdyBookings||[],attach=S._rzSchedAttach||{},groups={};
+  bks.forEach(function(b){
+    if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
+    var ord=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(ord))return;
+    var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,ord):null;
+    if(!ac||ac==='__none__'||ac==='__unalloc__'||!((S&&S.aircraft)||{})[ac])return;
+    ((b.items)||[]).forEach(function(it){
+      var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
+      var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;if(_rzMinsFromHHMM(start)==null)return;
+      var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';
+      if(_rzIsFlyback(prod)&&attach[ord])return;   // folded into a flight → not its own pilot flight
+      var key=_rzDepKey(ac,start,prod);if(!groups[key])groups[key]={ac:ac,start:start,prod:prod,key:key};
+    });
+  });
+  Object.keys(groups).forEach(function(k){var g=groups[k],_pr=g.prod,_orig=g.start,_isFb=_rzIsFlyback(_pr),dm,end;
+    if(_isFb){var eff=(typeof _rzFbTime==='function')?_rzFbTime(_pr,_orig):_orig;dm=_rzMinsFromHHMM(eff);if(dm==null)dm=_rzMinsFromHHMM(_orig)||0;end=dm+60;}
+    else{var sov=(S._rzDepTimeOv||{})[_pr+'|'+_orig],eov=(S._rzDepEndOv||{})[_pr+'|'+_orig];
+      dm=(sov!=null)?_rzMinsFromHHMM(sov):_rzMinsFromHHMM(_orig);if(dm==null)dm=_rzMinsFromHHMM(_orig)||0;
+      var du=(typeof _rzProductDuration==='function')?_rzProductDuration(_pr):270;
+      end=(eov!=null)?_rzMinsFromHHMM(eov):(dm+(du||270));if(end==null)end=dm+(du||270);}
+    flights.push({key:g.key,ac:g.ac,depMin:dm,endMin:end});
+  });
+  (S._schedBlocks||[]).forEach(function(b){   // manual blocks (maintenance ferries etc.) on a real aircraft
+    if(!b||!b.aircraft||b.aircraft==='__unalloc__'||b.aircraft==='__misc__'||!((S&&S.aircraft)||{})[b.aircraft])return;
+    var dm=_rzMinsFromHHMM(b.start),end=_rzMinsFromHHMM(b.end);if(dm==null)return;if(end==null||end<=dm)end=dm+60;
+    flights.push({key:b.id,ac:b.aircraft,depMin:dm,endMin:end});
+  });
+  return flights;
+}
 
 function _rzRenderSchedule(){
   if(S._schedLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading schedule…</div>';
@@ -16251,25 +16280,10 @@ function _rzRenderSchedule(){
     }
   });
   Object.keys(bkGroups).forEach(function(k){if(!bkGroups[k].bookings.length)delete bkGroups[k];});
-  // Time-aware auto-pilots: build the day's flights (the exact ones being drawn) with each one's
-  // departure + return-flight duration, then allocate pilots like aircraft — a pilot can only switch
-  // aircraft once back in Queenstown. Keyed per flight (g.key), so a manual split still gets a pilot.
+  // Time-aware auto-pilots over the day's flights (bookings + manual/maintenance blocks), shared with
+  // _schedEnsureAuto via _schedDayFlights so the calendar and the seatmap PIC always agree.
   if(typeof _schedEnabled==='function'&&_schedEnabled()&&typeof _schedComputeBlockPilots==='function'){
-    try{var _flights=[];
-      Object.keys(bkGroups).forEach(function(k){var g=bkGroups[k];var _a=g.aircraft;if(!_a||_a==='__unalloc__'||_a==='__misc__'||!((S&&S.aircraft)||{})[_a])return;
-        var _pr=g.product;var _orig=g.start;var _isFb=(typeof _rzIsFlyback==='function')&&_rzIsFlyback(_pr);
-        // The pilot is with the aircraft the WHOLE rotation (fly down, sit around, fly back) = the block
-        // span, honouring the operator's TOP (departure) / BOTTOM (return) edge drags.
-        var _dm,_end;
-        if(_isFb){var _eff=(typeof _rzFbTime==='function')?_rzFbTime(_pr,_orig):_orig;_dm=_rzMinsFromHHMM(_eff);if(_dm==null)_dm=_rzMinsFromHHMM(_orig)||0;_end=_dm+60;}
-        else{var _sov=(S._rzDepTimeOv||{})[_pr+'|'+_orig],_eov=(S._rzDepEndOv||{})[_pr+'|'+_orig];
-          _dm=(_sov!=null)?_rzMinsFromHHMM(_sov):_rzMinsFromHHMM(_orig);if(_dm==null)_dm=_rzMinsFromHHMM(_orig)||0;
-          var _du=(typeof _rzProductDuration==='function')?_rzProductDuration(_pr):270;
-          _end=(_eov!=null)?_rzMinsFromHHMM(_eov):(_dm+(_du||270));if(_end==null)_end=_dm+(_du||270);}
-        _flights.push({key:k,ac:_a,depMin:_dm,endMin:_end});
-      });
-      S._schedAutoPilots=_schedComputeBlockPilots(_flights);S._schedAutoPilotsDate=S.rezdyDate;
-    }catch(_e){}
+    try{S._schedAutoPilots=_schedComputeBlockPilots(_schedDayFlights(S.rezdyDate));S._schedAutoPilotsDate=S.rezdyDate;}catch(_e){}
   }
   const bkBlocks=Object.keys(bkGroups).map(function(k){
     var g=bkGroups[k];var sm=_rzMinsFromHHMM(g.start)||0;
@@ -16853,7 +16867,7 @@ window.rezdyReloadScheduleLive=function(){if(S.rezdyDate&&window.rezdyLoadSchedu
 // Manual block display title: "AA/SLA QN-WF" — pilot + aircraft are DERIVED (from the picker and the
 // aircraft selector); the operator only types the label (e.g. "QN-WF").
 function _rzManBlockTitle(b){
-  var pilot=(S._schedPilots||{})[b.id]||'';
+  var pilot=(S._schedPilots||{})[b.id]||(S._schedAutoPilots||{})[b.id]||'';   // manual pick, else the auto-allocated pilot
   var ac=(b.aircraft&&b.aircraft!=='__unalloc__'&&b.aircraft!=='__misc__')?String(b.aircraft).replace(/^ZK-?/,''):'';
   var pre=(pilot?pilot+'/':'')+ac;
   var lbl=b.label||'';
@@ -17782,9 +17796,8 @@ function _frRenderTodayRecord(uid){
     _frAcList().map(function(ac){return chip(_frAcShort(ac),selAc===ac,"S._frRecAc='"+_frJs(ac)+"';render()",_frAcCol(ac));}).join('')+
   '</div>';
   var recs=selAc?recsAll.filter(function(r){return r.aircraft===selAc;}):recsAll;
-  var addBtn='<div style="margin-bottom:10px"><button onclick="window.frAddManual()" style="width:100%;min-height:48px;border-radius:12px;border:2px dashed rgba(124,58,237,.5);background:rgba(124,58,237,.06);color:#a78bfa;font-size:15px;font-weight:800;cursor:pointer">＋ Add a flight (paper / missed)</button>'+
-    '<div style="font-size:11px;color:var(--text3);text-align:center;margin-top:4px">For a flight flown on paper, or one a pilot forgot to log — set the PIC, date, times &amp; TTIS, then Save. It only updates Maintenance &amp; Flight &amp; Duty when you submit the aircraft.</div>'+
-    '<button onclick="S.section=\'logbook\';window.frLbAdd()" style="width:100%;min-height:42px;margin-top:8px;border-radius:12px;border:1px dashed var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">＋ Add a logbook entry (personal logbook only)</button></div>';
+  var addBtn='<div style="margin-bottom:10px"><button onclick="window.frAddManual()" style="width:100%;min-height:48px;border-radius:12px;border:2px dashed rgba(124,58,237,.5);background:rgba(124,58,237,.06);color:#a78bfa;font-size:15px;font-weight:800;cursor:pointer">＋ Add a flight</button>'+
+    '<div style="font-size:11px;color:var(--text3);text-align:center;margin-top:4px">Set the PIC, date, times &amp; TTIS, then Save. It only updates Maintenance &amp; Flight &amp; Duty when you submit the aircraft.</div></div>';
   var h=nav+sel+addBtn;
   if(S._frEditId&&(S._frData||{})[S._frEditId]&&S._frData[S._frEditId].fr_date===date){h+=_frRenderEdit(S._frData[S._frEditId]);}
   if(selAc&&!recs.length)return h+'<div class="card" style="color:var(--text3);padding:24px;font-size:13px">No '+_frEsc(_frAcShort(selAc))+' flights recorded for this day.</div>';
@@ -19486,6 +19499,7 @@ window.loadScheduling=function(){
 };
 function _schedSave(){
   _schedCfg();
+  S._schedSaving=Date.now();   // brief window so a realtime echo doesn't clobber an in-flight edit
   try{lsSet&&lsSet('ts_scheduling',S._schedCfg);}catch(e){}
   if(typeof sbMergeSave==='function'){
     sbMergeSave(SCHED_KEY,S._schedCfg,function(m){S._schedCfg=m;try{lsSet&&lsSet('ts_scheduling',m);}catch(e){}}).then(function(r){
@@ -19872,25 +19886,8 @@ function _schedSig(date,bks){
 }
 // The pilot a user has MANUALLY picked for an aircraft on the calendar (any of its blocks), or null.
 function _schedManualPilotForAc(ac){var sp=S._schedPilots||{};var pre=ac+'|',found=null;Object.keys(sp).forEach(function(k){if(!found&&k.indexOf(pre)===0&&sp[k])found=sp[k];});return found;}
-// Sticky auto pilot→aircraft assignment for the day: keep last time's pilots where still valid, only
-// (re)assign the rest. Manual picks win and are never overridden; their pilot is reserved.
-function _schedComputeAutoPilots(date,aircraftUsed){
-  if(!_schedEnabled())return {};
-  var avail=_schedDayPilots(date);
-  var manualTaken={};aircraftUsed.forEach(function(ac){var m=_schedManualPilotForAc(ac);if(m)manualTaken[m]=true;});
-  var prev=(S._schedAutoPilotsDate===date)?(S._schedAutoPilots||{}):{};
-  var out={},used={};
-  aircraftUsed.forEach(function(ac){
-    if(_schedManualPilotForAc(ac))return;                        // manual handles this aircraft
-    var p=prev[ac];
-    if(p&&!used[p]&&!manualTaken[p]&&_schedPilotRates(p,ac)&&avail.some(function(x){return x.code===p;})){out[ac]=p;used[p]=true;}
-  });
-  var need=aircraftUsed.filter(function(ac){return !_schedManualPilotForAc(ac)&&!out[ac];});
-  var free=avail.filter(function(x){return !used[x.code]&&!manualTaken[x.code];});
-  var m=_schedAssignPilots(need,free);
-  Object.keys(m.byAc).forEach(function(ac){out[ac]=m.byAc[ac];});
-  return out;
-}
+// (The old aircraft-keyed _schedComputeAutoPilots was removed — pilot allocation is now the single
+// flight-keyed, time-aware _schedComputeBlockPilots below, fed by _schedDayFlights.)
 // The auto-assigned pilot for an aircraft on the current day (null when off / different date).
 // Time-aware pilot allocation — the pilot STAYS WITH THE AIRCRAFT. Each aircraft's flights for the day
 // form one rotation [first departure … last return] (the FCF down + the flyback back hours later all
@@ -19972,19 +19969,12 @@ function _schedEnsureAuto(){
       Object.keys(packed).forEach(function(o){map[o]=packed[o];});
     });
     S._schedAutoAc=map;S._schedAutoKey=sig;
-    // Allocate pilots over the aircraft ACTUALLY carrying flights on the calendar — i.e. the effective
-    // aircraft per order (manual move > auto plan > comments), NOT just the cost plan's choice. This is
-    // what makes a manually-moved flight still get an auto pilot.
-    var _effAc={};
-    bks.forEach(function(b){
-      if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
-      var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
-      var man=(S._rzBookingAc||{})[o];
-      var ac=(man&&man!=='__none__')?man:(map[o]||((typeof _rzAircraftFromComments==='function')?_rzAircraftFromComments(b):null));
-      if(ac&&ac!=='__none__'&&ac!=='__unalloc__'&&((S&&S.aircraft)||{})[ac])_effAc[ac]=true;
-    });
-    var _usedAc=Object.keys(_effAc);if(!_usedAc.length)_usedAc=dp.aircraftUsed;
-    S._schedAutoPilots=_schedComputeAutoPilots(date,_usedAc);S._schedAutoPilotsDate=date;  // sticky auto pilots
+    // Pilots: ONE flight-keyed, time-aware allocation over the day's actual flights (bookings + manual/
+    // maintenance blocks), shared with the calendar render via _schedDayFlights. This is the single
+    // writer of S._schedAutoPilots, so the seatmap PIC and the calendar always agree (was: a separate
+    // aircraft-keyed map here that could disagree on the seatmap).
+    S._schedAutoPilots=(typeof _schedDayFlights==='function')?_schedComputeBlockPilots(_schedDayFlights(date)):{};
+    S._schedAutoPilotsDate=date;
   }finally{S._schedAutoBusy=false;}
 }
 // ── Auto-allocate pilots (one-shot, overridable) ───────────────────────────────

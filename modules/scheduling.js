@@ -166,6 +166,7 @@ window.loadScheduling=function(){
 };
 function _schedSave(){
   _schedCfg();
+  S._schedSaving=Date.now();   // brief window so a realtime echo doesn't clobber an in-flight edit
   try{lsSet&&lsSet('ts_scheduling',S._schedCfg);}catch(e){}
   if(typeof sbMergeSave==='function'){
     sbMergeSave(SCHED_KEY,S._schedCfg,function(m){S._schedCfg=m;try{lsSet&&lsSet('ts_scheduling',m);}catch(e){}}).then(function(r){
@@ -552,25 +553,8 @@ function _schedSig(date,bks){
 }
 // The pilot a user has MANUALLY picked for an aircraft on the calendar (any of its blocks), or null.
 function _schedManualPilotForAc(ac){var sp=S._schedPilots||{};var pre=ac+'|',found=null;Object.keys(sp).forEach(function(k){if(!found&&k.indexOf(pre)===0&&sp[k])found=sp[k];});return found;}
-// Sticky auto pilot→aircraft assignment for the day: keep last time's pilots where still valid, only
-// (re)assign the rest. Manual picks win and are never overridden; their pilot is reserved.
-function _schedComputeAutoPilots(date,aircraftUsed){
-  if(!_schedEnabled())return {};
-  var avail=_schedDayPilots(date);
-  var manualTaken={};aircraftUsed.forEach(function(ac){var m=_schedManualPilotForAc(ac);if(m)manualTaken[m]=true;});
-  var prev=(S._schedAutoPilotsDate===date)?(S._schedAutoPilots||{}):{};
-  var out={},used={};
-  aircraftUsed.forEach(function(ac){
-    if(_schedManualPilotForAc(ac))return;                        // manual handles this aircraft
-    var p=prev[ac];
-    if(p&&!used[p]&&!manualTaken[p]&&_schedPilotRates(p,ac)&&avail.some(function(x){return x.code===p;})){out[ac]=p;used[p]=true;}
-  });
-  var need=aircraftUsed.filter(function(ac){return !_schedManualPilotForAc(ac)&&!out[ac];});
-  var free=avail.filter(function(x){return !used[x.code]&&!manualTaken[x.code];});
-  var m=_schedAssignPilots(need,free);
-  Object.keys(m.byAc).forEach(function(ac){out[ac]=m.byAc[ac];});
-  return out;
-}
+// (The old aircraft-keyed _schedComputeAutoPilots was removed — pilot allocation is now the single
+// flight-keyed, time-aware _schedComputeBlockPilots below, fed by _schedDayFlights.)
 // The auto-assigned pilot for an aircraft on the current day (null when off / different date).
 // Time-aware pilot allocation — the pilot STAYS WITH THE AIRCRAFT. Each aircraft's flights for the day
 // form one rotation [first departure … last return] (the FCF down + the flyback back hours later all
@@ -652,19 +636,12 @@ function _schedEnsureAuto(){
       Object.keys(packed).forEach(function(o){map[o]=packed[o];});
     });
     S._schedAutoAc=map;S._schedAutoKey=sig;
-    // Allocate pilots over the aircraft ACTUALLY carrying flights on the calendar — i.e. the effective
-    // aircraft per order (manual move > auto plan > comments), NOT just the cost plan's choice. This is
-    // what makes a manually-moved flight still get an auto pilot.
-    var _effAc={};
-    bks.forEach(function(b){
-      if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
-      var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
-      var man=(S._rzBookingAc||{})[o];
-      var ac=(man&&man!=='__none__')?man:(map[o]||((typeof _rzAircraftFromComments==='function')?_rzAircraftFromComments(b):null));
-      if(ac&&ac!=='__none__'&&ac!=='__unalloc__'&&((S&&S.aircraft)||{})[ac])_effAc[ac]=true;
-    });
-    var _usedAc=Object.keys(_effAc);if(!_usedAc.length)_usedAc=dp.aircraftUsed;
-    S._schedAutoPilots=_schedComputeAutoPilots(date,_usedAc);S._schedAutoPilotsDate=date;  // sticky auto pilots
+    // Pilots: ONE flight-keyed, time-aware allocation over the day's actual flights (bookings + manual/
+    // maintenance blocks), shared with the calendar render via _schedDayFlights. This is the single
+    // writer of S._schedAutoPilots, so the seatmap PIC and the calendar always agree (was: a separate
+    // aircraft-keyed map here that could disagree on the seatmap).
+    S._schedAutoPilots=(typeof _schedDayFlights==='function')?_schedComputeBlockPilots(_schedDayFlights(date)):{};
+    S._schedAutoPilotsDate=date;
   }finally{S._schedAutoBusy=false;}
 }
 // ── Auto-allocate pilots (one-shot, overridable) ───────────────────────────────

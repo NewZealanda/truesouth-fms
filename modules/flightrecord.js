@@ -296,9 +296,8 @@ function _frRenderTodayRecord(uid){
     _frAcList().map(function(ac){return chip(_frAcShort(ac),selAc===ac,"S._frRecAc='"+_frJs(ac)+"';render()",_frAcCol(ac));}).join('')+
   '</div>';
   var recs=selAc?recsAll.filter(function(r){return r.aircraft===selAc;}):recsAll;
-  var addBtn='<div style="margin-bottom:10px"><button onclick="window.frAddManual()" style="width:100%;min-height:48px;border-radius:12px;border:2px dashed rgba(124,58,237,.5);background:rgba(124,58,237,.06);color:#a78bfa;font-size:15px;font-weight:800;cursor:pointer">＋ Add a flight (paper / missed)</button>'+
-    '<div style="font-size:11px;color:var(--text3);text-align:center;margin-top:4px">For a flight flown on paper, or one a pilot forgot to log — set the PIC, date, times &amp; TTIS, then Save. It only updates Maintenance &amp; Flight &amp; Duty when you submit the aircraft.</div>'+
-    '<button onclick="S.section=\'logbook\';window.frLbAdd()" style="width:100%;min-height:42px;margin-top:8px;border-radius:12px;border:1px dashed var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">＋ Add a logbook entry (personal logbook only)</button></div>';
+  var addBtn='<div style="margin-bottom:10px"><button onclick="window.frAddManual()" style="width:100%;min-height:48px;border-radius:12px;border:2px dashed rgba(124,58,237,.5);background:rgba(124,58,237,.06);color:#a78bfa;font-size:15px;font-weight:800;cursor:pointer">＋ Add a flight</button>'+
+    '<div style="font-size:11px;color:var(--text3);text-align:center;margin-top:4px">Set the PIC, date, times &amp; TTIS, then Save. It only updates Maintenance &amp; Flight &amp; Duty when you submit the aircraft.</div></div>';
   var h=nav+sel+addBtn;
   if(S._frEditId&&(S._frData||{})[S._frEditId]&&S._frData[S._frEditId].fr_date===date){h+=_frRenderEdit(S._frData[S._frEditId]);}
   if(selAc&&!recs.length)return h+'<div class="card" style="color:var(--text3);padding:24px;font-size:13px">No '+_frEsc(_frAcShort(selAc))+' flights recorded for this day.</div>';
