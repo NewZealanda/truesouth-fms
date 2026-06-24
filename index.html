@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.28';
+const APP_VER='v26.29';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16782,7 +16782,7 @@ function _rzRenderSchedule(){
       const top=i*_RZ_PX_PER_SLOT;
       const mins=_RZ_SCH_START*60+i*_RZ_SLOT_MIN;
       const onHour=(mins%60===0);
-      rows+='<div style="position:absolute;top:'+top+'px;left:0;right:0;height:1px;background:'+(onHour?'var(--border)':'var(--border2)')+';opacity:'+(onHour?.8:.35)+'"></div>';
+      rows+='<div style="position:absolute;top:'+top+'px;left:0;right:0;height:1px;pointer-events:none;background:'+(onHour?'var(--border)':'var(--border2)')+';opacity:'+(onHour?.8:.35)+'"></div>';
     }
     // Booking blocks (from Rezdy) + manual blocks for this aircraft, cascaded when overlapping.
     let blocksH='';
@@ -16839,7 +16839,7 @@ function _rzRenderSchedule(){
     });
     var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
     colsH+='<div style="width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border)">'+
-      '<div data-ac="'+_acJs+'" ondragover="window.rezdySchedDragOverCol(event)" ondrop="window.rezdySchedDropBlockToAc(\''+_acJs+'\',event)" style="position:relative;height:'+gridH+'px">'+rows+blocksH+'</div></div>';
+      '<div data-ac="'+_acJs+'" onclick="window.rezdySchedColClick(\''+_acJs+'\',event)" ondragover="window.rezdySchedDragOverCol(event)" ondrop="window.rezdySchedDropBlockToAc(\''+_acJs+'\',event)" style="position:relative;height:'+gridH+'px;cursor:copy">'+rows+blocksH+'</div></div>';
   });
 
   // sticky aircraft-id header row, aligned with columns
@@ -17185,7 +17185,7 @@ function _rzRenderPilotMovements(){
   axis+='</div>';
   var colsH='';
   codes.forEach(function(code){
-    var rows='';for(var i2=0;i2<=slots;i2++){var t2=i2*_RZ_PX_PER_SLOT,m2=_RZ_SCH_START*60+i2*_RZ_SLOT_MIN,oh=(m2%60===0);rows+='<div style="position:absolute;top:'+t2+'px;left:0;right:0;height:1px;background:'+(oh?'var(--border)':'var(--border2)')+';opacity:'+(oh?.8:.35)+'"></div>';}
+    var rows='';for(var i2=0;i2<=slots;i2++){var t2=i2*_RZ_PX_PER_SLOT,m2=_RZ_SCH_START*60+i2*_RZ_SLOT_MIN,oh=(m2%60===0);rows+='<div style="position:absolute;top:'+t2+'px;left:0;right:0;height:1px;pointer-events:none;background:'+(oh?'var(--border)':'var(--border2)')+';opacity:'+(oh?.8:.35)+'"></div>';}
     var items=(byPilot[code]||[]).slice().sort(function(a,b){return (_rzMinsFromHHMM(a.start)||0)-(_rzMinsFromHHMM(b.start)||0);});
     items.forEach(function(m){var s=_rzMinsFromHHMM(m.start)||0,e=_rzMinsFromHHMM(m.end)||(s+30);var ov=items.filter(function(o){var os=_rzMinsFromHHMM(o.start)||0,oe=_rzMinsFromHHMM(o.end)||(os+30);return s<oe&&os<e;});m._cols=Math.max(1,ov.length);m._idx=ov.filter(function(o){var os=_rzMinsFromHHMM(o.start)||0;return os<s;}).length;});
     var blocksH='';
@@ -17203,7 +17203,7 @@ function _rzRenderPilotMovements(){
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(m.start+'–'+m.end)+'</div>')+
       '</div>';
     });
-    colsH+='<div style="width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border)"><div style="position:relative;height:'+gridH+'px">'+rows+blocksH+'</div></div>';
+    colsH+='<div style="width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border)"><div onclick="window.rezdyPilotColClick(\''+_rzEsc(String(code)).replace(/'/g,"\\'")+'\',event)" style="position:relative;height:'+gridH+'px;cursor:copy">'+rows+blocksH+'</div></div>';
   });
   var headH='<div style="display:flex;position:sticky;top:0;z-index:2;background:var(--card)"><div style="width:'+_RZ_AXIS_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:1px solid var(--border)"></div>';
   codes.forEach(function(code){headH+='<div style="width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:2px solid #60a5fa;padding:4px 6px;text-align:center">'+
@@ -17270,6 +17270,28 @@ window.schedNewBlock=function(){
   const ac=acIds[0]||'';
   S._schedEdit={id:null,aircraft:ac,label:'',start:'09:00',end:'10:00',color:_rzAcCol(ac),notes:'',ftype:'Maintenance'};
   render();
+};
+// The clicked time on a calendar/pilot column → snapped 15-min start (1h default block).
+function _rzSchedClickTimes(e){
+  var rect=e.currentTarget.getBoundingClientRect();
+  var min=_RZ_SCH_START*60+(e.clientY-rect.top)/_RZ_PX_PER_MIN;
+  min=Math.max(_RZ_SCH_START*60,Math.min(_RZ_SCH_END*60-15,Math.round(min/15)*15));
+  return {start:_rzMinToHHMM(min),end:_rzMinToHHMM(Math.min(_RZ_SCH_END*60,min+60))};
+}
+// Click empty space in an aircraft column (Bookings calendar) → open the add-block form for that
+// aircraft at the clicked time. Clicks on a block/overlay are ignored (target !== the column bg).
+window.rezdySchedColClick=function(ac,e){
+  if(!e||e.target!==e.currentTarget)return;
+  var t=_rzSchedClickTimes(e);
+  S._schedEdit={id:null,aircraft:ac,label:'',start:t.start,end:t.end,color:_rzAcCol(ac),notes:'',ftype:'Maintenance'};
+  S._schedGroupKey=null;render();
+};
+// Click empty space in a pilot column (Pilot movements) → open the add-meeting form for that pilot.
+window.rezdyPilotColClick=function(code,e){
+  if(!e||e.target!==e.currentTarget)return;
+  var t=_rzSchedClickTimes(e);
+  S._schedEdit={id:null,aircraft:'__pilot__',pilot:code||'',label:'Meeting',start:t.start,end:t.end,color:'#a78bfa',notes:'',ftype:'Meeting'};
+  S._schedGroupKey=null;render();
 };
 // New entry in the far-right Misc column (meetings / notes), e.g. "DF AA JY Meeting".
 window.schedNewMisc=function(){
