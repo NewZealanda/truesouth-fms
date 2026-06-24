@@ -4,7 +4,8 @@
 function _tsLoadingScene(){
   return '<div class="ts-scene">'
     +'<svg class="ts-mtns" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" aria-hidden="true">'
-      +'<path class="ts-mtn-path" pathLength="1" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M6 162 L66 98 L88 128 L132 74 L164 128 L204 54 L238 126 L274 40 L302 118 L316 162"></path>'
+      +'<defs><filter id="tsBrush" x="-25%" y="-25%" width="150%" height="150%"><feTurbulence type="fractalNoise" baseFrequency="0.014" numOctaves="2" seed="4" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="6" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap></filter></defs>'
+      +'<path class="ts-mtn-path" filter="url(#tsBrush)" pathLength="1" fill="none" stroke="rgba(255,255,255,.95)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" d="M4 158 L66 104 L118 132 L176 58 L232 128 L288 96 L316 152"></path>'
     +'</svg>'
     +'<div class="ts-runway2"></div>'
     +'<div class="ts-plane2"><svg viewBox="0 0 24 24" width="30" height="30" fill="#ffffff"><path d="M2.5,19h19v2h-19V19z M22.07,9.64c-0.21-0.8-1.04-1.28-1.84-1.06L14.92,10L8,3.57L6.09,4.08l4.15,7.19l-4.97,1.33l-1.97-1.54l-1.45,0.39l2.59,4.49l17.28-4.64C21.81,11.27,22.28,10.44,22.07,9.64z"></path></svg></div>'
