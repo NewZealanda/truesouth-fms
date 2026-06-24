@@ -1051,7 +1051,9 @@ function _rzFbTime(prod,held){var v=(S._rzFlybackTime||{})[_rzFbTimeKey(prod,hel
 window.rezdySetFlybackTime=function(prod,held,val){
   S._rzFlybackTime=S._rzFlybackTime||{};var k=_rzFbTimeKey(prod,held);
   val=String(val||'').trim();
-  if(/^\d{1,2}:\d{2}$/.test(val)&&val!=='15:30')S._rzFlybackTime[k]=val; else delete S._rzFlybackTime[k];
+  // Store ANY valid time (including 15:30) as an explicit override so it's always honoured. Only an
+  // empty value (the "reset to 15:30" link) clears it back to the default.
+  if(/^\d{1,2}:\d{2}$/.test(val))S._rzFlybackTime[k]=val; else delete S._rzFlybackTime[k];
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
 };
 // Reassign every booking in a calendar block to an aircraft — exactly like the user picking the
@@ -1097,8 +1099,7 @@ window.rezdySchedDropBlockToAc=function(ac,e){
   var changed=false;
   if(newTime){
     if(_rzIsFlyback(srcProd)){
-      S._rzFlybackTime=S._rzFlybackTime||{};var fk=_rzFbTimeKey(srcProd,srcStart);
-      if(newTime!=='15:30')S._rzFlybackTime[fk]=newTime;else delete S._rzFlybackTime[fk];changed=true;
+      S._rzFlybackTime=S._rzFlybackTime||{};S._rzFlybackTime[_rzFbTimeKey(srcProd,srcStart)]=newTime;changed=true;  // store any time, incl 15:30
     } else if(srcProd){
       S._rzDepTimeOv=S._rzDepTimeOv||{};var dk=srcProd+'|'+srcStart;
       if(newTime!==srcStart)S._rzDepTimeOv[dk]=newTime;else delete S._rzDepTimeOv[dk];changed=true;
