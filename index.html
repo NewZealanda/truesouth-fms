@@ -810,7 +810,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.03';
+const APP_VER='v26.04';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16324,7 +16324,11 @@ function _rzRenderSchedule(){
       var _fbHeld=g.start;var _fbOv=(S._rzFlybackTime||{})[_rzFbTimeKey(g.product,_fbHeld)];
       if(_fbOv||sm===720){
         var _ft=_rzFbTime(g.product,_fbHeld);var _fm=_rzMinsFromHHMM(_ft);if(_fm==null)_fm=930;
-        g._fbHeld=_fbHeld;g.start=_ft;var _fe=_fm+60;
+        // The aircraft only flies the RETURN leg (Milford→QN), ~40 min. Show the block as the LAST 40
+        // minutes of the flyback hour: a 15:30 flyback renders 15:50–16:30 (end held, start = end−40).
+        // _fbTime keeps the real fly-back time for the dropdown/logic so the block move doesn't change it.
+        g._fbHeld=_fbHeld;g._fbTime=_ft;var _fe=_fm+60;
+        g.start=_rzMinToHHMM(_fe-40);
         g.end=String(Math.floor(_fe/60)).padStart(2,'0')+':'+String(_fe%60).padStart(2,'0');
       }
     } else {
@@ -16396,7 +16400,7 @@ function _rzRenderSchedule(){
         var _fbHasOv=!!((S._rzFlybackTime||{})[_rzFbTimeKey(_grp.product,_fbHeldK)]);
         detailH+='<div style="display:flex;align-items:center;gap:8px;margin:0 0 8px;flex-wrap:wrap">'+
           '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700">🛬 Flyback time</span>'+
-          '<select onchange="window.rezdySetFlybackTime(\''+_rzEsc(_grp.product)+'\',\''+_rzEsc(_fbHeldK)+'\',this.value)" style="padding:7px 10px;border-radius:8px;border:1px solid rgba(245,158,11,.5);background:var(--card);color:var(--text1);font-size:15px;font-weight:800">'+_rzTimeOpts(_grp.start,'12:00','19:45')+'</select>'+
+          '<select onchange="window.rezdySetFlybackTime(\''+_rzEsc(_grp.product)+'\',\''+_rzEsc(_fbHeldK)+'\',this.value)" style="padding:7px 10px;border-radius:8px;border:1px solid rgba(245,158,11,.5);background:var(--card);color:var(--text1);font-size:15px;font-weight:800">'+_rzTimeOpts((_grp._fbTime||_grp.start),'12:00','19:45')+'</select>'+
           '<span style="font-size:11px;color:var(--text3)">when they actually fly back (seats held in the '+_rzEsc(_fbHeldK)+' slot)</span>'+
           (_fbHasOv?'<button onclick="window.rezdySetFlybackTime(\''+_rzEsc(_grp.product)+'\',\''+_rzEsc(_fbHeldK)+'\',\'\')" style="background:none;border:none;color:#60a5fa;font-size:11px;cursor:pointer;text-decoration:underline">reset to 15:30</button>':'')+
         '</div>';
@@ -16865,7 +16869,7 @@ function _rzPilotMovements(){
     var pilot=man[k]||auto[k];if(!pilot)return;var f=fBy[k];var mb=blocksById[k];
     if(mb){
       var lbl=(mb.aircraft&&mb.aircraft!=='__misc__'&&mb.aircraft!=='__pilot__'?String(mb.aircraft).replace(/^ZK-?/,'')+' ':'')+(mb.label||mb.ftype||'Block');
-      ensure(pilot).push({start:mb.start,end:mb.end,label:lbl,kind:'manual',ico:'🔧'});
+      ensure(pilot).push({start:mb.start,end:mb.end,label:lbl,kind:'manual',ico:'🔧',ac:mb.aircraft});
       var lp=String(mb.label||'').toUpperCase().split(/[-–\/]/).map(function(s){return s.trim();});
       var sm=_rzMinsFromHHMM(mb.start),em=_rzMinsFromHHMM(mb.end);
       if(lp[1]==='WF'&&em!=null)ensure(pilot).push({start:mb.end,end:_rzMinToHHMM(em+RZ_MAINT_DRIVE_MIN),label:'Drive WF→QN',kind:'drive',ico:'🚗'});
@@ -16873,7 +16877,7 @@ function _rzPilotMovements(){
     } else {
       var parts=String(k).split('|'),ac=parts[0],prod=parts[2]||'';
       var dest=(typeof _rzGroupDest==='function')?_rzGroupDest(prod):'';
-      ensure(pilot).push({start:_rzMinToHHMM(f.depMin),end:_rzMinToHHMM(f.endMin),label:(ac&&ac!=='__unalloc__'?String(ac).replace(/^ZK-?/,''):'?')+(dest?' '+dest:''),kind:'flight',ico:'✈'});
+      ensure(pilot).push({start:_rzMinToHHMM(f.depMin),end:_rzMinToHHMM(f.endMin),label:(ac&&ac!=='__unalloc__'?String(ac).replace(/^ZK-?/,''):'?')+(dest?' '+dest:''),kind:'flight',ico:'✈',ac:ac});
     }
   });
   (S._schedBlocks||[]).forEach(function(b){if(b&&b.pilot)ensure(b.pilot).push({start:b.start,end:b.end,label:b.label||b.ftype||'Meeting',kind:'meeting',ico:'📅',id:b.id});});
@@ -16890,7 +16894,7 @@ function _rzRenderPilotMovements(){
   var hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
     '<div><div class="st" style="margin-bottom:0">Pilot movements</div><p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzDowLabel(S.rezdyDate)+' · what each pilot is doing · tap a pilot column ＋ to add a meeting</p></div>'+
     '<div style="font-size:11px;color:var(--text3);display:flex;gap:12px;flex-wrap:wrap">'+
-      '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:10px;border-radius:2px;background:#60a5fa33;border:1px solid #60a5fa"></span>Flight</span>'+
+      '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:10px;border-radius:2px;background:linear-gradient(90deg,#ef4444,#22c55e,#60a5fa);border:1px solid var(--border)"></span>Flight (aircraft colour)</span>'+
       '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:10px;border-radius:2px;background:#f59e0b33;border:1px dashed #f59e0b"></span>Drive</span>'+
       '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:10px;border-radius:2px;background:#a78bfa33;border:1px solid #a78bfa"></span>Meeting</span>'+
     '</div></div>';
@@ -16911,7 +16915,10 @@ function _rzRenderPilotMovements(){
     var blocksH='';
     items.forEach(function(m){
       var top=_rzSchTop(m.start),ht=Math.max(_RZ_PX_PER_SLOT,_rzSchHeight(m.start,m.end)),compact=ht<26;
-      var col=(m.kind==='drive')?'#f59e0b':(m.kind==='meeting')?'#a78bfa':(m.kind==='manual')?'#94a3b8':'#60a5fa';
+      // Flight + manual blocks take their AIRCRAFT's colour (so a pilot's day reads as the fleet does);
+      // drives stay amber and meetings purple (no single aircraft).
+      var _acCol=(m.ac&&m.ac!=='__unalloc__'&&m.ac!=='__misc__'&&m.ac!=='__pilot__')?_rzAcCol(m.ac):null;
+      var col=(m.kind==='drive')?'#f59e0b':(m.kind==='meeting')?'#a78bfa':(_acCol||((m.kind==='manual')?'#94a3b8':'#60a5fa'));
       var n=Math.max(1,m._cols||1),idx=m._idx||0,OFF=12;
       var posS='left:'+(2+idx*OFF)+'px;width:calc(100% - '+((n-1)*OFF+4)+'px);z-index:'+(idx+1)+';';
       var clk=(m.kind==='meeting'&&m.id)?('onclick="window.schedEditBlock(\''+_rzEsc(String(m.id)).replace(/'/g,"\\'")+'\')" '):'';
