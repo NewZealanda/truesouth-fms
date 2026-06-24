@@ -547,6 +547,7 @@ function _schedSig(date,bks){
   try{parts.push('P:'+_schedDayPilots(date).map(function(p){return p.code;}).join(','));}catch(e){}   // roster + call-ins
   try{var c=_schedCfg();parts.push('T:'+JSON.stringify(c.pilotOrder||{})+JSON.stringify(c.pilotTie||{}));}catch(e){}
   try{parts.push('MP:'+JSON.stringify(S._schedPilots||{}));}catch(e){}   // manual pilot picks
+  try{parts.push('BA:'+JSON.stringify(S._rzBookingAc||{}));}catch(e){}   // manual aircraft moves (so pilots re-allocate)
   return parts.join('|');
 }
 // The pilot a user has MANUALLY picked for an aircraft on the calendar (any of its blocks), or null.
@@ -611,7 +612,19 @@ function _schedEnsureAuto(){
       Object.keys(packed).forEach(function(o){map[o]=packed[o];});
     });
     S._schedAutoAc=map;S._schedAutoKey=sig;
-    S._schedAutoPilots=_schedComputeAutoPilots(date,dp.aircraftUsed);S._schedAutoPilotsDate=date;  // sticky auto pilots
+    // Allocate pilots over the aircraft ACTUALLY carrying flights on the calendar — i.e. the effective
+    // aircraft per order (manual move > auto plan > comments), NOT just the cost plan's choice. This is
+    // what makes a manually-moved flight still get an auto pilot.
+    var _effAc={};
+    bks.forEach(function(b){
+      if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
+      var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
+      var man=(S._rzBookingAc||{})[o];
+      var ac=(man&&man!=='__none__')?man:(map[o]||((typeof _rzAircraftFromComments==='function')?_rzAircraftFromComments(b):null));
+      if(ac&&ac!=='__none__'&&ac!=='__unalloc__'&&((S&&S.aircraft)||{})[ac])_effAc[ac]=true;
+    });
+    var _usedAc=Object.keys(_effAc);if(!_usedAc.length)_usedAc=dp.aircraftUsed;
+    S._schedAutoPilots=_schedComputeAutoPilots(date,_usedAc);S._schedAutoPilotsDate=date;  // sticky auto pilots
   }finally{S._schedAutoBusy=false;}
 }
 // ── Auto-allocate pilots (one-shot, overridable) ───────────────────────────────
