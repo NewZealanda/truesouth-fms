@@ -755,6 +755,28 @@ window._rosterApplyAndSave=async function(changes){
   S.roster=fresh;lsSet('ts_roster',fresh);
   return true;
 };
+// Call a person in (or cancel it) on the roster for a date. Writes the dedicated 'called_in' status
+// (which counts as a working day) ONLY when their day is currently blank or an OFF day, and only
+// clears a day WE set (value still 'called_in') — so it never paints over a real rostered shift.
+// `who` may be a login-user id, a crew/login code, or a name. Marketing staff are skipped (they're
+// always available — greyed in the driver list — so they need no roster change). ds defaults to the
+// Operations date; the scheduling call-in passes its own selected day.
+var _ROSTER_OFF={rdo:1,off:1,leave:1,ul:1,sick:1,training:1};
+window._rosterCallIn=function(who,on,ds){
+  if(!who)return;ds=ds||S.rezdyDate;if(!ds)return;
+  var u=(S.users||[]).find(function(x){return x&&(x.id===who||(typeof _rCode==='function'&&_rCode(x)===String(who).toUpperCase())||x.name===who||(x.name||'').trim()===String(who).trim());});
+  if(u&&u.role==='marketing')return;                 // marketing is always available — no roster change
+  var key=u?u.id:who;
+  var cur='';try{cur=u?_rGetStatus(u,ds,S.roster||{}):(((S.roster||{})[ds]||{})[key]||'');}catch(e){cur=(((S.roster||{})[ds]||{})[key]||'');}
+  if(on){
+    if(cur&&!_ROSTER_OFF[cur])return;                 // already working that day → leave their shift alone
+    if(cur==='called_in')return;                      // already called in
+    var c={};c[ds]={};c[ds][key]='called_in';window._rosterApplyAndSave(c);
+  }else{
+    if(cur!=='called_in')return;                      // only undo a day we added
+    var d={};d[ds]={};d[ds][key]=_RDEL;window._rosterApplyAndSave(d);
+  }
+};
 window.saveRosterToCloud=async function(){
   // The draft IS this device's delta — apply only those cells onto the latest cloud roster, so a
   // failed save doesn't wipe edits and a concurrent device's other cells aren't overwritten.

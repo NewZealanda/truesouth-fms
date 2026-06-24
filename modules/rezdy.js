@@ -2504,7 +2504,7 @@ function _rzAvailableDrivers(){
   }).map(function(u){return (u.name||'').trim();}).filter(Boolean);
 }
 window.pickupDriverDragStart=function(name,e){S._rezdyDragDriver=name;try{e.dataTransfer.setData('text/plain','driver:'+name);e.dataTransfer.effectAllowed='copy';}catch(_){}};
-window.pickupClearDriver=function(vi,dep){var k=_pkKey(vi,dep);if(S._pickupDrivers)delete S._pickupDrivers[k];if(S._pickupAck&&S._pickupAck[k]!=null)delete S._pickupAck[k];window.pickupSave(true);render();};
+window.pickupClearDriver=function(vi,dep){var k=_pkKey(vi,dep);var _prevDrv=(S._pickupDrivers&&S._pickupDrivers[k]||'').trim();if(S._pickupDrivers)delete S._pickupDrivers[k];if(S._pickupAck&&S._pickupAck[k]!=null)delete S._pickupAck[k];if(_prevDrv)_rzDriverCalledInSync(_prevDrv);window.pickupSave(true);render();};
 // ── Tap-based controls (iOS Safari has no HTML5 touch drag-and-drop) ──
 // Combined driver list = rostered ground staff + anyone added via "＋" + anyone already assigned.
 function _rzAllDriverNames(){
@@ -2524,6 +2524,16 @@ function _rzNotifyDriverAssigned(vi,dep,name){
   var msg='🚐 You\'re driving '+_rzVehName(vi)+' on the '+_rzEsc(_rzDepDisplay(dep))+' run for '+_rzDowLabel(S.rezdyDate)+' — open My Pickups to review & acknowledge.';
   try{if(typeof sbU==='function')sbU('ts_notifications',[{user_id:u.id,type:'pickup_assigned',message:msg,read:false,created_at:new Date().toISOString()}]).catch(function(){});}catch(e){}
 }
+// Keep the roster in step with who's driving: a person is "called in" iff they're a van's driver or
+// in the spare pool today. Adds a 'called_in' roster day when first driving on a day off, and reverts
+// it once they're no longer driving anything. Marketing is skipped inside _rosterCallIn.
+function _rzDriverCalledInSync(name){
+  name=(name||'').trim();if(!name||typeof window._rosterCallIn!=='function')return;
+  var on=false,drv=S._pickupDrivers||{};
+  Object.keys(drv).forEach(function(kk){if((drv[kk]||'').trim()===name)on=true;});
+  if((S._pickupExtraDrivers||[]).indexOf(name)>=0)on=true;
+  window._rosterCallIn(name,on,S.rezdyDate);
+}
 window.pickupSetVanDriver=function(vi,dep,name){
   S._pickupDrivers=S._pickupDrivers||{};
   var k=_pkKey(vi,dep);
@@ -2533,6 +2543,8 @@ window.pickupSetVanDriver=function(vi,dep,name){
   if((prev||'')!==(next||'')){ // driver changed for this departure → reset this run's ack; notify
     if(S._pickupAck&&S._pickupAck[k]!=null)delete S._pickupAck[k];
     if(next)_rzNotifyDriverAssigned(vi,dep,next);
+    if(next)_rzDriverCalledInSync(next);            // newly driving → call them in (roster)
+    if(prev&&prev!==next)_rzDriverCalledInSync(prev); // freed up → revert if no longer driving anything
   }
   S._pickupVanDriverPick=null;
   if(window.pickupSave)window.pickupSave(true);render();
@@ -2616,8 +2628,8 @@ function _rzDriverPickRows(onPickJs){
   }
   return h;
 }
-window.pickupAddDriver=function(name){if(!name)return;S._pickupExtraDrivers=S._pickupExtraDrivers||[];if(S._pickupExtraDrivers.indexOf(name)<0)S._pickupExtraDrivers.push(name);S._pickupDriverPickerOpen=false;window.pickupSave(true);render();};
-window.pickupRemoveExtraDriver=function(name){S._pickupExtraDrivers=(S._pickupExtraDrivers||[]).filter(function(n){return n!==name;});window.pickupSave(true);render();};
+window.pickupAddDriver=function(name){if(!name)return;S._pickupExtraDrivers=S._pickupExtraDrivers||[];if(S._pickupExtraDrivers.indexOf(name)<0)S._pickupExtraDrivers.push(name);S._pickupDriverPickerOpen=false;_rzDriverCalledInSync(name);window.pickupSave(true);render();};
+window.pickupRemoveExtraDriver=function(name){S._pickupExtraDrivers=(S._pickupExtraDrivers||[]).filter(function(n){return n!==name;});_rzDriverCalledInSync(name);window.pickupSave(true);render();};
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  (2b) MY PICKUPS — mobile-first run sheet for the signed-in driver

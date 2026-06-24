@@ -879,8 +879,8 @@ function _schedDayPlan(date,opts){
 // ── Pilots (roster + manual call-in/override extras) ───────────────────────────
 function _schedExtraMap(){var c=_schedCfg();if(!c.extraPilots||typeof c.extraPilots!=='object')c.extraPilots={};return c.extraPilots;}
 function _schedDayExtras(date){var a=_schedExtraMap()[date];return Array.isArray(a)?a:[];}
-window.schedAddPilot=function(date,code){if(!code)return;var m=_schedExtraMap();var a=m[date]||(m[date]=[]);if(a.indexOf(code)<0)a.push(code);_schedSave();render();};
-window.schedRemovePilot=function(date,code){var m=_schedExtraMap();var a=m[date];if(!a)return;var i=a.indexOf(code);if(i>=0)a.splice(i,1);if(!a.length)delete m[date];_schedSave();render();};
+window.schedAddPilot=function(date,code){if(!code)return;var m=_schedExtraMap();var a=m[date]||(m[date]=[]);if(a.indexOf(code)<0)a.push(code);_schedSave();if(typeof window._rosterCallIn==='function')window._rosterCallIn(code,true,date);render();};
+window.schedRemovePilot=function(date,code){var m=_schedExtraMap();var a=m[date];if(!a)return;var i=a.indexOf(code);if(i>=0)a.splice(i,1);if(!a.length)delete m[date];_schedSave();if(typeof window._rosterCallIn==='function')window._rosterCallIn(code,false,date);render();};
 function _schedAllPilots(){try{return (typeof _rzAvailablePilots==='function')?(_rzAvailablePilots()||[]):[];}catch(e){return [];}}
 // Available pilots for ANY date = rostered that day (roster is date-addressable) + manual extras/call-ins.
 function _schedDayPilots(date){
