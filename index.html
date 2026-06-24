@@ -803,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.69';
+const APP_VER='v25.70';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -19154,13 +19154,22 @@ function _schedRcBiz(typeKey){
     var t=(typeKey==='airvan')?'GA8':'C208';var a=_bizTypeAvg(t);return {fuelHr:a.fuelHr,maintHr:a.maintHr,totalHr:a.totalHr,type:t};
   }catch(e){return null;}
 }
+// Tolerant location lookup — matches a destination to a Business Plan location even if it's spelled a
+// little differently (e.g. "Franz Josef Glacier", "Mount Cook"). Exact match first, then keyword.
+var SCHED_DEST_ALIAS={MF:['milford'],MC:['mt cook','mount cook','aoraki','cook'],FJ:['franz'],QN:['queenstown','qn']};
+function _schedLocIdx(locs,dest,fb){
+  var want=String((dest==='QN'?'Queenstown':SCHED_DEST_LOC[dest])||'').toLowerCase().trim();
+  if(want){for(var i=0;i<locs.length;i++){if(String((locs[i]&&locs[i].name)||'').toLowerCase().trim()===want)return i;}}
+  var al=SCHED_DEST_ALIAS[dest]||[];
+  for(var j=0;j<locs.length;j++){var nm=String((locs[j]&&locs[j].name)||'').toLowerCase();for(var k=0;k<al.length;k++){if(nm.indexOf(al[k])>=0)return j;}}
+  return (fb==null?-1:fb);
+}
 // Live breakdown for a route leg, computed from the destination's REAL location fees (Business Plan).
 function _schedRouteCompute(dest,typeKey,leg){
   var hrs=_schedRouteHrs(dest,typeKey,leg);var rc=_schedRcBiz(typeKey);
   if(rc&&typeof _bizFlightCost==='function'&&typeof _bizState==='function'){
     try{var p=_bizState();var locs=p.running.locations||[];
-      var io=function(nm,fb){if(nm){for(var i=0;i<locs.length;i++)if(locs[i]&&locs[i].name===nm)return i;}return fb;};
-      var depIdx=io('Queenstown',0);var destIdx=io(SCHED_DEST_LOC[dest||'MF']||'',-1);
+      var depIdx=_schedLocIdx(locs,'QN',0);var destIdx=_schedLocIdx(locs,(dest||'MF'),-1);
       var r=_bizFlightCost({fuelHr:rc.fuelHr,maintHr:rc.maintHr,totalHr:rc.totalHr,isLease:false,n:1},rc.type,hrs,depIdx,destIdx,true);
       if(r&&r.total!=null)return {hrs:hrs,runHr:rc.totalHr,land:(+r.ldg||0)+(+r.conc||0)+(+r.aw||0),total:r.total,destKnown:destIdx>=0};
     }catch(e){}
