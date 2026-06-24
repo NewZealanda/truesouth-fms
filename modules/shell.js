@@ -328,6 +328,7 @@ function render(){
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
   if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')||(S._rzLsActiveId&&S.activeTabId&&S.tab==='rloadsheets')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest&&S._lsMapOpen)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
   if(S._fdSign&&typeof _fdSetupSig==='function')_fdSetupSig(); // wire the Flight & Duty certify signature pad
+  if(S._mfView==='editor'&&typeof _mfSetupSigs==='function')_mfSetupSigs(); // wire the Work Order signature pads
   // ── Restore focus after re-render ──
   // Force-focus (set by Tab handler) takes priority over activeElement detection
   if(_ffRow!==null){

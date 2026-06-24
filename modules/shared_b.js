@@ -275,7 +275,7 @@ function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
   // Under Phase A, ts_users SELECT is revoked so it can't be subscribed — drop it.
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs','ts_maint_forms'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
     var _rtThisWs=_rtWs;   // guard: a reconnect/refresh may replace _rtWs before this socket opens
@@ -615,6 +615,11 @@ async function reloadTable(table){
     return false;   // the loader re-pulls + safeRenders on its own
   } else if(table==='ts_flightduty'||table==='ts_fd_certs'){
     if(S._fdLoaded&&typeof window.loadFlightDuty==='function'){window.loadFlightDuty();}
+    return false;
+  } else if(table==='ts_maint_forms'){
+    // Live-sync maintenance forms across devices — but skip while THIS device is editing a form (its
+    // local copy is authoritative; its own debounced save pushes to the DB), so an echo can't clobber.
+    if(S._mfLoaded&&S._mfView!=='editor'&&typeof window.loadMaintForms==='function'){window.loadMaintForms();}
     return false;
   } else if(table==='ts_scratchpads'){
     const ps=await sbF('ts_scratchpads','','saved_at');

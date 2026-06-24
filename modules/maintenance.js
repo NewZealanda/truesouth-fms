@@ -392,6 +392,11 @@ function renderMaintLog(){
   const selAc=S.maintEntryAc||acs2[0];
   const logDays=S.maintLogDays||90;
   const logSubTab=S.maintLogSubTab||'hours';
+  // Maintenance documents (Work Orders) take over the Log area when a form is open.
+  if(typeof renderMaintFormEditor==='function'){
+    if(S._mfView==='editor'&&S._mfOpen)return renderMaintFormEditor(S._mfOpen);
+    if(S._mfView==='list')return renderMaintFormsList(S._mfListAc||selAc);
+  }
 
   // ── Entry form ──
   const entAcs2=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'];
@@ -516,7 +521,11 @@ function renderMaintLog(){
     '<button onclick="S.maintLogDays=(S.maintLogDays||90)+90;render()" style="padding:7px 20px;background:var(--card2);border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer;color:var(--text2)">Load more (+90 days)</button>'+
     '</div>';
 
-  return entryForm+`<div class="card" style="overflow-x:auto">
+  // Documents (Work Orders etc.) replace the prominent daily entry; the manual daily-entry form is kept
+  // behind a toggle (the table below is directly editable).
+  const _docs=(typeof renderMaintDocSquares==='function')?renderMaintDocSquares(selAc):'';
+  const _dailyToggle=`<div style="margin-bottom:12px"><button onclick="S._maintDailyOpen=!S._maintDailyOpen;render()" style="font-size:11px;padding:5px 12px;border-radius:14px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer">${S._maintDailyOpen?'▾ Hide manual daily entry':'▸ Manual daily entry'}</button></div>`;
+  return _docs+_dailyToggle+(S._maintDailyOpen?entryForm:'')+`<div class="card" style="overflow-x:auto">
     <div class="st" style="color:${col2}">${ac} <span style="font-size:11px;font-weight:400;color:var(--text3)">— last ${logDays} days · tap any cell to edit</span></div>
     <table class="maint-log-tbl" style="width:100%;border-collapse:collapse;min-width:480px">
       <thead><tr style="border-bottom:2px solid var(--border)">
