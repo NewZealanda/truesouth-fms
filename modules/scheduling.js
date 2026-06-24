@@ -92,25 +92,48 @@ function _schedRunHr(typeKey){var b=_schedBizRunHr(typeKey);if(b!=null)return b;
 function _schedLandVal(typeKey){var b=_schedBizLandings(typeKey);if(b!=null)return b;return _schedNum((_schedCalc()[typeKey]||{}).land);}
 function _schedCostSource(typeKey){return _schedBizRunHr(typeKey)!=null?'biz':'manual';}
 function _schedCalcCost(typeKey,hrs){var r=_schedRunHr(typeKey);if(r==null)return null;var l=_schedLandVal(typeKey);return r*hrs+(l!=null?l:0);}
-// Flat per-DESTINATION round-trip costs (ex GST), editable in the cost table, seeded with operator
-// figures. Milford ('MF' / null) is NOT flat — it stays run/hr × hours-derived above. A non-Milford
-// destination's ferry LEG = half its round-trip (an empty leg flies the same time as a loaded one).
-var SCHED_DEST_COST_DEFAULT={MC:{airvan:1700.85,caravan:2469.21,sdb:2469.21}};
+// ── Unified per-route cost — ONE source of truth for the comparison table AND the allocator ─────────
+// Every scheduling route (Milford return/ferry, Mt Cook, Franz Josef) is priced from the SAME Business
+// Plan running-cost engine the table shows: run/hr × the route's flight hours + that destination's REAL
+// landing fees. An operator can pin any route to a flat price (stored as an override). Milford
+// ('MF'/blank) ferry is the short 1.0h reposition; Mt Cook / Franz Josef reposition flies the same time
+// as the loaded leg (ferry hours = return hours), so its empty leg ≈ a loaded leg.
+var SCHED_DEST_LOC={MF:'Milford',MC:'Mt Cook',FJ:'Franz Josef'};       // dest code → Business Plan location name
 function _schedDestCostCfg(){var c=_schedCfg();if(!c.destCost||typeof c.destCost!=='object')c.destCost={};return c.destCost;}
-function _schedDestRt(dest,typeKey){
-  if(!dest||dest==='MF')return null;                                   // Milford → hours-derived, not flat
-  var cfg=(_schedDestCostCfg()[dest])||{};var v=_schedNum(cfg[typeKey]);if(v!=null)return v; // operator override
-  var d=SCHED_DEST_COST_DEFAULT[dest];if(d){var dv=_schedNum(d[typeKey]);if(dv!=null)return dv;} // seeded flat (e.g. Mt Cook)
-  // Otherwise (e.g. Franz Josef) derive from the per-destination flight hours × run/hr + landings, so the
-  // allocator can cost it even before the operator types an exact flat price in the table.
-  var dh=SCHED_DEST_HRS[dest];if(dh&&dh[typeKey]!=null){var c=_schedCalcCost(typeKey,dh[typeKey]);if(c!=null)return c;}
-  return null;
+function _schedRouteKey(dest,leg){return (leg==='fer')?((dest||'MF')+'~F'):(dest||'MF');}
+function _schedRouteOv(dest,typeKey,leg){var e=_schedDestCostCfg()[_schedRouteKey(dest,leg)]||{};return _schedNum(e[typeKey]);}
+function _schedRouteHrs(dest,typeKey,leg){
+  if(leg==='fer'){if(!dest||dest==='MF')return (SCHED_HRS.fer[typeKey]!=null?SCHED_HRS.fer[typeKey]:1.0);return _schedRouteHrs(dest,typeKey,'ret');}
+  var dh=SCHED_DEST_HRS[dest];if(dh&&dh[typeKey]!=null)return dh[typeKey];
+  return (SCHED_HRS.ret[typeKey]!=null?SCHED_HRS.ret[typeKey]:1.1);
 }
-// Effective return / ferry cost for an aircraft on a destination — Milford computed from run/hr +
-// landings; other destinations use the flat figures (ferry round = round-trip, i.e. leg = half).
-function _schedRtCost(ac,dest){var tk=_schedTypeKey(ac);var flat=_schedDestRt(dest,tk);if(flat!=null)return flat;var v=_schedCalcCost(tk,SCHED_HRS.ret[tk]||1.1);return v!=null?v:_schedNum(_schedTail(ac).rt);}
-function _schedFerryCost(ac,dest){var tk=_schedTypeKey(ac);var flat=_schedDestRt(dest,tk);if(flat!=null)return flat;var v=_schedCalcCost(tk,SCHED_HRS.fer[tk]||1.0);return v!=null?v:_schedNum(_schedTail(ac).ferry);}
-window.schedSetDestCost=function(dest,type,v){var dc=_schedDestCostCfg();var e=dc[dest]||(dc[dest]={});var n=_schedNum(v);e[type]=(n!=null?n:'');_schedSave();render();};
+// Run-cost-per-hour object for a type bucket (airvan/caravan/sdb), from the Business Plan running costs.
+function _schedRcBiz(typeKey){
+  if(typeof _bizState!=='function'||typeof _bizTypeAvg!=='function')return null;
+  try{var p=_bizState();
+    if(typeKey==='sdb'){var ac=(p.running.aircraft||[]).find(function(a){return String(a.code||'').toUpperCase()==='SDB';});if(ac&&typeof _bizRunCalc==='function'){var c=_bizRunCalc(ac,p.running.fuel);return {fuelHr:c.fuelHr,maintHr:c.maintHr,totalHr:c.totalHr,type:ac.type};}}
+    var t=(typeKey==='airvan')?'GA8':'C208';var a=_bizTypeAvg(t);return {fuelHr:a.fuelHr,maintHr:a.maintHr,totalHr:a.totalHr,type:t};
+  }catch(e){return null;}
+}
+// Live breakdown for a route leg, computed from the destination's REAL location fees (Business Plan).
+function _schedRouteCompute(dest,typeKey,leg){
+  var hrs=_schedRouteHrs(dest,typeKey,leg);var rc=_schedRcBiz(typeKey);
+  if(rc&&typeof _bizFlightCost==='function'&&typeof _bizState==='function'){
+    try{var p=_bizState();var locs=p.running.locations||[];
+      var io=function(nm,fb){if(nm){for(var i=0;i<locs.length;i++)if(locs[i]&&locs[i].name===nm)return i;}return fb;};
+      var depIdx=io('Queenstown',0);var destIdx=io(SCHED_DEST_LOC[dest||'MF']||'',-1);
+      var r=_bizFlightCost({fuelHr:rc.fuelHr,maintHr:rc.maintHr,totalHr:rc.totalHr,isLease:false,n:1},rc.type,hrs,depIdx,destIdx,true);
+      if(r&&r.total!=null)return {hrs:hrs,runHr:rc.totalHr,land:(+r.ldg||0)+(+r.conc||0)+(+r.aw||0),total:r.total,destKnown:destIdx>=0};
+    }catch(e){}
+  }
+  var v=_schedCalcCost(typeKey,hrs);return {hrs:hrs,runHr:_schedRunHr(typeKey),land:_schedLandVal(typeKey),total:(v!=null?v:null),destKnown:false};
+}
+// Effective per-route round-trip cost: operator override if pinned, else the live computed figure.
+function _schedRouteCost(dest,typeKey,leg){var ov=_schedRouteOv(dest,typeKey,leg);if(ov!=null)return ov;var c=_schedRouteCompute(dest,typeKey,leg);return c?c.total:null;}
+function _schedRtCost(ac,dest){return _schedRouteCost(dest,_schedTypeKey(ac),'ret');}
+function _schedFerryCost(ac,dest){return _schedRouteCost(dest,_schedTypeKey(ac),'fer');}
+window.schedSetRouteCost=function(dest,typeKey,leg,v){var dc=_schedDestCostCfg();var k=_schedRouteKey(dest,leg);var e=dc[k]||(dc[k]={});var n=_schedNum(v);if(n!=null)e[typeKey]=n;else delete e[typeKey];_schedSave();render();};
+window.schedSetDestCost=function(dest,type,v){window.schedSetRouteCost(dest,type,'ret',v);}; // back-compat
 // No-ferry list: aircraft the allocator must NOT reposition (no empty/ferry leg). A no-ferry aircraft is
 // only used fresh from base, never flown empty to/from another rotation.
 function _schedNoFerryMap(){var c=_schedCfg();if(!c.noFerry||typeof c.noFerry!=='object')c.noFerry={};return c.noFerry;}
@@ -172,43 +195,34 @@ function renderSchedulingSettings(){
       '<span style="font-size:13px;font-weight:800;color:'+(on?'#22c55e':'var(--text3)')+'">'+(on?'ON':'OFF')+'</span>'+
     '</button></div>';
 
-  // Cost calculator (per type) — run/hr + landings drive the Milford return & ferry figures live.
-  // When the Business Plan is loaded these are pulled from its running costs (read-only here); when
-  // it isn't, the manual fields below act as the fallback.
-  var _fromBiz=(_schedCostSource('caravan')==='biz');
-  var _ni=function(type,field,val){return '<input type="number" min="0" inputmode="decimal" value="'+_schedEsc(val)+'" onchange="window.schedSetCalc(\''+type+'\',\''+field+'\',this.value)" style="width:96px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px">';};
-  var _nd=function(dest,type,val){return '<input type="number" min="0" inputmode="decimal" value="'+_schedEsc(val)+'" onchange="window.schedSetDestCost(\''+dest+'\',\''+type+'\',this.value)" style="width:96px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px">';};
-  var _ro=function(v){return '<span style="font-weight:700;color:var(--text1)">'+(v!=null?_schedMoney(v):'—')+'</span>';};
-  h+='<div class="card" style="margin-bottom:14px"><div class="st">Cost calculator</div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Costs ex GST, less pilot (rostered = sunk cost). '+
-      (_fromBiz?'Run/hr &amp; landings are pulled live from <b>Business Plan ▸ Running costs</b> — edit fuel / maintenance / fees there and every figure here (and the allocator) updates automatically.':'Enter <b>run/hr</b> and <b>landings + fees</b> per type (Business Plan not loaded — using manual fallback).')+
-      ' Hours: Milford <b>return</b> = airvan 1.2h, caravan/SDB 1.1h; <b>ferry</b> (empty) = 1.0h. '+
-      '<b>Mt Cook</b> &amp; <b>Franz Josef</b> use the flat round-trip you enter (ferry leg = half the round-trip); Franz starts from an hours-based estimate (airvan 2.4h, caravan 2.0h) until you set an exact price.</p>'+
-    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:680px">'+
-      '<thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em">'+
-        '<th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Run/hr $</th><th style="padding:6px 8px">Landings+fees $</th><th style="padding:6px 8px">Milford return</th><th style="padding:6px 8px">Milford ferry</th><th style="padding:6px 8px">Mt Cook return</th><th style="padding:6px 8px">Franz Josef return</th></tr></thead><tbody>';
-  [['airvan','Airvan (owned avg)'],['caravan','Caravan (owned avg)'],['sdb','SDB (lease)']].forEach(function(row){
-    var k=row[0];var e=_schedCalc()[k]||{};var biz=(_schedCostSource(k)==='biz');
-    var rt=_schedCalcCost(k,SCHED_HRS.ret[k]),fer=_schedCalcCost(k,SCHED_HRS.fer[k]);
-    h+='<tr style="border-top:1px solid var(--border2)">'+
-      '<td style="padding:6px 8px;font-weight:800;color:var(--text1)">'+row[1]+'<div style="font-size:10px;color:var(--text3);font-weight:400">'+(SCHED_HRS.ret[k])+'h ret · '+(SCHED_HRS.fer[k])+'h ferry'+(biz?' · from Business Plan':'')+'</div></td>'+
-      '<td style="padding:6px 8px">'+(biz?_ro(_schedRunHr(k)):_ni(k,'runhr',e.runhr))+'</td>'+
-      '<td style="padding:6px 8px">'+(biz?_ro(_schedLandVal(k)):_ni(k,'land',e.land))+'</td>'+
-      '<td style="padding:6px 8px;font-weight:800;color:#22c55e">'+_schedMoney(rt)+'</td>'+
-      '<td style="padding:6px 8px;font-weight:800;color:#f59e0b">'+_schedMoney(fer)+'</td>'+
-      '<td style="padding:6px 8px">'+_nd('MC',k,_schedDestRt('MC',k))+'</td>'+
-      '<td style="padding:6px 8px">'+_nd('FJ',k,_schedDestRt('FJ',k))+'</td>'+
-    '</tr>';
+  // Route costs — ONE live price list that is exactly what the allocator uses. Run/hr & landings come
+  // from Business Plan ▸ Running costs (computed from each destination's real fees); type an Override to
+  // pin a route to a flat price.
+  if(!S._bizPlan&&window.loadBusinessPlan){S._bizLoaded=true;try{window.loadBusinessPlan();}catch(e){}}
+  var SCHED_UI_ROUTES=[{dest:'MF',leg:'ret',lbl:'Milford return'},{dest:'MF',leg:'fer',lbl:'Milford ferry'},{dest:'MC',leg:'ret',lbl:'Mt Cook return'},{dest:'FJ',leg:'ret',lbl:'Franz Josef return'}];
+  var SCHED_UI_TYPES=[['airvan','Airvan'],['caravan','Caravan'],['sdb','SDB (lease)']];
+  h+='<div class="card" style="margin-bottom:14px"><div class="st">Route costs</div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">One live price list — what you see here is exactly what the allocator costs flights on. Run/hr &amp; landings are pulled from <b>Business Plan ▸ Running costs</b> (edit fuel / maintenance / fees there and every figure updates). Costs ex GST, less pilot (rostered = sunk cost). Type a number in <b>Override</b> to pin a route to a flat price; clear it to return to live. Hours: Milford 1.2/1.1h return · 1.0h ferry; Mt Cook 2.1/1.8h; Franz Josef 2.4/2.0h.</p>'+
+    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:740px">'+
+      '<thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.04em">'+
+        ['Route','Aircraft','Hrs','Run/hr','Landings','Total ex GST','Incl GST','Override $'].map(function(t,i){return '<th style="padding:6px 8px;text-align:'+(i<2?'left':'right')+'">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+  SCHED_UI_ROUTES.forEach(function(rt){
+    SCHED_UI_TYPES.forEach(function(tp,ti){
+      var tk=tp[0];var c=_schedRouteCompute(rt.dest,tk,rt.leg);var ov=_schedRouteOv(rt.dest,tk,rt.leg);
+      var eff=(ov!=null)?ov:(c?c.total:null);var missing=(c&&c.destKnown===false&&rt.dest!=='MF');
+      h+='<tr style="border-top:1px solid var(--border'+(ti===0?'':'2')+')">'+
+        '<td style="padding:6px 8px;font-weight:800;color:var(--text1);white-space:nowrap">'+(ti===0?_schedEsc(rt.lbl):'')+'</td>'+
+        '<td style="padding:6px 8px;color:var(--text2);white-space:nowrap">'+_schedEsc(tp[1])+(missing?' <span style="color:#ef4444;font-size:9px">add a “'+_schedEsc(SCHED_DEST_LOC[rt.dest])+'” location for fees</span>':'')+'</td>'+
+        '<td style="padding:6px 8px;text-align:right">'+(c?c.hrs:'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;color:var(--text2)">'+(c&&c.runHr!=null?_schedMoney(c.runHr):'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;color:var(--text2)">'+(c?_schedMoney(c.land):'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;font-weight:800;color:'+(ov!=null?'#60a5fa':'#f59e0b')+'">'+(eff!=null?_schedMoney(eff):'—')+(ov!=null?' <span style="font-size:9px;color:var(--text3)">pinned</span>':'')+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;color:var(--text2)">'+(eff!=null?_schedMoney(eff*1.15):'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:right"><input type="number" min="0" inputmode="decimal" value="'+(ov!=null?_schedEsc(ov):'')+'" placeholder="'+(c&&c.total!=null?Math.round(c.total):'')+'" onchange="window.schedSetRouteCost(\''+rt.dest+'\',\''+tk+'\',\''+rt.leg+'\',this.value)" style="width:92px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px;text-align:right"></td>'+
+      '</tr>';
+    });
   });
   h+='</tbody></table></div></div>';
-
-  // Live route costs — the canonical scheduling routes (Milford return/ferry, Mt Cook, Franz Josef)
-  // priced from the SAME running-cost engine the allocator uses, so this table and the schedule both
-  // update the moment fuel / maintenance / fees change in the Business Plan.
-  if(typeof _bizSchedRoutesPanel==='function'){
-    if(!S._bizPlan&&window.loadBusinessPlan){S._bizLoaded=true;try{window.loadBusinessPlan();}catch(e){}}
-    h+=_bizSchedRoutesPanel();
-  }
 
   // Per-tail seat capacity (SDB is 11; other caravans 13, airvans 7).
   h+='<div class="card" style="margin-bottom:14px"><div class="st">Aircraft seats</div>';
