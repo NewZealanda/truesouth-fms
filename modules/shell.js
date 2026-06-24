@@ -252,7 +252,7 @@ function render(){
       // the login form, so the login screen doesn't flash before auth resolves.
       lo.style.backgroundImage="linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,.68)),url('"+BG_IMG+"')";
       lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
-        +'<img class="ts-logo-spin" src="'+_TS_LOGO+'" style="width:72px;height:72px" />'
+        +'<div class="ts-takeoff"><div class="ts-runway"></div><div class="ts-plane">🛫</div></div>'
         +'<div class="ts-loading-text">Loading...</div>'
         +'</div>';
     } else {
