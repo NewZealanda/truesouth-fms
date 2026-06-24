@@ -1001,20 +1001,19 @@ function _rzAvailablePilots(dsOverride){
   });
   return out.sort(function(a,b){if(a.rostered!==b.rostered)return a.rostered?-1:1;return String(a.name).localeCompare(String(b.name));});
 }
-// ALL staff (not just aircraft-approved pilots) with a code — for picking meeting attendees.
-// `isPilot` = has a ZK- endorsement, so the meeting can be copied into that pilot's movements.
+// ALL staff with a code — for picking meeting attendees. Sourced from S.users (the SAME list the
+// roster shows) so everyone with an account appears, not only crew with aircraft endorsements.
+// `isPilot` = a pilot role or crew endorsements, so the meeting copies into that pilot's movements.
 function _rzAllStaff(dsOverride){
   var ds=dsOverride||S.rezdyDate,roster=S.roster||{},off={rdo:1,off:1,leave:1,ul:1,sick:1,training:1};
+  if(!S._rosterLoaded&&typeof window.loadRosterFromCloud==='function'){S._rosterLoaded=true;try{var _loc=lsGet('ts_roster');if(_loc&&typeof _loc==='object')S.roster=_loc;}catch(e){}window.loadRosterFromCloud();}
   var out=[],seen={};
-  (S.crew||[]).forEach(function(cr){
-    if(!cr||!cr.n)return;
-    var u=(S.users||[]).find(function(x){return x&&(x.name===cr.n||x.linkedCrew===cr.n);});
-    if(u&&u.inactive)return;
-    var code=cr.code?String(cr.code).toUpperCase():((u&&typeof _rCode==='function')?_rCode(u):(cr.n||'').replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase());
+  (S.users||[]).filter(function(u){return u&&u.id&&u.name&&!u.inactive;}).forEach(function(u){
+    var code=(typeof _rCode==='function')?_rCode(u):(u.name||'').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
     if(!code||seen[code])return;seen[code]=1;
-    var st=(u&&typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):((roster[ds]&&roster[ds][code])||'');
-    var isPilot=(cr.endorse||[]).some(function(e){return String(e).indexOf('ZK-')===0;});
-    out.push({code:code,name:(cr.n||code).trim(),rostered:(!!st&&!off[st]),isPilot:isPilot});
+    var st=(typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):((roster[ds]&&roster[ds][code])||'');
+    var isPilot=!!(u.role==='pilot'||(typeof _picEligible==='function'&&_picEligible(u)));
+    out.push({code:code,name:(u.name||code).trim(),rostered:(!!st&&!off[st]),isPilot:isPilot});
   });
   return out.sort(function(a,b){if(a.isPilot!==b.isPilot)return a.isPilot?-1:1;return String(a.name).localeCompare(String(b.name));});
 }

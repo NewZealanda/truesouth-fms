@@ -1389,7 +1389,7 @@ function _rzPilotMovements(){
   });
   // Pilot meetings (__pilot__ single-pilot) + multi-attendee meetings (misc): copy into each PILOT
   // attendee's lane so their day shows it (and the allocator reserves them).
-  var _pilotSet={};(_rzAvailablePilots()||[]).forEach(function(p){_pilotSet[p.code]=1;});
+  var _pilotSet={};(_rzAllStaff()||[]).forEach(function(p){if(p.isPilot)_pilotSet[p.code]=1;});
   (S._schedBlocks||[]).forEach(function(b){
     if(!b)return;
     if(b.pilot)ensure(b.pilot).push({start:b.start,end:b.end,label:b.label||b.ftype||'Meeting',kind:'meeting',ico:'📅',id:b.id});
