@@ -324,13 +324,15 @@ input[type=number] { -moz-appearance: textfield; }
 @keyframes ts-fade-in{0%{opacity:0}100%{opacity:1}}
 #loading-overlay{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background-size:cover;background-position:center;animation:ts-fade-in .2s ease}
 #loading-overlay .ts-logo-spin{width:72px;height:72px;animation:ts-spin 1.1s linear infinite;filter:drop-shadow(0 0 18px rgba(255,255,255,.35))}
-/* Aircraft takeoff loading animation */
-#loading-overlay .ts-takeoff{position:relative;width:170px;height:96px;overflow:hidden}
-#loading-overlay .ts-runway{position:absolute;left:8%;right:8%;bottom:22px;height:2px;border-radius:2px;overflow:hidden;background:rgba(255,255,255,.12)}
-#loading-overlay .ts-runway:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.6) 0 12px,transparent 12px 26px);animation:ts-runway-move .55s linear infinite}
-#loading-overlay .ts-plane{position:absolute;left:6px;bottom:18px;font-size:42px;line-height:1;animation:ts-takeoff 2s cubic-bezier(.45,0,.55,1) infinite;filter:drop-shadow(0 3px 8px rgba(0,0,0,.45))}
-@keyframes ts-takeoff{0%{transform:translate(0,0) rotate(0);opacity:0}12%{opacity:1}50%{transform:translate(62px,0) rotate(0)}100%{transform:translate(160px,-74px) rotate(-15deg);opacity:0}}
-@keyframes ts-runway-move{0%{transform:translateX(0)}100%{transform:translateX(-26px)}}
+/* Mountains-draw + plane-takeoff loading animation */
+#loading-overlay .ts-scene{position:relative;width:300px;height:170px;animation:tsm-fade 4.2s ease-in-out infinite}
+#loading-overlay .ts-mtns{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+#loading-overlay .ts-mtn-path{stroke-dasharray:1;stroke-dashoffset:1;animation:tsm-draw 4.2s ease-in-out infinite}
+#loading-overlay .ts-runway2{position:absolute;left:20px;bottom:16px;width:130px;height:2px;border-radius:2px;background:linear-gradient(90deg,rgba(255,255,255,.55),rgba(255,255,255,0))}
+#loading-overlay .ts-plane2{position:absolute;left:20px;bottom:14px;animation:tsm-plane 4.2s ease-in infinite;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+@keyframes tsm-fade{0%{opacity:0}5%{opacity:1}86%{opacity:1}100%{opacity:0}}
+@keyframes tsm-draw{0%{stroke-dashoffset:1}8%{stroke-dashoffset:1}46%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+@keyframes tsm-plane{0%,46%{transform:translate(0,0) rotate(0deg);opacity:0}51%{opacity:1}62%{transform:translate(80px,-14px) rotate(-8deg);opacity:1}100%{transform:translate(252px,-150px) rotate(-24deg);opacity:0}}
 #loading-overlay .ts-loading-text{margin-top:18px;font-size:13px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.6)}
 </style>
 </head>
@@ -810,7 +812,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.92';
+const APP_VER='v25.93';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3072,6 +3074,18 @@ function acLayout(acId){const _a=_acSpec(acId);if(_a?.layout==='ga8')return GA8_
 // ═══════════════════════ RENDER FUNCTIONS ═══════════════════════
 
 // ── iOS Add to Home Screen banner ──
+// Loading animation: a mountain range draws itself left→right, then a little plane takes off and
+// climbs over it. Used on the session-restore and app-load screens.
+function _tsLoadingScene(){
+  return '<div class="ts-scene">'
+    +'<svg class="ts-mtns" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" aria-hidden="true">'
+      +'<path class="ts-mtn-path" pathLength="1" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M6 162 L66 98 L88 128 L132 74 L164 128 L204 54 L238 126 L274 40 L302 118 L316 162"></path>'
+    +'</svg>'
+    +'<div class="ts-runway2"></div>'
+    +'<div class="ts-plane2"><svg viewBox="0 0 24 24" width="30" height="30" fill="#ffffff"><path d="M2.5,19h19v2h-19V19z M22.07,9.64c-0.21-0.8-1.04-1.28-1.84-1.06L14.92,10L8,3.57L6.09,4.08l4.15,7.19l-4.97,1.33l-1.97-1.54l-1.45,0.39l2.59,4.49l17.28-4.64C21.81,11.27,22.28,10.44,22.07,9.64z"></path></svg></div>'
+    +'</div>'
+    +'<div class="ts-loading-text">Loading...</div>';
+}
 function renderIOSBanner(){
   const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent);
   const isStandalone=window.navigator.standalone===true;
@@ -3325,8 +3339,7 @@ function render(){
       // the login form, so the login screen doesn't flash before auth resolves.
       lo.style.backgroundImage="linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,.68)),url('"+BG_IMG+"')";
       lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
-        +'<div class="ts-takeoff"><div class="ts-runway"></div><div class="ts-plane">🛫</div></div>'
-        +'<div class="ts-loading-text">Loading...</div>'
+        +_tsLoadingScene()
         +'</div>';
     } else {
       lo.style.backgroundImage=`linear-gradient(to bottom,rgba(0,0,0,.32),rgba(0,0,0,.58)),url('${BG_IMG}')`;
@@ -3342,8 +3355,7 @@ function render(){
     lo.style.display='flex';
     lo.style.backgroundImage="linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,.68)),url('"+BG_IMG+"')";
     lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
-      +'<img class="ts-logo-spin" src="'+_TS_LOGO+'" style="width:72px;height:72px" />'
-      +'<div class="ts-loading-text">Loading...</div>'
+      +_tsLoadingScene()
       +'</div>';
     r.style.display='none';
     return;

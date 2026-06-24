@@ -1,4 +1,16 @@
 // === MODULE: shell === v1.0 ===
+// Loading animation: a mountain range draws itself left→right, then a little plane takes off and
+// climbs over it. Used on the session-restore and app-load screens.
+function _tsLoadingScene(){
+  return '<div class="ts-scene">'
+    +'<svg class="ts-mtns" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" aria-hidden="true">'
+      +'<path class="ts-mtn-path" pathLength="1" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M6 162 L66 98 L88 128 L132 74 L164 128 L204 54 L238 126 L274 40 L302 118 L316 162"></path>'
+    +'</svg>'
+    +'<div class="ts-runway2"></div>'
+    +'<div class="ts-plane2"><svg viewBox="0 0 24 24" width="30" height="30" fill="#ffffff"><path d="M2.5,19h19v2h-19V19z M22.07,9.64c-0.21-0.8-1.04-1.28-1.84-1.06L14.92,10L8,3.57L6.09,4.08l4.15,7.19l-4.97,1.33l-1.97-1.54l-1.45,0.39l2.59,4.49l17.28-4.64C21.81,11.27,22.28,10.44,22.07,9.64z"></path></svg></div>'
+    +'</div>'
+    +'<div class="ts-loading-text">Loading...</div>';
+}
 function renderIOSBanner(){
   const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent);
   const isStandalone=window.navigator.standalone===true;
@@ -252,8 +264,7 @@ function render(){
       // the login form, so the login screen doesn't flash before auth resolves.
       lo.style.backgroundImage="linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,.68)),url('"+BG_IMG+"')";
       lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
-        +'<div class="ts-takeoff"><div class="ts-runway"></div><div class="ts-plane">🛫</div></div>'
-        +'<div class="ts-loading-text">Loading...</div>'
+        +_tsLoadingScene()
         +'</div>';
     } else {
       lo.style.backgroundImage=`linear-gradient(to bottom,rgba(0,0,0,.32),rgba(0,0,0,.58)),url('${BG_IMG}')`;
@@ -269,8 +280,7 @@ function render(){
     lo.style.display='flex';
     lo.style.backgroundImage="linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,.68)),url('"+BG_IMG+"')";
     lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
-      +'<img class="ts-logo-spin" src="'+_TS_LOGO+'" style="width:72px;height:72px" />'
-      +'<div class="ts-loading-text">Loading...</div>'
+      +_tsLoadingScene()
       +'</div>';
     r.style.display='none';
     return;

@@ -324,13 +324,15 @@ input[type=number] { -moz-appearance: textfield; }
 @keyframes ts-fade-in{0%{opacity:0}100%{opacity:1}}
 #loading-overlay{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background-size:cover;background-position:center;animation:ts-fade-in .2s ease}
 #loading-overlay .ts-logo-spin{width:72px;height:72px;animation:ts-spin 1.1s linear infinite;filter:drop-shadow(0 0 18px rgba(255,255,255,.35))}
-/* Aircraft takeoff loading animation */
-#loading-overlay .ts-takeoff{position:relative;width:170px;height:96px;overflow:hidden}
-#loading-overlay .ts-runway{position:absolute;left:8%;right:8%;bottom:22px;height:2px;border-radius:2px;overflow:hidden;background:rgba(255,255,255,.12)}
-#loading-overlay .ts-runway:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.6) 0 12px,transparent 12px 26px);animation:ts-runway-move .55s linear infinite}
-#loading-overlay .ts-plane{position:absolute;left:6px;bottom:18px;font-size:42px;line-height:1;animation:ts-takeoff 2s cubic-bezier(.45,0,.55,1) infinite;filter:drop-shadow(0 3px 8px rgba(0,0,0,.45))}
-@keyframes ts-takeoff{0%{transform:translate(0,0) rotate(0);opacity:0}12%{opacity:1}50%{transform:translate(62px,0) rotate(0)}100%{transform:translate(160px,-74px) rotate(-15deg);opacity:0}}
-@keyframes ts-runway-move{0%{transform:translateX(0)}100%{transform:translateX(-26px)}}
+/* Mountains-draw + plane-takeoff loading animation */
+#loading-overlay .ts-scene{position:relative;width:300px;height:170px;animation:tsm-fade 4.2s ease-in-out infinite}
+#loading-overlay .ts-mtns{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+#loading-overlay .ts-mtn-path{stroke-dasharray:1;stroke-dashoffset:1;animation:tsm-draw 4.2s ease-in-out infinite}
+#loading-overlay .ts-runway2{position:absolute;left:20px;bottom:16px;width:130px;height:2px;border-radius:2px;background:linear-gradient(90deg,rgba(255,255,255,.55),rgba(255,255,255,0))}
+#loading-overlay .ts-plane2{position:absolute;left:20px;bottom:14px;animation:tsm-plane 4.2s ease-in infinite;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+@keyframes tsm-fade{0%{opacity:0}5%{opacity:1}86%{opacity:1}100%{opacity:0}}
+@keyframes tsm-draw{0%{stroke-dashoffset:1}8%{stroke-dashoffset:1}46%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+@keyframes tsm-plane{0%,46%{transform:translate(0,0) rotate(0deg);opacity:0}51%{opacity:1}62%{transform:translate(80px,-14px) rotate(-8deg);opacity:1}100%{transform:translate(252px,-150px) rotate(-24deg);opacity:0}}
 #loading-overlay .ts-loading-text{margin-top:18px;font-size:13px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.6)}
 </style>
 </head>
