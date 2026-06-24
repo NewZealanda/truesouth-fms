@@ -31,7 +31,7 @@ function renderLsSeatGrid(f,a){
       var wt=f.seats[idx]||'';
       var bg=f.bags[idx]||'';
       var grp=(!isPIC&&!isCoPilot&&f.paxGroups)?f.paxGroups[idx]||'':'';
-      var gc=grp?_rzGroupColor(grp):null;
+      var gc=grp?_rzGroupColor(grp,_rzFormGrpList(f)):null;
       var paxType=(!isPIC&&!isCoPilot&&f.paxType)?f.paxType[idx]||'A':'A';
       var hasInfant=!!(f.infantNames&&f.infantNames[idx]);
       var payReq=!!(f.paxPaymentReq&&f.paxPaymentReq[idx]);
@@ -356,7 +356,7 @@ function renderLoadsheet(){
       const displayNm=nameHasInfant?nm.split(' + ')[0]:nm;
       const infantNm=rawInfant||(nameHasInfant?nm.split(' + ').slice(1).join(' + '):'');
       const grp=f.paxGroups?.[idx]||(curDisp()?.pax||[]).find(p=>p.name===nm||p.name===displayNm)?.group||'';
-      const gc=grp?_rzGroupColor(grp):null;
+      const gc=grp?_rzGroupColor(grp,_rzFormGrpList(f)):null;
       const payReq=(f.paxPaymentReq||{})[idx]||false;
       const hasPerson=nm||parseFloat(wt);
       const selUnalloc=S._selUnalloc!=null;const selSeat=S._selFormSeat===idx;
@@ -605,7 +605,7 @@ function renderLoadsheet(){
       const _emptySlots=_totalSlots-_filled;
       const cards=ua.map(function(p,i){
         const sel=selIdx===i;
-        const gc=p.group?.trim()?_rzGroupColor(p.group.trim()):null;
+        const gc=p.group?.trim()?_rzGroupColor(p.group.trim(),_rzFormGrpList(f)):null;
         const wt=parseFloat(p.weight||0)+parseFloat(p.bag||0);
         const borderCol=gc||'#64748b';
         const cardStyle=sel

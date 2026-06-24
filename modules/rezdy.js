@@ -628,7 +628,38 @@ function renderAdminOperations(){
 //  (1) BOOKINGS
 // ─────────────────────────────────────────────────────────────────────────────
 // Booking group colour (all pax in one booking share group = order number).
-function _rzGroupColor(s){s=String(s||'');var h=0;for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffffff;var pal=['#3b82f6','#ec4899','#10b981','#f59e0b','#8b5cf6','#f97316','#06b6d4','#84cc16','#ef4444','#6366f1'];return pal[Math.abs(h)%pal.length];}
+// Group colours. A passenger group's colour is its POSITION among the distinct groups in the SAME
+// aircraft/loadsheet, spread by the golden angle (137.5°) so neighbouring groups are always vividly
+// different — operators kept confusing same/similar-coloured groups sharing one cabin. `groups` = the
+// ordered distinct group list for that context (consecutive indices ⇒ maximally separated hues).
+// Without a list we fall back to a per-session registry so two different groups still never collide.
+function _grpHslHex(h,s,l){
+  h=((h%360)+360)%360;
+  var c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs(((h/60)%2)-1)),m=l-c/2,r=0,g=0,b=0;
+  if(h<60){r=c;g=x;}else if(h<120){r=x;g=c;}else if(h<180){g=c;b=x;}else if(h<240){g=x;b=c;}else if(h<300){r=x;b=c;}else{r=c;b=x;}
+  function _h2(v){return ('0'+Math.round((v+m)*255).toString(16)).slice(-2);}
+  return '#'+_h2(r)+_h2(g)+_h2(b);
+}
+// Curated, contrast-ordered palette: the first colours an aircraft uses are maximally different from
+// each other (blue→orange→green→magenta→purple→teal→gold→red…). Beyond it, golden-angle hues fill in.
+var _GRP_PAL=['#2563eb','#ea580c','#16a34a','#c026d3','#65a30d','#db2777','#0891b2','#7c3aed','#ca8a04','#dc2626','#b45309','#0d9488'];
+function _rzGroupColorIdx(i){i=i||0;return (i<_GRP_PAL.length)?_GRP_PAL[i]:_grpHslHex(210+i*137.508,0.62,0.52);}
+function _rzGroupColor(s,groups){
+  s=String(s||'');if(!s)return '#64748b';
+  if(groups&&groups.length){var gi=groups.indexOf(s);if(gi>=0)return _rzGroupColorIdx(gi);}
+  S._grpColReg=S._grpColReg||{};
+  if(S._grpColReg[s]==null){S._grpColReg[s]=(S._grpColN||0);S._grpColN=(S._grpColN||0)+1;}
+  return _rzGroupColorIdx(S._grpColReg[s]);
+}
+// Ordered distinct group list for a loadsheet form (seated + unallocated + current dispatch pax) so the
+// seat grid, pax cards and unallocated pool all colour the same group identically and distinctly.
+function _rzFormGrpList(f){
+  var o=[];function add(g){g=String(g||'').trim();if(g&&o.indexOf(g)<0)o.push(g);}
+  if(f&&f.paxGroups)Object.keys(f.paxGroups).forEach(function(k){add(f.paxGroups[k]);});
+  try{(typeof _uaPool==='function'?_uaPool():[]).forEach(function(p){add(p&&p.group);});}catch(e){}
+  try{(((typeof curDisp==='function'?curDisp():null)||{}).pax||[]).forEach(function(p){add(p&&p.group);});}catch(e){}
+  o.sort();return o;
+}
 function _rzPaxMeta(order){S._rezdyPaxMeta=S._rezdyPaxMeta||{};order=String(order);return S._rezdyPaxMeta[order]||(S._rezdyPaxMeta[order]={});}
 function _rzSavePaxMeta(){if(window.pickupSave)window.pickupSave(true);}
 // True if this booking has any manual child/infant overrides away from the Rezdy standard.
@@ -3526,6 +3557,8 @@ function _rzManSeatGrid(dep,acId,col){
   var seats=_rzManSeatsFor(dep,acId);
   var declMode=_rzManDeclMode(dep,acId);
   var byId={};(S._rzManPax||[]).forEach(function(p){byId[p.id]=p;});
+  // Distinct groups ON THIS AIRCRAFT (seated + overflow), so each gets a clearly-different colour.
+  var _seatGrps=[];(S._rzManPax||[]).forEach(function(pp){if(pp&&pp.ac===acId&&!pp.infantOf&&_rzPaxDep(pp)===dep&&pp.group){var gg=String(pp.group);if(_seatGrps.indexOf(gg)<0)_seatGrps.push(gg);}});_seatGrps.sort();
   var picCode=(S._rzManPic||{})[acId]||'';var pic=picCode?_rzPilotByCode(picCode):null;
   var coCode=(S._rzManCoPic||{})[acId]||'';var co=coCode?_rzPilotByCode(coCode):null;
   var depE=_rzEsc(dep).replace(/'/g,"\\'"),acE=acId.replace(/'/g,"\\'");
@@ -3552,7 +3585,7 @@ function _rzManSeatGrid(dep,acId,col){
       }
       var pid=seats[idx];var p=pid?byId[pid]:null;
       if(p){
-        var gcol=_rzGroupColor(p.group||'');
+        var gcol=_rzGroupColor(p.group||'',_seatGrps);
         var nm=_rzEsc(String(p.name||'').split(/\s+/)[0]);
         var wv=_rzPaxWeight(p,declMode);
         var tbc=(wv==null||wv==='');var decld=!tbc&&declMode;
