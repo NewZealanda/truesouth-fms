@@ -1095,6 +1095,8 @@ window.rezdySchedDropBlockToAc=function(ac,e){
   // Drop Y → the same 15-minute-snapped time the guideline showed (block top, grab-offset aware).
   var newTime=null;var _sm=_rzDragSnapMins(e);
   if(_sm!=null){_sm=Math.min((_RZ_SCH_END*60)-15,_sm);newTime=String(Math.floor(_sm/60)).padStart(2,'0')+':'+String(_sm%60).padStart(2,'0');}
+  // Edge resize — set just the departure (top) or return (bottom) time of a booking block.
+  if(String(src).indexOf('EDGE|')===0){var ep=String(src).split('|');window.rezdySchedSetEdge(ep[2]||'',ep[3]||'',ep[1]||'top',newTime);return;}
   // Manual block (maintenance ferry / training / etc.) — change its time and/or aircraft.
   if(String(src).indexOf('BLK|')===0){window.rezdySchedMoveBlock(String(src).slice(4),newTime,ac);return;}
   var parts=String(src).split('|');var srcAc=parts[0]||null;var srcStart=parts[1]||'';var srcProd=parts[2]||'';
@@ -1124,8 +1126,20 @@ window.rezdySchedMoveBlock=async function(id,newStart,newAc){
     if(typeof sbU==='function')await sbU('ts_schedule',[payload]);}catch(e){}
   if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
 };
+// Drag the TOP or BOTTOM edge of a booking block to set its departure / return time independently.
+window.rezdySchedEdgeDragStart=function(key,e){
+  S._rzSchedBlockDrag=key;S._rzSchedBlockGrabDy=0;          // the edge tracks the cursor exactly
+  if(e&&e.stopPropagation)e.stopPropagation();
+  try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','edge');}catch(_){}
+};
+window.rezdySchedSetEdge=function(prod,origStart,edge,val){
+  var k=String(prod||'')+'|'+String(origStart||'');
+  if(edge==='top'){S._rzDepTimeOv=S._rzDepTimeOv||{};if(val)S._rzDepTimeOv[k]=val;else delete S._rzDepTimeOv[k];}
+  else{S._rzDepEndOv=S._rzDepEndOv||{};if(val)S._rzDepEndOv[k]=val;else delete S._rzDepEndOv[k];}
+  if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
+};
 // Clear a departure's manual time-shift (back to the Rezdy tour time).
-window.rezdyClearDepTime=function(prod,start){if(S._rzDepTimeOv)delete S._rzDepTimeOv[String(prod||'')+'|'+String(start||'')];if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();};
+window.rezdyClearDepTime=function(prod,start){var k=String(prod||'')+'|'+String(start||'');if(S._rzDepTimeOv)delete S._rzDepTimeOv[k];if(S._rzDepEndOv)delete S._rzDepEndOv[k];if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();};
 window.rezdySchedDropPilot=function(key,e){
   if(e&&e.preventDefault)e.preventDefault();if(e&&e.stopPropagation)e.stopPropagation();
   var _dl0=document.getElementById('rzDragLine');if(_dl0)_dl0.style.display='none';
@@ -1761,7 +1775,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzDepTimeOv={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzDepTimeOv={};S._rzDepEndOv={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -2128,9 +2142,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','depTimeOv'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','depTimeOv','depEndOv'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},depTimeOv:S._rzDepTimeOv||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -2158,6 +2172,7 @@ function _pkApplyBlob(d){
   S._rzBkNote=(d.bkNote&&typeof d.bkNote==='object')?d.bkNote:{};
   S._rzFlybackTime=(d.flybackTime&&typeof d.flybackTime==='object')?d.flybackTime:{};
   S._rzDepTimeOv=(d.depTimeOv&&typeof d.depTimeOv==='object')?d.depTimeOv:{};
+  S._rzDepEndOv=(d.depEndOv&&typeof d.depEndOv==='object')?d.depEndOv:{};
   S._rzDepOrder=Array.isArray(d.depOrder)?d.depOrder:[];
 }
 function _pkSnapshot(d){try{return JSON.parse(JSON.stringify(d));}catch(e){return null;}}
@@ -3934,14 +3949,14 @@ function _rzRenderSchedule(){
     try{var _flights=[];
       Object.keys(bkGroups).forEach(function(k){var g=bkGroups[k];var _a=g.aircraft;if(!_a||_a==='__unalloc__'||_a==='__misc__'||!((S&&S.aircraft)||{})[_a])return;
         var _pr=g.product;var _orig=g.start;var _isFb=(typeof _rzIsFlyback==='function')&&_rzIsFlyback(_pr);
-        var _eff=(_isFb&&typeof _rzFbTime==='function')?_rzFbTime(_pr,_orig):_orig;
-        var _dm=_rzMinsFromHHMM(_eff);if(_dm==null)_dm=_rzMinsFromHHMM(_orig)||0;
-        // The pilot is with the aircraft for the WHOLE rotation (fly down, sit around, fly back) — that's
-        // the block's span, i.e. the product duration (FCF 4.5h, MC/FJ 5h, BRA 0.5h), not just the flight
-        // time. So a morning Milford pilot is committed until the aircraft is back, not free 1h later.
-        var _end;
-        if(_isFb){_end=_dm+60;}   // a flyback block is ~1h
-        else{var _du=(typeof _rzProductDuration==='function')?_rzProductDuration(_pr):270;_end=_dm+(_du||270);}
+        // The pilot is with the aircraft the WHOLE rotation (fly down, sit around, fly back) = the block
+        // span, honouring the operator's TOP (departure) / BOTTOM (return) edge drags.
+        var _dm,_end;
+        if(_isFb){var _eff=(typeof _rzFbTime==='function')?_rzFbTime(_pr,_orig):_orig;_dm=_rzMinsFromHHMM(_eff);if(_dm==null)_dm=_rzMinsFromHHMM(_orig)||0;_end=_dm+60;}
+        else{var _sov=(S._rzDepTimeOv||{})[_pr+'|'+_orig],_eov=(S._rzDepEndOv||{})[_pr+'|'+_orig];
+          _dm=(_sov!=null)?_rzMinsFromHHMM(_sov):_rzMinsFromHHMM(_orig);if(_dm==null)_dm=_rzMinsFromHHMM(_orig)||0;
+          var _du=(typeof _rzProductDuration==='function')?_rzProductDuration(_pr):270;
+          _end=(_eov!=null)?_rzMinsFromHHMM(_eov):(_dm+(_du||270));if(_end==null)_end=_dm+(_du||270);}
         _flights.push({key:k,ac:_a,depMin:_dm,endMin:_end});
       });
       S._schedAutoPilots=_schedComputeBlockPilots(_flights);S._schedAutoPilotsDate=S.rezdyDate;
@@ -3965,11 +3980,18 @@ function _rzRenderSchedule(){
         g.end=String(Math.floor(_fe/60)).padStart(2,'0')+':'+String(_fe%60).padStart(2,'0');
       }
     } else {
-      // Any other departure: apply a manual time-shift (drag-set) — keep the duration, move the block.
-      var _dto=(S._rzDepTimeOv||{})[g.product+'|'+g.start];
-      if(_dto){var _om=_rzMinsFromHHMM(_dto),_os=_rzMinsFromHHMM(g.start),_oe=_rzMinsFromHHMM(g.end);
-        if(_om!=null){var _dur=(_oe!=null&&_os!=null&&_oe>_os)?(_oe-_os):30;g._origStart=g.start;g._timeMoved=true;g.start=_dto;var _ne=_om+_dur;
-          g.end=String(Math.floor(_ne/60)).padStart(2,'0')+':'+String(_ne%60).padStart(2,'0');}}
+      // Any other departure: independent TOP (departure) and BOTTOM (return) overrides set by dragging
+      // the block's edges. Top alone moves the block (keeps duration); bottom alone re-times the return.
+      var _os2=g.start;                                  // raw grouping start = the override key
+      var _smRaw=_rzMinsFromHHMM(_os2);
+      var _durM=(_rzMinsFromHHMM(g.end)-_smRaw);if(!(_durM>0))_durM=270;
+      var _sov=(S._rzDepTimeOv||{})[g.product+'|'+_os2];
+      var _eov=(S._rzDepEndOv||{})[g.product+'|'+_os2];
+      var _startM=(_sov!=null)?_rzMinsFromHHMM(_sov):_smRaw;if(_startM==null)_startM=_smRaw;
+      var _endM=(_eov!=null)?_rzMinsFromHHMM(_eov):(_startM+_durM);if(_endM==null)_endM=_startM+_durM;
+      if(_endM<=_startM)_endM=_startM+15;
+      if(_sov!=null||_eov!=null)g._timeMoved=true;
+      g._origStart=_os2;g.start=_rzMinToHHMM(_startM);g.end=_rzMinToHHMM(_endM);
     }
     var acLbl=g.aircraft==='__unalloc__'?'?':g.aircraft.replace(/^ZK-?/,'');
     var gbd={a:0,c:0,i:0};g.bookings.forEach(function(bk){var e=_rzEffBreakdown(bk.b);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
@@ -4212,10 +4234,19 @@ function _rzRenderSchedule(){
       // onto a flight to combine a flyback/CCF.
       const _dragKey=isBk?String(b.order):('BLK|'+String(b.id));   // manual blocks (incl. maintenance ferries) are draggable too
       const _drag=' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(_dragKey).replace(/'/g,"\\'")+'\',event)" ondragend="window.rezdySchedDragEnd()"';
+      // Resize handles (booking flights, not flybacks): drag the TOP edge to set the departure, the
+      // BOTTOM edge to set the return. Keyed by product|raw-start so it survives an aircraft move.
+      var _resizable=isBk&&!_rzIsFlyback(b.product)&&b._origStart;
+      var _eArg=function(edge){return ('EDGE|'+edge+'|'+String(b.product||'')+'|'+String(b._origStart||'')).replace(/'/g,"\\'");};
+      var _handles=_resizable?(
+        '<div draggable="true" ondragstart="window.rezdySchedEdgeDragStart(\''+_eArg('top')+'\',event)" ondragend="window.rezdySchedDragEnd()" title="Drag to set the departure time" style="position:absolute;top:0;left:0;right:0;height:8px;cursor:ns-resize;z-index:3"></div>'+
+        '<div draggable="true" ondragstart="window.rezdySchedEdgeDragStart(\''+_eArg('bot')+'\',event)" ondragend="window.rezdySchedDragEnd()" title="Drag to set the return time" style="position:absolute;bottom:0;left:0;right:0;height:8px;cursor:ns-resize;z-index:3"></div>'
+      ):'';
       blocksH+='<div'+_drag+(_mlvl?' title="'+_rzEsc(_mtip)+'"':'')+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
         '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900" title="Over capacity — only '+(b.cap||'')+' seats on '+_rzEsc(String(b.aircraft).replace(/^ZK-?/,''))+'">⛔ OVER </span>':'')+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
-        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+(isBk?'':'–'+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
+        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+(isBk?(' – '+_rzEsc(b.end)):'–'+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
+        _handles+
         '</div>';
     });
     var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
@@ -4328,9 +4359,14 @@ function _rzAcMovements(){
       return;
     }
     var dur=_rzLegMins('QN',dest);
-    var block=Math.max(_rzProductDuration(g.prod)||270,2*dur); // never let the return overlap the outbound (no extra ground buffer — short trips like Branches are back-to-back)
-    ensure(g.ac).push({ac:g.ac,t:sm,from:'QN',to:dest,pob:g.pax,kind:'outbound',prod:g.prod});
-    ensure(g.ac).push({ac:g.ac,t:sm+block-dur,from:dest,to:'QN',pob:g.pax,kind:'return',prod:g.prod});
+    // Honour the operator's edge-drag overrides: TOP (departure) and BOTTOM (return) of the block.
+    var _sov=(S._rzDepTimeOv||{})[g.prod+'|'+g.start];var _eov=(S._rzDepEndOv||{})[g.prod+'|'+g.start];
+    var startM=(_sov!=null)?_rzMinsFromHHMM(_sov):sm;if(startM==null)startM=sm;
+    var block=(_eov!=null)?(_rzMinsFromHHMM(_eov)-startM):Math.max(_rzProductDuration(g.prod)||270,2*dur);
+    if(!(block>=2*dur))block=2*dur; // keep the return from overlapping the outbound
+    // Outbound sits at the TOP (one leg-length down); return sits at the BOTTOM (one leg-length up).
+    ensure(g.ac).push({ac:g.ac,t:startM,from:'QN',to:dest,pob:g.pax,kind:'outbound',prod:g.prod});
+    ensure(g.ac).push({ac:g.ac,t:startM+block-dur,from:dest,to:'QN',pob:g.pax,kind:'return',prod:g.prod});
   });
   // Position walk per aircraft → insert ferries, stamp start/end/dur. `avail` is the minute the
   // aircraft is next free, so a ferry/leg can never start before the previous leg ends — multiple
