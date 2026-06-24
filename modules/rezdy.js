@@ -1134,7 +1134,7 @@ function _rzColAcAt(x,y){try{var els=document.elementsFromPoint(x,y);for(var i=0
 function _rzBlockKeyAt(x,y,exclude){try{var els=document.elementsFromPoint(x,y);for(var i=0;i<els.length;i++){var k=els[i].getAttribute&&els[i].getAttribute('data-bkkey');if(k&&k!==exclude)return k;}}catch(_){}return null;}
 window.rzCalDown=function(e,key){
   if(e.button!=null&&e.button!==0)return;
-  var meta=(S._rzBlockMeta||{})[key];if(!meta)return;
+  var meta=(S._rzBlockMeta||{})[key];if(!meta||meta.startMin==null||meta.endMin==null)return; // unparseable time → don't start a drag
   var blk=e.currentTarget,col=blk.parentNode;
   var rect=blk.getBoundingClientRect(),crect=col.getBoundingClientRect();
   var offY=e.clientY-rect.top;
@@ -1168,7 +1168,7 @@ function _rzCalUp(e){
   if(!st)return;var m=st.meta;
   if(!st.moved){if(m.isManual)window.schedEditBlock(m.id);else window.rezdySchedShowGroup(m.order);return;} // tap = open
   var v=st._val;if(v==null){render();return;}var hhmm=_rzMinToHHMM(v);
-  if(m.isManual){window.rezdySchedMoveBlock(m.id,hhmm,_rzColAcAt(e.clientX,e.clientY)||m.ac);return;}
+  if(m.isManual){var _mac=_rzColAcAt(e.clientX,e.clientY)||m.ac;window.rezdySchedMoveBlock(m.id,hhmm,_mac);render();return;} // render() guarantees the live preview styles are cleared even on a no-op move
   if(m.isFb){
     // Dropped onto another flight? → fold this flyback into it (combine), like the old drag did.
     var tgt=_rzBlockKeyAt(e.clientX,e.clientY,m.key);var tgtAc=tgt?String(tgt).split('|')[0]:null;
@@ -1184,11 +1184,15 @@ function _rzCalUp(e){
   if(st.zone==='bot'){window.rezdySchedSetEdge(m.prod,m.origStart,'bot',hhmm);return;}
   // Move the whole booking block: shift departure (return follows), reassign aircraft if dropped elsewhere.
   var kk=m.prod+'|'+m.origStart;
-  S._rzDepTimeOv=S._rzDepTimeOv||{};S._rzDepTimeOv[kk]=hhmm;
-  if(S._rzDepEndOv&&S._rzDepEndOv[kk]!=null){var d=m.endMin-m.startMin;S._rzDepEndOv[kk]=_rzMinToHHMM(_rzMinsFromHHMM(hhmm)+d);}
+  S._rzDepTimeOv=S._rzDepTimeOv||{};
+  if(hhmm!==m.origStart){           // only record an override if it actually moved (avoids a spurious "moved" banner)
+    S._rzDepTimeOv[kk]=hhmm;
+    if(S._rzDepEndOv&&S._rzDepEndOv[kk]!=null){var d=m.endMin-m.startMin;S._rzDepEndOv[kk]=_rzMinToHHMM(_rzMinsFromHHMM(hhmm)+d);}
+  } else { delete S._rzDepTimeOv[kk]; }
   var col2=_rzColAcAt(e.clientX,e.clientY);
   if(col2==='__unalloc__')col2='__none__';if(col2==='__misc__')col2=null;
-  if(col2&&col2!==m.ac&&typeof _rzReassignBlockToAc==='function'){if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();_rzReassignBlockToAc(m.key,col2);}
+  var _curAc=(m.ac==='__unalloc__')?'__none__':m.ac;
+  if(col2&&col2!==m.ac&&col2!==_curAc&&typeof _rzReassignBlockToAc==='function'){if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();_rzReassignBlockToAc(m.key,col2);}
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
 }
 // Drag the TOP or BOTTOM edge of a booking block to set its departure / return time independently.

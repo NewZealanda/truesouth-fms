@@ -98,7 +98,7 @@ function _schedCalcCost(typeKey,hrs){var r=_schedRunHr(typeKey);if(r==null)retur
 // landing fees. An operator can pin any route to a flat price (stored as an override). Milford
 // ('MF'/blank) ferry is the short 1.0h reposition; Mt Cook / Franz Josef reposition flies the same time
 // as the loaded leg (ferry hours = return hours), so its empty leg ≈ a loaded leg.
-var SCHED_DEST_LOC={MF:'Milford',MC:'Mt Cook',FJ:'Franz Josef'};       // dest code → Business Plan location name
+var SCHED_DEST_LOC={MF:'Milford',MC:'Mt Cook',FJ:'Franz Josef',BRA:'Branches Station'};       // dest code → Business Plan location name
 function _schedDestCostCfg(){var c=_schedCfg();if(!c.destCost||typeof c.destCost!=='object')c.destCost={};return c.destCost;}
 function _schedRouteKey(dest,leg){return (leg==='fer')?((dest||'MF')+'~F'):(dest||'MF');}
 function _schedRouteOv(dest,typeKey,leg){var e=_schedDestCostCfg()[_schedRouteKey(dest,leg)]||{};return _schedNum(e[typeKey]);}
@@ -117,7 +117,7 @@ function _schedRcBiz(typeKey){
 }
 // Tolerant location lookup — matches a destination to a Business Plan location even if it's spelled a
 // little differently (e.g. "Franz Josef Glacier", "Mount Cook"). Exact match first, then keyword.
-var SCHED_DEST_ALIAS={MF:['milford'],MC:['mt cook','mount cook','aoraki','cook'],FJ:['franz'],QN:['queenstown','qn']};
+var SCHED_DEST_ALIAS={MF:['milford'],MC:['mt cook','mount cook','aoraki','cook'],FJ:['franz'],BRA:['branch'],QN:['queenstown','qn']};
 function _schedLocIdx(locs,dest,fb){
   var want=String((dest==='QN'?'Queenstown':SCHED_DEST_LOC[dest])||'').toLowerCase().trim();
   if(want){for(var i=0;i<locs.length;i++){if(String((locs[i]&&locs[i].name)||'').toLowerCase().trim()===want)return i;}}
@@ -583,11 +583,12 @@ function _schedComputeBlockPilots(flights){
   var manual=S._schedPilots||{};
   // Build one rotation window per aircraft from its flights.
   var rot={};
-  flights.forEach(function(f){var r=rot[f.ac]||(rot[f.ac]={ac:f.ac,start:f.depMin,end:f.endMin,keys:[]});r.start=Math.min(r.start,f.depMin);r.end=Math.max(r.end,f.endMin);r.keys.push(f.key);if(manual[f.key])r.manual=manual[f.key];});
+  flights.forEach(function(f){var r=rot[f.ac]||(rot[f.ac]={ac:f.ac,start:f.depMin,end:f.endMin,keys:[],manual:[]});r.start=Math.min(r.start,f.depMin);r.end=Math.max(r.end,f.endMin);r.keys.push(f.key);if(manual[f.key]&&r.manual.indexOf(manual[f.key])<0)r.manual.push(manual[f.key]);});
   var rots=Object.keys(rot).map(function(a){return rot[a];}).sort(function(a,b){return a.start-b.start;});
   var freeAt={};avail.forEach(function(p){freeAt[p.code]=-1e9;});   // everyone starts in QN
-  // Manual rotations win and occupy that pilot for the whole rotation.
-  rots.forEach(function(r){if(r.manual){freeAt[r.manual]=Math.max(freeAt[r.manual]==null?-1e9:freeAt[r.manual],r.end);r.assigned=r.manual;}});
+  // Manual rotations win: reserve EVERY manually-picked pilot on the aircraft for the whole rotation
+  // (so a second manual pick on the same aircraft can't be auto-assigned to an overlapping flight).
+  rots.forEach(function(r){if(r.manual.length){r.assigned=r.manual[0];r.manual.forEach(function(mp){freeAt[mp]=Math.max(freeAt[mp]==null?-1e9:freeAt[mp],r.end);});}});
   // Auto-assign the rest, earliest rotation first; a pilot must be back in QN (free ≤ rotation start).
   rots.forEach(function(r){
     if(r.assigned)return;
@@ -734,7 +735,7 @@ function _schedDayDepartures(date){
   return Object.keys(g).map(function(k){return g[k];}).sort(function(a,b){var d=(_schedMinOf(a.time)||0)-(_schedMinOf(b.time)||0);return d!==0?d:String(a.dest).localeCompare(String(b.dest));});
 }
 // Flight hours for a return to a destination, by type. Milford 1.2/1.1; Mt Cook 2.1/1.8; Franz 2.2/1.9.
-var SCHED_DEST_HRS={MF:{airvan:1.2,caravan:1.1,sdb:1.1},MC:{airvan:2.1,caravan:1.8,sdb:1.8},FJ:{airvan:2.4,caravan:2.0,sdb:2.0}};
+var SCHED_DEST_HRS={MF:{airvan:1.2,caravan:1.1,sdb:1.1},MC:{airvan:2.1,caravan:1.8,sdb:1.8},FJ:{airvan:2.4,caravan:2.0,sdb:2.0},BRA:{airvan:0.5,caravan:0.5,sdb:0.5}};
 function _schedDestFltHrs(dest,airvan){var d=SCHED_DEST_HRS[dest]||SCHED_DEST_HRS.MF;return airvan?d.airvan:d.caravan;}
 // A departure's flight hours for an aircraft type = the longest of its destinations (worst case).
 function _schedDepFltHrs(dests,airvan){var mx=0;(dests&&dests.length?dests:['MF']).forEach(function(dd){mx=Math.max(mx,_schedDestFltHrs(dd,airvan));});return mx||(airvan?1.2:1.1);}

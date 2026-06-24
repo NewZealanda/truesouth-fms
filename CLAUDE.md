@@ -90,7 +90,25 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v24.42** — built+verified. See `HANDOFF.md` for the full log.
+- Latest version: **v25.97** — built+verified. **`ARCHITECTURE_REVIEW_v25.97.md` is the latest
+  full bug sweep** (3-area parallel audit: calendar pointer-drag/overrides, scheduling allocator,
+  architecture/security/persistence). Fixed in v25.97: H1 manual-pilot double-book, A1 spurious
+  "moved" banner, A2 stuck drag preview, A3 unalloc no-op reassign, A4 drag NaN guard, M3 Branches
+  priced as Milford. OPEN backlog there: M1 two auto-pilot maps (seatmap PIC vs calendar), M2 two
+  away-time models, C1 flight-records/flightduty not live-synced, C2/C3/A5 minor, + this CLAUDE.md
+  is otherwise stale below (modules flightrecord/scheduling/training/businessplan + the whole v25.x
+  cycle aren't documented in the older notes that follow).
+- v25.x highlights since v24.x: **Scheduling** module (cost-aware aircraft + time-aware pilot
+  allocation — pilots stay with the aircraft for the whole rotation, only switch when back in QN;
+  unified live "Route costs" table is the single source the allocator reads; per-dest away-time;
+  no-ferry toggle; SDB-own-endorsement + type-based ratings). **Calendar**: pointer-based block
+  move/resize (drag top=departure, bottom=return, middle=move/reassign, tap=open), editable flyback
+  time, maintenance block spans between the QN-WF/WF-QN ferries, draggable manual/ferry blocks,
+  Aircraft-movements view. **Flight records** manual add + logbook entry. **Loading screen**:
+  mountains-draw + plane-takeoff animation with a Skip button. **Rezdy**: webhook + {import} backfill
+  for advance bookings the search hides; per-(order,date) storage.
+- Earlier snapshot below (pre-v25, may be stale):
+- Latest version was **v24.42** — built+verified. See `HANDOFF.md` for the full log.
 - **`ARCHITECTURE_REVIEW_v24.41.md` is the latest full bug-sweep** (3-reviewer audit of F&D +
   Transport + core). Fixed in v24.41: F1 crew `reloadTable` dropped `dob`/`typeRatings`; transport
   drop-off location/time override id; `'~'`→`'—'` dep sentinel; F&D orphan empty rows, days-off
