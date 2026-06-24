@@ -591,9 +591,11 @@ function _schedComputeBlockPilots(flights){
   // in case SDB has to fly). Manual pilot picks below still override this.
   var busy={};
   (S._schedBlocks||[]).forEach(function(b){
-    if(!b||b.aircraft!=='__pilot__'||!b.pilot)return;
+    if(!b)return;
     var s=_rzMinsFromHHMM(b.start),e=_rzMinsFromHHMM(b.end);if(s==null)return;if(e==null||e<=s)e=s+60;
-    (busy[b.pilot]=busy[b.pilot]||[]).push([s,e]);
+    if(b.aircraft==='__pilot__'&&b.pilot)(busy[b.pilot]=busy[b.pilot]||[]).push([s,e]);
+    // Multi-attendee meetings (e.g. a misc "JY DF AA Meeting") reserve every pilot attendee too.
+    if(b.attendees&&b.attendees.length)b.attendees.forEach(function(code){if(code)(busy[code]=busy[code]||[]).push([s,e]);});
   });
   function _pilotBusy(code,a,b){var ws=busy[code];if(!ws)return false;for(var i=0;i<ws.length;i++){if(a<ws[i][1]&&ws[i][0]<b)return true;}return false;}
   // Build one rotation window per aircraft from its flights.

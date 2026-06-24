@@ -86,10 +86,55 @@ function _mfSave(f,immediate){
 }
 function _mfCur(){return (S._mfData||{})[S._mfOpen]||null;}
 
+// ── observation ⇄ work-order linkage ────────────────────────────────────────
+// Open observations/defects for an aircraft are pulled into a new WO as line items (obsId-linked).
+// Ticking an item Completed resolves the source observation (lined out in the obs log for history);
+// un-ticking it (if it was resolved via this WO) reopens it. Saves to obs are debounced.
+function _mfObsArr(ac){return (S.maintObs&&S.maintObs[ac])||[];}
+function _mfObsFind(ac,obsId){var a=_mfObsArr(ac);for(var i=0;i<a.length;i++)if(a[i]&&a[i].id===obsId)return a[i];return null;}
+function _mfObsSaveSoon(){clearTimeout(S._mfObsTimer);S._mfObsTimer=setTimeout(function(){if(typeof _saveMaintObs==='function')_saveMaintObs();},700);}
+function _mfExistingWoIds(){var s={};Object.keys(S._mfData||{}).forEach(function(k){var f=S._mfData[k];if(f&&f.status!=='deleted')s[k]=1;});return s;}
+// Pull this aircraft's open observations/defects into the work order as obsId-linked line items.
+function _mfPullObs(f){
+  if(!f||!f.aircraft)return;
+  var arr=_mfObsArr(f.aircraft);if(!arr.length)return;
+  var existing=_mfExistingWoIds();var changed=false;
+  arr.forEach(function(o){
+    if(!o||o.type==='note')return;                         // notes aren't actionable items
+    if(o.status==='resolved')return;                       // already done
+    if(o.onWO&&existing[o.onWO]&&o.onWO!==f.id)return;      // already pulled onto another live WO
+    var sec=(o.type==='defect')?'defect':'unscheduled';     // defects → Defect Rectification, observations → Unscheduled
+    _mfList(f,sec).push({text:o.text||'',status:'',initial:'',obsId:o.id});
+    o.onWO=f.id;changed=true;
+  });
+  if(changed)_mfObsSaveSoon();
+}
+// Sync a line item's tick/initial back to its source observation.
+function _mfSyncObsItem(f,it){
+  if(!f||!it||!it.obsId)return;
+  var o=_mfObsFind(f.aircraft,it.obsId);if(!o)return;
+  if(it.status==='completed'){
+    o.status='resolved';o.resolvedBy=(S.user&&S.user.name)||'';o.resolvedAt=new Date().toISOString();o.resolvedVia=f.id;o.resolvedInitial=it.initial||'';
+  }else if(o.resolvedVia===f.id){                          // only reopen what THIS WO resolved
+    o.status=(o.type==='defect')?'open':null;o.resolvedBy=null;o.resolvedAt=null;o.resolvedVia=null;o.resolvedInitial=null;
+  }
+  _mfObsSaveSoon();
+}
+// On WO delete, detach pulled observations (and reopen any this WO had resolved, so nothing is lost).
+function _mfDetachObs(woId){
+  if(!S.maintObs)return;var changed=false;
+  Object.keys(S.maintObs).forEach(function(ac){(S.maintObs[ac]||[]).forEach(function(o){
+    if(o.onWO===woId){o.onWO=null;changed=true;}
+    if(o.resolvedVia===woId){o.status=(o.type==='defect')?'open':null;o.resolvedBy=null;o.resolvedAt=null;o.resolvedVia=null;o.resolvedInitial=null;changed=true;}
+  });});
+  if(changed&&typeof _saveMaintObs==='function')_saveMaintObs();
+}
+
 // ── CRUD / field edits ──────────────────────────────────────────────────────
 window.maintFormNew=function(type,ac){
   if(type!=='work_order')return;
   var f=_mfBlankWO(ac||S.maintEntryAc||'ZK-SLA');_mfMigrate(f);
+  _mfPullObs(f);                                            // seed line items from open observations
   S._mfData=S._mfData||{};S._mfData[f.id]=f;S._mfOpen=f.id;S._mfView='editor';
   _mfSave(f,true);
   if(typeof auditLog==='function')auditLog('maint_form_new',{type:type,aircraft:f.aircraft,id:f.id});
@@ -108,8 +153,8 @@ function _mfList(f,section){f.data[section]=f.data[section]||{items:[]};if(!Arra
 window.mfItemAdd=function(id,section,text){text=String(text||'').trim();if(!text)return;var f=(S._mfData||{})[id];if(!f)return;_mfList(f,section).push({text:text,status:'',initial:''});_mfSave(f);render();setTimeout(function(){var el=document.getElementById('mf_new_'+section);if(el)el.focus();},30);};
 window.mfItemAddKey=function(id,section,e,el){if(e&&e.key==='Enter'){e.preventDefault();window.mfItemAdd(id,section,el.value);el.value='';}};
 window.mfItemText=function(id,section,idx,val){var f=(S._mfData||{})[id];if(!f)return;var it=_mfList(f,section)[idx];if(it){it.text=val;_mfSave(f);}};
-window.mfItemInitial=function(id,section,idx,val){var f=(S._mfData||{})[id];if(!f)return;var it=_mfList(f,section)[idx];if(it){it.initial=val;_mfSave(f);}};
-window.mfItemStatus=function(id,section,idx,status){var f=(S._mfData||{})[id];if(!f)return;var it=_mfList(f,section)[idx];if(it){it.status=(it.status===status)?'':status;_mfSave(f);render();}};
+window.mfItemInitial=function(id,section,idx,val){var f=(S._mfData||{})[id];if(!f)return;var it=_mfList(f,section)[idx];if(it){it.initial=val;if(it.obsId&&it.status==='completed')_mfSyncObsItem(f,it);_mfSave(f);}};
+window.mfItemStatus=function(id,section,idx,status){var f=(S._mfData||{})[id];if(!f)return;var it=_mfList(f,section)[idx];if(it){it.status=(it.status===status)?'':status;if(it.obsId)_mfSyncObsItem(f,it);_mfSave(f);render();}};
 window.mfItemDel=function(id,section,idx){var f=(S._mfData||{})[id];if(!f)return;var arr=_mfList(f,section);if(idx>=0&&idx<arr.length){arr.splice(idx,1);_mfSave(f);render();}};
 
 // ── oil (item 9) ────────────────────────────────────────────────────────────
@@ -137,6 +182,7 @@ window.mfChkToggle=function(id,item,fieldName){
 window.maintFormDelete=function(id){
   var f=(S._mfData||{})[id];if(!f)return;
   if(typeof confirm==='function'&&!confirm('Delete this work order? This cannot be undone.'))return;
+  _mfDetachObs(id);  // release/reopen any observations this WO had pulled in
   if(typeof auditLog==='function')auditLog('maint_form_delete',{type:f.form_type,aircraft:f.aircraft,id:id,title:_mfTitle(f)});
   delete S._mfData[id];try{lsSet&&lsSet('ts_maint_forms_cache',S._mfData);}catch(e){}
   S._mfOpen=null;S._mfView='list';render();
@@ -194,7 +240,7 @@ function _mfWorkOrderHtml(f){
       listRows('6','Routine Maintenance','routine')+listRows('7','Unscheduled Maintenance','unscheduled')+listRows('8','Defect Rectification','defect')+
       '<tr><td class="n">9</td><td class="lbl">Oil used since last inspection</td><td class="txt">'+(oc.qts.toFixed(1))+' qts since last oil change'+(d.oil&&d.oil.lastChange?' ('+_mfEsc(d.oil.lastChange)+(oc.days!=null?', '+oc.days+' days':'')+')':'')+(d.oil&&d.oil.note?' — '+_mfEsc(d.oil.note):'')+'</td><td class="c"></td><td class="c"></td><td class="c"></td></tr>'+
     '</tbody></table>'+
-    '<div class="grid"><div class="fld"><b>10. Notify SLA about</b>'+_mfEsc(d.notify)+'</div>'+
+    '<div class="grid"><div class="fld"><b>10. Notify SLA about</b></div>'+
       '<div class="fld"><b>Price</b>'+yn(d.notifyPrice)+'</div><div class="fld"><b>Delays</b>'+yn(d.notifyDelays)+'</div><div class="fld"><b>Extra Work</b>'+yn(d.notifyExtra)+'</div></div>'+
     '<div class="grid"><div class="fld" style="flex:1 1 100%"><b>11. Engineers Comments</b>'+_mfEsc(d.comments)+'</div></div>'+
     '<div class="grid"><div class="fld"><b>12. Send Record for logbook updates to</b>'+_mfEsc(d.sendRecordTo)+'</div>'+
@@ -243,6 +289,7 @@ function _mfAcBar(selAc){
 }
 function renderMaintDocSquares(ac){
   if(!S._mfLoaded){S._mfLoaded=true;if(window.loadMaintForms)window.loadMaintForms();}
+  if(!S._maintObsLoaded){S._maintObsLoaded=true;if(window.loadMaintObs)window.loadMaintObs();}  // so a new WO can pull observations
   var wos=Object.keys(S._mfData||{}).map(function(k){return S._mfData[k];}).filter(function(f){return f.form_type==='work_order'&&f.aircraft===ac&&f.status!=='deleted';});
   function sq(onclick,icon,label,sub,col){
     return '<button onclick="'+onclick+'" style="flex:1 1 150px;min-width:140px;background:var(--card);border:1px solid var(--border2);border-top:3px solid '+col+';border-radius:12px;padding:16px 14px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:4px">'+
@@ -294,6 +341,7 @@ function renderMaintFormEditor(id){
     var rowsH=items.map(function(it,i){
       var done=it.status==='completed',def=it.status==='deferred';
       return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">'+
+        (it.obsId?'<span title="Pulled from Observations — ticking Completed resolves it there" style="flex-shrink:0;font-size:9px;font-weight:800;letter-spacing:.03em;color:#06b6d4;background:rgba(6,182,212,.14);border:1px solid rgba(6,182,212,.4);padding:2px 5px;border-radius:5px">OBS</span>':'')+
         '<input value="'+_mfEsc(it.text)+'" oninput="window.mfItemText(\''+id+'\',\''+key+'\','+i+',this.value)" style="flex:1;min-width:0;padding:6px 8px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;color:var(--text1);font-size:13px">'+
         '<button onclick="window.mfItemStatus(\''+id+'\',\''+key+'\','+i+',\'completed\')" title="Completed" style="width:30px;height:30px;border-radius:6px;border:1px solid '+(done?'#22c55e':'var(--border2)')+';background:'+(done?'rgba(34,197,94,.2)':'transparent')+';color:'+(done?'#22c55e':'var(--text3)')+';font-weight:800;cursor:pointer">✓</button>'+
         '<button onclick="window.mfItemStatus(\''+id+'\',\''+key+'\','+i+',\'deferred\')" title="Deferred" style="width:30px;height:30px;border-radius:6px;border:1px solid '+(def?'#ef4444':'var(--border2)')+';background:'+(def?'rgba(239,68,68,.2)':'transparent')+';color:'+(def?'#ef4444':'var(--text3)')+';font-weight:800;cursor:pointer">✗</button>'+
@@ -353,7 +401,7 @@ function renderMaintFormEditor(id){
   h+='<div class="card" style="margin-bottom:10px"><div class="st" style="font-size:13px;margin-bottom:8px">Please carry out the following</div>'+
     section('6','Routine Maintenance','routine')+section('7','Unscheduled Maintenance','unscheduled')+section('8','Defect Rectification','defect')+oilSection()+'</div>';
   h+='<div class="card" style="margin-bottom:10px"><div style="display:flex;flex-direction:column;gap:10px">'+
-    ta('10. Notify SLA about','notify',d.notify)+
+    '<div style="font-size:12px;font-weight:700;color:var(--text1)">10. Notify SLA about</div>'+
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">'+ynSel('Price','notifyPrice',d.notifyPrice)+ynSel('Delays','notifyDelays',d.notifyDelays)+ynSel('Extra Work','notifyExtra',d.notifyExtra)+'</div>'+
     ta('11. Engineers Comments','comments',d.comments)+
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">'+fld('12. Send Record (logbook) to','sendRecordTo',d.sendRecordTo)+fld('13. Send Invoice to','sendInvoiceTo',d.sendInvoiceTo)+'</div></div></div>';

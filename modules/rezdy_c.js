@@ -1318,7 +1318,7 @@ function _rzRenderMovements(){
 // uses aircraft '__pilot__' and stores its owner pilot on the block (data.pilot).
 function _rzSchedEditForm(){
   if(!S._schedEdit)return '';
-  var ed=S._schedEdit,isMeeting=(ed.aircraft==='__pilot__');
+  var ed=S._schedEdit,isMeeting=(ed.aircraft==='__pilot__'),isMisc=(ed.aircraft==='__misc__');
   var acIds=Object.keys((S&&S.aircraft)||{});
   var h='<div class="card"><div class="st">'+(ed.id?'Edit ':'New ')+(isMeeting?'meeting / note':'block')+'</div><div class="g2" style="margin-bottom:10px">'+
     '<div><label>'+(isMeeting?'Type':'Aircraft')+'</label><select class="fi" onchange="window.schedEditField(\'aircraft\',this.value)">'+
@@ -1337,6 +1337,16 @@ function _rzSchedEditForm(){
     ['Maintenance','Training','Ferry','Private Hire','Other'].map(function(t){return '<option value="'+t+'"'+((ed.ftype||'Maintenance')===t?' selected':'')+'>'+t+'</option>';}).join('')+
   '</select></div>')+
   '<div style="margin-bottom:10px"><label>Notes</label><input class="fi" type="text" value="'+_rzEsc(ed.notes)+'" onblur="window.schedEditField(\'notes\',this.value)"></div>';
+  if(isMisc){
+    // Meeting attendees — pick any staff. Those who are pilots (✈) also get the meeting copied into
+    // their Pilot-movements lane (and are reserved by the allocator). The block reads "JY DF AA <label>".
+    var att=ed.attendees||[];var staff=_rzAllStaff();
+    h+='<div style="margin-bottom:10px"><label>Staff attending</label><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">';
+    if(!staff.length)h+='<span style="font-size:11px;color:var(--text3)">No staff found</span>';
+    staff.forEach(function(p){var on=att.indexOf(p.code)>=0,off=!p.rostered,pc=p.isPilot?'#60a5fa':'#94a3b8';
+      h+='<button onclick="window.schedToggleAttendee(\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(p.isPilot?' · pilot':'')+(off?' (not rostered today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid '+pc:'1px solid '+pc+(off?'47':'80'))+';background:'+pc+(on?'33':(off?'0d':'1a'))+';color:'+pc+';font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'')+_rzEsc(p.code)+(p.isPilot?' ✈':'')+'</button>';});
+    h+='</div><div style="font-size:11px;color:var(--text3);margin-top:5px">✈ pilots also appear in Pilot movements.</div></div>';
+  } else {
   var sel=isMeeting?(ed.pilot||''):(ed.id?((S._schedPilots||{})[ed.id]||''):(ed.pilot||''));
   var pp=_rzAvailablePilots().filter(function(p){if(!ed.aircraft||ed.aircraft==='__unalloc__'||ed.aircraft==='__misc__'||ed.aircraft==='__pilot__')return true;var en=_rzPilotEndorse(p.code);return !(en&&en.length)||en.indexOf(ed.aircraft)>=0;});
   var setFn=isMeeting?'schedSetMeetingPilot':'schedSetBlockPilot';
@@ -1344,6 +1354,7 @@ function _rzSchedEditForm(){
   if(!pp.length)h+='<span style="font-size:11px;color:var(--text3)">No pilots available</span>';
   pp.forEach(function(p){var on=sel===p.code,off=!p.rostered;h+='<button onclick="window.'+setFn+'(\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(off?' (not rostered today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid #60a5fa':'1px solid rgba(96,165,250,'+(off?'.28':'.5')+')')+';background:rgba(96,165,250,'+(on?'.22':(off?'.05':'.1'))+');color:#60a5fa;font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'✈ ')+_rzEsc(p.code)+(off?' off':'')+'</button>';});
   h+='</div></div>';
+  }
   h+='<div style="display:flex;gap:8px">'+
     '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.schedSaveBlock()">💾 Save</button>'+
     (ed.id?'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.schedDeleteBlock()">🗑 Delete</button>':'')+
@@ -1352,6 +1363,7 @@ function _rzSchedEditForm(){
   return h;
 }
 window.schedSetMeetingPilot=function(code){if(S._schedEdit){S._schedEdit.pilot=(S._schedEdit.pilot===code?'':code);render();}};
+window.schedToggleAttendee=function(code){var ed=S._schedEdit;if(!ed||!code)return;ed.attendees=ed.attendees||[];var i=ed.attendees.indexOf(code);if(i>=0)ed.attendees.splice(i,1);else ed.attendees.push(code);render();};
 window.schedNewPilotBlock=function(code){S._schedEdit={id:null,aircraft:'__pilot__',pilot:code||'',label:'Meeting',start:'09:00',end:'10:00',color:'#a78bfa',notes:'',ftype:'Meeting'};render();};
 // Build each pilot's day: their allocated flights (rotation span) + maintenance-ferry drives + meetings.
 function _rzPilotMovements(){
@@ -1375,7 +1387,14 @@ function _rzPilotMovements(){
       ensure(pilot).push({start:_rzMinToHHMM(f.depMin),end:_rzMinToHHMM(f.endMin),label:(ac&&ac!=='__unalloc__'?String(ac).replace(/^ZK-?/,''):'?')+(dest?' '+dest:''),kind:'flight',ico:'✈',ac:ac});
     }
   });
-  (S._schedBlocks||[]).forEach(function(b){if(b&&b.pilot)ensure(b.pilot).push({start:b.start,end:b.end,label:b.label||b.ftype||'Meeting',kind:'meeting',ico:'📅',id:b.id});});
+  // Pilot meetings (__pilot__ single-pilot) + multi-attendee meetings (misc): copy into each PILOT
+  // attendee's lane so their day shows it (and the allocator reserves them).
+  var _pilotSet={};(_rzAvailablePilots()||[]).forEach(function(p){_pilotSet[p.code]=1;});
+  (S._schedBlocks||[]).forEach(function(b){
+    if(!b)return;
+    if(b.pilot)ensure(b.pilot).push({start:b.start,end:b.end,label:b.label||b.ftype||'Meeting',kind:'meeting',ico:'📅',id:b.id});
+    if(b.attendees&&b.attendees.length){var ttl=b.label||'Meeting';b.attendees.forEach(function(code){if(code&&code!==b.pilot&&_pilotSet[code])ensure(code).push({start:b.start,end:b.end,label:ttl,kind:'meeting',ico:'📅',id:b.id});});}
+  });
   return byPilot;
 }
 function _rzRenderPilotMovements(){
@@ -1477,7 +1496,14 @@ function _rzSchedBroadcast(){
 window.rezdyReloadScheduleLive=function(){if(S.rezdyDate&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();};
 // Manual block display title: "AA/SLA QN-WF" — pilot + aircraft are DERIVED (from the picker and the
 // aircraft selector); the operator only types the label (e.g. "QN-WF").
+// Misc/meeting label: attendee codes + title, e.g. "JY DF AA Meeting".
+function _rzMiscLabel(b){
+  var codes=((b&&b.attendees)||[]).join(' ');
+  var lbl=(b&&b.label)||'';
+  return ((codes?codes+' ':'')+lbl).trim()||(b&&b.notes)||'Meeting';
+}
 function _rzManBlockTitle(b){
+  if(b&&b.aircraft==='__misc__')return _rzMiscLabel(b);
   var pilot=(S._schedPilots||{})[b.id]||(S._schedAutoPilots||{})[b.id]||'';   // manual pick, else the auto-allocated pilot
   var ac=(b.aircraft&&b.aircraft!=='__unalloc__'&&b.aircraft!=='__misc__')?String(b.aircraft).replace(/^ZK-?/,''):'';
   var pre=(pilot?pilot+'/':'')+ac;
@@ -1502,6 +1528,7 @@ function _rzSchedClickTimes(e){
 window.rezdySchedColClick=function(ac,e){
   if(!e||e.target!==e.currentTarget)return;
   var t=_rzSchedClickTimes(e);
+  if(ac==='__misc__'){S._schedEdit={id:null,aircraft:'__misc__',label:'Meeting',attendees:[],start:t.start,end:t.end,color:'#94a3b8',notes:'',ftype:'Other'};S._schedGroupKey=null;render();return;}
   S._schedEdit={id:null,aircraft:ac,label:'',start:t.start,end:t.end,color:_rzAcCol(ac),notes:'',ftype:'Maintenance'};
   S._schedGroupKey=null;render();
 };
@@ -1514,13 +1541,13 @@ window.rezdyPilotColClick=function(code,e){
 };
 // New entry in the far-right Misc column (meetings / notes), e.g. "DF AA JY Meeting".
 window.schedNewMisc=function(){
-  S._schedEdit={id:null,aircraft:'__misc__',label:'',start:'11:00',end:'13:00',color:'#94a3b8',notes:'',ftype:'Other'};
+  S._schedEdit={id:null,aircraft:'__misc__',label:'Meeting',attendees:[],start:'11:00',end:'13:00',color:'#94a3b8',notes:'',ftype:'Other'};
   render();
 };
 window.schedEditBlock=function(id){
   const b=(S._schedBlocks||[]).find(function(x){return x.id===id;});
   if(!b)return;
-  S._schedEdit={id:b.id,aircraft:b.aircraft||'',pilot:b.pilot||'',label:b.label||'',start:b.start||'09:00',end:b.end||'10:00',color:b.color||_rzAcCol(b.aircraft),notes:b.notes||'',ftype:b.ftype||'Maintenance'};
+  S._schedEdit={id:b.id,aircraft:b.aircraft||'',pilot:b.pilot||'',attendees:(b.attendees||[]).slice(),label:b.label||'',start:b.start||'09:00',end:b.end||'10:00',color:b.color||_rzAcCol(b.aircraft),notes:b.notes||'',ftype:b.ftype||'Maintenance'};
   render();
 };
 window.schedEditField=function(field,val){
@@ -1548,7 +1575,7 @@ window.schedSaveBlock=async function(){
   if(!ed.start||!ed.end){toast('Start and end required','err');return;}
   if(ed.end<=ed.start){toast('End time must be after the start time','err');return;}
   const id=ed.id||('sch_'+Date.now()+'_'+Math.floor(Math.random()*1e5));
-  const payload={id:id,block_date:S.rezdyDate,data:{aircraft:ed.aircraft,pilot:(ed.aircraft==='__pilot__'?(ed.pilot||''):''),label:ed.label||'',start:ed.start,end:ed.end,color:ed.color||_rzAcCol(ed.aircraft),notes:ed.notes||'',ftype:ed.ftype||'Maintenance'}};
+  const payload={id:id,block_date:S.rezdyDate,data:{aircraft:ed.aircraft,pilot:(ed.aircraft==='__pilot__'?(ed.pilot||''):''),attendees:(ed.attendees||[]),label:ed.label||'',start:ed.start,end:ed.end,color:ed.color||_rzAcCol(ed.aircraft),notes:ed.notes||'',ftype:ed.ftype||'Maintenance'}};
   const r=await sbU('ts_schedule',[payload]);
   if(!r){toast('Save failed','err');return;}
   if(ed.pilot){S._schedPilots=S._schedPilots||{};S._schedPilots[id]=ed.pilot;if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();}  // apply the draft pilot to the new block

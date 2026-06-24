@@ -1001,6 +1001,23 @@ function _rzAvailablePilots(dsOverride){
   });
   return out.sort(function(a,b){if(a.rostered!==b.rostered)return a.rostered?-1:1;return String(a.name).localeCompare(String(b.name));});
 }
+// ALL staff (not just aircraft-approved pilots) with a code — for picking meeting attendees.
+// `isPilot` = has a ZK- endorsement, so the meeting can be copied into that pilot's movements.
+function _rzAllStaff(dsOverride){
+  var ds=dsOverride||S.rezdyDate,roster=S.roster||{},off={rdo:1,off:1,leave:1,ul:1,sick:1,training:1};
+  var out=[],seen={};
+  (S.crew||[]).forEach(function(cr){
+    if(!cr||!cr.n)return;
+    var u=(S.users||[]).find(function(x){return x&&(x.name===cr.n||x.linkedCrew===cr.n);});
+    if(u&&u.inactive)return;
+    var code=cr.code?String(cr.code).toUpperCase():((u&&typeof _rCode==='function')?_rCode(u):(cr.n||'').replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase());
+    if(!code||seen[code])return;seen[code]=1;
+    var st=(u&&typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):((roster[ds]&&roster[ds][code])||'');
+    var isPilot=(cr.endorse||[]).some(function(e){return String(e).indexOf('ZK-')===0;});
+    out.push({code:code,name:(cr.n||code).trim(),rostered:(!!st&&!off[st]),isPilot:isPilot});
+  });
+  return out.sort(function(a,b){if(a.isPilot!==b.isPilot)return a.isPilot?-1:1;return String(a.name).localeCompare(String(b.name));});
+}
 window.rezdySchedPilotDragStart=function(code,e){S._schedPilotDrag=code;try{e.dataTransfer.effectAllowed='copy';e.dataTransfer.setData('text/plain','pilot:'+code);}catch(_){}};
 // A pilot's aircraft endorsements (type ratings) from their crew profile.
 function _rzPilotEndorse(code){

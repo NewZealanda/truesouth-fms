@@ -67,18 +67,19 @@ function renderMaintObservations(){
   h+='<div style="font-size:12px;color:var(--text3)">'+(openDefects?'<span style="color:#ef4444;font-weight:700">'+openDefects+' open defect'+(openDefects!==1?'s':'')+'</span>':'No open defects')+'</div>';
   h+='<button tabindex="-1" onclick="S._obsShowResolved=!S._obsShowResolved;render()" style="font-size:11px;padding:4px 10px;border-radius:14px;border:1px solid var(--border2);background:'+(showResolved?'var(--card2)':'transparent')+';color:var(--text3);cursor:pointer">'+(showResolved?'Hide resolved':'Show resolved')+'</button></div>';
   // Entries
-  var visible=all.filter(function(e){return showResolved||!(e.type==='defect'&&e.status==='resolved');});
+  var visible=all.filter(function(e){return showResolved||e.status!=='resolved';});
   if(!visible.length){
     h+='<div class="card" style="text-align:center;color:var(--text3);padding:30px">No observations logged for '+acDisp(sel)+' yet.</div>';
   } else {
     visible.forEach(function(e){
-      var col=TC[e.type]||'#94a3b8',resolved=e.type==='defect'&&e.status==='resolved';
+      var col=TC[e.type]||'#94a3b8',resolved=e.status==='resolved';
       var d=e.ts?new Date(e.ts):null;
       var dstr=d?d.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'}):'';
       h+='<div class="card" style="margin-bottom:8px;border-left:4px solid '+col+';'+(resolved?'opacity:.55':'')+'">';
       h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">';
       h+='<span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:'+col+';background:'+col+'1a;padding:2px 8px;border-radius:5px">'+(TL[e.type]||'Note')+'</span>';
       if(e.type==='defect')h+='<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;background:'+(resolved?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)')+';color:'+(resolved?'#22c55e':'#ef4444')+'">'+(resolved?'Resolved':'Open')+'</span>';
+      else if(resolved)h+='<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(34,197,94,.15);color:#22c55e">Resolved</span>';
       h+='<span style="font-size:11px;color:var(--text3);margin-left:auto">'+_obsEsc(e.author||'')+' · '+dstr+(e.editedAt?' · edited':'')+'</span></div>';
       var _editing=canEdit&&S._obsEditId===e.id;
       if(_editing){
@@ -92,7 +93,8 @@ function renderMaintObservations(){
         h+='<button tabindex="-1" onclick="window.maintObsEditSave(\''+e.id+'\')" style="font-size:12px;padding:6px 16px;border-radius:7px;border:none;background:var(--acc);color:#fff;font-weight:700;cursor:pointer">Save</button>';
         h+='</div>';
       } else {
-        h+='<div style="font-size:13px;color:var(--text1);white-space:pre-wrap;line-height:1.5">'+_obsEsc(e.text||'')+'</div>';
+        h+='<div style="font-size:13px;color:var(--text1);white-space:pre-wrap;line-height:1.5'+(resolved?';text-decoration:line-through;color:var(--text3)':'')+'">'+_obsEsc(e.text||'')+'</div>';
+        if(resolved&&e.resolvedVia)h+='<div style="font-size:11px;color:#22c55e;margin-top:4px">✓ Signed off on a work order'+(e.resolvedInitial?' ('+_obsEsc(e.resolvedInitial)+')':'')+(e.resolvedBy?' · '+_obsEsc(e.resolvedBy):'')+'</div>';
         if(canEdit){
           h+='<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">';
           if(e.type==='defect')h+='<button tabindex="-1" onclick="window.maintObsResolve(\''+e.id+'\')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid '+(resolved?'var(--border2)':'rgba(34,197,94,.5)')+';background:transparent;color:'+(resolved?'var(--text3)':'#22c55e')+';cursor:pointer">'+(resolved?'Mark open':'Mark resolved')+'</button>';
