@@ -810,7 +810,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.98';
+const APP_VER='v25.99';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -13394,13 +13394,23 @@ function _rzCalMove(e){
   else if(st.zone==='bot'){var ne=Math.min(_RZ_SCH_END*60,Math.max(snap,startM+15));nt=(startM-_RZ_SCH_START*60)*pm;nh=(ne-startM)*pm;st._val=ne;gm=ne;}
   else{var dur=endM-startM;var nsm=Math.max(_RZ_SCH_START*60,Math.min(_RZ_SCH_END*60-dur,Math.round((snap-st.grabOff)/15)*15));nt=(nsm-_RZ_SCH_START*60)*pm;nh=dur*pm;st._val=nsm;gm=nsm;}
   st.blk.style.top=nt+'px';st.blk.style.height=Math.max(8,nh)+'px';st.blk.style.opacity='.85';st.blk.style.zIndex='80';
+  // On a MOVE, follow the cursor horizontally too so you can see which aircraft column it'll land in
+  // (resize stays vertical). Also highlight the column under the cursor.
+  if(st.zone==='move'){st.blk.style.transform='translateX('+(e.clientX-st.sx)+'px)';st.blk.style.pointerEvents='none';
+    var hovAc=_rzColAcAt(e.clientX,e.clientY);
+    if(hovAc!==st._hovAc){_rzClearColHi();st._hovAc=hovAc;
+      if(hovAc){try{var els=document.elementsFromPoint(e.clientX,e.clientY);for(var i=0;i<els.length;i++){if(els[i].getAttribute&&els[i].getAttribute('data-ac')===hovAc){els[i].style.boxShadow='inset 0 0 0 2px var(--acc,#60a5fa)';S._rzHiCol=els[i];break;}}}catch(_){}}
+    }
+  }
   var ln=document.getElementById('rzDragLine');if(ln){ln.style.top=((gm-_RZ_SCH_START*60)*pm)+'px';ln.style.display='block';var tt=document.getElementById('rzDragLineT');if(tt)tt.textContent=_rzMinToHHMM(gm);}
 }
+function _rzClearColHi(){if(S._rzHiCol){try{S._rzHiCol.style.boxShadow='';}catch(_){}S._rzHiCol=null;}}
 function _rzCalUp(e){
   var st=S._rzDragState;S._rzDragState=null;
   document.removeEventListener('pointermove',_rzCalMove,true);
   document.removeEventListener('pointerup',_rzCalUp,true);
   document.removeEventListener('pointercancel',_rzCalUp,true);
+  _rzClearColHi();
   var ln=document.getElementById('rzDragLine');if(ln)ln.style.display='none';
   if(!st)return;var m=st.meta;
   if(!st.moved){if(m.isManual)window.schedEditBlock(m.id);else window.rezdySchedShowGroup(m.order);return;} // tap = open
