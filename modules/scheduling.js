@@ -561,10 +561,15 @@ function _schedManualPilotForAc(ac){var sp=S._schedPilots||{};var pre=ac+'|',fou
 // belong to it), and the pilot is committed to that aircraft for the WHOLE rotation — they only become
 // free (back in Queenstown) at the rotation's end, when they can pick up another aircraft whose
 // rotation starts later. flights = [{key,ac,depMin,endMin}] (endMin = when the aircraft is back in QN).
+// The leased SDB's aircraft id (first SDB tail in the fleet), or null if we don't run one.
+function _schedSdbAcId(){var ids=Object.keys((S&&S.aircraft)||{});for(var i=0;i<ids.length;i++){if(_schedIsSDB(ids[i]))return ids[i];}return null;}
+// Can this aircraft fly today? (not in maintenance, not marked unavailable.)
+function _schedAcCanFly(ac){var st=_resEffState(S.rezdyDate,ac);return st!=='maint'&&st!=='off';}
 function _schedComputeBlockPilots(flights){
   if(!_schedEnabled())return {};
   var avail=_schedDayPilots(S.rezdyDate)||[];
   var manual=S._schedPilots||{};
+  var manualSet={};Object.keys(manual).forEach(function(k){if(manual[k])manualSet[manual[k]]=1;});
   // Pilot meetings/notes (a __pilot__ block carrying a `pilot`) RESERVE that pilot for their time
   // window: the allocator won't auto-assign them to an aircraft rotation that overlaps the meeting.
   // Drop an all-day block on a pilot to hold them on the ground (e.g. keep the SDB-rated pilot free
@@ -580,18 +585,36 @@ function _schedComputeBlockPilots(flights){
   var rot={};
   flights.forEach(function(f){var r=rot[f.ac]||(rot[f.ac]={ac:f.ac,start:f.depMin,end:f.endMin,keys:[],manual:[]});r.start=Math.min(r.start,f.depMin);r.end=Math.max(r.end,f.endMin);r.keys.push(f.key);if(manual[f.key]&&r.manual.indexOf(manual[f.key])<0)r.manual.push(manual[f.key]);});
   var rots=Object.keys(rot).map(function(a){return rot[a];}).sort(function(a,b){return a.start-b.start;});
-  var freeAt={};avail.forEach(function(p){freeAt[p.code]=-1e9;});   // everyone starts in QN
-  // Manual rotations win: reserve EVERY manually-picked pilot on the aircraft for the whole rotation
-  // (so a second manual pick on the same aircraft can't be auto-assigned to an overlapping flight).
-  rots.forEach(function(r){if(r.manual.length){r.assigned=r.manual[0];r.manual.forEach(function(mp){freeAt[mp]=Math.max(freeAt[mp]==null?-1e9:freeAt[mp],r.end);});}});
-  // Auto-assign the rest, earliest rotation first; a pilot must be back in QN (free ≤ rotation start).
-  rots.forEach(function(r){
-    if(r.assigned)return;
-    var cands=avail.filter(function(p){return _pilotRatedForAc(p.code,r.ac)&&(freeAt[p.code]==null||freeAt[p.code]<=r.start)&&!_pilotBusy(p.code,r.start,r.end);});
-    if(!cands.length)return;                       // nobody free & rated → aircraft left uncrewed
-    cands.sort(function(p,q){var rp=_schedPilotRank(p.code,r.ac),rq=_schedPilotRank(q.code,r.ac);if(rp!==rq)return rp-rq;return String(p.code).localeCompare(String(q.code));});
-    r.assigned=cands[0].code;freeAt[r.assigned]=r.end;
-  });
+  // One assignment pass. Manual picks win; the rest auto-assign earliest rotation first (a pilot must
+  // be back in QN — free ≤ rotation start — and not in a meeting). `excl` holds pilots reserved off the
+  // AUTO pool (the SDB standby). Returns how many rotations were left uncrewed; sets r.assigned.
+  function runAssign(excl){
+    excl=excl||{};
+    var freeAt={};avail.forEach(function(p){freeAt[p.code]=-1e9;});   // everyone starts in QN
+    var stranded=0;
+    rots.forEach(function(r){r.assigned=null;});
+    rots.forEach(function(r){if(r.manual.length){r.assigned=r.manual[0];r.manual.forEach(function(mp){freeAt[mp]=Math.max(freeAt[mp]==null?-1e9:freeAt[mp],r.end);});}});
+    rots.forEach(function(r){
+      if(r.assigned)return;
+      var cands=avail.filter(function(p){return !excl[p.code]&&_pilotRatedForAc(p.code,r.ac)&&(freeAt[p.code]==null||freeAt[p.code]<=r.start)&&!_pilotBusy(p.code,r.start,r.end);});
+      if(!cands.length){stranded++;return;}          // nobody free & rated → aircraft left uncrewed
+      cands.sort(function(p,q){var rp=_schedPilotRank(p.code,r.ac),rq=_schedPilotRank(q.code,r.ac);if(rp!==rq)return rp-rq;return String(p.code).localeCompare(String(q.code));});
+      r.assigned=cands[0].code;freeAt[r.assigned]=r.end;
+    });
+    return stranded;
+  }
+  var baseStranded=runAssign({});
+  // Auto SDB standby: if the leased SDB is in the fleet but NOT flying today (and able to fly), hold
+  // ONE SDB-rated pilot on the ground in case it has to go — but only if it doesn't leave an owned
+  // C208B/airvan uncrewed. Try reserving each spare SDB-rated pilot; keep the first that strands no one
+  // new. If none can be spared (e.g. 4 pilots / 4 aircraft going), he flies — restore the baseline.
+  var _sdbAc=_schedSdbAcId();
+  if(_sdbAc&&!rots.some(function(r){return _schedIsSDB(r.ac);})&&_schedAcCanFly(_sdbAc)){
+    var sdbPilots=avail.filter(function(p){return !manualSet[p.code]&&_pilotRatedForAc(p.code,_sdbAc);});
+    var reserved=false;
+    for(var si=0;si<sdbPilots.length;si++){var ex={};ex[sdbPilots[si].code]=1;if(runAssign(ex)<=baseStranded){reserved=true;break;}}
+    if(!reserved)runAssign({});                       // no one sparable → revert to the full assignment
+  }
   // Every flight on an aircraft gets that aircraft's pilot; a per-flight manual pick still wins.
   var out={};
   rots.forEach(function(r){if(r.assigned)r.keys.forEach(function(k){out[k]=r.assigned;});});
