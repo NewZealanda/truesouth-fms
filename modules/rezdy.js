@@ -1026,7 +1026,13 @@ function _rzOrdersForBlockKey(key){
   });
   return out;
 }
-window.rezdySchedBlockDragStart=function(key,e){S._rzSchedBlockDrag=key;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','block');}catch(_){}};
+window.rezdySchedBlockDragStart=function(key,e){
+  S._rzSchedBlockDrag=key;
+  // Remember WHERE in the block you grabbed, so the block's TOP (its start time) tracks the cursor —
+  // not the cursor pinning to the block's top and making it jump half a block on drop.
+  try{var br=e&&e.currentTarget&&e.currentTarget.getBoundingClientRect?e.currentTarget.getBoundingClientRect():null;S._rzSchedBlockGrabDy=br?Math.max(0,(e.clientY||0)-br.top):0;}catch(_){S._rzSchedBlockGrabDy=0;}
+  try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','block');}catch(_){}
+};
 // ── Editable flyback (FLB/CCF) return time ──────────────────────────────────────
 // A flyback's seats are parked in its OUTBOUND (held) Rezdy slot; what we actually need is the time
 // they FLY BACK. That defaults to 15:30, but the operator can override it per flyback group in the
@@ -1066,7 +1072,7 @@ function _rzReassignToast(n,ac){if(typeof toast==='function')toast(n+' booking'+
 // so you can see exactly where it will land. Pure DOM (no re-render) so it's smooth.
 function _rzDragSnapMins(e){
   var ct=e&&e.currentTarget;if(!ct||!ct.getBoundingClientRect)return null;
-  var rect=ct.getBoundingClientRect();var y=(e.clientY||0)-rect.top;
+  var rect=ct.getBoundingClientRect();var y=(e.clientY||0)-rect.top-(S._rzSchedBlockGrabDy||0);  // block TOP, not cursor
   var mins=_RZ_SCH_START*60+y/_RZ_PX_PER_MIN;mins=Math.round(mins/15)*15;          // lock to 15-minute steps
   return Math.max(_RZ_SCH_START*60,Math.min(_RZ_SCH_END*60,mins));
 }
@@ -1085,12 +1091,9 @@ window.rezdySchedDropBlockToAc=function(ac,e){
   var src=S._rzSchedBlockDrag;S._rzSchedBlockDrag=null;
   if(!src||!ac)return;
   var parts=String(src).split('|');var srcAc=parts[0]||null;var srcStart=parts[1]||'';var srcProd=parts[2]||'';
-  // Drop Y → a 15-minute-snapped time within the visible grid.
-  var newTime=null;
-  try{var ct=e&&e.currentTarget;if(ct&&ct.getBoundingClientRect){var rect=ct.getBoundingClientRect();var y=(e.clientY||0)-rect.top;
-    var mins=_RZ_SCH_START*60+y/_RZ_PX_PER_MIN;mins=Math.round(mins/15)*15;
-    mins=Math.max(_RZ_SCH_START*60,Math.min((_RZ_SCH_END*60)-15,mins));
-    newTime=String(Math.floor(mins/60)).padStart(2,'0')+':'+String(mins%60).padStart(2,'0');}}catch(_){}
+  // Drop Y → the same 15-minute-snapped time the guideline showed (block top, grab-offset aware).
+  var newTime=null;var _sm=_rzDragSnapMins(e);
+  if(_sm!=null){_sm=Math.min((_RZ_SCH_END*60)-15,_sm);newTime=String(Math.floor(_sm/60)).padStart(2,'0')+':'+String(_sm%60).padStart(2,'0');}
   var changed=false;
   if(newTime){
     if(_rzIsFlyback(srcProd)){
@@ -1108,6 +1111,7 @@ window.rezdySchedDropBlockToAc=function(ac,e){
 window.rezdyClearDepTime=function(prod,start){if(S._rzDepTimeOv)delete S._rzDepTimeOv[String(prod||'')+'|'+String(start||'')];if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();};
 window.rezdySchedDropPilot=function(key,e){
   if(e&&e.preventDefault)e.preventDefault();if(e&&e.stopPropagation)e.stopPropagation();
+  var _dl0=document.getElementById('rzDragLine');if(_dl0)_dl0.style.display='none';
   // A block dragged onto another block: a flyback/CCF folds INTO that flight (combine, as before);
   // any other block just moves its bookings to that block's aircraft.
   if(S._rzSchedBlockDrag){
