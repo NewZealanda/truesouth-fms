@@ -565,6 +565,17 @@ function _schedComputeBlockPilots(flights){
   if(!_schedEnabled())return {};
   var avail=_schedDayPilots(S.rezdyDate)||[];
   var manual=S._schedPilots||{};
+  // Pilot meetings/notes (a __pilot__ block carrying a `pilot`) RESERVE that pilot for their time
+  // window: the allocator won't auto-assign them to an aircraft rotation that overlaps the meeting.
+  // Drop an all-day block on a pilot to hold them on the ground (e.g. keep the SDB-rated pilot free
+  // in case SDB has to fly). Manual pilot picks below still override this.
+  var busy={};
+  (S._schedBlocks||[]).forEach(function(b){
+    if(!b||b.aircraft!=='__pilot__'||!b.pilot)return;
+    var s=_rzMinsFromHHMM(b.start),e=_rzMinsFromHHMM(b.end);if(s==null)return;if(e==null||e<=s)e=s+60;
+    (busy[b.pilot]=busy[b.pilot]||[]).push([s,e]);
+  });
+  function _pilotBusy(code,a,b){var ws=busy[code];if(!ws)return false;for(var i=0;i<ws.length;i++){if(a<ws[i][1]&&ws[i][0]<b)return true;}return false;}
   // Build one rotation window per aircraft from its flights.
   var rot={};
   flights.forEach(function(f){var r=rot[f.ac]||(rot[f.ac]={ac:f.ac,start:f.depMin,end:f.endMin,keys:[],manual:[]});r.start=Math.min(r.start,f.depMin);r.end=Math.max(r.end,f.endMin);r.keys.push(f.key);if(manual[f.key]&&r.manual.indexOf(manual[f.key])<0)r.manual.push(manual[f.key]);});
@@ -576,7 +587,7 @@ function _schedComputeBlockPilots(flights){
   // Auto-assign the rest, earliest rotation first; a pilot must be back in QN (free ≤ rotation start).
   rots.forEach(function(r){
     if(r.assigned)return;
-    var cands=avail.filter(function(p){return _pilotRatedForAc(p.code,r.ac)&&(freeAt[p.code]==null||freeAt[p.code]<=r.start);});
+    var cands=avail.filter(function(p){return _pilotRatedForAc(p.code,r.ac)&&(freeAt[p.code]==null||freeAt[p.code]<=r.start)&&!_pilotBusy(p.code,r.start,r.end);});
     if(!cands.length)return;                       // nobody free & rated → aircraft left uncrewed
     cands.sort(function(p,q){var rp=_schedPilotRank(p.code,r.ac),rq=_schedPilotRank(q.code,r.ac);if(rp!==rq)return rp-rq;return String(p.code).localeCompare(String(q.code));});
     r.assigned=cands[0].code;freeAt[r.assigned]=r.end;
