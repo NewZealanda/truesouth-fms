@@ -850,7 +850,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.13';
+const APP_VER='v26.14';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3054,14 +3054,16 @@ function _restoreLastView(){
 
 window.addEventListener('pagehide',function(){saveWorkspace();});
 
-// Hidden shortcut: tap anywhere 4× in quick succession (each tap ≤500ms after the last) → jump
-// straight to the Flight Record. A pilot convenience for logging on the apron without digging
-// through the menu. Capture phase so it counts taps even on buttons; only fires for users who can
-// actually see the Flight Record.
+// Hidden shortcut: tap 4× in quick succession (each tap ≤500ms after the last) on CLEAR SPACE —
+// not on a button/link/field/control — → jump straight to the Flight Record. A pilot convenience
+// for logging on the apron without digging through the menu. Only fires for users who can see it.
 (function(){
   if(typeof document==='undefined')return;
   var _lastTap=0,_tapCount=0;
-  document.addEventListener('pointerdown',function(){
+  var _interactive='a,button,input,select,textarea,label,canvas,[onclick],[role="button"],[contenteditable],[draggable="true"]';
+  document.addEventListener('pointerdown',function(e){
+    // Ignore taps that land on (or inside) an interactive control — only blank space counts.
+    if(e&&e.target&&e.target.closest&&e.target.closest(_interactive))return;
     var now=Date.now();
     _tapCount=(now-_lastTap<=500)?(_tapCount+1):1;
     _lastTap=now;
