@@ -1305,6 +1305,7 @@ function _restoreLastView(){
       if(v.tab)S.tab=v.tab;
       if(v.savedTab)S.savedTab=v.savedTab;
       if(v.pilotBagTab)S._pilotBagTab=v.pilotBagTab; // restore Pilot Bag ▸ Flight Record/Logbooks/Flight & Duty
+      if(v.groundSecTab)S._groundSecTab=v.groundSecTab; // restore Ground ▸ Transport/My Pickups/Vehicle Prestart
     }
   }catch(e){}
 }

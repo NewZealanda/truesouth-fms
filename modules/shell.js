@@ -65,7 +65,7 @@ document.addEventListener('keydown',function(e){
     var _da=document.activeElement,_dt=_da&&_da.tagName;
     if(_dt==='INPUT'||_dt==='SELECT'||_dt==='TEXTAREA'||(_da&&_da.isContentEditable))return;
     if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
-    if(((S.section==='operations'&&(S.tab==='bookings'||S.tab==='rseatmap'||S.tab==='rloadsheets'||S.tab==='ground'))||S.section==='calendar')&&typeof window.rezdyShiftDate==='function'){
+    if(((S.section==='operations'&&(S.tab==='bookings'||S.tab==='rseatmap'||S.tab==='rloadsheets'))||S.section==='ground'||S.section==='calendar')&&typeof window.rezdyShiftDate==='function'){
       e.preventDefault();window.rezdyShiftDate(e.key==='ArrowRight'?1:-1);
     }
     return;
@@ -92,7 +92,7 @@ document.addEventListener('keydown',function(e){
       e.preventDefault();window.rezdyShiftDate(_dir);return;
     }
     if(S.section!=='operations')return;
-    var _tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');_tabs.push('ground');
+    var _tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
     var _cur=_tabs.indexOf(S.tab);if(_cur<0)_cur=0;
     var _next=_cur+_dir;if(_next<0)_next=_tabs.length-1;if(_next>=_tabs.length)_next=0;
     e.preventDefault();if(typeof window.switchOpsTab==='function')window.switchOpsTab(_tabs[_next]);
@@ -102,7 +102,7 @@ document.addEventListener('keydown',function(e){
 window._cycleTier2=function(dir){
   if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
   if(S.section==='operations'){
-    var tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');tabs.push('ground');
+    var tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');
     var cur=tabs.indexOf(S.tab);if(cur<0)cur=0;var nx=(cur+dir+tabs.length)%tabs.length;
     if(typeof window.switchOpsTab==='function')window.switchOpsTab(tabs[nx]);
   } else if(S.section==='calendar'){
@@ -204,7 +204,7 @@ var HOME_OPTIONS=[
   {id:'bookings',label:'Bookings',section:'operations',tab:'bookings'},
   {id:'rseatmap',label:'Seatmap',section:'operations',tab:'rseatmap'},
   {id:'rloadsheets',label:'Loadsheets',section:'operations',tab:'rloadsheets'},
-  {id:'ground',label:'Transport (Ground)',section:'operations',tab:'ground'},
+  {id:'ground',label:'Transport (Ground)',section:'ground'},
   {id:'calendar',label:'Calendar',section:'calendar'},
   {id:'maintenance',label:'Maintenance',section:'maintenance'},
   {id:'roster',label:'Roster',section:'roster'},
@@ -256,9 +256,11 @@ function render(){
   // ── Nav migration (v24.14): the old 'rezdy' section was split — Calendar is now its own
   // tier-1 section, Pickups/My Pickups moved to Operations ▸ Ground. Remap any restored last-view
   // or stale deep-link so old state still lands somewhere sensible.
+  // Transport/My Pickups moved again (v26.34): now the tier-1 Ground section (_groundSecTab), not Operations ▸ Ground.
+  if(S.section==='operations'&&S.tab==='ground'){S.section='ground';S._groundSecTab=(S._groundTab==='mypickups')?'mypickups':'transport';}
   if(S.section==='rezdy'){
-    if(S.rezdyTab==='pickups'){S.section='operations';S.tab='ground';S._groundTab='pickups';}
-    else if(S.rezdyTab==='mypickups'){S.section='operations';S.tab='ground';S._groundTab='mypickups';}
+    if(S.rezdyTab==='pickups'){S.section='ground';S._groundSecTab='transport';}
+    else if(S.rezdyTab==='mypickups'){S.section='ground';S._groundSecTab='mypickups';}
     else{S.section='calendar';}
   }
   // ── Nav migration (v26.12): Flight Record / Logbooks / Flight & Duty are now bundled into one
@@ -267,7 +269,7 @@ function render(){
   // ── Remember the current view so a reload returns to the same page ──
   // Gated on S._viewRestored so the default-view renders during boot DON'T overwrite the
   // saved last view before _restoreLastView() has had a chance to read and apply it.
-  if(S.user&&S._viewRestored){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'bookings',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null,groundTab:S._groundTab||null,pilotBagTab:S._pilotBagTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
+  if(S.user&&S._viewRestored){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'bookings',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null,groundSecTab:S._groundSecTab||null,pilotBagTab:S._pilotBagTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
   // ── Preserve focused input across re-renders ──
   const _ae=document.activeElement;
   const _aeId=_ae?.id||null;
@@ -629,9 +631,18 @@ function renderDrawer(){
       h+=_subBtn('Loadsheets',t==='rloadsheets'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('rloadsheets')");
       h+=_subBtn('Saved',t==='saved'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('saved')");
       if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
-      h+=_subBtn('Ground',t==='ground'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('ground')");
     }
   }
+  // Ground — Transport / My Pickups (+ Vehicle Prestart). Tier-1 section, pinned under Operations.
+  {if(hasRolePerm('ground')||(S.user&&S.user.superAdmin)){
+    var _gSec=S._groundSecTab||'transport';
+    h+=_secBtn('Ground','ground','🚐');
+    if(_isExp('ground')){
+      h+=_subBtn('Transport',sec==='ground'&&_gSec==='transport',"S._drawerOpen=false;S.section='ground';S._groundSecTab='transport';render()");
+      h+=_subBtn('My Pickups',sec==='ground'&&_gSec==='mypickups',"S._drawerOpen=false;S.section='ground';S._groundSecTab='mypickups';render()");
+      if(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin))h+=_subBtn('Vehicle Prestart',sec==='ground'&&_gSec==='vehicleprestart',"S._drawerOpen=false;S.section='ground';S._groundSecTab='vehicleprestart';render()");
+    }
+  }}
   // Pilot Bag (Flight Record / Logbooks / Flight & Duty) — pinned right under Operations.
   {var _pbDefs=_pilotBagTabDefs();
    if(_pbDefs.length){
@@ -681,7 +692,7 @@ function renderDrawer(){
      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'resources\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onRes?'rgba(34,197,94,.18)':'transparent')+';color:'+(_onRes?'#22c55e':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onRes?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🚦</span><span style="flex:1">Resources</span></button>';
    }}
   // Coming-soon placeholders (visible to superadmin for now; enable per-role in Permissions later).
-  {[{s:'sms',p:'sms',l:'SMS',i:'🛡️'},{s:'ground',p:'ground',l:'Ground',i:'🚐'},{s:'trainingmod',p:'training_mod',l:'Training',i:'📚'}].forEach(function(x){
+  {[{s:'sms',p:'sms',l:'SMS',i:'🛡️'},{s:'trainingmod',p:'training_mod',l:'Training',i:'📚'}].forEach(function(x){
      if(hasRolePerm(x.p)||(S.user&&S.user.superAdmin)){var _onPh=sec===x.s;
        h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+x.s+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onPh?'rgba(255,255,255,.12)':'transparent')+';color:'+(_onPh?'#fff':'rgba(255,255,255,.6)')+';font-size:14px;font-weight:'+(_onPh?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+x.i+'</span><span style="flex:1">'+x.l+'</span><span style="font-size:9px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.55);padding:1px 6px;border-radius:8px">soon</span></button>';
      }});}
@@ -726,7 +737,6 @@ function renderOpsSubTabs(){
     {lbl:'Saved ('+savedCount+')',on:opsTab==='saved'&&!isLegacyLs,onclick:"window.switchOpsTab('saved')"}
   ];
   if(hasRolePerm('charter'))tabs.push({lbl:'Charter',on:opsTab==='charter'&&!isLegacyLs,onclick:"window.switchOpsTab('charter')"});
-  tabs.push({lbl:'Ground',on:opsTab==='ground'&&!isLegacyLs,onclick:"window.switchOpsTab('ground')"});
   return _tier2(tabs);
 }
 
@@ -768,10 +778,9 @@ function renderTier2Bar(){
   return '';
 }
 function renderGroundSubTabs(){
-  var sub=S._groundSecTab||'overview';
-  var tabs=[{id:'overview',lbl:'Ground'}];
+  var sub=S._groundSecTab||'transport';
+  var tabs=[{id:'transport',lbl:'Transport'},{id:'mypickups',lbl:'My Pickups'}];
   if(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin))tabs.push({id:'vehicleprestart',lbl:'Vehicle Prestart'});
-  if(tabs.length<2)return '';
   return _tier2(tabs.map(function(t){return {lbl:t.lbl,on:sub===t.id,onclick:"S._groundSecTab='"+t.id+"';render()"};}));
 }
 function renderPilotBagSubTabs(){
@@ -881,8 +890,9 @@ function renderApp(){
         if(_sec==='sms'){if(!hasRolePerm('sms')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('SMS','Safety Management System');}
         if(_sec==='ground'){
           if(!hasRolePerm('ground')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
-          if((S._groundSecTab||'overview')==='vehicleprestart'&&(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin)))return _placeholderPage('Vehicle Prestart','Daily vehicle prestart checks');
-          return _placeholderPage('Ground','Ground operations');
+          var _gst=S._groundSecTab||'transport';
+          if(_gst==='vehicleprestart'&&(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin)))return _placeholderPage('Vehicle Prestart','Daily vehicle prestart checks');
+          return '<div id="flash-ground">'+renderGround()+'</div>';
         }
         if(_sec==='trainingmod'){if(!hasRolePerm('training_mod')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('Training','Training records');}
         if(_sec==='resources'){

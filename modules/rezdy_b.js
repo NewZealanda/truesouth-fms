@@ -743,7 +743,7 @@ window.pickupAckRunAll=function(){
 setInterval(function(){
   try{
     if(typeof S==='undefined'||!S.user||document.visibilityState!=='visible')return;
-    if(S.section==='operations'&&S.tab==='ground'&&typeof window.rezdyReloadPickupLive==='function')window.rezdyReloadPickupLive();
+    if(S.section==='ground'&&typeof window.rezdyReloadPickupLive==='function')window.rezdyReloadPickupLive();
   }catch(e){}
 },15000);
 // ── Unacknowledged-pickup chime (mobile) ───────────────────────────────────────

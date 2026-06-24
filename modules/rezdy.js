@@ -594,18 +594,15 @@ function renderCalendar(){
   var _body=(_cv==='moves')?_rzRenderMovements():(_cv==='pilots')?_rzRenderPilotMovements():_rzRenderSchedule();
   return _rzDateRow('schedule')+_toggle+_body+_rzModals();
 }
-// GROUND — Operations ▸ Ground tier-2 tab hosting Pickups / My Pickups (tier-3). Operations perm.
+// GROUND — tier-1 Ground section body (Transport / My Pickups). The Transport/My Pickups/Vehicle
+// Prestart selector is the tier-2 bar (renderGroundSubTabs); this just renders the chosen pickup view.
 function renderGround(){
-  if(typeof hasRolePerm==='function'&&!hasRolePerm('operations'))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+  if(typeof hasRolePerm==='function'&&!(hasRolePerm('ground')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
   _rzEnsureDay();
-  var gt=(S._groundTab==='mypickups')?'mypickups':'pickups';S._groundTab=gt;
+  var gt=(S._groundSecTab==='mypickups')?'mypickups':'pickups';
   S._rzPrevSub=gt;
-  var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    [{id:'pickups',lbl:'Transport'},{id:'mypickups',lbl:'My Pickups'}].map(function(t){
-      return '<button class="sub-tab '+(gt===t.id?'on':'')+'" onclick="S._groundTab=\''+t.id+'\';render()">'+t.lbl+'</button>';
-    }).join('')+'</div>';
   var body=(gt==='mypickups')?_rzRenderMyPickups():_rzRenderPickups();
-  return bar+_rzDateRow(gt)+body+_rzModals();
+  return _rzDateRow(gt)+body+_rzModals();
 }
 // SETTINGS ▸ OPERATIONS — tier-3 operations settings (Pickup Locations for now; more to come).
 function renderAdminOperations(){

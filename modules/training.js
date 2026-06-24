@@ -17,7 +17,7 @@ var TRAIN_MODULES={
     {title:'Operations · Seatmap',section:'operations',tab:'rseatmap',body:'Drag passengers onto seats for each aircraft. The pilot (PIC) and weights flow through to the loadsheet. An aircraft can appear twice if it flies a departure twice.'},
     {title:'Operations · Loadsheets',section:'operations',tab:'rloadsheets',body:'The weight & balance for each flight: seat weights, bags, fuel and burn. It warns if you\'re below reserve, and the PIC signs it before the flight.'},
     {title:'Calendar',section:'calendar',body:'The whole day at a glance — aircraft down the columns, time down the side. You can switch to "Aircraft movements" to see each leg (including ferries).'},
-    {title:'Ground · Transport',section:'operations',tab:'ground',groundTab:'pickups',body:'Passenger pickups and return drop-offs, grouped by departure, assigned to vans and drivers. Drivers mark people collected / dropped off and acknowledge their run.'},
+    {title:'Ground · Transport',section:'ground',groundSecTab:'transport',body:'Passenger pickups and return drop-offs, grouped by departure, assigned to vans and drivers. Drivers mark people collected / dropped off and acknowledge their run.'},
     {title:'Maintenance',section:'maintenance',maintTab:'overview',body:'Aircraft hours and TTIS, upcoming checks, and maintenance bookings. A booking here blocks the aircraft and even creates its ferry-to-Wanaka blocks on the calendar.'},
     {title:'Roster & Leave',section:'roster',body:'Who\'s working each day. Leave requests and approvals live alongside it, and rostered pilots feed the scheduling tools.'},
     {title:'That\'s the tour',body:'You\'ve seen the main areas. Your day-to-day depends on your role — try the Desk/Operations or Pilot module next for the step-by-step. You can reopen Training any time from the menu.'}
@@ -25,7 +25,7 @@ var TRAIN_MODULES={
   ops:{label:'Desk / Operations',icon:'🎧',desc:'The everyday desk flow — from the booking through weather calls, check-in and onto the seatmap.',steps:[
     {title:'Bookings — the order',section:'operations',tab:'bookings',body:'Operations ▸ Bookings is the day\'s orders. Each card is a booking. Watch the "$ TO PAY" and lunch flags, and add an internal note on any booking that needs one.'},
     {title:'Weather calls (Wx)',section:'operations',tab:'bookings',body:'When a passenger phones about the weather, tap Wx on their booking to record that they\'ve contacted us. That lets you see who HASN\'T called and ring them to confirm or cancel their flight due to weather.'},
-    {title:'Transport (ground staff)',section:'operations',tab:'ground',groundTab:'pickups',body:'Transport is generated from the bookings — it\'s us picking passengers up to bring them in to check in. Day to day this is run by the ground staff on the Transport board (vans, drivers, pickups & drop-offs).'},
+    {title:'Transport (ground staff)',section:'ground',groundSecTab:'transport',body:'Transport is generated from the bookings — it\'s us picking passengers up to bring them in to check in. Day to day this is run by the ground staff on the Transport board (vans, drivers, pickups & drop-offs).'},
     {title:'Check passengers in',section:'operations',tab:'bookings',body:'When passengers arrive at the office, tap "Checked in" to enter names and actual weights, and hand out their lunch passes and lanyards for the aircraft they\'re flying on.'},
     {title:'No-shows',section:'operations',tab:'bookings',body:'No-show means a passenger didn\'t turn up for their pickup — the driver or desk marks them No-show, which drops them from the run and the seatmap push.'},
     {title:'Close check-in → push to seatmap',section:'operations',tab:'bookings',body:'When you\'re ready to close check-in, close it (you can close with the no-shows) and it pushes everyone onto the seatmap.'},
@@ -53,6 +53,7 @@ function _trainNav(step){
       if(step.tab!=null)S.tab=step.tab;
       if(step.maintTab!=null)S.maintTab=step.maintTab;
       if(step.groundTab!=null)S._groundTab=step.groundTab;
+      if(step.groundSecTab!=null)S._groundSecTab=step.groundSecTab;
       if(step.adminSection!=null){S.admin=S.admin||{};S.admin.section=step.adminSection;}
       S.section=step.section;
     }
