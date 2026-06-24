@@ -585,12 +585,13 @@ function renderCalendar(){
   _rzEnsureDay();
   if(S._rzPrevSub!=='schedule'){S._schedBlocks=null;S._rezdyBookings=null;}
   S._rzPrevSub='schedule';S.rezdyTab='schedule'; // keep rezdyTab so schedule load/reload code still fires
-  var _cv=(S._calView==='moves')?'moves':'schedule';
+  var _cv=(S._calView==='moves'||S._calView==='pilots')?S._calView:'schedule';
   var _toggle='<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">'+
     '<button class="sub-tab '+(_cv==='schedule'?'on':'')+'" onclick="S._calView=\'schedule\';render()">📅 Bookings</button>'+
     '<button class="sub-tab '+(_cv==='moves'?'on':'')+'" onclick="S._calView=\'moves\';render()">✈ Aircraft movements</button>'+
+    '<button class="sub-tab '+(_cv==='pilots'?'on':'')+'" onclick="S._calView=\'pilots\';render()">🧑‍✈️ Pilot movements</button>'+
   '</div>';
-  var _body=(_cv==='moves')?_rzRenderMovements():_rzRenderSchedule();
+  var _body=(_cv==='moves')?_rzRenderMovements():(_cv==='pilots')?_rzRenderPilotMovements():_rzRenderSchedule();
   return _rzDateRow('schedule')+_toggle+_body+_rzModals();
 }
 // GROUND — Operations ▸ Ground tier-2 tab hosting Pickups / My Pickups (tier-3). Operations perm.
@@ -4201,46 +4202,11 @@ function _rzRenderSchedule(){
   }
 
   // inline add/edit form
-  let formH='';
-  if(S._schedEdit){
-    const ed=S._schedEdit;
-    const acIds=Object.keys((typeof S!=='undefined'&&S.aircraft)||{});
-    formH='<div class="card"><div class="st">'+(ed.id?'Edit block':'New block')+'</div><div class="g2" style="margin-bottom:10px">'+
-      '<div><label>Aircraft</label><select class="fi" onchange="window.schedEditField(\'aircraft\',this.value)">'+
-        '<option value="">— select —</option>'+
-        acIds.map(function(a){return '<option value="'+_rzEsc(a)+'"'+(ed.aircraft===a?' selected':'')+'>'+_rzEsc(a)+'</option>';}).join('')+
-        '<option value="__misc__"'+(ed.aircraft==='__misc__'?' selected':'')+'>Misc / notes</option>'+
-      '</select></div>'+
-      '<div><label>Label <span style="font-weight:400;color:var(--text3);font-size:10px">(route only — pilot/aircraft auto-added)</span></label><input class="fi" type="text" value="'+_rzEsc(ed.label)+'" onblur="window.schedEditField(\'label\',this.value)" placeholder="e.g. QN-WF"></div>'+
-    '</div><div class="g3" style="margin-bottom:10px">'+
-      '<div><label>Start (HH:MM)</label><input class="fi" type="time" value="'+_rzEsc(ed.start)+'" onchange="window.schedEditField(\'start\',this.value)"></div>'+
-      '<div><label>End (HH:MM)</label><input class="fi" type="time" value="'+_rzEsc(ed.end)+'" onchange="window.schedEditField(\'end\',this.value)"></div>'+
-      '<div><label>Colour</label><input class="fi" type="color" value="'+_rzEsc(ed.color||_rzAcCol(ed.aircraft))+'" onchange="window.schedEditField(\'color\',this.value)" style="height:38px;padding:3px"></div>'+
-    '</div>'+
-    '<div style="margin-bottom:10px"><label>Flight type <span style="font-weight:400;color:var(--text3);font-size:10px">(shows in the pilot’s flight record)</span></label><select class="fi" onchange="window.schedEditField(\'ftype\',this.value)">'+
-      ['Maintenance','Training','Ferry','Private Hire','Other'].map(function(t){return '<option value="'+t+'"'+((ed.ftype||'Maintenance')===t?' selected':'')+'>'+t+'</option>';}).join('')+
-    '</select></div>'+
-    '<div style="margin-bottom:10px"><label>Notes</label><input class="fi" type="text" value="'+_rzEsc(ed.notes)+'" onblur="window.schedEditField(\'notes\',this.value)"></div>'+
-    (function(){
-      // Pilot picker — tap a type-rated pilot (tap again to clear). For a brand-new block the choice
-      // is held on the draft and applied when you Save.
-      var selP=ed.id?((S._schedPilots||{})[ed.id]||''):(ed.pilot||'');
-      var pp=_rzAvailablePilots().filter(function(p){if(!ed.aircraft||ed.aircraft==='__unalloc__')return true;var en=_rzPilotEndorse(p.code);return !(en&&en.length)||en.indexOf(ed.aircraft)>=0;});
-      var ph='<div style="margin-bottom:10px"><label>Pilot</label><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">';
-      if(!pp.length)ph+='<span style="font-size:11px;color:var(--text3)">No type-rated pilots available</span>';
-      pp.forEach(function(p){var on=selP===p.code;var off=!p.rostered;ph+='<button onclick="window.schedSetBlockPilot(\''+_rzEsc(p.code).replace(/\'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(off?' (not rostered on today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid #60a5fa':'1px solid rgba(96,165,250,'+(off?'.28':'.5')+')')+';background:rgba(96,165,250,'+(on?'.22':(off?'.05':'.1'))+');color:#60a5fa;font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'✈ ')+_rzEsc(p.code)+(off?' <span style="font-size:8px;font-weight:700">off</span>':'')+'</button>';});
-      ph+='</div></div>';return ph;
-    })()+
-    '<div style="display:flex;gap:8px">'+
-      '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.schedSaveBlock()">💾 Save</button>'+
-      (ed.id?'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.schedDeleteBlock()">🗑 Delete</button>':'')+
-      '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedEdit=null;render()">Cancel</button>'+
-    '</div></div>';
-  }
+  var formH=_rzSchedEditForm();
 
   // Columns: one per aircraft. Include any aircraft that has a block but isn't in S.aircraft.
   let acIds=Object.keys((S&&S.aircraft)||{});
-  blocks.forEach(function(b){if(b.aircraft&&b.aircraft!=='__misc__'&&acIds.indexOf(b.aircraft)<0)acIds.push(b.aircraft);});
+  blocks.forEach(function(b){if(b.aircraft&&b.aircraft!=='__misc__'&&b.aircraft!=='__pilot__'&&acIds.indexOf(b.aircraft)<0)acIds.push(b.aircraft);});
   bkBlocks.forEach(function(b){if(b.aircraft&&b.aircraft!=='__unalloc__'&&b.aircraft!=='__misc__'&&acIds.indexOf(b.aircraft)<0)acIds.push(b.aircraft);});
   if(bkBlocks.some(function(b){return b.aircraft==='__unalloc__';}))acIds.push('__unalloc__');
   acIds.push('__misc__');   // far-right free-form column for meetings / notes (e.g. "DF AA JY Meeting")
@@ -4496,7 +4462,7 @@ function _rzAcMovements(){
   });
   // Manual schedule blocks (maintenance / training / ferry / private hire) — show their leg too.
   (S._schedBlocks||[]).forEach(function(b){
-    if(!b.aircraft)return;var sm=_rzMinsFromHHMM(b.start);if(sm==null)return;
+    if(!b.aircraft||b.aircraft==='__pilot__'||b.aircraft==='__misc__')return;var sm=_rzMinsFromHHMM(b.start);if(sm==null)return;
     var parts=String(b.label||'').split(/[-–/]/).map(function(s){return s.trim();}).filter(Boolean);
     out.push({ac:b.aircraft,t:sm,start:b.start,end:b.end||_rzMinToHHMM(sm+40),from:parts[0]||'',to:parts[1]||'',kind:'manual',pob:0,prod:b.ftype||'Block',label:b.label});
   });
@@ -4605,6 +4571,125 @@ function _rzRenderMovements(){
   return hdr+grid;
 }
 // Open a booking's passenger detail straight from its calendar block.
+// Shared block-edit form (used by the Bookings calendar AND the Pilot-movements view). A pilot MEETING
+// uses aircraft '__pilot__' and stores its owner pilot on the block (data.pilot).
+function _rzSchedEditForm(){
+  if(!S._schedEdit)return '';
+  var ed=S._schedEdit,isMeeting=(ed.aircraft==='__pilot__');
+  var acIds=Object.keys((S&&S.aircraft)||{});
+  var h='<div class="card"><div class="st">'+(ed.id?'Edit ':'New ')+(isMeeting?'meeting / note':'block')+'</div><div class="g2" style="margin-bottom:10px">'+
+    '<div><label>'+(isMeeting?'Type':'Aircraft')+'</label><select class="fi" onchange="window.schedEditField(\'aircraft\',this.value)">'+
+      '<option value="">— select —</option>'+
+      acIds.map(function(a){return '<option value="'+_rzEsc(a)+'"'+(ed.aircraft===a?' selected':'')+'>'+_rzEsc(a)+'</option>';}).join('')+
+      '<option value="__pilot__"'+(ed.aircraft==='__pilot__'?' selected':'')+'>Pilot meeting / note</option>'+
+      '<option value="__misc__"'+(ed.aircraft==='__misc__'?' selected':'')+'>Misc / notes</option>'+
+    '</select></div>'+
+    '<div><label>Label</label><input class="fi" type="text" value="'+_rzEsc(ed.label)+'" onblur="window.schedEditField(\'label\',this.value)" placeholder="'+(isMeeting?'e.g. Sim / Meeting':'e.g. QN-WF')+'"></div>'+
+  '</div><div class="g3" style="margin-bottom:10px">'+
+    '<div><label>Start</label><input class="fi" type="time" value="'+_rzEsc(ed.start)+'" onchange="window.schedEditField(\'start\',this.value)"></div>'+
+    '<div><label>End</label><input class="fi" type="time" value="'+_rzEsc(ed.end)+'" onchange="window.schedEditField(\'end\',this.value)"></div>'+
+    '<div><label>Colour</label><input class="fi" type="color" value="'+_rzEsc(ed.color||(isMeeting?'#a78bfa':_rzAcCol(ed.aircraft)))+'" onchange="window.schedEditField(\'color\',this.value)" style="height:38px;padding:3px"></div>'+
+  '</div>'+
+  (isMeeting?'':'<div style="margin-bottom:10px"><label>Flight type</label><select class="fi" onchange="window.schedEditField(\'ftype\',this.value)">'+
+    ['Maintenance','Training','Ferry','Private Hire','Other'].map(function(t){return '<option value="'+t+'"'+((ed.ftype||'Maintenance')===t?' selected':'')+'>'+t+'</option>';}).join('')+
+  '</select></div>')+
+  '<div style="margin-bottom:10px"><label>Notes</label><input class="fi" type="text" value="'+_rzEsc(ed.notes)+'" onblur="window.schedEditField(\'notes\',this.value)"></div>';
+  var sel=isMeeting?(ed.pilot||''):(ed.id?((S._schedPilots||{})[ed.id]||''):(ed.pilot||''));
+  var pp=_rzAvailablePilots().filter(function(p){if(!ed.aircraft||ed.aircraft==='__unalloc__'||ed.aircraft==='__misc__'||ed.aircraft==='__pilot__')return true;var en=_rzPilotEndorse(p.code);return !(en&&en.length)||en.indexOf(ed.aircraft)>=0;});
+  var setFn=isMeeting?'schedSetMeetingPilot':'schedSetBlockPilot';
+  h+='<div style="margin-bottom:10px"><label>Pilot</label><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">';
+  if(!pp.length)h+='<span style="font-size:11px;color:var(--text3)">No pilots available</span>';
+  pp.forEach(function(p){var on=sel===p.code,off=!p.rostered;h+='<button onclick="window.'+setFn+'(\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(off?' (not rostered today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid #60a5fa':'1px solid rgba(96,165,250,'+(off?'.28':'.5')+')')+';background:rgba(96,165,250,'+(on?'.22':(off?'.05':'.1'))+');color:#60a5fa;font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'✈ ')+_rzEsc(p.code)+(off?' off':'')+'</button>';});
+  h+='</div></div>';
+  h+='<div style="display:flex;gap:8px">'+
+    '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.schedSaveBlock()">💾 Save</button>'+
+    (ed.id?'<button class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)" onclick="window.schedDeleteBlock()">🗑 Delete</button>':'')+
+    '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedEdit=null;render()">Cancel</button>'+
+  '</div></div>';
+  return h;
+}
+window.schedSetMeetingPilot=function(code){if(S._schedEdit){S._schedEdit.pilot=(S._schedEdit.pilot===code?'':code);render();}};
+window.schedNewPilotBlock=function(code){S._schedEdit={id:null,aircraft:'__pilot__',pilot:code||'',label:'Meeting',start:'09:00',end:'10:00',color:'#a78bfa',notes:'',ftype:'Meeting'};render();};
+// Build each pilot's day: their allocated flights (rotation span) + maintenance-ferry drives + meetings.
+function _rzPilotMovements(){
+  var auto=S._schedAutoPilots||{},man=S._schedPilots||{};
+  var flights=(typeof _schedDayFlights==='function')?_schedDayFlights(S.rezdyDate):[];
+  var fBy={};flights.forEach(function(f){fBy[f.key]=f;});
+  var blocksById={};(S._schedBlocks||[]).forEach(function(b){if(b&&b.id)blocksById[b.id]=b;});
+  var byPilot={};function ensure(p){return byPilot[p]||(byPilot[p]=[]);}
+  Object.keys(fBy).forEach(function(k){
+    var pilot=man[k]||auto[k];if(!pilot)return;var f=fBy[k];var mb=blocksById[k];
+    if(mb){
+      var lbl=(mb.aircraft&&mb.aircraft!=='__misc__'&&mb.aircraft!=='__pilot__'?String(mb.aircraft).replace(/^ZK-?/,'')+' ':'')+(mb.label||mb.ftype||'Block');
+      ensure(pilot).push({start:mb.start,end:mb.end,label:lbl,kind:'manual',ico:'🔧'});
+      var lp=String(mb.label||'').toUpperCase().split(/[-–\/]/).map(function(s){return s.trim();});
+      var sm=_rzMinsFromHHMM(mb.start),em=_rzMinsFromHHMM(mb.end);
+      if(lp[1]==='WF'&&em!=null)ensure(pilot).push({start:mb.end,end:_rzMinToHHMM(em+RZ_MAINT_DRIVE_MIN),label:'Drive WF→QN',kind:'drive',ico:'🚗'});
+      else if(lp[0]==='WF'&&sm!=null)ensure(pilot).push({start:_rzMinToHHMM(Math.max(0,sm-RZ_MAINT_DRIVE_MIN)),end:mb.start,label:'Drive QN→WF',kind:'drive',ico:'🚗'});
+    } else {
+      var parts=String(k).split('|'),ac=parts[0],prod=parts[2]||'';
+      var dest=(typeof _rzGroupDest==='function')?_rzGroupDest(prod):'';
+      ensure(pilot).push({start:_rzMinToHHMM(f.depMin),end:_rzMinToHHMM(f.endMin),label:(ac&&ac!=='__unalloc__'?String(ac).replace(/^ZK-?/,''):'?')+(dest?' '+dest:''),kind:'flight',ico:'✈'});
+    }
+  });
+  (S._schedBlocks||[]).forEach(function(b){if(b&&b.pilot)ensure(b.pilot).push({start:b.start,end:b.end,label:b.label||b.ftype||'Meeting',kind:'meeting',ico:'📅',id:b.id});});
+  return byPilot;
+}
+function _rzRenderPilotMovements(){
+  if(S._schedLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading…</div>';
+  if(!S._schedBlocks){if(window.rezdyLoadSchedule)window.rezdyLoadSchedule();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading pilot movements…</div>';}
+  var byPilot=_rzPilotMovements();var avail=_rzAvailablePilots()||[];
+  var codes=[],seen={},nameOf={},offOf={};
+  avail.forEach(function(p){if(!seen[p.code]){seen[p.code]=1;codes.push(p.code);}nameOf[p.code]=p.name;offOf[p.code]=!p.rostered;});
+  Object.keys(byPilot).forEach(function(c){if(!seen[c]){seen[c]=1;codes.push(c);offOf[c]=true;}});
+  var all=[];codes.forEach(function(c){(byPilot[c]||[]).forEach(function(m){all.push(m);});});
+  var hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
+    '<div><div class="st" style="margin-bottom:0">Pilot movements</div><p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzDowLabel(S.rezdyDate)+' · what each pilot is doing · tap a pilot column ＋ to add a meeting</p></div>'+
+    '<div style="font-size:11px;color:var(--text3);display:flex;gap:12px;flex-wrap:wrap">'+
+      '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:10px;border-radius:2px;background:#60a5fa33;border:1px solid #60a5fa"></span>Flight</span>'+
+      '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:10px;border-radius:2px;background:#f59e0b33;border:1px dashed #f59e0b"></span>Drive</span>'+
+      '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:10px;border-radius:2px;background:#a78bfa33;border:1px solid #a78bfa"></span>Meeting</span>'+
+    '</div></div>';
+  if(!codes.length)return hdr+'<div class="card" style="text-align:center;padding:36px;color:var(--text3);font-size:13px">No pilots rostered on '+_rzEsc(_rzDowLabel(S.rezdyDate))+'.</div>';
+  (function(){var mins=[],maxs=[];all.forEach(function(m){var s=_rzMinsFromHHMM(m.start),e=_rzMinsFromHHMM(m.end);if(s!=null){mins.push(s);maxs.push(e!=null?e:s+30);}});
+    if(mins.length){var lo=Math.min.apply(null,mins),hi=Math.max.apply(null,maxs);_RZ_SCH_START=Math.max(0,Math.floor(lo/60)-1);_RZ_SCH_END=Math.min(24,Math.ceil(hi/60)+1);if(_RZ_SCH_END-_RZ_SCH_START<3)_RZ_SCH_END=Math.min(24,_RZ_SCH_START+3);}else{_RZ_SCH_START=6;_RZ_SCH_END=18;}})();
+  var slots=((_RZ_SCH_END-_RZ_SCH_START)*60)/_RZ_SLOT_MIN,gridH=slots*_RZ_PX_PER_SLOT;
+  var axis='<div style="position:relative;width:'+_RZ_AXIS_W+'px;flex-shrink:0;height:'+gridH+'px;border-right:1px solid var(--border)">';
+  for(var i=0;i<=slots;i++){var top=i*_RZ_PX_PER_SLOT,mins=_RZ_SCH_START*60+i*_RZ_SLOT_MIN,onHour=(mins%60===0),onHalf=(mins%30===0);
+    axis+='<div style="position:absolute;top:'+top+'px;left:0;right:0;height:1px;background:'+(onHour?'var(--border)':'var(--border2)')+';opacity:'+(onHour?1:.5)+'"></div>';
+    if(onHalf&&i<slots){var hh=String(Math.floor(mins/60)).padStart(2,'0'),mm=String(mins%60).padStart(2,'0');axis+='<div style="position:absolute;top:'+(top-1)+'px;left:0;right:6px;text-align:right;font-size:'+(onHour?'11':'10')+'px;color:var(--text3);font-weight:'+(onHour?'700':'400')+'">'+hh+':'+mm+'</div>';}}
+  axis+='</div>';
+  var colsH='';
+  codes.forEach(function(code){
+    var rows='';for(var i2=0;i2<=slots;i2++){var t2=i2*_RZ_PX_PER_SLOT,m2=_RZ_SCH_START*60+i2*_RZ_SLOT_MIN,oh=(m2%60===0);rows+='<div style="position:absolute;top:'+t2+'px;left:0;right:0;height:1px;background:'+(oh?'var(--border)':'var(--border2)')+';opacity:'+(oh?.8:.35)+'"></div>';}
+    var items=(byPilot[code]||[]).slice().sort(function(a,b){return (_rzMinsFromHHMM(a.start)||0)-(_rzMinsFromHHMM(b.start)||0);});
+    items.forEach(function(m){var s=_rzMinsFromHHMM(m.start)||0,e=_rzMinsFromHHMM(m.end)||(s+30);var ov=items.filter(function(o){var os=_rzMinsFromHHMM(o.start)||0,oe=_rzMinsFromHHMM(o.end)||(os+30);return s<oe&&os<e;});m._cols=Math.max(1,ov.length);m._idx=ov.filter(function(o){var os=_rzMinsFromHHMM(o.start)||0;return os<s;}).length;});
+    var blocksH='';
+    items.forEach(function(m){
+      var top=_rzSchTop(m.start),ht=Math.max(_RZ_PX_PER_SLOT,_rzSchHeight(m.start,m.end)),compact=ht<26;
+      var col=(m.kind==='drive')?'#f59e0b':(m.kind==='meeting')?'#a78bfa':(m.kind==='manual')?'#94a3b8':'#60a5fa';
+      var n=Math.max(1,m._cols||1),idx=m._idx||0,OFF=12;
+      var posS='left:'+(2+idx*OFF)+'px;width:calc(100% - '+((n-1)*OFF+4)+'px);z-index:'+(idx+1)+';';
+      var clk=(m.kind==='meeting'&&m.id)?('onclick="window.schedEditBlock(\''+_rzEsc(String(m.id)).replace(/'/g,"\\'")+'\')" '):'';
+      blocksH+='<div '+clk+'style="position:absolute;'+posS+'top:'+top+'px;height:'+ht+'px;background:'+col+'22;border:1px '+(m.kind==='drive'?'dashed':'solid')+' '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'2px 6px')+';overflow:hidden;box-sizing:border-box;line-height:1.2'+(clk?';cursor:pointer':'')+'">'+
+        '<div style="font-weight:800;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(m.ico||'')+' '+_rzEsc(m.label)+'</div>'+
+        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(m.start+'–'+m.end)+'</div>')+
+      '</div>';
+    });
+    colsH+='<div style="width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border)"><div style="position:relative;height:'+gridH+'px">'+rows+blocksH+'</div></div>';
+  });
+  var headH='<div style="display:flex;position:sticky;top:0;z-index:2;background:var(--card)"><div style="width:'+_RZ_AXIS_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:1px solid var(--border)"></div>';
+  codes.forEach(function(code){headH+='<div style="width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:2px solid #60a5fa;padding:4px 6px;text-align:center">'+
+    '<div style="font-weight:800;font-size:12px;color:#60a5fa;opacity:'+(offOf[code]?'.55':'1')+'">'+_rzEsc(code)+(offOf[code]?' <span style="font-size:8px">off</span>':'')+'</div>'+
+    '<button onclick="window.schedNewPilotBlock(\''+_rzEsc(String(code)).replace(/'/g,"\\'")+'\')" title="Add a meeting / note for '+_rzEsc(code)+'" style="margin-top:2px;font-size:10px;border:1px dashed var(--border2);background:transparent;color:var(--text3);border-radius:6px;padding:1px 7px;cursor:pointer">＋</button></div>';});
+  headH+='</div>';
+  var nowLine='';
+  if(S.rezdyDate===_rzToday()){var _n=new Date(),_nm=_n.getHours()*60+_n.getMinutes(),_inR=(_nm>=_RZ_SCH_START*60&&_nm<=_RZ_SCH_END*60),_ny=(_nm-_RZ_SCH_START*60)*_RZ_PX_PER_MIN;
+    nowLine='<div id="rzNowLine" style="position:absolute;left:0;right:0;top:'+_ny+'px;height:2px;background:#ef4444;z-index:60;pointer-events:none;display:'+(_inR?'block':'none')+'"></div>';if(!S._rzNowTimer)S._rzNowTimer=setInterval(_rzTickNowLine,60000);}
+  var formH=_rzSchedEditForm();
+  var grid='<div class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+headH+'<div style="display:flex;position:relative">'+axis+colsH+nowLine+'</div></div></div>';
+  return hdr+formH+grid;
+}
 window.rezdySchedShowGroup=function(key){S._schedGroupKey=key;S._schedEdit=null;render();};
 // Jump from a calendar block's passenger detail straight to that booking in the Bookings tab.
 // The Bookings page lives in the Operations section (S.section/S.tab), NOT as a rezdy sub-tab —
@@ -4667,7 +4752,7 @@ window.schedNewMisc=function(){
 window.schedEditBlock=function(id){
   const b=(S._schedBlocks||[]).find(function(x){return x.id===id;});
   if(!b)return;
-  S._schedEdit={id:b.id,aircraft:b.aircraft||'',label:b.label||'',start:b.start||'09:00',end:b.end||'10:00',color:b.color||_rzAcCol(b.aircraft),notes:b.notes||'',ftype:b.ftype||'Maintenance'};
+  S._schedEdit={id:b.id,aircraft:b.aircraft||'',pilot:b.pilot||'',label:b.label||'',start:b.start||'09:00',end:b.end||'10:00',color:b.color||_rzAcCol(b.aircraft),notes:b.notes||'',ftype:b.ftype||'Maintenance'};
   render();
 };
 window.schedEditField=function(field,val){
@@ -4695,7 +4780,7 @@ window.schedSaveBlock=async function(){
   if(!ed.start||!ed.end){toast('Start and end required','err');return;}
   if(ed.end<=ed.start){toast('End time must be after the start time','err');return;}
   const id=ed.id||('sch_'+Date.now()+'_'+Math.floor(Math.random()*1e5));
-  const payload={id:id,block_date:S.rezdyDate,data:{aircraft:ed.aircraft,label:ed.label||'',start:ed.start,end:ed.end,color:ed.color||_rzAcCol(ed.aircraft),notes:ed.notes||'',ftype:ed.ftype||'Maintenance'}};
+  const payload={id:id,block_date:S.rezdyDate,data:{aircraft:ed.aircraft,pilot:(ed.aircraft==='__pilot__'?(ed.pilot||''):''),label:ed.label||'',start:ed.start,end:ed.end,color:ed.color||_rzAcCol(ed.aircraft),notes:ed.notes||'',ftype:ed.ftype||'Maintenance'}};
   const r=await sbU('ts_schedule',[payload]);
   if(!r){toast('Save failed','err');return;}
   if(ed.pilot){S._schedPilots=S._schedPilots||{};S._schedPilots[id]=ed.pilot;if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();}  // apply the draft pilot to the new block
