@@ -202,6 +202,14 @@ function renderSchedulingSettings(){
   });
   h+='</tbody></table></div></div>';
 
+  // Live route costs — the canonical scheduling routes (Milford return/ferry, Mt Cook, Franz Josef)
+  // priced from the SAME running-cost engine the allocator uses, so this table and the schedule both
+  // update the moment fuel / maintenance / fees change in the Business Plan.
+  if(typeof _bizSchedRoutesPanel==='function'){
+    if(!S._bizPlan&&window.loadBusinessPlan){S._bizLoaded=true;try{window.loadBusinessPlan();}catch(e){}}
+    h+=_bizSchedRoutesPanel();
+  }
+
   // Per-tail seat capacity (SDB is 11; other caravans 13, airvans 7).
   h+='<div class="card" style="margin-bottom:14px"><div class="st">Aircraft seats</div>';
   if(!acIds.length)h+='<div style="color:var(--text3);font-size:13px">No aircraft configured.</div>';
