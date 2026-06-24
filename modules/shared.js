@@ -153,7 +153,7 @@ function _seatmapSyncPool(){
     pool.push({id:p.id,name:p.name,weight:p.weight,bag:p.bag||0,group:p.group||'',infant:p.infantName||null,type:p.type||'adult',paymentReq:!!p.paymentReq});
   });
 }
-const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);if(r.status>=500||r.status===0)_syncEnqueue(t,d);return null;}return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);_syncEnqueue(t,d);return null;}};
+const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);if(r.status>=500||r.status===0)_syncEnqueue(t,d);return null;}_syncPurge(t,d);return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);_syncEnqueue(t,d);return null;}};
 // ── Offline write queue ───────────────────────────────────────────────────────
 // A device in the field (e.g. a pilot mid-flight) may capture flight records or loadsheet edits with
 // no reception. Those writes already persist to localStorage immediately; here we ALSO queue the
@@ -163,6 +163,15 @@ const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'
 var _SYNC_TABLES={ts_loadsheets:1,ts_flight_records:1};
 function _syncQGet(){try{var q=lsGet&&lsGet('ts_sync_queue');return Array.isArray(q)?q:[];}catch(e){return [];}}
 function _syncQSet(q){try{lsSet&&lsSet('ts_sync_queue',q);}catch(e){}try{S._syncPending=(q&&q.length)||0;}catch(e){}}
+// A newer (successful) write supersedes any older queued one for the same row — so a stale queued
+// payload can never replay over a fresh bin/archive/edit when the queue later flushes.
+function _syncPurge(table,rows){
+  if(!_SYNC_TABLES[table]||!Array.isArray(rows)||!rows.length)return;
+  var q=_syncQGet();if(!q.length)return;
+  var ids={};rows.forEach(function(r){if(r&&r.id!=null)ids[r.id]=1;});
+  var n=q.filter(function(e){return !(e.table===table&&e.row&&ids[e.row.id]);});
+  if(n.length!==q.length)_syncQSet(n);
+}
 function _syncEnqueue(table,rows){
   if(!_SYNC_TABLES[table]||!Array.isArray(rows)||!rows.length)return;
   var q=_syncQGet();
@@ -512,7 +521,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.16';
+const APP_VER='v26.17';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2303,6 +2312,11 @@ function autoSaveLS(){
 }
 async function saveLsToDb(id,form){
   if(!S.user||!id||!form)return;
+  // Never resurrect a binned sheet: if it's been moved to the Bin, a stray Save-&-Close, autosave or
+  // realtime echo must not write it back as 'unsigned'/'complete' (that's the "binned sheets reappear
+  // in Active on refresh" bug).
+  var _ex=(S.saved||[]).find(function(s){return s.id===id;});
+  if(_ex&&_ex.status==='deleted')return;
   const status=form.status||'unsigned';
   // Preserve the Drive-archive flag so an archived loadsheet isn't reverted to "Signed" on a re-save.
   const _du=!!((S.saved||[]).find(function(s){return s.id===id;})||{}).driveUploaded;

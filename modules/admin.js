@@ -2481,14 +2481,14 @@ window.uploadToDrive=async function(sheet,preToken){
     var folderLink='https://drive.google.com/drive/folders/'+monthId;
     S.driveStatus='ok:'+fname;S.driveLastLink=fileLink;S.driveLastFile=fname;S.driveLastFolder=folderLink;
     if(typeof toast==='function')toast('Saved to Drive: '+fname,'ok');
-    // Mark as uploaded in Supabase — updates drive_uploaded column on ts_loadsheets row. AWAIT it (with
-    // one retry) so the archive flag is committed before we move on; a fire-and-forget patch could lose
-    // the race with a page refresh, bouncing the sheet back to Signed.
+    // Mark as uploaded in Supabase. Set the local flag first, then a FULL-ROW upsert via sbU so the
+    // archive flag rides the offline write-queue (retried until it lands) — a fire-and-forget PATCH
+    // could lose the race with a page refresh and bounce the sheet back to Signed.
     if(sheet&&sheet.id){
-      var _puOk=await sbPatch('ts_loadsheets',sheet.id,{drive_uploaded:true});
-      if(!_puOk)await sbPatch('ts_loadsheets',sheet.id,{drive_uploaded:true});
       var _sh=S.saved.find(function(s){return s.id===sheet.id;});
       if(_sh){_sh.driveUploaded=true;_sh.uploadedBy=(S.user&&S.user.name)||'';_sh.uploadedAt=new Date().toISOString();lsSet('ts_loadsheets_cache',S.saved);}
+      var _ar=_sh||sheet;
+      await sbU('ts_loadsheets',[{id:sheet.id,form:_ar.form,saved_at:_ar.savedAt||new Date().toISOString(),status:_ar.status||'complete',drive_uploaded:true}]);
     }
     render();
     // No popup - status banner handles it
