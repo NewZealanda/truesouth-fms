@@ -229,6 +229,7 @@ function _bizCalcSnapshot(){
 }
 window.bizCalcSave=function(){var s=_bizCalcSnapshot();if(!s)return;_bizState().savedCalcs.push(s);_bizSave();if(typeof toast==='function')toast('Saved to compare ✓','ok');render();};
 window.bizCalcDelSaved=function(i){var p=_bizState();p.savedCalcs.splice(i,1);_bizSave();render();};
+window.bizSetSavedName=function(i,val){var p=_bizState();if(p.savedCalcs&&p.savedCalcs[i]){p.savedCalcs[i].name=val;_bizSave();}if(typeof safeRender==='function')safeRender();};
 window.bizCalcClearSaved=function(){var p=_bizState();p.savedCalcs=[];_bizSave();render();};
 function _bizAddMonths(ds,n){var m=/(\d{4})-(\d{2})/.exec(String(ds||''));if(!m)return ds;var d=new Date(+m[1],+m[2]-1+n,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01';}
 function _bizMonLabel(ds){var m=/(\d{4})-(\d{2})/.exec(String(ds||''));if(!m)return ds;return new Date(+m[1],+m[2]-1,1).toLocaleDateString('en-NZ',{month:'short',year:'2-digit'});}
@@ -765,19 +766,18 @@ function _bizRunCalcView(){
   // ── Saved flights — side-by-side comparison ──
   var saved=p.savedCalcs||[];
   if(saved.length){
-    var minTot=Math.min.apply(null,saved.map(function(s){return s.total||0;}));
     h+='<div class="card" style="padding:0;overflow-x:auto"><div class="st" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 14px 6px"><span>Saved flights — compare</span><button class="btn btn-ghost" style="font-size:11px;color:#ef4444;border-color:rgba(239,68,68,.35)" onclick="if(confirm(\'Clear all saved flights?\'))window.bizCalcClearSaved()">Clear all</button></div>';
     h+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:640px"><thead><tr style="background:var(--card2)">'+
-      ['Aircraft','Route','Hrs','Run/hr','Landings','Total ex GST','Incl GST',''].map(function(t,i){return '<th style="text-align:'+(i<2?'left':i>6?'center':'right')+';padding:6px 8px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+      ['Name','Route','Hrs','Run/hr','Landings','Total ex GST','Incl GST',''].map(function(t,i){return '<th style="text-align:'+(i<2?'left':i>6?'center':'right')+';padding:6px 8px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
     saved.forEach(function(s,i){
-      var cheapest=(s.total||0)<=minTot+0.001;
+      var nm=(s.name!=null&&s.name!=='')?s.name:(s.lbl||'');
       h+='<tr style="border-top:1px solid var(--border2)">'+
-        '<td style="padding:5px 8px;font-weight:700;white-space:nowrap">'+_rzEscSafe(s.lbl||'')+'</td>'+
+        '<td style="padding:4px 6px;white-space:nowrap"><input value="'+_rzEscSafe(nm)+'" onchange="window.bizSetSavedName('+i+',this.value)" title="Rename this saved flight" style="'+_bizInS+';width:124px;font-weight:700"></td>'+
         '<td style="padding:5px 8px;color:var(--text2);white-space:nowrap">'+_rzEscSafe(s.route||'')+'</td>'+
         '<td style="padding:5px 8px;text-align:right">'+(s.hrs||0)+'</td>'+
         '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh(s.runHr)+'</td>'+
         '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh((+s.ldg||0)+(+s.conc||0)+(+s.aw||0))+'</td>'+
-        '<td style="padding:5px 8px;text-align:right;font-weight:800;color:'+(cheapest?'#22c55e':'#f59e0b')+'">'+_bizPh(s.total)+(cheapest&&saved.length>1?' <span style="font-size:9px;font-weight:700">✓ low</span>':'')+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;font-weight:800;color:#f59e0b">'+_bizPh(s.total)+'</td>'+
         '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh((s.total||0)*1.15)+'</td>'+
         '<td style="padding:5px 6px;text-align:center"><button onclick="window.bizCalcDelSaved('+i+')" title="Remove" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button></td>'+
         '</tr>';
