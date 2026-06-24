@@ -757,12 +757,20 @@ function _rzChimeBeep(){
   if(!_rzAudioCtx||_rzAudioCtx.state!=='running')return;
   try{
     var t=_rzAudioCtx.currentTime;
-    [880,1175].forEach(function(freq,i){ // two-note chime
-      var o=_rzAudioCtx.createOscillator(),g=_rzAudioCtx.createGain(),s=t+i*0.18;
-      o.type='sine';o.frequency.value=freq;o.connect(g);g.connect(_rzAudioCtx.destination);
-      g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.3,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.35);
-      o.start(s);o.stop(s+0.37);
+    // Louder, four-note attention chime (square+sine layered for presence), played twice ~0.9s apart.
+    [0,0.9].forEach(function(rep){
+      [880,1175,880,1175].forEach(function(freq,i){
+        var s=t+rep+i*0.16;
+        ['square','sine'].forEach(function(wav){
+          var o=_rzAudioCtx.createOscillator(),g=_rzAudioCtx.createGain();
+          o.type=wav;o.frequency.value=freq;o.connect(g);g.connect(_rzAudioCtx.destination);
+          var peak=wav==='square'?0.35:0.6; // combined ≈0.95 — much louder than before
+          g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(peak,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.32);
+          o.start(s);o.stop(s+0.34);
+        });
+      });
     });
+    if(navigator.vibrate)try{navigator.vibrate([180,90,180,90,180]);}catch(e){}
   }catch(e){}
 }
 // A single, more prominent chime when a NEW notification arrives — a 3-note rising triangle tone,
@@ -791,7 +799,7 @@ setInterval(function(){
     if(typeof S==='undefined'||!S.user||!S.mobileView||document.visibilityState!=='visible')return;
     if(typeof _rzDriverHasUnacked==='function'&&_rzDriverHasUnacked())_rzChimeBeep();
   }catch(e){}
-},9000);
+},4000);
 
 window.rezdyLoadPickups=async function(){
   S._pickupLoading=true;safeRender();
