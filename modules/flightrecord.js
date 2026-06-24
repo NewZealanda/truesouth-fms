@@ -192,7 +192,9 @@ window.frEditField=function(id,field,val){var r=(S._frData||{})[id];if(!r)return
   if(field==='pob'||field==='landings'||field==='starts')r[field]=Math.max(0,Math.round(+val)||0);
   else if(field==='startHours'||field==='endHours')r[field]=(val===''?null:Math.round((+val)*10)/10);
   else if(field==='off'||field==='on')r[field]=_frFmtTime(val);   // "2334" → "23:34"
-  else r[field]=val;
+  else if(field==='aircraft'){r.aircraft=val;r.type=_frAcType(val);if((S._frPage||'log')==='record'&&val)S._frRecAc=val;}   // manual flights can pick the airframe (keeps type + view in sync)
+  else if(field==='fr_date'){r.fr_date=val;if((S._frPage||'log')==='record'&&val)S._frRecDate=val;}                       // keep the records view on this flight's date
+  else r[field]=val;   // from / to / product / note / user_id (PIC)
   if(r.off&&r.on){var blk=_frMins(r.on)-_frMins(r.off);if(blk<0)blk+=1440;r.flightTime=Math.round(Math.round(blk/6)*0.1*10)/10;} // block time
   if(r.endHours!=null&&r.startHours!=null)r.tacho=Math.round((r.endHours-(+r.startHours||0))*10)/10; // TTIS used
   _frSave(r);if(typeof safeRender==='function')safeRender();};
@@ -206,6 +208,19 @@ window.frEditDeleteConfirm=function(id){var r=(S._frData||{})[id];if(!r){S._frDe
 window.frCancelFlight=function(id){if(typeof confirm==='function'&&!confirm('Discard this flight record?'))return;var r=(S._frData||{})[id];if(r){delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}if(typeof sbDel==='function')sbDel('ts_flight_records',id);else if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});}render();};
 window.frSetAdj=function(val){S._frSettings=S._frSettings||{};S._frSettings.adj=(val===''?1:Math.max(0,Math.round(+val)));_frSaveSettings();if(typeof safeRender==='function')safeRender();};
 window.frToggleSettings=function(){S._frSettingsOpen=!S._frSettingsOpen;render();};
+// Manually add a completed flight (a pilot forgot to log it, or it was flown on paper). Creates a
+// done record for the date/aircraft currently in view, default PIC = you, and opens it for editing —
+// set the PIC, date, times, TTIS, landings etc., then Save. It still uploads to Maintenance / Flight
+// & Duty when the aircraft is submitted, like any other flight.
+window.frAddManual=function(){
+  var date=S._frRecDate||_frToday();
+  var ac=S._frRecAc||_frAcList()[0]||'';
+  var hrs=_frAcHours(ac);
+  var rec={id:_frNewId(),user_id:(S.user&&S.user.id)||'',fr_date:date,aircraft:ac,type:_frAcType(ac),product:'',from:'QN',to:'',pob:1,off:'',on:'',startHours:(hrs!=null?hrs:''),endHours:null,flightTime:null,tacho:null,landings:1,starts:1,manual:true,note:'',done:true,submitted:false,at:new Date().toISOString()};
+  _frSave(rec);S._frEditId=rec.id;S._frDelConfirm=null;S._frPage='record';
+  if(typeof toast==='function')toast('New manual flight — fill in PIC, times & TTIS, then Save','ok');
+  render();
+};
 
 // ── RENDER ──────────────────────────────────────────────────────────────────────
 var _FR_BTN='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:64px;border-radius:14px;border:2px solid var(--border2);background:var(--card);color:var(--text1);font-size:16px;font-weight:700;cursor:pointer;padding:10px;text-align:center;line-height:1.2';
@@ -281,7 +296,9 @@ function _frRenderTodayRecord(uid){
     _frAcList().map(function(ac){return chip(_frAcShort(ac),selAc===ac,"S._frRecAc='"+_frJs(ac)+"';render()",_frAcCol(ac));}).join('')+
   '</div>';
   var recs=selAc?recsAll.filter(function(r){return r.aircraft===selAc;}):recsAll;
-  var h=nav+sel;
+  var addBtn='<div style="margin-bottom:10px"><button onclick="window.frAddManual()" style="width:100%;min-height:48px;border-radius:12px;border:2px dashed rgba(124,58,237,.5);background:rgba(124,58,237,.06);color:#a78bfa;font-size:15px;font-weight:800;cursor:pointer">＋ Add a flight (paper / missed)</button>'+
+    '<div style="font-size:11px;color:var(--text3);text-align:center;margin-top:4px">For a flight flown on paper, or one a pilot forgot to log — set the PIC, date, times &amp; TTIS, then Save.</div></div>';
+  var h=nav+sel+addBtn;
   if(S._frEditId&&(S._frData||{})[S._frEditId]&&S._frData[S._frEditId].fr_date===date){h+=_frRenderEdit(S._frData[S._frEditId]);}
   if(selAc&&!recs.length)return h+'<div class="card" style="color:var(--text3);padding:24px;font-size:13px">No '+_frEsc(_frAcShort(selAc))+' flights recorded for this day.</div>';
   return h+_frTodayBody(recs,date);
@@ -447,7 +464,19 @@ function _frPushToFD(date,uids){
 }
 function _frRenderEdit(r){
   var h='<div class="card" style="border-left:4px solid #60a5fa">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:16px;font-weight:800">Edit flight — '+_frEsc(_frAcShort(r.aircraft))+'</div><button onclick="window.frEditCancel()" style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer">✕ Close</button></div>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:16px;font-weight:800">'+(r.manual?'Add / edit flight':'Edit flight')+' — '+_frEsc(_frAcShort(r.aircraft))+'</div><button onclick="window.frEditCancel()" style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer">✕ Close</button></div>';
+  if(r.manual){
+    var _us=(S.users||[]).slice().sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''));});
+    if(!_us.length&&r.user_id)_us=[{id:r.user_id,name:((S.user&&S.user.id===r.user_id&&S.user.name)||r.user_id)}];
+    h+='<div style="background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.25);border-radius:10px;padding:10px;margin-bottom:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'+
+      '<div style="font-size:11px;color:#a78bfa;font-weight:800;width:100%;margin-bottom:-2px">✍ MANUAL FLIGHT — who flew it, the date & aircraft</div>'+
+      '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">PIC (pilot)</label><select onchange="window.frEditField(\''+r.id+'\',\'user_id\',this.value)" style="height:46px;font-size:15px;font-weight:700;padding:0 8px;border:2px solid var(--border2);border-radius:10px;background:var(--card);color:var(--text);min-width:150px">'+
+        _us.map(function(u){return '<option value="'+_frJs(u.id)+'"'+(r.user_id===u.id?' selected':'')+'>'+_frEsc(u.name||u.id)+'</option>';}).join('')+'</select></div>'+
+      '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">Date</label><input type="date" value="'+_frEsc(r.fr_date||'')+'" onchange="window.frEditField(\''+r.id+'\',\'fr_date\',this.value)" style="height:46px;font-size:15px;font-weight:700;padding:0 8px;border:2px solid var(--border2);border-radius:10px;background:var(--card);color:var(--text)"></div>'+
+      '<div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px">Aircraft</label><select onchange="window.frEditField(\''+r.id+'\',\'aircraft\',this.value)" style="height:46px;font-size:15px;font-weight:700;padding:0 8px;border:2px solid var(--border2);border-radius:10px;background:var(--card);color:var(--text)">'+
+        _frAcList().map(function(a){return '<option value="'+_frJs(a)+'"'+(r.aircraft===a?' selected':'')+'>'+_frEsc(_frAcShort(a))+'</option>';}).join('')+'</select></div>'+
+    '</div>';
+  }
   h+='<div style="font-size:11px;color:var(--text3);font-weight:700;margin:4px 0 6px">FLIGHT TYPE</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
   _frProducts().forEach(function(pr){h+='<button onclick="window.frEditField(\''+r.id+'\',\'product\',\''+_frJs(pr)+'\')" style="padding:8px 12px;border-radius:9px;border:2px solid var(--border2);background:var(--card);color:var(--text1);font-size:13px;font-weight:700;cursor:pointer'+(r.product===pr?';border-color:#7c3aed;background:rgba(124,58,237,.14);color:#a78bfa':'')+'">'+_frEsc(pr)+'</button>';});
   h+='</div>';
