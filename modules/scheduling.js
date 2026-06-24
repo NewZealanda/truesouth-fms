@@ -572,11 +572,42 @@ function _schedComputeAutoPilots(date,aircraftUsed){
   return out;
 }
 // The auto-assigned pilot for an aircraft on the current day (null when off / different date).
-// S._schedAutoPilots is computed directly in the calendar render over the aircraft it actually draws
-// flights on (so manual splits are covered); just read it here.
-function _schedAutoPilotFor(ac){
+// Time-aware pilot allocation — pilots are tracked like aircraft. A pilot flies a complete return
+// trip and is only free to take ANOTHER aircraft once they're back in Queenstown (freeAt ≤ the next
+// departure). Walk the day's flights in time order: prefer the pilot who last flew that aircraft
+// (sticky), else the highest-priority pilot currently free & type-rated. flights = [{key,ac,depMin,busyMin}].
+function _schedComputeBlockPilots(flights){
+  if(!_schedEnabled())return {};
+  var avail=_schedDayPilots(S.rezdyDate)||[];
+  var manual=S._schedPilots||{};
+  var freeAt={};avail.forEach(function(p){freeAt[p.code]=-1e9;});   // everyone starts in QN
+  var lastAcPilot={},out={};
+  flights=flights.slice().sort(function(a,b){return a.depMin-b.depMin;});
+  // Manual picks win and occupy that pilot's window.
+  flights.forEach(function(f){var mp=manual[f.key];if(mp){out[f.key]=mp;if(freeAt[mp]==null)freeAt[mp]=-1e9;freeAt[mp]=Math.max(freeAt[mp],f.depMin+f.busyMin);lastAcPilot[f.ac]=mp;}});
+  // Auto-assign the rest, earliest departure first.
+  flights.forEach(function(f){
+    if(out[f.key])return;
+    var cands=avail.filter(function(p){return _pilotRatedForAc(p.code,f.ac)&&(freeAt[p.code]==null||freeAt[p.code]<=f.depMin);});
+    if(!cands.length)return;                       // nobody free & rated → flight left uncrewed
+    cands.sort(function(p,q){
+      var sp=(lastAcPilot[f.ac]===p.code)?0:1,sq=(lastAcPilot[f.ac]===q.code)?0:1;if(sp!==sq)return sp-sq; // stay with the aircraft
+      var rp=_schedPilotRank(p.code,f.ac),rq=_schedPilotRank(q.code,f.ac);if(rp!==rq)return rp-rq;          // priority
+      return String(p.code).localeCompare(String(q.code));
+    });
+    var pick=cands[0].code;out[f.key]=pick;freeAt[pick]=f.depMin+f.busyMin;lastAcPilot[f.ac]=pick;
+  });
+  return out;
+}
+// Read the auto-allocated pilot. S._schedAutoPilots is keyed by flight (ac|HH:MM|prod) when the
+// calendar computed it; falls back to an aircraft key for older/seatmap-only contexts.
+function _schedAutoPilotFor(ac,time){
   if(!_schedEnabled()||S._schedAutoPilotsDate!==S.rezdyDate)return null;
-  return (S._schedAutoPilots||{})[ac]||null;
+  var ap=S._schedAutoPilots||{};
+  if(ap[ac])return ap[ac];                         // legacy aircraft-keyed
+  var keys=Object.keys(ap),tc=time?String(time):null;
+  for(var i=0;i<keys.length;i++){var pp=keys[i].split('|');if(pp[0]===ac&&(!tc||pp[1]===tc))return ap[keys[i]];}
+  return null;
 }
 // Live order→aircraft map (memoised). The per-departure aircraft SETS come from the whole-day
 // optimiser (_schedDayPlan — idle-first, ferry-aware, lock-aware); bookings are then packed into
