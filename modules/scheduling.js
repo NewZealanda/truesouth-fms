@@ -572,7 +572,15 @@ function _schedComputeAutoPilots(date,aircraftUsed){
   return out;
 }
 // The auto-assigned pilot for an aircraft on the current day (null when off / different date).
-function _schedAutoPilotFor(ac){if(!_schedEnabled()||S._schedAutoPilotsDate!==S.rezdyDate)return null;return (S._schedAutoPilots||{})[ac]||null;}
+function _schedAutoPilotFor(ac){
+  if(!_schedEnabled())return null;
+  // Ensure the day's allocation is current — otherwise a day where EVERY booking was manually placed
+  // never triggers _schedEnsureAuto (it only fires while resolving an auto aircraft), so no auto pilots
+  // are computed at all. The sig cache makes repeat calls cheap.
+  try{if(typeof _schedEnsureAuto==='function')_schedEnsureAuto();}catch(e){}
+  if(S._schedAutoPilotsDate!==S.rezdyDate)return null;
+  return (S._schedAutoPilots||{})[ac]||null;
+}
 // Live order→aircraft map (memoised). The per-departure aircraft SETS come from the whole-day
 // optimiser (_schedDayPlan — idle-first, ferry-aware, lock-aware); bookings are then packed into
 // each departure's set. Locked departures are left as committed. Skips cancelled/no-show + flybacks.
