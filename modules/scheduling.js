@@ -796,7 +796,20 @@ function _schedDayPilots(date){
   _schedDayExtras(date).forEach(function(code){if(!seen[code]){seen[code]=1;var pp=rost.find(function(x){return x.code===code;});out.push({code:code,name:(pp&&pp.name)||code,extra:true});}});
   return out;
 }
-function _schedPilotRates(code,ac){var en=(typeof _rzPilotEndorse==='function')?_rzPilotEndorse(code):null;return !en||!en.length||en.indexOf(ac)>=0;}
+// A pilot is rated for an aircraft if endorsed on it OR on ANY other aircraft of the SAME type/layout
+// (a GA8 rating covers every GA8 — SLD and SLQ — not just the specific tail endorsed). Empty
+// endorsement list = not yet recorded → don't block (legacy behaviour). Used by the auto-allocator
+// AND the manual pilot-pick guard so the two never disagree.
+function _pilotRatedForAc(code,ac){
+  if(!ac||ac==='__unalloc__'||ac==='__none__'||ac==='__misc__')return true;
+  var en=(typeof _rzPilotEndorse==='function')?(_rzPilotEndorse(code)||[]):[];
+  if(!en.length)return true;                          // no endorsements recorded → don't block
+  if(en.indexOf(ac)>=0)return true;                   // explicit tail endorsement
+  var want=(typeof _acSpec==='function')?((_acSpec(ac)||{}).layout):null;
+  if(!want)return false;
+  return en.some(function(t){var sp=(typeof _acSpec==='function')?_acSpec(t):null;return !!(sp&&sp.layout===want);}); // same type ⇒ rated
+}
+function _schedPilotRates(code,ac){return _pilotRatedForAc(code,ac);}
 // What a pilot can actually fly, from their ENDORSEMENTS — only counts known aircraft tails (a stray
 // non-aircraft endorsement no longer makes someone "caravan-rated"). No endorsement → flies nothing
 // here, so unrated pilots don't appear in the type lists.

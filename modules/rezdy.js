@@ -1131,8 +1131,7 @@ window.rezdySchedDropPilot=function(key,e){
   if(String(key).indexOf('|')>=0)ac=String(key).split('|')[0];
   else{var blk=(S._schedBlocks||[]).find(function(b){return String(b.id)===String(key);});ac=blk&&blk.aircraft;}
   if(ac&&ac!=='__unalloc__'){
-    var en=_rzPilotEndorse(code);
-    if(en&&en.length&&en.indexOf(ac)<0){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}
+    if(typeof _pilotRatedForAc==='function'&&!_pilotRatedForAc(code,ac)){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}
   }
   S._schedPilots=S._schedPilots||{};S._schedPilots[String(key)]=code;
   if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
@@ -1144,7 +1143,7 @@ window.rezdySchedSetPilot=function(key,code){
   var ac=null;
   if(key.indexOf('|')>=0)ac=key.split('|')[0];
   else{var blk=(S._schedBlocks||[]).find(function(b){return String(b.id)===key;});ac=blk&&blk.aircraft;}
-  if(ac&&ac!=='__unalloc__'){var en=_rzPilotEndorse(code);if(en&&en.length&&en.indexOf(ac)<0){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}}
+  if(ac&&ac!=='__unalloc__'){if(typeof _pilotRatedForAc==='function'&&!_pilotRatedForAc(code,ac)){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}}
   S._schedPilots=S._schedPilots||{};
   if(S._schedPilots[key]===code)delete S._schedPilots[key];else S._schedPilots[key]=code;  // toggle off if re-tapped
   if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
@@ -4499,7 +4498,7 @@ window.schedEditField=function(field,val){
 window.schedSetBlockPilot=function(code){
   var ed=S._schedEdit;if(!ed||!code)return;
   if(ed.id){window.rezdySchedSetPilot(ed.id,code);return;}  // sets S._schedPilots[id] + saves + render
-  if(ed.aircraft&&ed.aircraft!=='__unalloc__'){var en=_rzPilotEndorse(code);if(en&&en.length&&en.indexOf(ed.aircraft)<0){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ed.aircraft).replace('ZK-','')+'.','warn');return;}}
+  if(ed.aircraft&&ed.aircraft!=='__unalloc__'){if(typeof _pilotRatedForAc==='function'&&!_pilotRatedForAc(code,ed.aircraft)){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ed.aircraft).replace('ZK-','')+'.','warn');return;}}
   ed.pilot=(ed.pilot===code?'':code);render();
 };
 window.schedSaveBlock=async function(){

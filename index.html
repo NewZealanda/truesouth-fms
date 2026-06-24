@@ -803,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.73';
+const APP_VER='v25.74';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -13347,8 +13347,7 @@ window.rezdySchedDropPilot=function(key,e){
   if(String(key).indexOf('|')>=0)ac=String(key).split('|')[0];
   else{var blk=(S._schedBlocks||[]).find(function(b){return String(b.id)===String(key);});ac=blk&&blk.aircraft;}
   if(ac&&ac!=='__unalloc__'){
-    var en=_rzPilotEndorse(code);
-    if(en&&en.length&&en.indexOf(ac)<0){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}
+    if(typeof _pilotRatedForAc==='function'&&!_pilotRatedForAc(code,ac)){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}
   }
   S._schedPilots=S._schedPilots||{};S._schedPilots[String(key)]=code;
   if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
@@ -13360,7 +13359,7 @@ window.rezdySchedSetPilot=function(key,code){
   var ac=null;
   if(key.indexOf('|')>=0)ac=key.split('|')[0];
   else{var blk=(S._schedBlocks||[]).find(function(b){return String(b.id)===key;});ac=blk&&blk.aircraft;}
-  if(ac&&ac!=='__unalloc__'){var en=_rzPilotEndorse(code);if(en&&en.length&&en.indexOf(ac)<0){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}}
+  if(ac&&ac!=='__unalloc__'){if(typeof _pilotRatedForAc==='function'&&!_pilotRatedForAc(code,ac)){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}}
   S._schedPilots=S._schedPilots||{};
   if(S._schedPilots[key]===code)delete S._schedPilots[key];else S._schedPilots[key]=code;  // toggle off if re-tapped
   if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
@@ -16715,7 +16714,7 @@ window.schedEditField=function(field,val){
 window.schedSetBlockPilot=function(code){
   var ed=S._schedEdit;if(!ed||!code)return;
   if(ed.id){window.rezdySchedSetPilot(ed.id,code);return;}  // sets S._schedPilots[id] + saves + render
-  if(ed.aircraft&&ed.aircraft!=='__unalloc__'){var en=_rzPilotEndorse(code);if(en&&en.length&&en.indexOf(ed.aircraft)<0){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ed.aircraft).replace('ZK-','')+'.','warn');return;}}
+  if(ed.aircraft&&ed.aircraft!=='__unalloc__'){if(typeof _pilotRatedForAc==='function'&&!_pilotRatedForAc(code,ed.aircraft)){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ed.aircraft).replace('ZK-','')+'.','warn');return;}}
   ed.pilot=(ed.pilot===code?'':code);render();
 };
 window.schedSaveBlock=async function(){
@@ -19939,7 +19938,20 @@ function _schedDayPilots(date){
   _schedDayExtras(date).forEach(function(code){if(!seen[code]){seen[code]=1;var pp=rost.find(function(x){return x.code===code;});out.push({code:code,name:(pp&&pp.name)||code,extra:true});}});
   return out;
 }
-function _schedPilotRates(code,ac){var en=(typeof _rzPilotEndorse==='function')?_rzPilotEndorse(code):null;return !en||!en.length||en.indexOf(ac)>=0;}
+// A pilot is rated for an aircraft if endorsed on it OR on ANY other aircraft of the SAME type/layout
+// (a GA8 rating covers every GA8 — SLD and SLQ — not just the specific tail endorsed). Empty
+// endorsement list = not yet recorded → don't block (legacy behaviour). Used by the auto-allocator
+// AND the manual pilot-pick guard so the two never disagree.
+function _pilotRatedForAc(code,ac){
+  if(!ac||ac==='__unalloc__'||ac==='__none__'||ac==='__misc__')return true;
+  var en=(typeof _rzPilotEndorse==='function')?(_rzPilotEndorse(code)||[]):[];
+  if(!en.length)return true;                          // no endorsements recorded → don't block
+  if(en.indexOf(ac)>=0)return true;                   // explicit tail endorsement
+  var want=(typeof _acSpec==='function')?((_acSpec(ac)||{}).layout):null;
+  if(!want)return false;
+  return en.some(function(t){var sp=(typeof _acSpec==='function')?_acSpec(t):null;return !!(sp&&sp.layout===want);}); // same type ⇒ rated
+}
+function _schedPilotRates(code,ac){return _pilotRatedForAc(code,ac);}
 // What a pilot can actually fly, from their ENDORSEMENTS — only counts known aircraft tails (a stray
 // non-aircraft endorsement no longer makes someone "caravan-rated"). No endorsement → flies nothing
 // here, so unrated pilots don't appear in the type lists.
