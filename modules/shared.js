@@ -540,7 +540,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.25';
+const APP_VER='v26.28';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1454,7 +1454,8 @@ let S={
   rolePerms:{},admin:{section:'people',crewEditId:null,crewDraftN:'',crewDraftW:'',newN:'',newW:'',err:'',acSel:'ZK-SLD',acDraft:null,acErr:'',acSaved:false,userEditId:null,userDraft:{},newUser:{name:'',email:'',password:'',role:'desk',linkedCrew:''}},
   // Login form
   loginForm:{email:'',password:'',err:''},
-  showReset:false,resetMsg:null,resetEmail:'',resetStep:0,showAccount:false,changePwMsg:null, // 0=login 1=email-sent 2=enter-codeappMsg:null,lockedAcs:[],formDirty:false,mobileAcIdx:0,sigMode:'draw',sigTypedName:'',maintTab:'overview',maintSearch:{},editAcId:null,auditFilter:'',auditFilterUser:'',auditPage:0,
+  showReset:false,resetMsg:null,resetEmail:'',resetStep:0/* 0=login 1=email-sent 2=enter-code */,showAccount:false,changePwMsg:null,
+  lockedAcs:[],formDirty:false,mobileAcIdx:0,sigMode:'draw',sigTypedName:'',maintTab:'overview',maintSearch:{},editAcId:null,auditFilter:'',auditFilterUser:'',auditPage:0,
   gdriveEnabled:false,gdriveClientId:'',gdriveFolder:'Loadsheets',gdriveFolderId:'',driveStatus:'',driveLastLink:'',driveLastFile:'',driveLastFolder:'',
 };
 

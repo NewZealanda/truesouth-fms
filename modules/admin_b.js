@@ -368,15 +368,15 @@ window.openSelectedSaved=function(){
   window.scrollTo(0,0);render();
   toast('Opened '+(nLs+nMf)+' item'+((nLs+nMf)!==1?'s':''),'ok');
 };
-window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';if(window._lsStickyMark)window._lsStickyMark(id,'deleted',true);lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]);};
+window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';if(window._lsStickyMark)window._lsStickyMark(id,'deleted',true);lsSet('ts_loadsheets_cache',S.saved);render();auditLog('loadsheet_bin',{id:s.id,ac:(s.form&&s.form.ac)||'',date:(s.form&&s.form.date)||''});await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]);};
 window.restoreFromBin=async function(id){
   var s=S.saved.find(function(x){return x.id===id;});
   if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;if(window._lsStickyMark)window._lsStickyMark(id,'deleted',false);lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status,drive_uploaded:!!s.driveUploaded}]);return;}
   var m=S.manifests.find(function(x){return x.id===id;});
   if(m){if(m.data)delete m.data._deleted;m._deleted=false;lsSet('ts_manifests_cache',S.manifests);render();await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);}
 };
-window.permDeleteFromBin=async function(id){if(!confirm('Permanently delete? This cannot be undone.'))return;if(window._lsStickyMark){window._lsStickyMark(id,'deleted',false);window._lsStickyMark(id,'uploaded',false);}S.saved=S.saved.filter(function(s){return s.id!==id;});S.manifests=S.manifests.filter(function(m){return m.id!==id;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_loadsheets',id).catch(function(){});await sbDel('ts_manifests',id).catch(function(){});};
-window.emptyBin=async function(){var bLs=S.saved.filter(function(s){return s.status==='deleted';});var bMs=S.manifests.filter(function(m){return m._deleted;});if(!bLs.length&&!bMs.length){toast('Bin is already empty','info');return;}if(!confirm('Permanently delete all '+(bLs.length+bMs.length)+' item(s)? This cannot be undone.'))return;if(window._lsStickyMark)bLs.forEach(function(x){window._lsStickyMark(x.id,'deleted',false);window._lsStickyMark(x.id,'uploaded',false);});S.saved=S.saved.filter(function(s){return s.status!=='deleted';});S.manifests=S.manifests.filter(function(m){return!m._deleted;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();for(var i=0;i<bLs.length;i++)await sbDel('ts_loadsheets',bLs[i].id).catch(function(){});for(var j=0;j<bMs.length;j++)await sbDel('ts_manifests',bMs[j].id).catch(function(){});};
+window.permDeleteFromBin=async function(id){if(!confirm('Permanently delete? This cannot be undone.'))return;auditLog('record_delete_permanent',{id:id});if(window._lsStickyMark){window._lsStickyMark(id,'deleted',false);window._lsStickyMark(id,'uploaded',false);}S.saved=S.saved.filter(function(s){return s.id!==id;});S.manifests=S.manifests.filter(function(m){return m.id!==id;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();await sbDel('ts_loadsheets',id).catch(function(){});await sbDel('ts_manifests',id).catch(function(){});};
+window.emptyBin=async function(){var bLs=S.saved.filter(function(s){return s.status==='deleted';});var bMs=S.manifests.filter(function(m){return m._deleted;});if(!bLs.length&&!bMs.length){toast('Bin is already empty','info');return;}if(!confirm('Permanently delete all '+(bLs.length+bMs.length)+' item(s)? This cannot be undone.'))return;auditLog('bin_empty',{loadsheets:bLs.length,manifests:bMs.length});if(window._lsStickyMark)bLs.forEach(function(x){window._lsStickyMark(x.id,'deleted',false);window._lsStickyMark(x.id,'uploaded',false);});S.saved=S.saved.filter(function(s){return s.status!=='deleted';});S.manifests=S.manifests.filter(function(m){return!m._deleted;});lsSet('ts_loadsheets_cache',S.saved);lsSet('ts_manifests_cache',S.manifests);render();for(var i=0;i<bLs.length;i++)await sbDel('ts_loadsheets',bLs[i].id).catch(function(){});for(var j=0;j<bMs.length;j++)await sbDel('ts_manifests',bMs[j].id).catch(function(){});};
 window.restoreLsOriginal=function(){
   if(!confirm('Restore to the version loaded from saved? Any unsaved edits will be lost.'))return;
   var tab=S.lsTabs.find(function(t){return t.id===S.activeTabId;});
@@ -651,6 +651,7 @@ window.uploadToDrive=async function(sheet,preToken){
     // could lose the race with a page refresh and bounce the sheet back to Signed.
     if(sheet&&sheet.id){
       if(window._lsStickyMark)window._lsStickyMark(sheet.id,'uploaded',true);
+      auditLog('loadsheet_upload',{id:sheet.id,file:fname});
       var _sh=S.saved.find(function(s){return s.id===sheet.id;});
       if(_sh){_sh.driveUploaded=true;_sh.uploadedBy=(S.user&&S.user.name)||'';_sh.uploadedAt=new Date().toISOString();lsSet('ts_loadsheets_cache',S.saved);}
       var _ar=_sh||sheet;
@@ -1015,6 +1016,7 @@ window.savePerson=async function(){
           role:userRec.role,linked_crew:userRec.linkedCrew,password_hash:userRec.passwordHash}]);
         if(!minUR) toast('Warning: account may not have saved to server — check connection','warn');
       }
+      auditLog('user_save',{name:userRec.name,email:userRec.email,role:userRec.role,inactive:!!userRec.inactive});
     }
   }
 
@@ -1501,52 +1503,69 @@ window.saveRolePerms=async function(silent){
 
 function renderAdminPerms(){
   S._permsPageTs=Date.now();   // mark the grid as actively on screen (blocks reload clobber)
-  var PERM_COLS=[
-    {k:'operations',    lbl:'Ops',           tip:'Access to flight operations (manifests, loadsheets, seatmap, charter)'},
-    {k:'maintenance',   lbl:'Maint',          tip:'Access to the maintenance section'},
-    {k:'roster_leave',  lbl:'Roster & Leave', tip:'View the roster and submit/view own leave requests'},
-    {k:'roster_edit',   lbl:'Roster Edit',    tip:'Edit the roster and build patterns (otherwise view-only)'},
-    {k:'leave_approve', lbl:'Approvals',      tip:'Approve or decline leave requests from staff'},
-    {k:'admin_crew',    lbl:'Crew',           tip:'View and edit crew profiles and endorsements'},
-    {k:'admin_users',   lbl:'Users',          tip:'Manage user accounts, roles and passwords'},
-    {k:'sign_loadsheet',lbl:'Sign',           tip:'Sign off on loadsheets as PIC'},
-    {k:'maint_bookings',lbl:'Bookings',       tip:'Manage maintenance bookings'},
-    {k:'audit',         lbl:'Audit',          tip:'View the system audit log'},
-    {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'},
-    {k:'calendar',      lbl:'Calendar',       tip:'Access the Calendar tab'},
-    {k:'flightduty',    lbl:'F&D',            tip:'Access Flight & Duty — own record + team summary'},
-    {k:'flightduty_manage',lbl:'F&D Mgr',     tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'},
-    {k:'businessplan',  lbl:'Biz Plan',       tip:'View the confidential TSF Business Plan'},
-    {k:'flightrecord',  lbl:'Flt Record',     tip:'Access the Flight Record (log flights, aircraft records)'},
-    {k:'flightrecord_manage',lbl:'Flt Rec Mgr',tip:'Flight Record statistics + view/manage all pilots\' logbooks'},
-    {k:'resources',     lbl:'Scheduling',     tip:'Access the Resource board + cost-aware aircraft/pilot allocation'},
-    {k:'sms',           lbl:'SMS',            tip:'Safety Management System (placeholder — coming soon)'},
-    {k:'ground',        lbl:'Ground',         tip:'Ground operations module (placeholder — coming soon)'},
-    {k:'vehicle_prestart', lbl:'Vehicle Prestart', tip:'Daily vehicle prestart checks (placeholder — coming soon)'},
-    {k:'training_mod',  lbl:'Training',       tip:'Training records module (placeholder — coming soon)'}
-    // (the old 'rezdy' column was retired in v24.16 — the Rezdy section no longer exists; Calendar
-    //  has its own perm and Pickups live under Operations ▸ Ground gated by 'operations'.)
+  // Permissions grouped by area so the (wide) grid is easy to scan and find things in.
+  var PERM_GROUPS=[
+    {cat:'Operations', col:'#2563eb', perms:[
+      {k:'operations',    lbl:'Ops',        tip:'Access to flight operations (manifests, loadsheets, seatmap, charter)'},
+      {k:'sign_loadsheet',lbl:'Sign',       tip:'Sign off on loadsheets as PIC'},
+      {k:'calendar',      lbl:'Calendar',   tip:'Access the Calendar tab'},
+      {k:'resources',     lbl:'Scheduling', tip:'Access the Resource board + cost-aware aircraft/pilot allocation'}
+    ]},
+    {cat:'Maintenance', col:'#a78bfa', perms:[
+      {k:'maintenance',   lbl:'Maint',      tip:'Access to the maintenance section'},
+      {k:'maint_bookings',lbl:'Bookings',   tip:'Manage maintenance bookings'}
+    ]},
+    {cat:'Roster & Leave', col:'#f59e0b', perms:[
+      {k:'roster_leave',  lbl:'Roster & Leave', tip:'View the roster and submit/view own leave requests'},
+      {k:'roster_edit',   lbl:'Roster Edit',    tip:'Edit the roster and build patterns (otherwise view-only)'},
+      {k:'leave_approve', lbl:'Approvals',      tip:'Approve or decline leave requests from staff'},
+      {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'}
+    ]},
+    {cat:'Pilot', col:'#22c55e', perms:[
+      {k:'flightduty',    lbl:'F&D',         tip:'Access Flight & Duty — own record + team summary'},
+      {k:'flightduty_manage',lbl:'F&D Mgr',  tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'},
+      {k:'flightrecord',  lbl:'Flt Record',  tip:'Access the Flight Record (log flights, aircraft records)'},
+      {k:'flightrecord_manage',lbl:'Flt Rec Mgr',tip:'Flight Record statistics + view/manage all pilots\' logbooks'}
+    ]},
+    {cat:'Admin & System', col:'#ef4444', perms:[
+      {k:'admin_crew',    lbl:'Crew',        tip:'View and edit crew profiles and endorsements'},
+      {k:'admin_users',   lbl:'Users',       tip:'Manage user accounts, roles and passwords'},
+      {k:'audit',         lbl:'Audit',       tip:'View the system audit log'},
+      {k:'businessplan',  lbl:'Biz Plan',    tip:'View the confidential TSF Business Plan'}
+    ]},
+    {cat:'Coming soon', col:'#64748b', perms:[
+      {k:'sms',           lbl:'SMS',         tip:'Safety Management System (placeholder — coming soon)'},
+      {k:'ground',        lbl:'Ground',      tip:'Ground operations module (placeholder — coming soon)'},
+      {k:'vehicle_prestart',lbl:'Vehicle Prestart',tip:'Daily vehicle prestart checks (placeholder — coming soon)'},
+      {k:'training_mod',  lbl:'Training',    tip:'Training records module (placeholder — coming soon)'}
+    ]}
   ];
+  // Flatten with group metadata (first-in-group → separator + group colour).
+  var PERM_COLS=[];
+  PERM_GROUPS.forEach(function(g){g.perms.forEach(function(p,i){PERM_COLS.push(Object.assign({_first:i===0,_col:g.col},p));});});
   var ROLE_ROWS=[
-    {k:'admin',        lbl:'Admin'},
-    {k:'cx_manager',   lbl:'CX Mgr'},
-    {k:'pilot',        lbl:'Pilot'},
-    {k:'desk',         lbl:'Desk'},
-    {k:'maint',        lbl:'Maint'},
-    {k:'ground_staff', lbl:'Ground'},
-    {k:'accounts',     lbl:'Accounts'},
-    {k:'marketing',    lbl:'Marketing'}
+    {k:'admin',lbl:'Admin'},{k:'cx_manager',lbl:'CX Mgr'},{k:'pilot',lbl:'Pilot'},{k:'desk',lbl:'Desk'},
+    {k:'maint',lbl:'Maint'},{k:'ground_staff',lbl:'Ground'},{k:'accounts',lbl:'Accounts'},{k:'marketing',lbl:'Marketing'}
   ];
   var rp=S.rolePerms||{};
+  var _sepFor=function(col){return col._first?('border-left:3px solid '+col._col+'66;'):'';};
   var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
     +'<div class="st" style="margin-bottom:0">Role Permissions</div>'
     +'<button onclick="window.saveRolePerms()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>'
     +'</div>'
     +'<div style="overflow-x:auto">'
     +'<table style="border-collapse:collapse;min-width:100%;font-size:12px">'
-    +'<thead><tr><th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:600;white-space:nowrap">Role</th>';
+    +'<thead>';
+  // Group header row (category labels spanning their columns).
+  h+='<tr><th style="padding:0 8px"></th>';
+  PERM_GROUPS.forEach(function(g){
+    h+='<th colspan="'+g.perms.length+'" style="padding:4px 4px 5px;text-align:center;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:'+g.col+';border-left:3px solid '+g.col+'66;border-bottom:2px solid '+g.col+'33;white-space:nowrap">'+g.cat+'</th>';
+  });
+  h+='</tr>';
+  // Column header row.
+  h+='<tr><th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:600;white-space:nowrap">Role</th>';
   PERM_COLS.forEach(function(col){
-    h+='<th title="'+col.tip+'" style="padding:6px 4px;color:var(--text3);font-weight:600;text-align:center;white-space:nowrap;cursor:help">'+col.lbl+'</th>';
+    h+='<th title="'+col.tip+'" style="padding:6px 4px;color:var(--text3);font-weight:600;text-align:center;white-space:nowrap;cursor:help;'+_sepFor(col)+'">'+col.lbl+'</th>';
   });
   h+='</tr></thead><tbody>';
   ROLE_ROWS.forEach(function(row,ri){
@@ -1563,7 +1582,7 @@ function renderAdminPerms(){
       } else {
         eff=over[col.k]!==undefined?over[col.k]:base[col.k]||false;
       }
-      h+='<td style="text-align:center;padding:4px">'
+      h+='<td style="text-align:center;padding:4px;'+_sepFor(col)+'">'
         +'<input type="checkbox" '+(eff?'checked':'')+' '
         +"onchange=\"window.toggleRolePerm('"+row.k+"','"+col.k+"',this.checked)\" "
         +'style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">'
@@ -1571,15 +1590,19 @@ function renderAdminPerms(){
     });
     h+='</tr>';
   });
-  h+='</tbody></table></div>'
-    +'<div style="margin-top:16px;padding:12px 14px;background:var(--card2);border:1px solid var(--border);border-radius:8px">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Column Guide</div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:6px 22px">';
-  PERM_COLS.forEach(function(col){
-    h+='<div style="font-size:11px;color:var(--text2)"><span style="font-weight:700;color:var(--text1)">'+col.lbl+'</span> '+col.tip+'</div>';
+  h+='</tbody></table></div>';
+  // Column guide grouped by category.
+  h+='<div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px">';
+  PERM_GROUPS.forEach(function(g){
+    h+='<div style="background:var(--card2);border:1px solid var(--border);border-left:3px solid '+g.col+';border-radius:8px;padding:10px 12px">'
+      +'<div style="font-size:11px;font-weight:800;color:'+g.col+';text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">'+g.cat+'</div>';
+    g.perms.forEach(function(col){
+      h+='<div style="font-size:11px;color:var(--text2);margin-bottom:3px"><span style="font-weight:700;color:var(--text1)">'+col.lbl+'</span> — '+col.tip+'</div>';
+    });
+    h+='</div>';
   });
-  h+='</div></div>'
-    +'<p style="font-size:11px;color:var(--text3);margin-top:12px">Superadmin always has full access. Hover column headers for quick descriptions. Changes apply after Save.</p>'
+  h+='</div>'
+    +'<p style="font-size:11px;color:var(--text3);margin-top:12px">Superadmin always has full access. Hover a column header for its description. Changes apply after Save.</p>'
     +'</div>';
   return h;
 }

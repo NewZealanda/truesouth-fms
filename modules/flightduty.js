@@ -216,6 +216,7 @@ window.fdCertify=async function(uid,month,sig){
     // WITHOUT the signature so certification still persists (apply flightduty.sql to keep the sig).
     if(ok===null&&sig)await sbU('ts_fd_certs',[{id:k,user_id:uid,period:month,certified_at:S._fdCerts[k].at,certified_by:S._fdCerts[k].by}]);
   }
+  if(typeof auditLog==='function')auditLog('fd_certify',{user_id:uid,period:month,signed:!!sig});
   if(typeof toast==='function')toast('Period '+_fdMonthLabel(month)+' certified ✓','ok');
 };
 // Wire the certify signature canvas (called from the post-render hook in shell.js).
@@ -253,6 +254,7 @@ window.fdUncertify=async function(uid,month){
   var k=uid+'|'+month;
   if(S._fdCerts)delete S._fdCerts[k];
   render();
+  if(typeof auditLog==='function')auditLog('fd_uncertify',{user_id:uid,period:month});
   try{await fetch(SB+'/rest/v1/ts_fd_certs?id=eq.'+encodeURIComponent(k),{method:'DELETE',headers:SH});}catch(e){}
   if(typeof toast==='function')toast(_fdMonthLabel(month)+' certification removed — re-certify when ready','warn');
 };

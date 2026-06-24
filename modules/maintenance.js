@@ -539,7 +539,7 @@ function renderMaintLog(){
 function renderMaintOil(){
   const oil=(S.maintenance?.oil||[]).slice().reverse();
   const acs=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'];
-  const today=new Date().toISOString().slice(0,10);
+  const today=(typeof _todayLocal==='function')?_todayLocal():new Date().toISOString().slice(0,10);
 
   const entryForm=`<div class="card" style="margin-bottom:12px">
     <div class="st">Add Oil Entry</div>
@@ -780,7 +780,7 @@ function renderMaintSearch(){
   // For oil: generate every date in range so gaps show as —
   let filtered;
   if(type==='oil'){
-    const today=new Date().toISOString().slice(0,10);
+    const today=(typeof _todayLocal==='function')?_todayLocal():new Date().toISOString().slice(0,10);
     const rangeFrom=sf.from||(data.length?data[0].date:today);
     const rangeTo=sf.to||today;
     const allDates=[];

@@ -1301,6 +1301,7 @@ window.reopenSaved=async function(id){
   if(!form.cargo)form.cargo={};var _rsAc=S.aircraft[form.ac];if(_rsAc&&_rsAc.layout==='ga8'&&(!form.burnOff||parseFloat(form.burnOff)<30)){form.burnOff='35';}
   s.form=form;s.status='unsigned';
   lsSet('ts_loadsheets_cache',S.saved);
+  auditLog('loadsheet_reopen',{id:s.id,ac:form.ac||'',date:form.date||''}); // un-signs a controlled record
   await sbU('ts_loadsheets',[{id:s.id,form:form,saved_at:s.savedAt,status:'unsigned'}]);
   var acFull=form.ac||'ZK-SLA';
   var existing=S.lsTabs.find(function(t){return t.id===id;});
@@ -1326,6 +1327,7 @@ window.bulkDeleteSaved=async function(){
   S.manifests.forEach(function(m){if(mIds.indexOf(m.id)>=0){if(!m.data)m.data={};m.data._deleted=true;m._deleted=true;}});
   lsSet('ts_loadsheets_cache',S.saved);
   lsSet('ts_manifests_cache',S.manifests);
+  auditLog('loadsheet_bin_bulk',{loadsheets:lsIds.length,manifests:mIds.length});
   S.savedSel={};render();
   for(var i=0;i<lsIds.length;i++){var s2=S.saved.find(function(x){return x.id===lsIds[i];});if(s2)await sbU('ts_loadsheets',[{id:s2.id,form:s2.form,saved_at:s2.savedAt,status:'deleted',drive_uploaded:!!s2.driveUploaded}]).catch(function(){});}
   for(var j=0;j<mIds.length;j++){var m2=S.manifests.find(function(x){return x.id===mIds[j];});if(m2)await sbU('ts_manifests',[{id:m2.id,name:m2.name,data:m2.data,saved_at:m2.savedAt}]).catch(function(){});}

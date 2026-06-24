@@ -785,6 +785,7 @@ window.saveRosterToCloud=async function(){
   var changes={};Object.keys(draft).forEach(function(ds){changes[ds]={};Object.keys(draft[ds]).forEach(function(u){changes[ds][u]=draft[ds][u];});});
   var ok=await window._rosterApplyAndSave(changes);
   if(!ok){toast('Roster save failed — your changes are kept locally, please try again','err');return;}
+  if(typeof auditLog==='function'){var _days=Object.keys(changes),_cells=_days.reduce(function(n,d){return n+Object.keys(changes[d]).length;},0);auditLog('roster_save',{days:_days.length,cells:_cells});}
   S._rosterDraft={};
   S._rosterUndoStack=[];
   toast('Roster saved!','success');
