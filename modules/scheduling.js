@@ -533,6 +533,21 @@ function _schedPack(groups,chosen){
   });
   return map;
 }
+// Can these aircraft capacities hold every booking group WHOLE? A group (one order) can't be split
+// across aircraft, so a 14-pax 8+6 load needs a seat-8 aircraft — two 7-seat airvans won't do.
+// Best-fit-decreasing: it actually builds a packing, so `true` is a real fit. A false-negative only
+// makes the picker conservatively reach for more capacity (e.g. upgrade an airvan to a caravan) — safe.
+function _schedCanPack(caps,groups){
+  if(!groups||!groups.length)return true;
+  var rem=caps.slice(),gs=groups.slice().sort(function(a,b){return b-a;});
+  for(var i=0;i<gs.length;i++){
+    var bi=-1;
+    for(var j=0;j<rem.length;j++){if(rem[j]>=gs[i]&&(bi<0||rem[j]<rem[bi]))bi=j;}   // tightest bin that still fits
+    if(bi<0)return false;                                                          // this group fits nowhere
+    rem[bi]-=gs[i];
+  }
+  return true;
+}
 // Light change-signature so the day's allocation is only recomputed when something relevant moves.
 function _schedSig(date,bks){
   var parts=[date,_schedEnabled()?'1':'0',_schedPriorityList().join(',')];
@@ -739,11 +754,13 @@ function _schedDayDepartures(date){
       if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;
       var dst=(typeof _rzGroupDest==='function')?_rzGroupDest(prod):'MF';
       var key=_schedDepKeyTD(start,dst);
-      var e=g[key]||(g[key]={time:start,dest:dst,key:key,pax:0,dests:[dst]});
-      e.pax+=(parseInt(it.quantity,10)||0);
+      var e=g[key]||(g[key]={time:start,dest:dst,key:key,pax:0,dests:[dst],orders:{}});
+      var _q=(parseInt(it.quantity,10)||0);
+      e.pax+=_q;
+      e.orders[o]=(e.orders[o]||0)+_q;   // per booking group (a group can't be split across aircraft)
     });
   });
-  return Object.keys(g).map(function(k){return g[k];}).sort(function(a,b){var d=(_schedMinOf(a.time)||0)-(_schedMinOf(b.time)||0);return d!==0?d:String(a.dest).localeCompare(String(b.dest));});
+  return Object.keys(g).map(function(k){var e=g[k];e.groups=Object.keys(e.orders).map(function(o){return e.orders[o];});return e;}).sort(function(a,b){var d=(_schedMinOf(a.time)||0)-(_schedMinOf(b.time)||0);return d!==0?d:String(a.dest).localeCompare(String(b.dest));});
 }
 // Flight hours for a return to a destination, by type. Milford 1.2/1.1; Mt Cook 2.1/1.8; Franz 2.2/1.9.
 var SCHED_DEST_HRS={MF:{airvan:1.2,caravan:1.1,sdb:1.1},MC:{airvan:2.1,caravan:1.8,sdb:1.8},FJ:{airvan:2.4,caravan:2.0,sdb:2.0},BRA:{airvan:0.5,caravan:0.5,sdb:0.5}};
@@ -754,15 +771,17 @@ function _schedDepFltHrs(dests,airvan){var mx=0;(dests&&dests.length?dests:['MF'
 // aircraft, priority, less waste). Candidates carry {cap,inc,reused,priority}.
 // maxNew caps how many NOT-yet-used aircraft this departure may introduce (for the "if we don't
 // call in a pilot" comparison, which limits the day to the crewable aircraft count).
-function _schedPlanPick(pax,cand,maxNew){
+function _schedPlanPick(pax,cand,maxNew,groups){
   var n=cand.length;if(!n)return [];if(maxNew==null)maxNew=Infinity;
   var best=null,partial=null;
   for(var mask=1;mask<(1<<n);mask++){
-    var cap=0,inc=0,cnt=0,fer=0,pri=0,nw=0;
-    for(var i=0;i<n;i++)if(mask&(1<<i)){var c=cand[i];cap+=c.cap;inc+=c.inc;cnt++;if(c.reused)fer++;if(c.priority)pri++;if(c.isNew)nw++;}
+    var cap=0,inc=0,cnt=0,fer=0,pri=0,nw=0,caps=[];
+    for(var i=0;i<n;i++)if(mask&(1<<i)){var c=cand[i];cap+=c.cap;inc+=c.inc;cnt++;if(c.reused)fer++;if(c.priority)pri++;if(c.isNew)nw++;caps.push(c.cap);}
     if(nw>maxNew)continue;
-    if(cap>=pax){var sc=[+inc.toFixed(2),fer,cnt,-pri,cap];if(!best||_schedScoreLt(sc,best.score))best={mask:mask,score:sc};}
-    else{var sp=[-cap,+inc.toFixed(2),fer];if(!partial||_schedScoreLt(sp,partial.score))partial={mask:mask,score:sp};} // can't cover → carry the most
+    // A subset "covers" the departure only if total seats ≥ pax AND every booking group fits whole in
+    // one of its aircraft — otherwise it falls to the best-effort partial (carry the most seats).
+    if(cap>=pax&&_schedCanPack(caps,groups)){var sc=[+inc.toFixed(2),fer,cnt,-pri,cap];if(!best||_schedScoreLt(sc,best.score))best={mask:mask,score:sc};}
+    else{var sp=[-cap,+inc.toFixed(2),fer];if(!partial||_schedScoreLt(sp,partial.score))partial={mask:mask,score:sp};} // can't cover / can't fit groups → carry the most
   }
   var pick=best||partial;if(!pick)return [];
   var sel=[];for(var j=0;j<n;j++)if(pick.mask&(1<<j))sel.push(cand[j]);return sel;
@@ -846,7 +865,7 @@ function _schedDayPlan(date,opts){
       var out=(freeAt[f.ac]!=null&&freeAt[f.ac]>dm);
       return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,isNew:!everUsed[f.ac],ll:ll,el:el,inc:2*ll+(out?2*el:0)};})
       .filter(function(c){return !(c.reused&&_schedNoFerry(c.ac));});   // no-ferry aircraft can't be repositioned (empty leg)
-    var chosen=_schedPlanPick(d.pax,cand,maxNew);
+    var chosen=_schedPlanPick(d.pax,cand,maxNew,d.groups);
     var depAc=[];var depCap=0;
     chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+_schedDepDurMin(d);_ut[c.ac]=1;_mxUse(c.ac,_schedDepFltHrs(d.dests,c.airvan));depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
       loadedLegs+=2;cost+=2*c.ll;if(c.reused){emptyLegs+=2;cost+=2*c.el;}});
