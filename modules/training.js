@@ -66,15 +66,15 @@ window.trainExit=function(done){S._train=null;if(done&&typeof toast==='function'
 
 // ── Tips & Tricks — hidden shortcuts / sneaky features people might not know about ──────────────
 var _TRAIN_TIPS=[
-  {icon:'👆',title:'Quad-tap to your Flight Record',body:'Tap any blank space on the screen four times quickly and you jump straight to your Flight Record — handy on the apron. Taps on buttons, fields or cards don\'t count, only empty space.'},
+  {icon:'👆',title:'Quad-tap to your Flight Record',body:'Tap any blank space on the screen four times quickly and you jump straight to your Flight Record — handy in the aircraft. Taps on buttons, fields or cards don\'t count, only empty space.'},
   {icon:'⬅➡',title:'Arrow keys cycle the page',body:'On a keyboard, ← and → move around the section you\'re in: Operations flips through its sub-tabs (Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved ↔ Ground), Maintenance flips its tabs, the Roster shifts a week, and the Calendar steps a day.'},
   {icon:'⌘',title:'⌘ / Ctrl + arrows change the day',body:'Hold ⌘ (Mac) or Ctrl (Windows) with ← / → to step the DATE one day at a time on Bookings, Seatmap, Loadsheets, Ground and the Calendar — the same as the ◁ ▷ buttons.'},
   {icon:'👉',title:'Swipe to switch (phone)',body:'On a phone, a firm sideways swipe cycles the sub-tabs in Operations, or the day on the Calendar. Swipe left for the next one, right to go back.'},
   {icon:'🗓',title:'Drag calendar blocks',body:'On the Calendar, drag a flight block\'s TOP edge to set its departure, its BOTTOM edge to set the return, or grab the MIDDLE to move it — drop it on another aircraft\'s column to reassign. A single tap just opens it.'},
-  {icon:'🧑‍✈',title:'Hold a pilot on the ground',body:'In Pilot movements, tap a pilot\'s ＋ to add an all-day note/meeting and the allocator will keep them off the aircraft — e.g. holding your SDB-rated pilot in reserve. The allocator also does this automatically for SDB when there\'s spare crew.'},
+  {icon:'🧑‍✈',title:'Hold a pilot on the ground',body:'In Pilot movements, tap a pilot\'s ＋ to add an all-day note/meeting and the allocator will keep them off the aircraft.'},
   {icon:'🏠',title:'Set your start page',body:'Tap your name (top-right) and choose which page the app opens to, so you always land on Bookings, the Calendar, your Flight Record — whatever you use most.'},
   {icon:'🎒',title:'Everything pilot in one place',body:'Flight Record, Logbooks and Flight & Duty all live together under Pilot Bag in the menu.'},
-  {icon:'📶',title:'Logs survive no reception',body:'Start a flight log, fly out of coverage, land and tap On Blocks — it\'s all saved on your device and uploads itself automatically once you\'re back in range.'},
+  {icon:'📶',title:'Logs survive no reception',body:'Logs save on your device the instant you tap Off Blocks / On Blocks — whether you start in coverage or already out of range. They upload themselves automatically once you\'re back in range.'},
   {icon:'⏭',title:'Skip the intro',body:'The mountains-and-plane loading animation has a Skip button in the corner when you\'re in a hurry.'}
 ];
 window.trainTipsOpen=function(){S._trainTips=true;render();};

@@ -85,6 +85,9 @@ async function _sbFetch(url, opts){
   return r;
 }
 const sbF=async(t,q='',order='created_at')=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?select=*${q}&order=${order}.desc`,{headers:{...SH}});if(!r.ok){console.error('[sbF]',t,'status:',r.status,await r.text());return null;}return r.json();}catch(e){console.error('[sbF]',t,'exception:',e);return null;}};
+// Intro animation: the mountains-draw + plane-takeoff plays once (5.5s) on boot before the app is
+// revealed, unless the Skip button is pressed. INTRO_MS = how long the intro is held.
+const INTRO_MS=5500;
 // ── Fetch window: only load recent rows from large tables (tunable) ──
 const FETCH_DAYS=90;
 const _fetchSince=()=>new Date(Date.now()-FETCH_DAYS*864e5).toISOString().slice(0,10);
@@ -537,7 +540,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.20';
+const APP_VER='v26.21';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1669,7 +1672,7 @@ async function loadAll(){
     let _sess=null;try{_sess=JSON.parse(localStorage.getItem('ts_sb_session')||'null');}catch(e){}
     if(_sess&&_sess.refresh_token){
       _applySession(_sess);
-      S._authRestoring=true; // first render shows the loading spinner, not a login flash
+      S._authRestoring=true;S._introStart=Date.now(); // first render shows the intro, not a login flash
       // Safety net: if the refresh hangs (no network), fall back to the login form rather than
       // spinning forever.
       setTimeout(function(){if(S._authRestoring&&!S.user){S._authRestoring=false;render();}},8000);
@@ -1680,7 +1683,10 @@ async function loadAll(){
           auditLog('session_restore',{via:'supabase',user:S.user.email});
           await _reloadCoreTables();
           _loadAuditLog(); // S.user now set → load the audit history on refresh too
-          S._authRestoring=false;initRealtime();render();setTimeout(function(){restoreWorkspace();},400);
+          // Keep the intro on screen for its full one-time play before revealing the app (Skip cuts it).
+          S._authRestoring=false;S._appLoading=true;initRealtime();render();setTimeout(function(){restoreWorkspace();},400);
+          var _introRem=Math.max(300,INTRO_MS-(Date.now()-(S._introStart||Date.now())));
+          setTimeout(function(){S._appLoading=false;render();},_introRem);
         } else { S._authRestoring=false;_applySession(null);try{localStorage.removeItem('ts_sb_session');}catch(e){} render(); }
       })();
     }
@@ -2616,7 +2622,7 @@ async function _doLogin(emailArg,passArg){
   ['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});
   // Update auth header to use user's session token if available (fixes RLS for writes)
   if(u.sessionToken) SH['Authorization']='Bearer '+u.sessionToken;
-  S.tab=u.role==='maint'?'maintenance':'manifest';S._appLoading=true;render();initRealtime();setTimeout(function(){restoreWorkspace();},600);setTimeout(function(){S._appLoading=false;render();},1400);
+  S.tab=u.role==='maint'?'maintenance':'manifest';S._appLoading=true;S._introStart=Date.now();render();initRealtime();setTimeout(function(){restoreWorkspace();},600);setTimeout(function(){S._appLoading=false;render();},INTRO_MS);
   // Phase C: the boot fetch ran as anon (RLS hid protected tables) — reload them now the JWT is set.
   if(AUTH_PHASE_C){_reloadCoreTables().then(function(){safeRender();});}
   // Fetch latest audit log from Supabase after login (shared helper; uses the user JWT via SH)
@@ -2631,7 +2637,21 @@ window.tryLogin=async function(){
   try{await _doLogin();}
   finally{S._loggingIn=false;if(_b&&document.body.contains(_b)){_b.disabled=false;_b.innerHTML='✈ Sign In';_b.style.opacity='1';}}
 };
-window.updateLoginSuffix=function(){var s=document.getElementById('li_e_sfx');var e=document.getElementById('li_e');if(s&&e)s.style.display=e.value.includes('@')?'none':'';};
+window.updateLoginSuffix=function(){
+  var e=document.getElementById('li_e'),s=document.getElementById('li_e_sfx');if(!e)return;
+  var hasAt=e.value.indexOf('@')>=0;
+  if(s)s.style.display=hasAt?'none':'';
+  // If they've typed a full email, let the field fill the row; otherwise size it to the typed text so
+  // the @truesouthflights.co.nz suffix sits right after the username and stays aligned on the same line.
+  if(hasAt){e.style.flex='1';e.style.width='100%';return;}
+  var m=document.getElementById('li_e_meas');
+  if(!m){m=document.createElement('span');m.id='li_e_meas';m.style.cssText='position:absolute;left:-9999px;top:0;white-space:pre;visibility:hidden;pointer-events:none';document.body.appendChild(m);}
+  var cs=getComputedStyle(e);m.style.fontSize=cs.fontSize;m.style.fontFamily=cs.fontFamily;m.style.fontWeight=cs.fontWeight;m.style.letterSpacing=cs.letterSpacing;
+  m.textContent=e.value||e.placeholder||'yourname';
+  var pad=16;                                  // left padding(14) + ~2 so the suffix nearly touches the text
+  var avail=(e.parentElement?e.parentElement.clientWidth:320)-(s?s.offsetWidth:200)-6;
+  e.style.flex='0 0 auto';e.style.width=Math.max(60,Math.min(m.offsetWidth+pad,avail))+'px';
+};
 function logout(){
   if(AUTH_PHASE_C){
     try{if(_sbSession&&_sbSession.access_token)fetch(SB+'/auth/v1/logout',{method:'POST',headers:{'apikey':SK,'Authorization':'Bearer '+_sbSession.access_token}}).catch(function(){});}catch(e){}

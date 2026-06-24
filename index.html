@@ -323,15 +323,17 @@ input[type=number] { -moz-appearance: textfield; }
 @keyframes ts-fade-in{0%{opacity:0}100%{opacity:1}}
 #loading-overlay{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background-size:cover;background-position:center;animation:ts-fade-in .2s ease}
 /* Mountains-draw + plane-takeoff loading animation */
-#loading-overlay .ts-scene{position:relative;width:300px;height:170px;animation:tsm-fade 5.5s ease-in-out infinite}
+#loading-overlay .ts-scene{position:relative;width:300px;height:170px;animation:tsm-fade 5.5s ease-in-out forwards}
 #loading-overlay .ts-mtns{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-#loading-overlay .ts-mtn-path{stroke-dasharray:1;stroke-dashoffset:1;animation:tsm-draw 5.5s ease-in-out infinite}
+#loading-overlay .ts-mtn-path{stroke-dasharray:1;stroke-dashoffset:1;animation:tsm-draw 5.5s ease-in-out forwards}
 #loading-overlay .ts-runway2{position:absolute;left:18px;bottom:16px;width:130px;height:2px;border-radius:2px;background:linear-gradient(90deg,rgba(255,255,255,.5),rgba(255,255,255,0))}
-#loading-overlay .ts-plane2{position:absolute;left:18px;bottom:14px;animation:tsm-plane 5.5s linear infinite;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+#loading-overlay .ts-plane2{position:absolute;left:18px;bottom:14px;animation:tsm-plane 5.5s linear forwards;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
 @keyframes tsm-fade{0%{opacity:0}4%{opacity:1}93%{opacity:1}100%{opacity:0}}
 @keyframes tsm-draw{0%{stroke-dashoffset:1}4%{stroke-dashoffset:1}40%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
 @keyframes tsm-plane{0%,40%{transform:translate(0,0) rotate(0deg);opacity:0}44%{opacity:1;transform:translate(6px,0) rotate(0deg)}52%{transform:translate(50px,-16px) rotate(-12deg)}96%{transform:translate(258px,-136px) rotate(-17deg);opacity:1}100%{transform:translate(282px,-150px) rotate(-17deg);opacity:0}}
 #loading-overlay .ts-loading-text{margin-top:18px;font-size:13px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+/* Keep the login fields their dark style even when the browser autofills / "remembers" them (no yellow/blue recolour). */
+#login-form input:-webkit-autofill,#login-form input:-webkit-autofill:hover,#login-form input:-webkit-autofill:focus,#login-form input:-webkit-autofill:active{-webkit-text-fill-color:#fff!important;caret-color:#fff;-webkit-box-shadow:0 0 0 1000px rgba(255,255,255,.07) inset!important;box-shadow:0 0 0 1000px rgba(255,255,255,.07) inset!important;transition:background-color 99999s ease-in-out 0s}
 </style>
 </head>
 <body>
@@ -423,6 +425,9 @@ async function _sbFetch(url, opts){
   return r;
 }
 const sbF=async(t,q='',order='created_at')=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?select=*${q}&order=${order}.desc`,{headers:{...SH}});if(!r.ok){console.error('[sbF]',t,'status:',r.status,await r.text());return null;}return r.json();}catch(e){console.error('[sbF]',t,'exception:',e);return null;}};
+// Intro animation: the mountains-draw + plane-takeoff plays once (5.5s) on boot before the app is
+// revealed, unless the Skip button is pressed. INTRO_MS = how long the intro is held.
+const INTRO_MS=5500;
 // ── Fetch window: only load recent rows from large tables (tunable) ──
 const FETCH_DAYS=90;
 const _fetchSince=()=>new Date(Date.now()-FETCH_DAYS*864e5).toISOString().slice(0,10);
@@ -875,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.20';
+const APP_VER='v26.21';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2007,7 +2012,7 @@ async function loadAll(){
     let _sess=null;try{_sess=JSON.parse(localStorage.getItem('ts_sb_session')||'null');}catch(e){}
     if(_sess&&_sess.refresh_token){
       _applySession(_sess);
-      S._authRestoring=true; // first render shows the loading spinner, not a login flash
+      S._authRestoring=true;S._introStart=Date.now(); // first render shows the intro, not a login flash
       // Safety net: if the refresh hangs (no network), fall back to the login form rather than
       // spinning forever.
       setTimeout(function(){if(S._authRestoring&&!S.user){S._authRestoring=false;render();}},8000);
@@ -2018,7 +2023,10 @@ async function loadAll(){
           auditLog('session_restore',{via:'supabase',user:S.user.email});
           await _reloadCoreTables();
           _loadAuditLog(); // S.user now set → load the audit history on refresh too
-          S._authRestoring=false;initRealtime();render();setTimeout(function(){restoreWorkspace();},400);
+          // Keep the intro on screen for its full one-time play before revealing the app (Skip cuts it).
+          S._authRestoring=false;S._appLoading=true;initRealtime();render();setTimeout(function(){restoreWorkspace();},400);
+          var _introRem=Math.max(300,INTRO_MS-(Date.now()-(S._introStart||Date.now())));
+          setTimeout(function(){S._appLoading=false;render();},_introRem);
         } else { S._authRestoring=false;_applySession(null);try{localStorage.removeItem('ts_sb_session');}catch(e){} render(); }
       })();
     }
@@ -2954,7 +2962,7 @@ async function _doLogin(emailArg,passArg){
   ['ts_maintenance','ts_loadsheets_cache','ts_drive_uploaded_ids','ts_drive_last_upload'].forEach(function(k){localStorage.removeItem(k);});
   // Update auth header to use user's session token if available (fixes RLS for writes)
   if(u.sessionToken) SH['Authorization']='Bearer '+u.sessionToken;
-  S.tab=u.role==='maint'?'maintenance':'manifest';S._appLoading=true;render();initRealtime();setTimeout(function(){restoreWorkspace();},600);setTimeout(function(){S._appLoading=false;render();},1400);
+  S.tab=u.role==='maint'?'maintenance':'manifest';S._appLoading=true;S._introStart=Date.now();render();initRealtime();setTimeout(function(){restoreWorkspace();},600);setTimeout(function(){S._appLoading=false;render();},INTRO_MS);
   // Phase C: the boot fetch ran as anon (RLS hid protected tables) — reload them now the JWT is set.
   if(AUTH_PHASE_C){_reloadCoreTables().then(function(){safeRender();});}
   // Fetch latest audit log from Supabase after login (shared helper; uses the user JWT via SH)
@@ -2969,7 +2977,21 @@ window.tryLogin=async function(){
   try{await _doLogin();}
   finally{S._loggingIn=false;if(_b&&document.body.contains(_b)){_b.disabled=false;_b.innerHTML='✈ Sign In';_b.style.opacity='1';}}
 };
-window.updateLoginSuffix=function(){var s=document.getElementById('li_e_sfx');var e=document.getElementById('li_e');if(s&&e)s.style.display=e.value.includes('@')?'none':'';};
+window.updateLoginSuffix=function(){
+  var e=document.getElementById('li_e'),s=document.getElementById('li_e_sfx');if(!e)return;
+  var hasAt=e.value.indexOf('@')>=0;
+  if(s)s.style.display=hasAt?'none':'';
+  // If they've typed a full email, let the field fill the row; otherwise size it to the typed text so
+  // the @truesouthflights.co.nz suffix sits right after the username and stays aligned on the same line.
+  if(hasAt){e.style.flex='1';e.style.width='100%';return;}
+  var m=document.getElementById('li_e_meas');
+  if(!m){m=document.createElement('span');m.id='li_e_meas';m.style.cssText='position:absolute;left:-9999px;top:0;white-space:pre;visibility:hidden;pointer-events:none';document.body.appendChild(m);}
+  var cs=getComputedStyle(e);m.style.fontSize=cs.fontSize;m.style.fontFamily=cs.fontFamily;m.style.fontWeight=cs.fontWeight;m.style.letterSpacing=cs.letterSpacing;
+  m.textContent=e.value||e.placeholder||'yourname';
+  var pad=16;                                  // left padding(14) + ~2 so the suffix nearly touches the text
+  var avail=(e.parentElement?e.parentElement.clientWidth:320)-(s?s.offsetWidth:200)-6;
+  e.style.flex='0 0 auto';e.style.width=Math.max(60,Math.min(m.offsetWidth+pad,avail))+'px';
+};
 function logout(){
   if(AUTH_PHASE_C){
     try{if(_sbSession&&_sbSession.access_token)fetch(SB+'/auth/v1/logout',{method:'POST',headers:{'apikey':SK,'Authorization':'Bearer '+_sbSession.access_token}}).catch(function(){});}catch(e){}
@@ -3474,12 +3496,16 @@ function render(){
       // We have a saved session and are restoring it on refresh — show the loading spinner, NOT
       // the login form, so the login screen doesn't flash before auth resolves.
       lo.style.backgroundImage="linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,.68)),url('"+BG_IMG+"')";
-      lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
-        +_tsLoadingScene()
-        +'</div>';
+      // Set the intro scene ONCE so re-renders during boot don't restart the animation mid-play.
+      if(!lo.querySelector('.ts-scene'))lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'+_tsLoadingScene()+'</div>';
     } else {
       lo.style.backgroundImage=`linear-gradient(to bottom,rgba(0,0,0,.32),rgba(0,0,0,.58)),url('${BG_IMG}')`;
-      lo.innerHTML=renderLoginInner();
+      // Build the login form ONCE (or when the reset step changes) so a stray re-render — presence
+      // ticks, realtime, etc. — can't rebuild it and steal focus mid-typing / break Tab order. The
+      // only live bit (the error banner) is updated in place.
+      var _lgStep=String(S.resetStep||0);
+      if(!lo.querySelector('#login-form')||lo.dataset.lgStep!==_lgStep){lo.innerHTML=renderLoginInner();lo.dataset.lgStep=_lgStep;}
+      else{var _ee=lo.querySelector('#login-err');if(_ee){_ee.innerHTML=S.loginErr||'';_ee.style.display=S.loginErr?'block':'none';}}
     }
     r.style.display='none';
     return;
@@ -3490,9 +3516,8 @@ function render(){
     if(!lo){lo=document.createElement('div');lo.id='login-overlay';document.body.appendChild(lo);}
     lo.style.display='flex';
     lo.style.backgroundImage="linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,.68)),url('"+BG_IMG+"')";
-    lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
-      +_tsLoadingScene()
-      +'</div>';
+    // Set the intro scene ONCE so re-renders during boot don't restart the animation mid-play.
+    if(!lo.querySelector('.ts-scene'))lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'+_tsLoadingScene()+'</div>';
     r.style.display='none';
     return;
   }
@@ -3624,9 +3649,9 @@ function renderLoginInner(){
           <label style="display:block;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase">Email</label>
           <div style="display:flex;align-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;overflow:hidden">
             <input id="li_e" type="text" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
-              style="flex:1;padding:11px 14px;background:transparent;border:none;color:#fff;font-size:16px;outline:none;min-width:0;width:100%"
-              oninput="window.updateLoginSuffix()" onfocus="document.getElementById('li_e_sfx').style.display='inline';window.updateLoginSuffix()" onblur="if(!this.value)document.getElementById('li_e_sfx').style.display='none';" onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
-            <span id="li_e_sfx" style="display:none;flex-shrink:0;padding:0 12px 0 0;color:rgba(255,255,255,.45);font-size:12px;white-space:nowrap;align-self:center">@truesouthflights.co.nz</span>
+              style="flex:0 0 auto;padding:11px 2px 11px 14px;background:transparent;border:none;color:#fff;font-size:16px;outline:none;min-width:60px;width:120px;box-sizing:border-box"
+              oninput="window.updateLoginSuffix()" onfocus="window.updateLoginSuffix()" onblur="if(!this.value)document.getElementById('li_e_sfx').style.display='none';" onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
+            <span id="li_e_sfx" style="display:none;flex:0 1 auto;padding:0 12px 0 0;color:rgba(255,255,255,.5);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:center">@truesouthflights.co.nz</span>
           </div>
         </div>
         <div style="margin-bottom:24px">
@@ -3813,6 +3838,15 @@ function renderDrawer(){
       h+=_subBtn('Ground',t==='ground'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('ground')");
     }
   }
+  // Pilot Bag (Flight Record / Logbooks / Flight & Duty) — pinned right under Operations.
+  {var _pbDefs=_pilotBagTabDefs();
+   if(_pbDefs.length){
+    h+=_secBtn('Pilot Bag','pilotbag','🎒');
+    if(_isExp('pilotbag')){
+      var _pbCur=_pilotBagTab();
+      _pbDefs.forEach(function(d){h+=_subBtn(d.lbl,sec==='pilotbag'&&_pbCur===d.id,"S._drawerOpen=false;window.setPilotBagTab('"+d.id+"')");});
+    }
+   }}
   // Roster & Leave combined — show the group only if the user can reach at least one item.
   {var _canApproveLeaveNav=hasRolePerm('leave_approve');
   if(_canRoster||_canLeave||_canApproveLeaveNav){
@@ -3840,17 +3874,8 @@ function renderDrawer(){
       h+=_mn('Search','search');
     }
   }
-  // Pilot Bag (Flight Record / Logbooks / Flight & Duty) + TSF Business Plan.
+  // TSF Business Plan.
   {var _canBP=hasRolePerm('businessplan')||(S.user&&S.user.superAdmin);
-   var _pbDefs=_pilotBagTabDefs();
-   // Pilot Bag — one expandable tier-1 entry bundling the pilot tools (declutters the menu).
-   if(_pbDefs.length){
-    h+=_secBtn('Pilot Bag','pilotbag','🎒');
-    if(_isExp('pilotbag')){
-      var _pbCur=_pilotBagTab();
-      _pbDefs.forEach(function(d){h+=_subBtn(d.lbl,sec==='pilotbag'&&_pbCur===d.id,"S._drawerOpen=false;window.setPilotBagTab('"+d.id+"')");});
-    }
-   }
    if(_canBP){
     var on=sec==='businessplan';
     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'businessplan\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(on?'rgba(124,58,237,.22)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(on?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📈</span><span style="flex:1">Business Plan</span></button>';
@@ -20767,15 +20792,15 @@ window.trainExit=function(done){S._train=null;if(done&&typeof toast==='function'
 
 // ── Tips & Tricks — hidden shortcuts / sneaky features people might not know about ──────────────
 var _TRAIN_TIPS=[
-  {icon:'👆',title:'Quad-tap to your Flight Record',body:'Tap any blank space on the screen four times quickly and you jump straight to your Flight Record — handy on the apron. Taps on buttons, fields or cards don\'t count, only empty space.'},
+  {icon:'👆',title:'Quad-tap to your Flight Record',body:'Tap any blank space on the screen four times quickly and you jump straight to your Flight Record — handy in the aircraft. Taps on buttons, fields or cards don\'t count, only empty space.'},
   {icon:'⬅➡',title:'Arrow keys cycle the page',body:'On a keyboard, ← and → move around the section you\'re in: Operations flips through its sub-tabs (Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved ↔ Ground), Maintenance flips its tabs, the Roster shifts a week, and the Calendar steps a day.'},
   {icon:'⌘',title:'⌘ / Ctrl + arrows change the day',body:'Hold ⌘ (Mac) or Ctrl (Windows) with ← / → to step the DATE one day at a time on Bookings, Seatmap, Loadsheets, Ground and the Calendar — the same as the ◁ ▷ buttons.'},
   {icon:'👉',title:'Swipe to switch (phone)',body:'On a phone, a firm sideways swipe cycles the sub-tabs in Operations, or the day on the Calendar. Swipe left for the next one, right to go back.'},
   {icon:'🗓',title:'Drag calendar blocks',body:'On the Calendar, drag a flight block\'s TOP edge to set its departure, its BOTTOM edge to set the return, or grab the MIDDLE to move it — drop it on another aircraft\'s column to reassign. A single tap just opens it.'},
-  {icon:'🧑‍✈',title:'Hold a pilot on the ground',body:'In Pilot movements, tap a pilot\'s ＋ to add an all-day note/meeting and the allocator will keep them off the aircraft — e.g. holding your SDB-rated pilot in reserve. The allocator also does this automatically for SDB when there\'s spare crew.'},
+  {icon:'🧑‍✈',title:'Hold a pilot on the ground',body:'In Pilot movements, tap a pilot\'s ＋ to add an all-day note/meeting and the allocator will keep them off the aircraft.'},
   {icon:'🏠',title:'Set your start page',body:'Tap your name (top-right) and choose which page the app opens to, so you always land on Bookings, the Calendar, your Flight Record — whatever you use most.'},
   {icon:'🎒',title:'Everything pilot in one place',body:'Flight Record, Logbooks and Flight & Duty all live together under Pilot Bag in the menu.'},
-  {icon:'📶',title:'Logs survive no reception',body:'Start a flight log, fly out of coverage, land and tap On Blocks — it\'s all saved on your device and uploads itself automatically once you\'re back in range.'},
+  {icon:'📶',title:'Logs survive no reception',body:'Logs save on your device the instant you tap Off Blocks / On Blocks — whether you start in coverage or already out of range. They upload themselves automatically once you\'re back in range.'},
   {icon:'⏭',title:'Skip the intro',body:'The mountains-and-plane loading animation has a Skip button in the corner when you\'re in a hurry.'}
 ];
 window.trainTipsOpen=function(){S._trainTips=true;render();};

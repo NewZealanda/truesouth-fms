@@ -288,12 +288,16 @@ function render(){
       // We have a saved session and are restoring it on refresh — show the loading spinner, NOT
       // the login form, so the login screen doesn't flash before auth resolves.
       lo.style.backgroundImage="linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,.68)),url('"+BG_IMG+"')";
-      lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
-        +_tsLoadingScene()
-        +'</div>';
+      // Set the intro scene ONCE so re-renders during boot don't restart the animation mid-play.
+      if(!lo.querySelector('.ts-scene'))lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'+_tsLoadingScene()+'</div>';
     } else {
       lo.style.backgroundImage=`linear-gradient(to bottom,rgba(0,0,0,.32),rgba(0,0,0,.58)),url('${BG_IMG}')`;
-      lo.innerHTML=renderLoginInner();
+      // Build the login form ONCE (or when the reset step changes) so a stray re-render — presence
+      // ticks, realtime, etc. — can't rebuild it and steal focus mid-typing / break Tab order. The
+      // only live bit (the error banner) is updated in place.
+      var _lgStep=String(S.resetStep||0);
+      if(!lo.querySelector('#login-form')||lo.dataset.lgStep!==_lgStep){lo.innerHTML=renderLoginInner();lo.dataset.lgStep=_lgStep;}
+      else{var _ee=lo.querySelector('#login-err');if(_ee){_ee.innerHTML=S.loginErr||'';_ee.style.display=S.loginErr?'block':'none';}}
     }
     r.style.display='none';
     return;
@@ -304,9 +308,8 @@ function render(){
     if(!lo){lo=document.createElement('div');lo.id='login-overlay';document.body.appendChild(lo);}
     lo.style.display='flex';
     lo.style.backgroundImage="linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,.68)),url('"+BG_IMG+"')";
-    lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
-      +_tsLoadingScene()
-      +'</div>';
+    // Set the intro scene ONCE so re-renders during boot don't restart the animation mid-play.
+    if(!lo.querySelector('.ts-scene'))lo.innerHTML='<div id="loading-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'+_tsLoadingScene()+'</div>';
     r.style.display='none';
     return;
   }
@@ -438,9 +441,9 @@ function renderLoginInner(){
           <label style="display:block;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase">Email</label>
           <div style="display:flex;align-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;overflow:hidden">
             <input id="li_e" type="text" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
-              style="flex:1;padding:11px 14px;background:transparent;border:none;color:#fff;font-size:16px;outline:none;min-width:0;width:100%"
-              oninput="window.updateLoginSuffix()" onfocus="document.getElementById('li_e_sfx').style.display='inline';window.updateLoginSuffix()" onblur="if(!this.value)document.getElementById('li_e_sfx').style.display='none';" onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
-            <span id="li_e_sfx" style="display:none;flex-shrink:0;padding:0 12px 0 0;color:rgba(255,255,255,.45);font-size:12px;white-space:nowrap;align-self:center">@truesouthflights.co.nz</span>
+              style="flex:0 0 auto;padding:11px 2px 11px 14px;background:transparent;border:none;color:#fff;font-size:16px;outline:none;min-width:60px;width:120px;box-sizing:border-box"
+              oninput="window.updateLoginSuffix()" onfocus="window.updateLoginSuffix()" onblur="if(!this.value)document.getElementById('li_e_sfx').style.display='none';" onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
+            <span id="li_e_sfx" style="display:none;flex:0 1 auto;padding:0 12px 0 0;color:rgba(255,255,255,.5);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:center">@truesouthflights.co.nz</span>
           </div>
         </div>
         <div style="margin-bottom:24px">
@@ -627,6 +630,15 @@ function renderDrawer(){
       h+=_subBtn('Ground',t==='ground'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('ground')");
     }
   }
+  // Pilot Bag (Flight Record / Logbooks / Flight & Duty) — pinned right under Operations.
+  {var _pbDefs=_pilotBagTabDefs();
+   if(_pbDefs.length){
+    h+=_secBtn('Pilot Bag','pilotbag','🎒');
+    if(_isExp('pilotbag')){
+      var _pbCur=_pilotBagTab();
+      _pbDefs.forEach(function(d){h+=_subBtn(d.lbl,sec==='pilotbag'&&_pbCur===d.id,"S._drawerOpen=false;window.setPilotBagTab('"+d.id+"')");});
+    }
+   }}
   // Roster & Leave combined — show the group only if the user can reach at least one item.
   {var _canApproveLeaveNav=hasRolePerm('leave_approve');
   if(_canRoster||_canLeave||_canApproveLeaveNav){
@@ -654,17 +666,8 @@ function renderDrawer(){
       h+=_mn('Search','search');
     }
   }
-  // Pilot Bag (Flight Record / Logbooks / Flight & Duty) + TSF Business Plan.
+  // TSF Business Plan.
   {var _canBP=hasRolePerm('businessplan')||(S.user&&S.user.superAdmin);
-   var _pbDefs=_pilotBagTabDefs();
-   // Pilot Bag — one expandable tier-1 entry bundling the pilot tools (declutters the menu).
-   if(_pbDefs.length){
-    h+=_secBtn('Pilot Bag','pilotbag','🎒');
-    if(_isExp('pilotbag')){
-      var _pbCur=_pilotBagTab();
-      _pbDefs.forEach(function(d){h+=_subBtn(d.lbl,sec==='pilotbag'&&_pbCur===d.id,"S._drawerOpen=false;window.setPilotBagTab('"+d.id+"')");});
-    }
-   }
    if(_canBP){
     var on=sec==='businessplan';
     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'businessplan\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(on?'rgba(124,58,237,.22)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(on?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📈</span><span style="flex:1">Business Plan</span></button>';
