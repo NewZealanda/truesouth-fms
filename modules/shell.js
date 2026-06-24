@@ -166,9 +166,27 @@ function _sectionAllowed(sec){
     case 'ground':      return hasRolePerm('ground');
     case 'trainingmod': return hasRolePerm('training_mod');
     case 'logbook':     return !!S.user; // every signed-in pilot has a personal logbook
+    case 'pilotbag':    return _pilotBagTabDefs().length>0; // bundles Flight Record / Logbooks / Flight & Duty
     default:            return true;
   }
 }
+// ── Pilot Bag: Flight Record / Logbooks / Flight & Duty bundled into one tier-1 section ──
+function _pilotBagTabDefs(){
+  if(!S.user)return [];
+  var sa=!!(S.user&&S.user.superAdmin);
+  var t=[];
+  if(hasRolePerm('flightrecord')||sa)t.push({id:'flightrecord',lbl:'Flight Record',icon:'🛩️'});
+  t.push({id:'logbook',lbl:'Logbooks',icon:'📒'});                 // every signed-in user gets a personal logbook
+  if(hasRolePerm('flightduty')||sa)t.push({id:'flightduty',lbl:'Flight & Duty',icon:'🕓'});
+  return t;
+}
+function _pilotBagTab(){
+  var defs=_pilotBagTabDefs();if(!defs.length)return null;
+  var cur=S._pilotBagTab;
+  if(cur&&defs.some(function(d){return d.id===cur;}))return cur;
+  return defs[0].id;
+}
+window.setPilotBagTab=function(id){S._pilotBagTab=id;S.section='pilotbag';S._drawerOpen=false;render();};
 function _firstAllowedSection(){
   var order=['operations','calendar','maintenance','roster','leave','settings'];
   for(var i=0;i<order.length;i++){if(_sectionAllowed(order[i]))return order[i];}
@@ -191,9 +209,9 @@ var HOME_OPTIONS=[
   {id:'maintenance',label:'Maintenance',section:'maintenance'},
   {id:'roster',label:'Roster',section:'roster'},
   {id:'leave',label:'Leave',section:'leave'},
-  {id:'flightrecord',label:'Flight Record',section:'flightrecord'},
-  {id:'logbook',label:'Logbook',section:'logbook'},
-  {id:'flightduty',label:'Flight & Duty',section:'flightduty'},
+  {id:'flightrecord',label:'Flight Record',section:'pilotbag',tab:'flightrecord'},
+  {id:'logbook',label:'Logbook',section:'pilotbag',tab:'logbook'},
+  {id:'flightduty',label:'Flight & Duty',section:'pilotbag',tab:'flightduty'},
   {id:'resources',label:'Resource board',section:'resources'},
   {id:'businessplan',label:'Business Plan',section:'businessplan'},
   {id:'settings',label:'Settings',section:'settings',tab:'admin'},
@@ -202,7 +220,7 @@ var HOME_OPTIONS=[
 function _homeOptAll(){return HOME_OPTIONS.filter(function(o){return (typeof _sectionAllowed!=='function')||_sectionAllowed(o.section);});}
 function _homeGet(){try{return (typeof lsGet==='function'&&lsGet('ts_home'))||'';}catch(e){return '';}}
 function _homeOpt(id){for(var i=0;i<HOME_OPTIONS.length;i++)if(HOME_OPTIONS[i].id===id)return HOME_OPTIONS[i];return null;}
-function _applyHomePref(){var o=_homeOpt(_homeGet());if(!o)return;if((typeof _sectionAllowed==='function')&&!_sectionAllowed(o.section))return;S.section=o.section;S.tab=o.tab||_defaultTabFor(o.section);}
+function _applyHomePref(){var o=_homeOpt(_homeGet());if(!o)return;if((typeof _sectionAllowed==='function')&&!_sectionAllowed(o.section))return;S.section=o.section;S.tab=o.tab||_defaultTabFor(o.section);if(o.section==='pilotbag'&&o.tab)S._pilotBagTab=o.tab;}
 window.homeSetSearch=function(v){S._homeSearch=v;render();};
 window.homeSet=function(id){try{if(id)lsSet('ts_home',id);else localStorage.removeItem('ts_home');}catch(e){}if(typeof toast==='function')toast(id?('Opens to '+((_homeOpt(id)||{}).label||id)):'Opens to your default page','ok');render();};
 function _renderHomePicker(){
@@ -243,10 +261,13 @@ function render(){
     else if(S.rezdyTab==='mypickups'){S.section='operations';S.tab='ground';S._groundTab='mypickups';}
     else{S.section='calendar';}
   }
+  // ── Nav migration (v26.12): Flight Record / Logbooks / Flight & Duty are now bundled into one
+  // 'pilotbag' section as tier-2 tabs. Remap any restored last-view / home-pref / deep link.
+  if(S.section==='flightrecord'||S.section==='logbook'||S.section==='flightduty'){S._pilotBagTab=S.section;S.section='pilotbag';}
   // ── Remember the current view so a reload returns to the same page ──
   // Gated on S._viewRestored so the default-view renders during boot DON'T overwrite the
   // saved last view before _restoreLastView() has had a chance to read and apply it.
-  if(S.user&&S._viewRestored){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'bookings',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null,groundTab:S._groundTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
+  if(S.user&&S._viewRestored){try{var _lv=JSON.stringify({section:S.section||'operations',tab:S.tab||'bookings',activeTabId:S.activeTabId||null,activeManifestTabId:S.activeManifestTabId||null,savedTab:S.savedTab||null,groundTab:S._groundTab||null,pilotBagTab:S._pilotBagTab||null});if(_lv!==S.__lastViewStr){S.__lastViewStr=_lv;localStorage.setItem('ts_lastview',_lv);}}catch(e){}}
   // ── Preserve focused input across re-renders ──
   const _ae=document.activeElement;
   const _aeId=_ae?.id||null;
@@ -633,21 +654,21 @@ function renderDrawer(){
       h+=_mn('Search','search');
     }
   }
-  // Flight & Duty + TSF Business Plan — each shown to anyone holding its permission.
-  {var _canFD=hasRolePerm('flightduty')||(S.user&&S.user.superAdmin);
-   var _canBP=hasRolePerm('businessplan')||(S.user&&S.user.superAdmin);
-   var _canFR=hasRolePerm('flightrecord')||(S.user&&S.user.superAdmin);
-   var _canLB=!!(S.user); // every signed-in pilot gets a personal logbook
-   if(_canFD||_canBP||_canFR||_canLB){
-    var _fdNavBtn=function(label,section,icon){
-      var on=sec===section;
-      return '<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+section+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(on?'rgba(124,58,237,.22)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(on?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+icon+'</span><span style="flex:1">'+label+'</span></button>';
-    };
-    if(_canFR)h+=_fdNavBtn('Flight Record','flightrecord','🛩️');
-    if(_canLB)h+=_fdNavBtn('Logbooks','logbook','📒');
-    if(_canFD)h+=_fdNavBtn('Flight & Duty','flightduty','🕓');
-    if(_canBP)h+=_fdNavBtn('Business Plan','businessplan','📈');
-  }}
+  // Pilot Bag (Flight Record / Logbooks / Flight & Duty) + TSF Business Plan.
+  {var _canBP=hasRolePerm('businessplan')||(S.user&&S.user.superAdmin);
+   var _pbDefs=_pilotBagTabDefs();
+   // Pilot Bag — one expandable tier-1 entry bundling the pilot tools (declutters the menu).
+   if(_pbDefs.length){
+    h+=_secBtn('Pilot Bag','pilotbag','🎒');
+    if(_isExp('pilotbag')){
+      var _pbCur=_pilotBagTab();
+      _pbDefs.forEach(function(d){h+=_subBtn(d.lbl,sec==='pilotbag'&&_pbCur===d.id,"S._drawerOpen=false;window.setPilotBagTab('"+d.id+"')");});
+    }
+   }
+   if(_canBP){
+    var on=sec==='businessplan';
+    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'businessplan\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(on?'rgba(124,58,237,.22)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(on?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📈</span><span style="flex:1">Business Plan</span></button>';
+   }}
   // Resource board — only when the cost-scheduling feature is toggled ON (snaps in/out during testing).
   {if(S.user&&!S._schedLoaded){S._schedLoaded=true;if(window.loadScheduling)window.loadScheduling();}
    if(typeof _schedEnabled==='function'&&_schedEnabled()&&hasRolePerm('resources')){
@@ -737,7 +758,13 @@ function renderTier2Bar(){
   if(sec==='operations')return renderOpsSubTabs();
   if(sec==='maintenance')return renderMaintenanceSubTabs();
   if(sec==='settings')return renderSettingsSubTabs();
+  if(sec==='pilotbag')return renderPilotBagSubTabs();
   return '';
+}
+function renderPilotBagSubTabs(){
+  var defs=_pilotBagTabDefs();if(defs.length<2)return ''; // only one tool available → no selector needed
+  var cur=_pilotBagTab();
+  return _tier2(defs.map(function(d){return {lbl:d.lbl,on:cur===d.id,onclick:"window.setPilotBagTab('"+d.id+"')"};}));
 }
 function renderMaintenanceSubTabs(){
   const sub=S.maintTab||'overview';
@@ -814,6 +841,14 @@ function renderApp(){
         }
         if(_sec==='leave')return'<div id="flash-leave">'+renderLeave()+'</div>';
         if(_sec==='calendar')return renderCalendar();
+        if(_sec==='pilotbag'){
+          var _pbt=_pilotBagTab();
+          if(!_pbt)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          if(_pbt==='flightduty'){if(!(hasRolePerm('flightduty')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return '<div id="flash-flightduty">'+renderFlightDuty()+'</div>';}
+          if(_pbt==='logbook'){if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return '<div id="flash-logbook">'+renderLogbook()+'</div>';}
+          if(!(hasRolePerm('flightrecord')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-flightrecord">'+renderFlightRecord()+'</div>';
+        }
         if(_sec==='flightduty'){
           if(!(hasRolePerm('flightduty')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-flightduty">'+renderFlightDuty()+'</div>';
