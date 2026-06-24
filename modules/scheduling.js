@@ -572,31 +572,34 @@ function _schedComputeAutoPilots(date,aircraftUsed){
   return out;
 }
 // The auto-assigned pilot for an aircraft on the current day (null when off / different date).
-// Time-aware pilot allocation — pilots are tracked like aircraft. A pilot flies a complete return
-// trip and is only free to take ANOTHER aircraft once they're back in Queenstown (freeAt ≤ the next
-// departure). Walk the day's flights in time order: prefer the pilot who last flew that aircraft
-// (sticky), else the highest-priority pilot currently free & type-rated. flights = [{key,ac,depMin,busyMin}].
+// Time-aware pilot allocation — the pilot STAYS WITH THE AIRCRAFT. Each aircraft's flights for the day
+// form one rotation [first departure … last return] (the FCF down + the flyback back hours later all
+// belong to it), and the pilot is committed to that aircraft for the WHOLE rotation — they only become
+// free (back in Queenstown) at the rotation's end, when they can pick up another aircraft whose
+// rotation starts later. flights = [{key,ac,depMin,endMin}] (endMin = when the aircraft is back in QN).
 function _schedComputeBlockPilots(flights){
   if(!_schedEnabled())return {};
   var avail=_schedDayPilots(S.rezdyDate)||[];
   var manual=S._schedPilots||{};
+  // Build one rotation window per aircraft from its flights.
+  var rot={};
+  flights.forEach(function(f){var r=rot[f.ac]||(rot[f.ac]={ac:f.ac,start:f.depMin,end:f.endMin,keys:[]});r.start=Math.min(r.start,f.depMin);r.end=Math.max(r.end,f.endMin);r.keys.push(f.key);if(manual[f.key])r.manual=manual[f.key];});
+  var rots=Object.keys(rot).map(function(a){return rot[a];}).sort(function(a,b){return a.start-b.start;});
   var freeAt={};avail.forEach(function(p){freeAt[p.code]=-1e9;});   // everyone starts in QN
-  var lastAcPilot={},out={};
-  flights=flights.slice().sort(function(a,b){return a.depMin-b.depMin;});
-  // Manual picks win and occupy that pilot's window.
-  flights.forEach(function(f){var mp=manual[f.key];if(mp){out[f.key]=mp;if(freeAt[mp]==null)freeAt[mp]=-1e9;freeAt[mp]=Math.max(freeAt[mp],f.depMin+f.busyMin);lastAcPilot[f.ac]=mp;}});
-  // Auto-assign the rest, earliest departure first.
-  flights.forEach(function(f){
-    if(out[f.key])return;
-    var cands=avail.filter(function(p){return _pilotRatedForAc(p.code,f.ac)&&(freeAt[p.code]==null||freeAt[p.code]<=f.depMin);});
-    if(!cands.length)return;                       // nobody free & rated → flight left uncrewed
-    cands.sort(function(p,q){
-      var sp=(lastAcPilot[f.ac]===p.code)?0:1,sq=(lastAcPilot[f.ac]===q.code)?0:1;if(sp!==sq)return sp-sq; // stay with the aircraft
-      var rp=_schedPilotRank(p.code,f.ac),rq=_schedPilotRank(q.code,f.ac);if(rp!==rq)return rp-rq;          // priority
-      return String(p.code).localeCompare(String(q.code));
-    });
-    var pick=cands[0].code;out[f.key]=pick;freeAt[pick]=f.depMin+f.busyMin;lastAcPilot[f.ac]=pick;
+  // Manual rotations win and occupy that pilot for the whole rotation.
+  rots.forEach(function(r){if(r.manual){freeAt[r.manual]=Math.max(freeAt[r.manual]==null?-1e9:freeAt[r.manual],r.end);r.assigned=r.manual;}});
+  // Auto-assign the rest, earliest rotation first; a pilot must be back in QN (free ≤ rotation start).
+  rots.forEach(function(r){
+    if(r.assigned)return;
+    var cands=avail.filter(function(p){return _pilotRatedForAc(p.code,r.ac)&&(freeAt[p.code]==null||freeAt[p.code]<=r.start);});
+    if(!cands.length)return;                       // nobody free & rated → aircraft left uncrewed
+    cands.sort(function(p,q){var rp=_schedPilotRank(p.code,r.ac),rq=_schedPilotRank(q.code,r.ac);if(rp!==rq)return rp-rq;return String(p.code).localeCompare(String(q.code));});
+    r.assigned=cands[0].code;freeAt[r.assigned]=r.end;
   });
+  // Every flight on an aircraft gets that aircraft's pilot; a per-flight manual pick still wins.
+  var out={};
+  rots.forEach(function(r){if(r.assigned)r.keys.forEach(function(k){out[k]=r.assigned;});});
+  Object.keys(manual).forEach(function(k){if(manual[k])out[k]=manual[k];});
   return out;
 }
 // Read the auto-allocated pilot. S._schedAutoPilots is keyed by flight (ac|HH:MM|prod) when the

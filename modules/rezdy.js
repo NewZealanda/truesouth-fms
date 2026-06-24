@@ -3933,13 +3933,14 @@ function _rzRenderSchedule(){
   if(typeof _schedEnabled==='function'&&_schedEnabled()&&typeof _schedComputeBlockPilots==='function'){
     try{var _flights=[];
       Object.keys(bkGroups).forEach(function(k){var g=bkGroups[k];var _a=g.aircraft;if(!_a||_a==='__unalloc__'||_a==='__misc__'||!((S&&S.aircraft)||{})[_a])return;
-        var _pr=g.product;var _orig=g.start;
-        var _eff=(typeof _rzIsFlyback==='function'&&_rzIsFlyback(_pr)&&typeof _rzFbTime==='function')?_rzFbTime(_pr,_orig):_orig;
+        var _pr=g.product;var _orig=g.start;var _isFb=(typeof _rzIsFlyback==='function')&&_rzIsFlyback(_pr);
+        var _eff=(_isFb&&typeof _rzFbTime==='function')?_rzFbTime(_pr,_orig):_orig;
         var _dm=_rzMinsFromHHMM(_eff);if(_dm==null)_dm=_rzMinsFromHHMM(_orig)||0;
-        var _dest=(typeof _rzGroupDest==='function')?_rzGroupDest(_pr):'MF';
-        var _tk=(typeof _schedTypeKey==='function')?_schedTypeKey(_a):'caravan';
-        var _bh=null;try{_bh=(SCHED_DEST_HRS[_dest]||{})[_tk];}catch(e){}if(_bh==null)_bh=1.2;  // return-flight hours
-        _flights.push({key:k,ac:_a,depMin:_dm,busyMin:_bh*60+15});                              // +15min turnaround
+        var _end;
+        if(_isFb){_end=_dm+60;}   // a flyback block is ~1h; it caps the aircraft's rotation (back ~16:30)
+        else{var _dest=(typeof _rzGroupDest==='function')?_rzGroupDest(_pr):'MF';var _tk=(typeof _schedTypeKey==='function')?_schedTypeKey(_a):'caravan';
+          var _bh=null;try{_bh=(SCHED_DEST_HRS[_dest]||{})[_tk];}catch(e){}if(_bh==null)_bh=1.2;_end=_dm+_bh*60+15;}  // return flight + turnaround
+        _flights.push({key:k,ac:_a,depMin:_dm,endMin:_end});
       });
       S._schedAutoPilots=_schedComputeBlockPilots(_flights);S._schedAutoPilotsDate=S.rezdyDate;
     }catch(_e){}
