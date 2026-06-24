@@ -9,8 +9,11 @@ function _tsLoadingScene(){
     +'<div class="ts-runway2"></div>'
     +'<div class="ts-plane2"><svg viewBox="0 0 24 24" width="30" height="30" fill="#ffffff"><path d="M2.5,19h19v2h-19V19z M22.07,9.64c-0.21-0.8-1.04-1.28-1.84-1.06L14.92,10L8,3.57L6.09,4.08l4.15,7.19l-4.97,1.33l-1.97-1.54l-1.45,0.39l2.59,4.49l17.28-4.64C21.81,11.27,22.28,10.44,22.07,9.64z"></path></svg></div>'
     +'</div>'
-    +'<div class="ts-loading-text">Loading...</div>';
+    +'<div class="ts-loading-text">Loading...</div>'
+    +'<button onclick="window.tsSkipLoad()" style="margin-top:16px;padding:8px 22px;border-radius:20px;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.08);color:#fff;font-size:13px;font-weight:700;letter-spacing:.03em;cursor:pointer">Skip →</button>';
 }
+// Skip the loading screen and go straight to the app.
+window.tsSkipLoad=function(){S._appLoading=false;S._authRestoring=false;if(typeof render==='function')render();};
 function renderIOSBanner(){
   const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent);
   const isStandalone=window.navigator.standalone===true;
