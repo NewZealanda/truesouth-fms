@@ -3357,6 +3357,7 @@ function renderAdminPerms(){
     {k:'resources',     lbl:'Scheduling',     tip:'Access the Resource board + cost-aware aircraft/pilot allocation'},
     {k:'sms',           lbl:'SMS',            tip:'Safety Management System (placeholder — coming soon)'},
     {k:'ground',        lbl:'Ground',         tip:'Ground operations module (placeholder — coming soon)'},
+    {k:'vehicle_prestart', lbl:'Vehicle Prestart', tip:'Daily vehicle prestart checks (placeholder — coming soon)'},
     {k:'training_mod',  lbl:'Training',       tip:'Training records module (placeholder — coming soon)'}
     // (the old 'rezdy' column was retired in v24.16 — the Rezdy section no longer exists; Calendar
     //  has its own perm and Pickups live under Operations ▸ Ground gated by 'operations'.)
