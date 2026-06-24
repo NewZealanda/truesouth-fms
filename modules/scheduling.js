@@ -99,14 +99,23 @@ var SCHED_DEST_COST_DEFAULT={MC:{airvan:1700.85,caravan:2469.21,sdb:2469.21}};
 function _schedDestCostCfg(){var c=_schedCfg();if(!c.destCost||typeof c.destCost!=='object')c.destCost={};return c.destCost;}
 function _schedDestRt(dest,typeKey){
   if(!dest||dest==='MF')return null;                                   // Milford → hours-derived, not flat
-  var cfg=(_schedDestCostCfg()[dest])||{};var v=_schedNum(cfg[typeKey]);if(v!=null)return v;
-  var d=SCHED_DEST_COST_DEFAULT[dest];return d?_schedNum(d[typeKey]):null;
+  var cfg=(_schedDestCostCfg()[dest])||{};var v=_schedNum(cfg[typeKey]);if(v!=null)return v; // operator override
+  var d=SCHED_DEST_COST_DEFAULT[dest];if(d){var dv=_schedNum(d[typeKey]);if(dv!=null)return dv;} // seeded flat (e.g. Mt Cook)
+  // Otherwise (e.g. Franz Josef) derive from the per-destination flight hours × run/hr + landings, so the
+  // allocator can cost it even before the operator types an exact flat price in the table.
+  var dh=SCHED_DEST_HRS[dest];if(dh&&dh[typeKey]!=null){var c=_schedCalcCost(typeKey,dh[typeKey]);if(c!=null)return c;}
+  return null;
 }
 // Effective return / ferry cost for an aircraft on a destination — Milford computed from run/hr +
 // landings; other destinations use the flat figures (ferry round = round-trip, i.e. leg = half).
 function _schedRtCost(ac,dest){var tk=_schedTypeKey(ac);var flat=_schedDestRt(dest,tk);if(flat!=null)return flat;var v=_schedCalcCost(tk,SCHED_HRS.ret[tk]||1.1);return v!=null?v:_schedNum(_schedTail(ac).rt);}
 function _schedFerryCost(ac,dest){var tk=_schedTypeKey(ac);var flat=_schedDestRt(dest,tk);if(flat!=null)return flat;var v=_schedCalcCost(tk,SCHED_HRS.fer[tk]||1.0);return v!=null?v:_schedNum(_schedTail(ac).ferry);}
 window.schedSetDestCost=function(dest,type,v){var dc=_schedDestCostCfg();var e=dc[dest]||(dc[dest]={});var n=_schedNum(v);e[type]=(n!=null?n:'');_schedSave();render();};
+// No-ferry list: aircraft the allocator must NOT reposition (no empty/ferry leg). A no-ferry aircraft is
+// only used fresh from base, never flown empty to/from another rotation.
+function _schedNoFerryMap(){var c=_schedCfg();if(!c.noFerry||typeof c.noFerry!=='object')c.noFerry={};return c.noFerry;}
+function _schedNoFerry(ac){return !!_schedNoFerryMap()[ac];}
+window.schedToggleNoFerry=function(ac){var m=_schedNoFerryMap();if(m[ac])delete m[ac];else m[ac]=true;_schedSave();render();};
 function _schedCallIn(){return _schedNum(_schedCfg().callInPerDay);}
 function _schedMoney(n){if(n==null||isNaN(n))return '—';return '$'+Number(n).toLocaleString('en-NZ',{maximumFractionDigits:0});}
 
@@ -174,10 +183,10 @@ function renderSchedulingSettings(){
     '<p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Costs ex GST, less pilot (rostered = sunk cost). '+
       (_fromBiz?'Run/hr &amp; landings are pulled live from <b>Business Plan ▸ Running costs</b> — edit fuel / maintenance / fees there and every figure here (and the allocator) updates automatically.':'Enter <b>run/hr</b> and <b>landings + fees</b> per type (Business Plan not loaded — using manual fallback).')+
       ' Hours: Milford <b>return</b> = airvan 1.2h, caravan/SDB 1.1h; <b>ferry</b> (empty) = 1.0h. '+
-      '<b>Mt Cook</b> uses the flat round-trip you enter (ferry leg = half the round-trip).</p>'+
+      '<b>Mt Cook</b> &amp; <b>Franz Josef</b> use the flat round-trip you enter (ferry leg = half the round-trip); Franz starts from an hours-based estimate (airvan 2.4h, caravan 2.0h) until you set an exact price.</p>'+
     '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:680px">'+
       '<thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em">'+
-        '<th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Run/hr $</th><th style="padding:6px 8px">Landings+fees $</th><th style="padding:6px 8px">Milford return</th><th style="padding:6px 8px">Milford ferry</th><th style="padding:6px 8px">Mt Cook return</th></tr></thead><tbody>';
+        '<th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Run/hr $</th><th style="padding:6px 8px">Landings+fees $</th><th style="padding:6px 8px">Milford return</th><th style="padding:6px 8px">Milford ferry</th><th style="padding:6px 8px">Mt Cook return</th><th style="padding:6px 8px">Franz Josef return</th></tr></thead><tbody>';
   [['airvan','Airvan (owned avg)'],['caravan','Caravan (owned avg)'],['sdb','SDB (lease)']].forEach(function(row){
     var k=row[0];var e=_schedCalc()[k]||{};var biz=(_schedCostSource(k)==='biz');
     var rt=_schedCalcCost(k,SCHED_HRS.ret[k]),fer=_schedCalcCost(k,SCHED_HRS.fer[k]);
@@ -188,6 +197,7 @@ function renderSchedulingSettings(){
       '<td style="padding:6px 8px;font-weight:800;color:#22c55e">'+_schedMoney(rt)+'</td>'+
       '<td style="padding:6px 8px;font-weight:800;color:#f59e0b">'+_schedMoney(fer)+'</td>'+
       '<td style="padding:6px 8px">'+_nd('MC',k,_schedDestRt('MC',k))+'</td>'+
+      '<td style="padding:6px 8px">'+_nd('FJ',k,_schedDestRt('FJ',k))+'</td>'+
     '</tr>';
   });
   h+='</tbody></table></div></div>';
@@ -196,10 +206,11 @@ function renderSchedulingSettings(){
   h+='<div class="card" style="margin-bottom:14px"><div class="st">Aircraft seats</div>';
   if(!acIds.length)h+='<div style="color:var(--text3);font-size:13px">No aircraft configured.</div>';
   else{h+='<div style="display:flex;flex-wrap:wrap;gap:10px">';
-    acIds.forEach(function(ac){var t=_schedTail(ac);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';
+    acIds.forEach(function(ac){var t=_schedTail(ac);var col=(typeof _rzAcCol==='function')?_rzAcCol(ac):'#64748b';var nf=_schedNoFerry(ac);
       h+='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:800;color:'+col+'">'+_schedEsc(_schedAcShort(ac))+'</span>'+
-        '<input type="number" min="0" value="'+_schedEsc(t.cap)+'" onchange="window.schedSetTailField(\''+_schedEsc(ac)+'\',\'cap\',this.value)" style="width:58px;padding:4px 6px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px"><span style="font-size:11px;color:var(--text3)">'+_schedAcType(ac)+'</span></div>';});
-    h+='</div>';}
+        '<input type="number" min="0" value="'+_schedEsc(t.cap)+'" onchange="window.schedSetTailField(\''+_schedEsc(ac)+'\',\'cap\',this.value)" style="width:58px;padding:4px 6px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1);font-size:13px"><span style="font-size:11px;color:var(--text3)">'+_schedAcType(ac)+'</span>'+
+        '<button onclick="window.schedToggleNoFerry(\''+_schedEsc(ac)+'\')" title="When on, the allocator will not ferry (reposition empty) this aircraft" style="cursor:pointer;font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;border:1px solid '+(nf?'#ef4444':'var(--border2)')+';background:'+(nf?'rgba(239,68,68,.12)':'transparent')+';color:'+(nf?'#ef4444':'var(--text3)')+'">⚓ '+(nf?'No-ferry':'Ferry OK')+'</button></div>';});
+    h+='</div><div style="font-size:11px;color:var(--text3);margin-top:8px">⚓ <b>No-ferry</b> keeps an aircraft from being repositioned empty — the allocator will only use it fresh from base, never fly it on an empty ferry leg.</div>';}
   h+='</div>';
 
   // Pilot call-in
@@ -501,6 +512,7 @@ function _schedSig(date,bks){
   try{Object.keys((S.maintenance&&S.maintenance.bookings)||{}).forEach(function(ac){((S.maintenance.bookings[ac])||[]).forEach(function(b){if(b&&b.date&&date>=b.date&&date<=(b.end||b.date))parts.push('M'+ac);});});}catch(e){}
   Object.keys((S&&S.aircraft)||{}).forEach(function(ac){parts.push(ac+':'+(_schedNum(_schedTail(ac).cap)||'')+':'+_schedRtCost(ac)+':'+_schedFerryCost(ac));});
   try{parts.push('DC:'+JSON.stringify(_schedDestCostCfg()));}catch(e){}   // per-destination flat costs
+  try{parts.push('NF:'+JSON.stringify(_schedNoFerryMap()));}catch(e){}    // no-ferry aircraft
   try{parts.push('P:'+_schedDayPilots(date).map(function(p){return p.code;}).join(','));}catch(e){}   // roster + call-ins
   try{var c=_schedCfg();parts.push('T:'+JSON.stringify(c.pilotOrder||{})+JSON.stringify(c.pilotTie||{}));}catch(e){}
   try{parts.push('MP:'+JSON.stringify(S._schedPilots||{}));}catch(e){}   // manual pilot picks
@@ -639,7 +651,7 @@ function _schedDayDepartures(date){
   return Object.keys(g).map(function(k){return g[k];}).sort(function(a,b){var d=(_schedMinOf(a.time)||0)-(_schedMinOf(b.time)||0);return d!==0?d:String(a.dest).localeCompare(String(b.dest));});
 }
 // Flight hours for a return to a destination, by type. Milford 1.2/1.1; Mt Cook 2.1/1.8; Franz 2.2/1.9.
-var SCHED_DEST_HRS={MF:{airvan:1.2,caravan:1.1},MC:{airvan:2.1,caravan:1.8},FJ:{airvan:2.2,caravan:1.9}};
+var SCHED_DEST_HRS={MF:{airvan:1.2,caravan:1.1,sdb:1.1},MC:{airvan:2.1,caravan:1.8,sdb:1.8},FJ:{airvan:2.4,caravan:2.0,sdb:2.0}};
 function _schedDestFltHrs(dest,airvan){var d=SCHED_DEST_HRS[dest]||SCHED_DEST_HRS.MF;return airvan?d.airvan:d.caravan;}
 // A departure's flight hours for an aircraft type = the longest of its destinations (worst case).
 function _schedDepFltHrs(dests,airvan){var mx=0;(dests&&dests.length?dests:['MF']).forEach(function(dd){mx=Math.max(mx,_schedDestFltHrs(dd,airvan));});return mx||(airvan?1.2:1.1);}
@@ -726,7 +738,8 @@ function _schedDayPlan(date,opts){
     // time (freeAt > now). One that never flew, or already returned to base, is free (fresh rotation).
     var cand=fleet.map(function(f){var ll=_schedLoadedLeg(f.ac,d.dest),el=_schedEmptyLeg(f.ac,d.dest);
       var out=(freeAt[f.ac]!=null&&freeAt[f.ac]>dm);
-      return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,isNew:!everUsed[f.ac],ll:ll,el:el,inc:2*ll+(out?2*el:0)};});
+      return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,isNew:!everUsed[f.ac],ll:ll,el:el,inc:2*ll+(out?2*el:0)};})
+      .filter(function(c){return !(c.reused&&_schedNoFerry(c.ac));});   // no-ferry aircraft can't be repositioned (empty leg)
     var chosen=_schedPlanPick(d.pax,cand,maxNew);
     var depAc=[];var depCap=0;
     chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+SCHED_BLOCK_MIN;_ut[c.ac]=1;_mxUse(c.ac,_schedDepFltHrs(d.dests,c.airvan));depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});

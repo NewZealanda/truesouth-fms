@@ -225,7 +225,25 @@ function _bizCalcSnapshot(){
   var round=(cal.round===undefined)?true:!!cal.round;
   var r=_bizFlightCost(rc,sel.type,cal.hrs,depIdx,destIdx,round);
   var route=((locs[depIdx]&&locs[depIdx].name)||'?')+(round?' ⇄ ':' → ')+((locs[destIdx]&&locs[destIdx].name)||'?');
-  return {ts:new Date().toISOString(),lbl:sel.lbl,route:route,hrs:r.hrs,fuelHr:r.fuelHr,maintHr:r.maintHr,runHr:r.runHr,flight:r.flight,ldg:r.ldg,conc:r.conc,aw:r.aw,total:r.total,isLease:r.isLease};
+  return {ts:new Date().toISOString(),lbl:sel.lbl,route:route,hrs:r.hrs,fuelHr:r.fuelHr,maintHr:r.maintHr,runHr:r.runHr,flight:r.flight,ldg:r.ldg,conc:r.conc,aw:r.aw,total:r.total,isLease:r.isLease,
+    // inputs kept so a saved flight re-prices itself whenever fuel/maintenance change:
+    srcCode:(sel.acIdx!=null?(acs[sel.acIdx].code||''):null),srcType:sel.type,round:round,depName:(locs[depIdx]&&locs[depIdx].name)||'',destName:(locs[destIdx]&&locs[destIdx].name)||''};
+}
+// Re-price a saved flight from the CURRENT fuel/maintenance/fees, using its stored inputs (older saved
+// rows without inputs are reverse-engineered from their label + route so they update too).
+function _bizSavedLbl(s){return (s&&s.name!=null&&s.name!=='')?s.name:((s&&s.lbl)||'');}
+function _bizSavedRecalc(s){
+  var p=_bizState();var acs=p.running.aircraft||[],locs=p.running.locations||[];
+  var rc=null,type=s.srcType||'',code=s.srcCode;
+  if(code==null){var lbl=String(s.lbl||'');if(/\(owned avg\)/i.test(lbl)){type=/GA8/i.test(lbl)?'GA8':'C208';}else{code=lbl.replace(/\s*\(lease\)\s*$/i,'').trim();}}
+  if(code){var ac=acs.find(function(a){return String(a.code||'')===code;});if(ac){var c=_bizRunCalc(ac,p.running.fuel);rc={fuelHr:c.fuelHr,maintHr:c.maintHr,totalHr:c.totalHr,isLease:c.isLease,n:1};type=ac.type;}}
+  if(!rc){if(!type)type='C208';var av=_bizTypeAvg(type);rc={fuelHr:av.fuelHr,maintHr:av.maintHr,totalHr:av.totalHr,isLease:false,n:av.n};}
+  var round=(s.round!=null)?!!s.round:/ ⇄ /.test(String(s.route||''));
+  var depName=s.depName,destName=s.destName;
+  if(depName==null||destName==null){var m=String(s.route||'').split(round?' ⇄ ':' → ');if(depName==null)depName=(m[0]||'').trim();if(destName==null)destName=(m[1]||'').trim();}
+  function idxOf(nm,fb){if(nm){var i=locs.findIndex(function(l){return l.name===nm;});if(i>=0)return i;}return fb;}
+  var depIdx=idxOf(depName,0),destIdx=idxOf(destName,locs.length>1?1:0);
+  return _bizFlightCost(rc,type,s.hrs,depIdx,destIdx,round);
 }
 window.bizCalcSave=function(){var s=_bizCalcSnapshot();if(!s)return;_bizState().savedCalcs.push(s);_bizSave();if(typeof toast==='function')toast('Saved to compare ✓','ok');render();};
 window.bizCalcDelSaved=function(i){var p=_bizState();p.savedCalcs.splice(i,1);_bizSave();render();};
@@ -770,20 +788,70 @@ function _bizRunCalcView(){
     h+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:640px"><thead><tr style="background:var(--card2)">'+
       ['Name','Route','Hrs','Run/hr','Landings','Total ex GST','Incl GST',''].map(function(t,i){return '<th style="text-align:'+(i<2?'left':i>6?'center':'right')+';padding:6px 8px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
     saved.forEach(function(s,i){
-      var nm=(s.name!=null&&s.name!=='')?s.name:(s.lbl||'');
+      var nm=_bizSavedLbl(s);
+      var r=_bizSavedRecalc(s); // live: re-priced from current fuel/maintenance/fees
       h+='<tr style="border-top:1px solid var(--border2)">'+
         '<td style="padding:4px 6px;white-space:nowrap"><input value="'+_rzEscSafe(nm)+'" onchange="window.bizSetSavedName('+i+',this.value)" title="Rename this saved flight" style="'+_bizInS+';width:124px;font-weight:700"></td>'+
         '<td style="padding:5px 8px;color:var(--text2);white-space:nowrap">'+_rzEscSafe(s.route||'')+'</td>'+
-        '<td style="padding:5px 8px;text-align:right">'+(s.hrs||0)+'</td>'+
-        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh(s.runHr)+'</td>'+
-        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh((+s.ldg||0)+(+s.conc||0)+(+s.aw||0))+'</td>'+
-        '<td style="padding:5px 8px;text-align:right;font-weight:800;color:#f59e0b">'+_bizPh(s.total)+'</td>'+
-        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh((s.total||0)*1.15)+'</td>'+
+        '<td style="padding:5px 8px;text-align:right">'+(r.hrs||0)+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh(r.runHr)+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh((+r.ldg||0)+(+r.conc||0)+(+r.aw||0))+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;font-weight:800;color:#f59e0b">'+_bizPh(r.total)+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh((r.total||0)*1.15)+'</td>'+
         '<td style="padding:5px 6px;text-align:center"><button onclick="window.bizCalcDelSaved('+i+')" title="Remove" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button></td>'+
         '</tr>';
     });
     h+='</tbody></table></div>';
   }
+  // ── Permanent scheduling-route comparison — always shown, auto-updates with fuel/maintenance ──
+  h+=_bizSchedRoutesPanel();
+  return h;
+}
+
+// Canonical scheduling routes (the ones the allocator costs): Milford return/ferry, Mt Cook, Franz Josef.
+// Rendered as a permanent live comparison so editing fuel/maintenance updates these AND the Scheduling
+// allocator (which derives its per-destination costs from the same running-cost engine).
+var BIZ_SCHED_ROUTES=[
+  {lbl:'Milford return',     dest:'Milford',     round:true, hrs:{GA8:1.2,C208:1.1}},
+  {lbl:'Milford ferry',      dest:'Milford',     round:true, hrs:{GA8:1.0,C208:1.0}},
+  {lbl:'Mt Cook return',     dest:'Mt Cook',     round:true, hrs:{GA8:2.1,C208:1.8}},
+  {lbl:'Franz Josef return', dest:'Franz Josef', round:true, hrs:{GA8:2.4,C208:2.0}}
+];
+function _bizSrcRc(src){ // src: 'GA8'|'C208' (type average), or an aircraft code (e.g. 'SDB')
+  var p=_bizState();
+  if(src==='GA8'||src==='C208'){var a=_bizTypeAvg(src);return {rc:{fuelHr:a.fuelHr,maintHr:a.maintHr,totalHr:a.totalHr,isLease:false,n:a.n},type:src};}
+  var ac=(p.running.aircraft||[]).find(function(x){return String(x.code||'')===src;});
+  if(ac){var c=_bizRunCalc(ac,p.running.fuel);return {rc:{fuelHr:c.fuelHr,maintHr:c.maintHr,totalHr:c.totalHr,isLease:c.isLease,n:1},type:ac.type};}
+  return null;
+}
+function _bizSchedRoutesPanel(){
+  var p=_bizState();var locs=p.running.locations||[];
+  function idxOf(nm,fb){if(nm){var i=locs.findIndex(function(l){return l.name===nm;});if(i>=0)return i;}return fb;}
+  var depIdx=idxOf('Queenstown',0);
+  var srcs=[{key:'GA8',lbl:'Airvan'},{key:'C208',lbl:'Caravan'}];
+  if((p.running.aircraft||[]).some(function(a){return String(a.code||'').toUpperCase()==='SDB';}))srcs.push({key:'SDB',lbl:'SDB (lease)'});
+  var h='<div class="card" style="padding:0;overflow-x:auto"><div class="st" style="padding:14px 14px 4px">Scheduling routes — live cost <span style="font-weight:400;font-size:11px;color:var(--text3)">(ex GST · auto-updates with fuel &amp; maintenance · feeds the Scheduling allocator)</span></div>';
+  h+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:640px"><thead><tr style="background:var(--card2)">'+
+    ['Route','Aircraft','Hrs','Run/hr','Landings','Total ex GST','Incl GST'].map(function(t,i){return '<th style="text-align:'+(i<2?'left':'right')+';padding:6px 8px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+  BIZ_SCHED_ROUTES.forEach(function(rt){
+    var destIdx=idxOf(rt.dest,-1);
+    srcs.forEach(function(sc,si){
+      var src=_bizSrcRc(sc.key);if(!src)return;
+      var hrs=rt.hrs[src.type];if(hrs==null)hrs=rt.hrs.C208;
+      var r=_bizFlightCost(src.rc,src.type,hrs,depIdx,destIdx,rt.round);
+      var land=(+r.ldg||0)+(+r.conc||0)+(+r.aw||0);
+      h+='<tr style="border-top:1px solid var(--border'+(si===0?'':'2')+')">'+
+        '<td style="padding:5px 8px;font-weight:800;white-space:nowrap">'+(si===0?_rzEscSafe(rt.lbl):'')+'</td>'+
+        '<td style="padding:5px 8px;color:var(--text2);white-space:nowrap">'+_rzEscSafe(sc.lbl)+(destIdx<0?' <span style="color:#ef4444;font-size:9px">add a “'+_rzEscSafe(rt.dest)+'” location for fees</span>':'')+'</td>'+
+        '<td style="padding:5px 8px;text-align:right">'+hrs+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh(r.runHr)+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh(land)+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;font-weight:800;color:#f59e0b">'+_bizPh(r.total)+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;color:var(--text2)">'+_bizPh(r.total*1.15)+'</td>'+
+        '</tr>';
+    });
+  });
+  h+='</tbody></table></div>';
   return h;
 }
 
