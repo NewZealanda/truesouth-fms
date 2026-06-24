@@ -3936,10 +3936,12 @@ function _rzRenderSchedule(){
         var _pr=g.product;var _orig=g.start;var _isFb=(typeof _rzIsFlyback==='function')&&_rzIsFlyback(_pr);
         var _eff=(_isFb&&typeof _rzFbTime==='function')?_rzFbTime(_pr,_orig):_orig;
         var _dm=_rzMinsFromHHMM(_eff);if(_dm==null)_dm=_rzMinsFromHHMM(_orig)||0;
+        // The pilot is with the aircraft for the WHOLE rotation (fly down, sit around, fly back) — that's
+        // the block's span, i.e. the product duration (FCF 4.5h, MC/FJ 5h, BRA 0.5h), not just the flight
+        // time. So a morning Milford pilot is committed until the aircraft is back, not free 1h later.
         var _end;
-        if(_isFb){_end=_dm+60;}   // a flyback block is ~1h; it caps the aircraft's rotation (back ~16:30)
-        else{var _dest=(typeof _rzGroupDest==='function')?_rzGroupDest(_pr):'MF';var _tk=(typeof _schedTypeKey==='function')?_schedTypeKey(_a):'caravan';
-          var _bh=null;try{_bh=(SCHED_DEST_HRS[_dest]||{})[_tk];}catch(e){}if(_bh==null)_bh=1.2;_end=_dm+_bh*60+15;}  // return flight + turnaround
+        if(_isFb){_end=_dm+60;}   // a flyback block is ~1h
+        else{var _du=(typeof _rzProductDuration==='function')?_rzProductDuration(_pr):270;_end=_dm+(_du||270);}
         _flights.push({key:k,ac:_a,depMin:_dm,endMin:_end});
       });
       S._schedAutoPilots=_schedComputeBlockPilots(_flights);S._schedAutoPilotsDate=S.rezdyDate;

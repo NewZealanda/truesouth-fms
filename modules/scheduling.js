@@ -755,7 +755,17 @@ function _schedPlanPick(pax,cand,maxNew){
   var pick=best||partial;if(!pick)return [];
   var sel=[];for(var j=0;j<n;j++)if(pick.mask&(1<<j))sel.push(cand[j]);return sel;
 }
-var SCHED_BLOCK_MIN=270;   // Milford rotation ~4.5h: an aircraft is back at QN block-minutes after it departs
+var SCHED_BLOCK_MIN=270;   // Milford rotation ~4.5h (default): an aircraft is back at QN this long after it departs
+// How long an aircraft is AWAY for a departure, by destination — so a short trip (e.g. Branches ~30min)
+// frees the aircraft to take a following departure, instead of looking busy for 4.5h. This is what lets
+// the allocator reuse an aircraft returning from Branches at 09:30 for a 09:30 Milford rather than
+// spinning up a second aircraft.
+function _schedDepDurMin(d){
+  var dest=(d&&d.dest)||'';
+  if(dest==='BRA')return 30;             // Branches: quick round trip
+  if(dest==='MC'||dest==='FJ')return 300; // Mt Cook / Franz Josef: ~5h
+  return SCHED_BLOCK_MIN;                 // Milford (and default): 4.5h
+}
 function _schedNowMin(){var n=new Date();return n.getHours()*60+n.getMinutes();}
 function _schedLockMap(){var c=_schedCfg();if(!c.locks||typeof c.locks!=='object')c.locks={};return c.locks;}
 // A departure is LOCKED if manually pinned, or (on today) its time has already passed — the
@@ -806,7 +816,7 @@ function _schedDayPlan(date,opts){
       // Respect the committed aircraft; just position them so the rest of the day plans around it.
       var fixed=_schedDepAssignedAc(date,d.time,d.dest);var ldAc=[],ldCap=0;
       fixed.forEach(function(a){var ll=_schedLoadedLeg(a.ac,d.dest),el=_schedEmptyLeg(a.ac,d.dest);var out=(freeAt[a.ac]!=null&&freeAt[a.ac]>dm);
-        var cap=_schedNum(_schedTail(a.ac).cap)||_schedDefaultCap(a.ac);ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+SCHED_BLOCK_MIN;_ut[a.ac]=1;_mxUse(a.ac,_schedDepFltHrs(d.dests,_schedIsAirvan(a.ac)));
+        var cap=_schedNum(_schedTail(a.ac).cap)||_schedDefaultCap(a.ac);ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+_schedDepDurMin(d);_ut[a.ac]=1;_mxUse(a.ac,_schedDepFltHrs(d.dests,_schedIsAirvan(a.ac)));
         if(ll!=null){loadedLegs+=2;cost+=2*ll;if(out){emptyLegs+=2;cost+=2*el;}}
         ldAc.push({ac:a.ac,cap:cap,reused:out});});
       if(ldCap<d.pax)paxShort+=(d.pax-ldCap);
@@ -825,7 +835,7 @@ function _schedDayPlan(date,opts){
       .filter(function(c){return !(c.reused&&_schedNoFerry(c.ac));});   // no-ferry aircraft can't be repositioned (empty leg)
     var chosen=_schedPlanPick(d.pax,cand,maxNew);
     var depAc=[];var depCap=0;
-    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+SCHED_BLOCK_MIN;_ut[c.ac]=1;_mxUse(c.ac,_schedDepFltHrs(d.dests,c.airvan));depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
+    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+_schedDepDurMin(d);_ut[c.ac]=1;_mxUse(c.ac,_schedDepFltHrs(d.dests,c.airvan));depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
       loadedLegs+=2;cost+=2*c.ll;if(c.reused){emptyLegs+=2;cost+=2*c.el;}});
     if(depCap<d.pax)paxShort+=(d.pax-depCap);
     plan.push({time:d.time,dest:d.dest,key:d.key,pax:d.pax,aircraft:depAc,cap:depCap,short:depCap<d.pax,locked:false,manualLock:_schedDepManualLock(date,d.time)});
@@ -855,6 +865,7 @@ function _schedDayPilots(date){
 function _pilotRatedForAc(code,ac){
   if(!ac||ac==='__unalloc__'||ac==='__none__'||ac==='__misc__')return true;
   var en=(typeof _rzPilotEndorse==='function')?(_rzPilotEndorse(code)||[]):[];
+  if(typeof _schedIsSDB==='function'&&_schedIsSDB(ac))return en.indexOf(ac)>=0; // SDB (leased) needs its OWN endorsement — no C208 type fallback
   if(!en.length)return true;                          // no endorsements recorded → don't block
   if(en.indexOf(ac)>=0)return true;                   // explicit tail endorsement
   var want=(typeof _acSpec==='function')?((_acSpec(ac)||{}).layout):null;
