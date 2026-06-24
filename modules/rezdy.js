@@ -1126,6 +1126,71 @@ window.rezdySchedMoveBlock=async function(id,newStart,newAc){
     if(typeof sbU==='function')await sbU('ts_schedule',[payload]);}catch(e){}
   if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
 };
+// ── Pointer-based block move / resize (smooth; replaces the glitchy native HTML5 drag) ─────────────
+// Grab the TOP 12px → set departure; BOTTOM 12px → set return; middle → move the block (and reassign
+// aircraft if dropped in another column). A flyback just moves (sets its fly-back time). A tap (no
+// drag) opens the flight. Works with mouse and touch.
+function _rzColAcAt(x,y){try{var els=document.elementsFromPoint(x,y);for(var i=0;i<els.length;i++){var a=els[i].getAttribute&&els[i].getAttribute('data-ac');if(a)return a;}}catch(_){}return null;}
+function _rzBlockKeyAt(x,y,exclude){try{var els=document.elementsFromPoint(x,y);for(var i=0;i<els.length;i++){var k=els[i].getAttribute&&els[i].getAttribute('data-bkkey');if(k&&k!==exclude)return k;}}catch(_){}return null;}
+window.rzCalDown=function(e,key){
+  if(e.button!=null&&e.button!==0)return;
+  var meta=(S._rzBlockMeta||{})[key];if(!meta)return;
+  var blk=e.currentTarget,col=blk.parentNode;
+  var rect=blk.getBoundingClientRect(),crect=col.getBoundingClientRect();
+  var offY=e.clientY-rect.top;
+  var zone=meta.canResize?(offY<12?'top':(offY>rect.height-12?'bot':'move')):'move';
+  var grabMin=_RZ_SCH_START*60+(e.clientY-crect.top)/_RZ_PX_PER_MIN;
+  S._rzDragState={meta:meta,zone:zone,gridTop:crect.top,sx:e.clientX,sy:e.clientY,grabOff:grabMin-meta.startMin,blk:blk,moved:false,_val:null};
+  try{blk.setPointerCapture(e.pointerId);}catch(_){}
+  document.addEventListener('pointermove',_rzCalMove,true);
+  document.addEventListener('pointerup',_rzCalUp,true);
+  document.addEventListener('pointercancel',_rzCalUp,true);
+  if(e.preventDefault)e.preventDefault();if(e.stopPropagation)e.stopPropagation();
+};
+function _rzCalMove(e){
+  var st=S._rzDragState;if(!st)return;
+  if(!st.moved&&Math.abs(e.clientY-st.sy)<4&&Math.abs(e.clientX-st.sx)<4)return;
+  st.moved=true;
+  var pm=_RZ_PX_PER_MIN,startM=st.meta.startMin,endM=st.meta.endMin,nt,nh,gm;
+  var snap=Math.round((_RZ_SCH_START*60+(e.clientY-st.gridTop)/pm)/15)*15;
+  if(st.zone==='top'){var ns=Math.max(_RZ_SCH_START*60,Math.min(snap,endM-15));nt=(ns-_RZ_SCH_START*60)*pm;nh=(endM-ns)*pm;st._val=ns;gm=ns;}
+  else if(st.zone==='bot'){var ne=Math.min(_RZ_SCH_END*60,Math.max(snap,startM+15));nt=(startM-_RZ_SCH_START*60)*pm;nh=(ne-startM)*pm;st._val=ne;gm=ne;}
+  else{var dur=endM-startM;var nsm=Math.max(_RZ_SCH_START*60,Math.min(_RZ_SCH_END*60-dur,Math.round((snap-st.grabOff)/15)*15));nt=(nsm-_RZ_SCH_START*60)*pm;nh=dur*pm;st._val=nsm;gm=nsm;}
+  st.blk.style.top=nt+'px';st.blk.style.height=Math.max(8,nh)+'px';st.blk.style.opacity='.85';st.blk.style.zIndex='80';
+  var ln=document.getElementById('rzDragLine');if(ln){ln.style.top=((gm-_RZ_SCH_START*60)*pm)+'px';ln.style.display='block';var tt=document.getElementById('rzDragLineT');if(tt)tt.textContent=_rzMinToHHMM(gm);}
+}
+function _rzCalUp(e){
+  var st=S._rzDragState;S._rzDragState=null;
+  document.removeEventListener('pointermove',_rzCalMove,true);
+  document.removeEventListener('pointerup',_rzCalUp,true);
+  document.removeEventListener('pointercancel',_rzCalUp,true);
+  var ln=document.getElementById('rzDragLine');if(ln)ln.style.display='none';
+  if(!st)return;var m=st.meta;
+  if(!st.moved){if(m.isManual)window.schedEditBlock(m.id);else window.rezdySchedShowGroup(m.order);return;} // tap = open
+  var v=st._val;if(v==null){render();return;}var hhmm=_rzMinToHHMM(v);
+  if(m.isManual){window.rezdySchedMoveBlock(m.id,hhmm,_rzColAcAt(e.clientX,e.clientY)||m.ac);return;}
+  if(m.isFb){
+    // Dropped onto another flight? → fold this flyback into it (combine), like the old drag did.
+    var tgt=_rzBlockKeyAt(e.clientX,e.clientY,m.key);var tgtAc=tgt?String(tgt).split('|')[0]:null;
+    if(tgt&&tgtAc&&tgtAc!=='__unalloc__'&&!_rzIsFlyback(String(tgt).split('|')[2]||'')&&typeof _rzOrdersForBlockKey==='function'){
+      var ords=_rzOrdersForBlockKey(m.key);S._rzSchedAttach=S._rzSchedAttach||{};S._rzBookingAc=S._rzBookingAc||{};
+      if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();
+      ords.forEach(function(o){S._rzSchedAttach[o]=tgt;S._rzBookingAc[o]=tgtAc;});
+      if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();return;
+    }
+    window.rezdySetFlybackTime(m.prod,m.origStart,hhmm);return;
+  }
+  if(st.zone==='top'){window.rezdySchedSetEdge(m.prod,m.origStart,'top',hhmm);return;}
+  if(st.zone==='bot'){window.rezdySchedSetEdge(m.prod,m.origStart,'bot',hhmm);return;}
+  // Move the whole booking block: shift departure (return follows), reassign aircraft if dropped elsewhere.
+  var kk=m.prod+'|'+m.origStart;
+  S._rzDepTimeOv=S._rzDepTimeOv||{};S._rzDepTimeOv[kk]=hhmm;
+  if(S._rzDepEndOv&&S._rzDepEndOv[kk]!=null){var d=m.endMin-m.startMin;S._rzDepEndOv[kk]=_rzMinToHHMM(_rzMinsFromHHMM(hhmm)+d);}
+  var col2=_rzColAcAt(e.clientX,e.clientY);
+  if(col2==='__unalloc__')col2='__none__';if(col2==='__misc__')col2=null;
+  if(col2&&col2!==m.ac&&typeof _rzReassignBlockToAc==='function'){if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();_rzReassignBlockToAc(m.key,col2);}
+  if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
+}
 // Drag the TOP or BOTTOM edge of a booking block to set its departure / return time independently.
 window.rezdySchedEdgeDragStart=function(key,e){
   S._rzSchedBlockDrag=key;S._rzSchedBlockGrabDy=0;          // the edge tracks the cursor exactly
@@ -3916,6 +3981,7 @@ function _rzRenderSchedule(){
     return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading calendar…</div>';
   }
   const blocks=S._schedBlocks||[];
+  S._rzBlockMeta={};   // per-render map: drag key → block info, used by the pointer move/resize handlers
   // Booking-derived blocks: all bookings sharing an aircraft / departure / product are STACKED
   // into ONE block (e.g. "SLB · 13A · FCF"). Click it to see the bookings + passengers inside.
   const bkGroups={};
@@ -4232,26 +4298,21 @@ function _rzRenderSchedule(){
       const _dropKey=(isBk?b.order:b.id);
       // Any booking block can be dragged to another aircraft column (reassigns its bookings) or
       // onto a flight to combine a flyback/CCF.
-      const _dragKey=isBk?String(b.order):('BLK|'+String(b.id));   // manual blocks (incl. maintenance ferries) are draggable too
-      const _drag=' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(_dragKey).replace(/'/g,"\\'")+'\',event)" ondragend="window.rezdySchedDragEnd()"';
-      // Resize handles (booking flights, not flybacks): drag the TOP edge to set the departure, the
-      // BOTTOM edge to set the return. Keyed by product|raw-start so it survives an aircraft move.
-      var _resizable=isBk&&!_rzIsFlyback(b.product)&&b._origStart;
-      var _eArg=function(edge){return ('EDGE|'+edge+'|'+String(b.product||'')+'|'+String(b._origStart||'')).replace(/'/g,"\\'");};
-      var _handles=_resizable?(
-        '<div draggable="true" ondragstart="window.rezdySchedEdgeDragStart(\''+_eArg('top')+'\',event)" ondragend="window.rezdySchedDragEnd()" title="Drag to set the departure time" style="position:absolute;top:0;left:0;right:0;height:8px;cursor:ns-resize;z-index:3"></div>'+
-        '<div draggable="true" ondragstart="window.rezdySchedEdgeDragStart(\''+_eArg('bot')+'\',event)" ondragend="window.rezdySchedDragEnd()" title="Drag to set the return time" style="position:absolute;bottom:0;left:0;right:0;height:8px;cursor:ns-resize;z-index:3"></div>'
-      ):'';
-      blocksH+='<div'+_drag+(_mlvl?' title="'+_rzEsc(_mtip)+'"':'')+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
-        'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
-        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900" title="Over capacity — only '+(b.cap||'')+' seats on '+_rzEsc(String(b.aircraft).replace(/^ZK-?/,''))+'">⛔ OVER </span>':'')+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
-        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+(isBk?(' – '+_rzEsc(b.end)):'–'+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
-        _handles+
+      const _dragKey=isBk?String(b.order):('BLK|'+String(b.id));
+      var _canResize=isBk&&!_rzIsFlyback(b.product)&&!!b._origStart;
+      // Register this block for the pointer move/resize handlers.
+      S._rzBlockMeta[_dragKey]={prod:b.product,origStart:b._origStart||b.start,ac:b.aircraft,isFb:isBk&&_rzIsFlyback(b.product),isManual:!isBk,id:b.id,order:b.order,key:_dragKey,startMin:_rzMinsFromHHMM(b.start),endMin:_rzMinsFromHHMM(b.end),canResize:_canResize};
+      var _pdown=' onpointerdown="window.rzCalDown(event,\''+_rzEsc(_dragKey).replace(/'/g,"\\'")+'\')"';
+      blocksH+='<div'+_pdown+(isBk?' data-bkkey="'+_rzEsc(String(b.order))+'"':'')+(_mlvl?' title="'+_rzEsc(_mtip)+'"':' title="Drag to move · drag the top/bottom edge to set departure/return · tap to open"')+' ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
+        'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:'+_curs+';overflow:hidden;box-sizing:border-box;line-height:1.25;touch-action:none;user-select:none'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
+        (_canResize?'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:6px 6px 0 0;cursor:ns-resize"></div><div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:0 0 6px 6px;cursor:ns-resize"></div>':'')+
+        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
+        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';
     });
     var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
     colsH+='<div style="width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border)">'+
-      '<div ondragover="window.rezdySchedDragOverCol(event)" ondrop="window.rezdySchedDropBlockToAc(\''+_acJs+'\',event)" style="position:relative;height:'+gridH+'px">'+rows+blocksH+'</div></div>';
+      '<div data-ac="'+_acJs+'" ondragover="window.rezdySchedDragOverCol(event)" ondrop="window.rezdySchedDropBlockToAc(\''+_acJs+'\',event)" style="position:relative;height:'+gridH+'px">'+rows+blocksH+'</div></div>';
   });
 
   // sticky aircraft-id header row, aligned with columns
