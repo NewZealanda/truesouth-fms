@@ -763,7 +763,8 @@ var SCHED_BLOCK_MIN=270;   // Milford rotation ~4.5h (default): an aircraft is b
 function _schedDepDurMin(d){
   var dest=(d&&d.dest)||'';
   if(dest==='BRA')return 30;             // Branches: quick round trip
-  if(dest==='MC'||dest==='FJ')return 300; // Mt Cook / Franz Josef: ~5h
+  if(dest==='MC')return 360;             // Mt Cook expedition: ~6h
+  if(dest==='FJ')return 300;             // Franz Josef: ~5h
   return SCHED_BLOCK_MIN;                 // Milford (and default): 4.5h
 }
 function _schedNowMin(){var n=new Date();return n.getHours()*60+n.getMinutes();}
