@@ -1062,8 +1062,26 @@ function _rzReassignToast(n,ac){if(typeof toast==='function')toast(n+' booking'+
 // Drop a dragged booking block in a column: sets its TIME from the drop height (snapped to 15 min) and,
 // if dropped in a different aircraft column, reassigns it. A flyback's time updates its fly-back time;
 // any other departure gets a display time-shift (Rezdy can't actually move a tour, so this is local).
+// While dragging a block over a column, draw a dashed-red guideline at the 15-min-snapped target time
+// so you can see exactly where it will land. Pure DOM (no re-render) so it's smooth.
+function _rzDragSnapMins(e){
+  var ct=e&&e.currentTarget;if(!ct||!ct.getBoundingClientRect)return null;
+  var rect=ct.getBoundingClientRect();var y=(e.clientY||0)-rect.top;
+  var mins=_RZ_SCH_START*60+y/_RZ_PX_PER_MIN;mins=Math.round(mins/15)*15;          // lock to 15-minute steps
+  return Math.max(_RZ_SCH_START*60,Math.min(_RZ_SCH_END*60,mins));
+}
+window.rezdySchedDragOverCol=function(e){
+  if(e&&e.preventDefault)e.preventDefault();
+  if(!S._rzSchedBlockDrag)return;                                                  // only for block drags, not pilots
+  var mins=_rzDragSnapMins(e);if(mins==null)return;
+  var ln=document.getElementById('rzDragLine');if(!ln)return;
+  ln.style.top=((mins-_RZ_SCH_START*60)*_RZ_PX_PER_MIN)+'px';ln.style.display='block';
+  var t=document.getElementById('rzDragLineT');if(t)t.textContent=String(Math.floor(mins/60)).padStart(2,'0')+':'+String(mins%60).padStart(2,'0');
+};
+window.rezdySchedDragEnd=function(){var ln=document.getElementById('rzDragLine');if(ln)ln.style.display='none';};
 window.rezdySchedDropBlockToAc=function(ac,e){
   if(e&&e.preventDefault)e.preventDefault();
+  var _dl=document.getElementById('rzDragLine');if(_dl)_dl.style.display='none';
   var src=S._rzSchedBlockDrag;S._rzSchedBlockDrag=null;
   if(!src||!ac)return;
   var parts=String(src).split('|');var srcAc=parts[0]||null;var srcStart=parts[1]||'';var srcProd=parts[2]||'';
@@ -4144,7 +4162,7 @@ function _rzRenderSchedule(){
       const _dropKey=(isBk?b.order:b.id);
       // Any booking block can be dragged to another aircraft column (reassigns its bookings) or
       // onto a flight to combine a flyback/CCF.
-      const _drag=isBk?(' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(String(b.order)).replace(/'/g,"\\'")+'\',event)"'):'';
+      const _drag=isBk?(' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(String(b.order)).replace(/'/g,"\\'")+'\',event)" ondragend="window.rezdySchedDragEnd()"'):'';
       blocksH+='<div'+_drag+(_mlvl?' title="'+_rzEsc(_mtip)+'"':'')+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
         '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900" title="Over capacity — only '+(b.cap||'')+' seats on '+_rzEsc(String(b.aircraft).replace(/^ZK-?/,''))+'">⛔ OVER </span>':'')+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
@@ -4153,7 +4171,7 @@ function _rzRenderSchedule(){
     });
     var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
     colsH+='<div style="width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border)">'+
-      '<div ondragover="event.preventDefault()" ondrop="window.rezdySchedDropBlockToAc(\''+_acJs+'\',event)" style="position:relative;height:'+gridH+'px">'+rows+blocksH+'</div></div>';
+      '<div ondragover="window.rezdySchedDragOverCol(event)" ondrop="window.rezdySchedDropBlockToAc(\''+_acJs+'\',event)" style="position:relative;height:'+gridH+'px">'+rows+blocksH+'</div></div>';
   });
 
   // sticky aircraft-id header row, aligned with columns
@@ -4181,7 +4199,9 @@ function _rzRenderSchedule(){
   }
   const grid='<div class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+
     headH+
-    '<div style="display:flex;position:relative">'+axis+colsH+nowLine+'</div>'+
+    '<div style="display:flex;position:relative">'+axis+colsH+nowLine+
+      '<div id="rzDragLine" style="position:absolute;left:'+_RZ_AXIS_W+'px;right:0;top:0;border-top:2px dashed #ef4444;z-index:70;pointer-events:none;display:none"><div id="rzDragLineT" style="position:absolute;left:4px;top:-9px;font-size:10px;font-weight:800;color:#ef4444;background:var(--card);padding:0 5px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div></div>'+
+    '</div>'+
     '</div></div>';
   // Available pilots — drag a code bubble onto a flight block to allocate.
   var _pilots=_rzAvailablePilots();
