@@ -2481,9 +2481,12 @@ window.uploadToDrive=async function(sheet,preToken){
     var folderLink='https://drive.google.com/drive/folders/'+monthId;
     S.driveStatus='ok:'+fname;S.driveLastLink=fileLink;S.driveLastFile=fname;S.driveLastFolder=folderLink;
     S.appMsg={type:'ok',text:'Saved to Drive: '+fname+' — <a href="'+fileLink+'" target="_blank" style="color:inherit">Open ↗</a> &nbsp; <a href="'+folderLink+'" target="_blank" style="color:inherit">Folder ↗</a>'};
-    // Mark as uploaded in Supabase — updates drive_uploaded column on ts_loadsheets row
+    // Mark as uploaded in Supabase — updates drive_uploaded column on ts_loadsheets row. AWAIT it (with
+    // one retry) so the archive flag is committed before we move on; a fire-and-forget patch could lose
+    // the race with a page refresh, bouncing the sheet back to Signed.
     if(sheet&&sheet.id){
-      sbPatch('ts_loadsheets',sheet.id,{drive_uploaded:true}).catch(function(){});
+      var _puOk=await sbPatch('ts_loadsheets',sheet.id,{drive_uploaded:true});
+      if(!_puOk)await sbPatch('ts_loadsheets',sheet.id,{drive_uploaded:true});
       var _sh=S.saved.find(function(s){return s.id===sheet.id;});
       if(_sh){_sh.driveUploaded=true;_sh.uploadedBy=(S.user&&S.user.name)||'';_sh.uploadedAt=new Date().toISOString();lsSet('ts_loadsheets_cache',S.saved);}
     }
