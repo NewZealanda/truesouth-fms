@@ -803,7 +803,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v25.61';
+const APP_VER='v25.62';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16075,6 +16075,10 @@ function _rzRenderSchedule(){
     if(_rzIsFlyback(g.product)&&sm===720){g.start='15:30';g.end='16:30';}
     var acLbl=g.aircraft==='__unalloc__'?'?':g.aircraft.replace(/^ZK-?/,'');
     var gbd={a:0,c:0,i:0};g.bookings.forEach(function(bk){var e=_rzEffBreakdown(bk.b);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
+    // Overbooked flag: seated pax (adults+children; infants are lap) beyond the aircraft's seat count.
+    var _sp=(g.aircraft!=='__unalloc__'&&g.aircraft!=='__misc__'&&typeof _acSpec==='function')?_acSpec(g.aircraft):null;
+    g.cap=_sp?((_sp.seats||[]).length-1-(((_sp.removedSeats)||[]).length)):null;   // seats minus PIC + removed
+    g.over=(g.cap!=null)&&((gbd.a+gbd.c)>g.cap);
     var _manP=(S._schedPilots||{})[g.key]||null;
     var _autoP=(typeof _schedAutoPilotFor==='function')?_schedAutoPilotFor(g.aircraft):null;
     var pilot=_manP||_autoP||null;
@@ -16194,8 +16198,8 @@ function _rzRenderSchedule(){
 
   // Columns: one per aircraft. Include any aircraft that has a block but isn't in S.aircraft.
   let acIds=Object.keys((S&&S.aircraft)||{});
-  blocks.forEach(function(b){if(b.aircraft&&acIds.indexOf(b.aircraft)<0)acIds.push(b.aircraft);});
-  bkBlocks.forEach(function(b){if(b.aircraft&&b.aircraft!=='__unalloc__'&&acIds.indexOf(b.aircraft)<0)acIds.push(b.aircraft);});
+  blocks.forEach(function(b){if(b.aircraft&&b.aircraft!=='__misc__'&&acIds.indexOf(b.aircraft)<0)acIds.push(b.aircraft);});
+  bkBlocks.forEach(function(b){if(b.aircraft&&b.aircraft!=='__unalloc__'&&b.aircraft!=='__misc__'&&acIds.indexOf(b.aircraft)<0)acIds.push(b.aircraft);});
   if(bkBlocks.some(function(b){return b.aircraft==='__unalloc__';}))acIds.push('__unalloc__');
   acIds.push('__misc__');   // far-right free-form column for meetings / notes (e.g. "DF AA JY Meeting")
   if(acIds.length===1){     // only the misc column → nothing scheduled
@@ -16275,7 +16279,7 @@ function _rzRenderSchedule(){
       const _drag=isBk?(' draggable="true" ondragstart="window.rezdySchedBlockDragStart(\''+_rzEsc(String(b.order)).replace(/'/g,"\\'")+'\',event)"'):'';
       blocksH+='<div'+_drag+(_mlvl?' title="'+_rzEsc(_mtip)+'"':'')+' onclick="'+_click+'" ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:pointer;overflow:hidden;box-sizing:border-box;line-height:1.25'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
-        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
+        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900" title="Over capacity — only '+(b.cap||'')+' seats on '+_rzEsc(String(b.aircraft).replace(/^ZK-?/,''))+'">⛔ OVER </span>':'')+(isBk&&b._owing?'<span style="color:#ef4444;font-weight:900">$ </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(b.start)+(isBk?'':'–'+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';
     });
