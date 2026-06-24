@@ -200,6 +200,16 @@ window.fdCertify=function(uid,month){
   if(typeof toast==='function')toast('Period '+_fdMonthLabel(month)+' certified ✓','ok');
   render();
 };
+// Remove a month's certification so it can be edited and re-signed (deletes the ts_fd_certs row).
+window.fdUncertify=async function(uid,month){
+  if(!uid||!month)return;
+  if(typeof confirm==='function'&&!confirm('Remove the certification for '+_fdMonthLabel(month)+'? It returns to "needs certifying" so you can edit and re-sign it.'))return;
+  var k=uid+'|'+month;
+  if(S._fdCerts)delete S._fdCerts[k];
+  render();
+  try{await fetch(SB+'/rest/v1/ts_fd_certs?id=eq.'+encodeURIComponent(k),{method:'DELETE',headers:SH});}catch(e){}
+  if(typeof toast==='function')toast(_fdMonthLabel(month)+' certification removed — re-certify when ready','warn');
+};
 function _fdCert(uid,month){return (S._fdCerts||{})[uid+'|'+month]||null;}
 
 window.fdSetMonth=function(m){S._fdMonth=m;render();};
@@ -453,7 +463,12 @@ function _fdRenderRecord(canManage){
   var cert=_fdCert(uid,month);
   var monthEnded=month<_fdMonth(_fdToday());
   if(cert){
-    h+='<div class="card" style="border-left:3px solid #22c55e;font-size:12px;color:var(--text2)">✓ '+_rzEscSafe(_fdMonthLabel(month))+' certified by '+_rzEscSafe(cert.by)+(cert.at?' on '+_rzEscSafe(_fdFmt(String(cert.at).slice(0,10))):'')+'.</div>';
+    h+='<div class="card" style="border-left:3px solid #22c55e;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+      '<div style="font-size:12px;color:var(--text2)">✓ '+_rzEscSafe(_fdMonthLabel(month))+' certified by '+_rzEscSafe(cert.by)+(cert.at?' on '+_rzEscSafe(_fdFmt(String(cert.at).slice(0,10))):'')+'.</div>'+
+      '<div style="display:flex;gap:6px;flex-shrink:0">'+
+        '<button class="btn btn-ghost" style="font-size:12px" onclick="window.fdPrint(\''+uid+'\',\''+month+'\')">🖨 Print</button>'+
+        '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(245,158,11,.5);color:#f59e0b" onclick="window.fdUncertify(\''+uid+'\',\''+month+'\')">↩ Uncertify</button>'+
+      '</div></div>';
   } else {
     h+='<div class="card" style="border-left:3px solid '+(monthEnded?'#f59e0b':'var(--border2)')+';display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
       '<div style="font-size:12px;color:var(--text2)">'+(monthEnded?'<b style="color:#f59e0b">This period needs certifying.</b> ':'')+'When '+_rzEscSafe(_fdMonthLabel(month))+' is complete, print, check, then certify the record.</div>'+
@@ -519,6 +534,7 @@ window.fdPrint=function(uid,month){
   // past month shows that month's rolling totals, not the current window's.
   var _pEnd=(month<_fdMonth(_fdToday()))?(y+'-'+String(mo+1).padStart(2,'0')+'-'+String(daysIn).padStart(2,'0')):_fdToday();
   var d30=_fdValueFor(uid,'duty_30',_pEnd),f30=_fdValueFor(uid,'flt_30',_pEnd);
+  var cert=_fdCert(uid,month);   // when certified, the printout shows who signed it + when (controlled record)
   var w=window.open('','_blank','width=820,height=900');if(!w){if(typeof toast==='function')toast('Allow pop-ups to print.','warn');return;}
   w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Flight & Duty — '+_rzEscSafe(nm)+' — '+_fdMonthLabel(month)+'</title><style>'+
     '*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:14mm;font-size:12px}'+
@@ -532,7 +548,7 @@ window.fdPrint=function(uid,month){
     '<tr class="tot"><td colspan="3">Month totals</td><td class="c">'+(Math.round(totD*10)/10)+'</td><td class="c">'+(Math.round(totF*10)/10)+'</td><td class="c"></td><td class="c"></td></tr>'+
     '</tbody></table>'+
     '<div class="sub">Rolling at period end — Duty/30 days: '+(Math.round(d30*10)/10)+' / '+L.duty_30.val+' h · Flight/30 days: '+(Math.round(f30*10)/10)+' / '+L.flt_30.val+' h</div>'+
-    '<div class="sign"><div>Pilot signature &amp; date</div></div>'+
+    '<div class="sign">'+(cert?'<div>Certified by '+_rzEscSafe(cert.by)+(cert.at?' on '+_rzEscSafe(_fdFmt(String(cert.at).slice(0,10))):'')+'</div>':'<div>Pilot signature &amp; date</div>')+'</div>'+
     '<div class="note">+ = duty extended to '+FD_DUTY_EXT+'h to complete a disrupted schedule. I certify the above flight and duty times are correct and complete.</div>'+
     '<script>window.onload=function(){window.print();}<\/script></body></html>');
   w.document.close();
