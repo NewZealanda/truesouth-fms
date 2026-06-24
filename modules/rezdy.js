@@ -4004,13 +4004,26 @@ function _rzRenderSchedule(){
       // Click-to-set pilot picker — tap a pilot to assign (tap again to clear). Only type-rated
       // pilots for this aircraft are shown.
       var _gkey=String(_grp.key).replace(/'/g,"\\'");
-      var _gpick=_rzAvailablePilots().filter(function(p){if(!_gac)return true;var en=_rzPilotEndorse(p.code);return !(en&&en.length)||en.indexOf(_gac)>=0;});
+      var _gpick=_rzAvailablePilots().filter(function(p){if(!_gac)return true;return (typeof _pilotRatedForAc==='function')?_pilotRatedForAc(p.code,_gac):true;});
       detailH+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 8px">'+
         '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-right:2px">Set pilot</span>';
       if(!_gpick.length){detailH+='<span style="font-size:11px;color:var(--text3)">No type-rated pilots available</span>';}
       _gpick.forEach(function(p){var on=_grp.pilot===p.code;var off=!p.rostered;
         detailH+='<button onclick="event.stopPropagation();window.rezdySchedSetPilot(\''+_gkey+'\',\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(off?' (not rostered on today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid #60a5fa':'1px solid rgba(96,165,250,'+(off?'.28':'.5')+')')+';background:rgba(96,165,250,'+(on?'.22':(off?'.05':'.1'))+');color:#60a5fa;font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'✈ ')+_rzEsc(p.code)+(off?' <span style="font-size:8px;font-weight:700">off</span>':'')+'</button>';});
       detailH+='</div>';
+      // ⚙ TEMP DIAGNOSTIC — reveals what the auto-allocator decided for this aircraft, so we can see
+      // why a flight stays uncrewed. (Remove once the pilot allocation is confirmed working.)
+      if(_gac){
+        try{var _da=(S._schedAutoPilots||{});var _av=(typeof _schedDayPilots==='function')?_schedDayPilots(S.rezdyDate):[];
+          var _dl=[];
+          _dl.push('sched='+(((typeof _schedEnabled==='function')&&_schedEnabled())?'ON':'OFF'));
+          _dl.push('dateOK='+(S._schedAutoPilotsDate===S.rezdyDate?'y':'n'));
+          _dl.push('autoHere='+(_da[_gac]||'—'));
+          _dl.push('allKeys=['+Object.keys(_da).map(function(k){return String(k).replace(/^ZK-?/,'')+':'+_da[k];}).join(' ')+']');
+          _dl.push('avail='+_av.map(function(p){return p.code+(((typeof _pilotRatedForAc==='function')&&_pilotRatedForAc(p.code,_gac))?'+':'-');}).join(','));
+          detailH+='<div style="font-size:10px;color:#b45309;font-family:monospace;background:rgba(245,158,11,.10);padding:6px 8px;border-radius:6px;margin:0 0 8px;word-break:break-all">⚙ '+_rzEsc(_dl.join(' · '))+'</div>';
+        }catch(_e){}
+      }
       // Full product title(s) at the top — the real Rezdy product name, not just the short code.
       var _allBk=_grp.bookings.concat(_grp._fb||[]);
       var _titles=[];_allBk.forEach(function(bk){var t=String((bk.it&&bk.it.product)||'').trim();if(t&&_titles.indexOf(t)<0)_titles.push(t);});
