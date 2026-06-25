@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.54';
+const APP_VER='v26.55';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16680,61 +16680,53 @@ function _rzSmartSeat(acId,paxList,opts){
   var wOf=function(p){var w=parseFloat(p&&p.weight);return isNaN(w)?0:w;};
   var gMap={};
   paxList.forEach(function(p){var key=(p.group&&String(p.group).trim())||('solo:'+p.id);(gMap[key]||(gMap[key]={pax:[]})).pax.push(p);});
-  var groups=Object.keys(gMap).map(function(k){var g=gMap[k];g.w=g.pax.reduce(function(s,p){return s+wOf(p);},0);g.size=g.pax.length;g.inf=g.pax.some(function(p){return p.infant;});g._placed=false;return g;});
+  var groups=Object.keys(gMap).map(function(k){var g=gMap[k];g.w=g.pax.reduce(function(s,p){return s+wOf(p);},0);g.size=g.pax.length;g.inf=g.pax.some(function(p){return p.infant;});return g;});
   // Front single seat (seat 1 used as a pax seat) = a 1-seat row at the very front.
   var frontSingle=(rows[0]&&rows[0].length===1&&!coPilot)?rows[0][0]:null;
-  var pairRows=(frontSingle!=null?rows.slice(1):rows).map(function(r){return r.slice();}); // remaining rows, front→back
+  // Flat list of the PAIR-row seats, front→back (these tile two-per-row).
+  var P=[];(frontSingle!=null?rows.slice(1):rows).forEach(function(r){r.forEach(function(s){P.push(s);});});
   var result={};
-  // Take `need` seats from consecutive rows (front, or back for infant groups). Removes them from pairRows.
-  function takeRows(need,fromBack){
-    var order=[];for(var i=0;i<pairRows.length;i++)order.push(i);if(fromBack)order.reverse();
-    for(var oi=0;oi<order.length;oi++){
-      var start=order[oi],got=[],used=[],r=start;
-      while(r>=0&&r<pairRows.length&&got.length<need){
-        if(used.length&&r!==used[used.length-1]+1)break;
-        if(pairRows[r].length===0){if(got.length)break;else{r++;continue;}}
-        for(var s=0;s<pairRows[r].length&&got.length<need;s++)got.push(pairRows[r][s]);
-        used.push(r);r++;
-      }
-      if(got.length>=need){got=got.slice(0,need);got.forEach(_rmSeat);return got;}
-    }
-    var allFree=[];pairRows.forEach(function(r){r.forEach(function(s){allFree.push(s);});});
-    if(allFree.length>=need){var pick=allFree.slice(0,need);pick.forEach(_rmSeat);return pick;}
-    return null;
-  }
-  function _rmSeat(seat){for(var rr=0;rr<pairRows.length;rr++){var ix=pairRows[rr].indexOf(seat);if(ix>=0){pairRows[rr].splice(ix,1);return;}}}
   // Seat one group across its seats: heaviest member most-forward, infant host rearmost.
   function assignGroup(g,seats){
-    var seatsByArm=seats.slice().sort(function(x,y){return arm(x)-arm(y);}); // front→back
+    var byArm=seats.slice().sort(function(x,y){return arm(x)-arm(y);});               // front→back
     var nonInf=g.pax.filter(function(p){return !p.infant;}).sort(function(x,y){return wOf(y)-wOf(x);});
-    var inf=g.pax.filter(function(p){return p.infant;});
-    var mem=nonInf.concat(inf); // infants last → rear seats
-    seatsByArm.forEach(function(seat,i){if(mem[i])result[seat]=mem[i].id;});
-    g._placed=true;
+    var mem=nonInf.concat(g.pax.filter(function(p){return p.infant;}));               // infant host last → rear
+    byArm.forEach(function(s,i){if(mem[i])result[s]=mem[i].id;});
   }
-  // 1) Front single → heaviest solo, else one member of the heaviest odd (non-infant) group.
-  if(frontSingle!=null){
-    var solos=groups.filter(function(g){return g.size===1&&!g.inf;}).sort(function(x,y){return y.w-x.w;});
-    var fg=solos[0];
-    if(!fg){var odds=groups.filter(function(g){return g.size%2===1&&!g.inf;}).sort(function(x,y){return y.w-x.w;});fg=odds[0];}
-    if(fg){
-      if(fg.size===1){result[frontSingle]=fg.pax[0].id;fg._placed=true;}
-      else{var extra=takeRows(fg.size-1,false);if(extra){assignGroup(fg,[frontSingle].concat(extra));}else{result[frontSingle]=fg.pax[0].id;fg._placed=true;}}
-      frontSingle=null;
-    }
+  // Classify (non-infant by parity; infants always handled last → back).
+  var solos=groups.filter(function(g){return g.size===1&&!g.inf;}).sort(function(x,y){return y.w-x.w;});
+  var evens=groups.filter(function(g){return g.size>=2&&g.size%2===0&&!g.inf;}).sort(function(x,y){return y.w-x.w;});
+  var odds =groups.filter(function(g){return g.size>=3&&g.size%2===1&&!g.inf;}).sort(function(x,y){return y.w-x.w;});
+  var infs =groups.filter(function(g){return g.inf;}).sort(function(x,y){return y.w-x.w;});
+
+  // Build the seat sequence + group fill order so that:
+  //  • a SOLO takes the front single seat (or, failing a solo, one member of an odd group anchors it);
+  //  • EVEN groups tile WHOLE pair-rows (sit side-by-side across the aisle) — so they lead the pair seats;
+  //  • ODD groups + extra solos fill the remaining pair seats contiguously (their odd seat shares a row
+  //    with the next group — a clean group boundary);
+  //  • INFANT groups come LAST → the rear rows, host in the rearmost seat.
+  var seq, frontFill;
+  if(frontSingle!=null&&!solos.length&&odds.length){
+    // No solo to take the front single → let an odd group anchor it; odds lead so they stay contiguous.
+    seq=[frontSingle].concat(P);
+    frontFill=odds.concat(evens).concat(solos);
+  }else{
+    if(frontSingle!=null&&solos.length){result[frontSingle]=solos.shift().pax[0].id;} // heaviest solo → front single
+    seq=P.slice();                                                                     // front single (if any) handled / left empty
+    frontFill=evens.concat(odds).concat(solos);                                        // evens first → pair-aligned
   }
-  // 2) Remaining groups: non-infant heaviest first (front pairs), infant groups to the back.
-  var rest=groups.filter(function(g){return !g._placed;});
-  var ordered=rest.filter(function(g){return !g.inf;}).sort(function(x,y){return y.w-x.w;}).concat(rest.filter(function(g){return g.inf;}).sort(function(x,y){return y.w-x.w;}));
-  ordered.forEach(function(g){
-    var seats=takeRows(g.size,g.inf);
-    if(!seats){ // last resort: any free seat, incl. an unused front single
-      seats=[];if(frontSingle!=null){seats.push(frontSingle);frontSingle=null;}
-      var pool=[];pairRows.forEach(function(r){r.forEach(function(s){pool.push(s);});});
-      while(seats.length<g.size&&pool.length){var s=pool.shift();seats.push(s);_rmSeat(s);}
-    }
-    if(seats&&seats.length)assignGroup(g,seats);
-  });
+  // Reserve the REAR seats for infant groups (so the host genuinely sits in the back row), and fill the
+  // non-infant groups from the front into what's left.
+  var infTotal=infs.reduce(function(s,g){return s+g.size;},0);
+  var frontLimit=Math.max(0,seq.length-infTotal);
+  var lo=0;
+  frontFill.forEach(function(g){var seats=[];for(var k=0;k<g.size&&lo<frontLimit;k++)seats.push(seq[lo++]);if(seats.length)assignGroup(g,seats);});
+  var bi=frontLimit;
+  infs.forEach(function(g){var seats=[];for(var k=0;k<g.size&&bi<seq.length;k++)seats.push(seq[bi++]);if(seats.length)assignGroup(g,seats);});
+  // Anyone still unseated (front fillers overran the reserved tail) → drop into any remaining seat.
+  var taken={};Object.keys(result).forEach(function(s){taken[result[s]]=1;});
+  var freeSeats=seq.filter(function(s){return result[s]==null;});if(frontSingle!=null&&result[frontSingle]==null)freeSeats.unshift(frontSingle);
+  var fi=0;groups.forEach(function(g){g.pax.forEach(function(p){if(!taken[p.id]&&fi<freeSeats.length){result[freeSeats[fi++]]=p.id;taken[p.id]=1;}});});
   return result;
 }
 window.rezdyManReseat=function(dep,acId){
