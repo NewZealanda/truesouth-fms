@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.69';
+const APP_VER='v26.70';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -18320,17 +18320,50 @@ function _rzBreakdownAnalyze(brokenAc,fromMin,hours,loc){
       if(c.kind==='rebook'||c.kind==='piggyback')commit.rebook[c.onFlight.key]=(commit.rebook[c.onFlight.key]||0)+F.pax;else commitSlot(commit,c.ac,c.depAt,c.depAt+F.dur);
       moves.push({orders:F.orders,toAc:c.ac});if(c.askPax)askPax=true;maxDelay=Math.max(maxDelay,c.delay||0);steps.push(brStep(F,c));});
     return{steps:steps,moves:moves,stuck:stuck,askPax:askPax,maxDelay:maxDelay,paxCancelled:stuck.reduce(function(s,f){return s+f.pax;},0)};}
+  // Pilots free to launch an extra airframe in [dep,end): rostered pilots minus the other flights
+  // already airborne in that window (each consumes one). The broken aircraft's pilot is freed.
+  function freePilotsAt(dep,end){var rostered=pilots.filter(function(p){return p.rostered;}).length||99;var busy=flights.filter(function(g){return g.ac!==brokenAc&&ovl(dep,end,g.depMin,g.endMin);}).length;return Math.max(0,rostered-busy);}
+  function ordPax(o){var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(o);});var bd=(b&&typeof _rzEffBreakdown==='function')?_rzEffBreakdown(b):{a:1,c:0};return (bd.a||0)+(bd.c||0);}
+  // Split a flight's load across several smaller free tails (groups kept whole) — preferred over a
+  // delayed ferry when enough small airframes + pilots are free to carry everyone on time.
+  function buildSplitPlan(){
+    if(!affected.length)return null;
+    var commit=newCommit(),steps=[],moves=[],stuck=[],maxDelay=0,used=false;
+    affected.forEach(function(F){
+      var dep=F.depMin,end=F.depMin+F.dur,cands=[];
+      if(loc==='out'){fleet.forEach(function(ac){if(!ratedAvail(ac))return;var d=Math.max(fromMin,freeAfterPlan(ac,commit));if(d+F.dur<=DAY_END&&!busyPlan(ac,d,d+F.dur,commit))cands.push({ac:ac,capLeft:cap(ac),depAt:d,backAt:d+F.dur,parked:isParked(ac)});});}
+      else{fleet.forEach(function(ac){if(!ratedAvail(ac))return;if(!busyPlan(ac,dep,end,commit)&&freeAfterPlan(ac,commit)<=dep)cands.push({ac:ac,capLeft:cap(ac),depAt:dep,backAt:end,parked:isParked(ac)});});}
+      if(cands.length<2){stuck.push(F);return;}
+      cands.sort(function(a,b){return b.capLeft-a.capLeft;});
+      var budget=freePilotsAt(dep,end),chosen=[],tot=0;
+      for(var i=0;i<cands.length&&chosen.length<budget;i++){chosen.push(cands[i]);tot+=cands[i].capLeft;if(tot>=F.pax)break;}
+      if(chosen.length<2||tot<F.pax){stuck.push(F);return;}
+      var ords=(F.orders||[]).map(function(o){return {order:o,pax:ordPax(o)};}).sort(function(a,b){return b.pax-a.pax;});
+      var bins=chosen.map(function(t){return {ac:t.ac,left:t.capLeft,orders:[],pax:0,parked:t.parked,depAt:t.depAt,backAt:t.backAt};});
+      var ok=true;
+      ords.forEach(function(g){var bin=bins.filter(function(bn){return bn.left>=g.pax;}).sort(function(a,b){return b.left-a.left;})[0];if(!bin){ok=false;return;}bin.left-=g.pax;bin.pax+=g.pax;bin.orders.push(g.order);});
+      var usedBins=bins.filter(function(bn){return bn.orders.length;});
+      if(!ok||usedBins.length<2){stuck.push(F);return;}
+      usedBins.forEach(function(bn){commitSlot(commit,bn.ac,bn.depAt,bn.depAt+F.dur);moves.push({orders:bn.orders,toAc:bn.ac});var d=Math.max(0,(loc==='out')?(bn.backAt-F.endMin):(bn.depAt-F.depMin));maxDelay=Math.max(maxDelay,d);
+        steps.push({kind:'split',text:(loc==='out'?'Collect ':'')+bn.pax+'p of '+HH(F.depMin)+' '+(F.dest||F.destCode)+' on <b>'+sh(bn.ac)+'</b>'+(bn.parked?' (bring parked online)':'')+(loc==='out'?' — empty out, back ~'+HH(bn.backAt):'')});});
+      used=true;
+    });
+    if(!used)return null;
+    return{steps:steps,moves:moves,stuck:stuck,askPax:false,maxDelay:maxDelay,paxCancelled:stuck.reduce(function(s,f){return s+f.pax;},0)};
+  }
   function rk(map){return function(c){return map[c.kind]!=null?map[c.kind]:5;};}
   function brLabel(p){if(p.stuck.length)return 'Partial — '+p.paxCancelled+'p still stuck';var k={};p.steps.forEach(function(s){k[s.kind]=1;});
+    if(k.split)return 'Split the load across '+p.moves.length+' aircraft';
     if(k.rebook)return 'Rebook to a later flight';if(k.piggyback)return 'Bring back on another aircraft';if(k.collect)return 'Empty positioning flight to collect';if(k.ferry)return 'Ferry an aircraft for an extra run';if(k.parked)return 'Bring a parked aircraft online';return 'Recover with a spare aircraft';}
   var raw=[buildPlan(rk({spare:0,parked:1,collect:1,piggyback:1,ferry:2,rebook:3}))];
+  var splitP=buildSplitPlan();if(splitP&&splitP.steps.length)raw.push(splitP);
   if(loc==='out')raw.push(buildPlan(rk({collect:0,parked:0,piggyback:1})));
   else{raw.push(buildPlan(rk({ferry:0,spare:1,parked:1})));raw.push(buildPlan(rk({rebook:0,piggyback:0,spare:1,parked:1})));raw.push(buildPlan(rk({parked:0,collect:0,spare:1})));}
   var seen={},options=[];
   raw.forEach(function(p){if(!p.steps.length)return;var sig=p.moves.map(function(m){return m.orders.join('+')+'>'+m.toAc;}).join('|')+'#'+p.paxCancelled;if(seen[sig])return;seen[sig]=1;options.push({type:'recover',label:brLabel(p),steps:p.steps,moves:p.moves,cancelOrders:[],cancelFlights:p.stuck.slice(),paxCancelled:p.paxCancelled,maxDelay:p.maxDelay,askPax:p.askPax,stuck:p.stuck.slice()});});
   var allOrders=[];affected.forEach(function(f){(f.orders||[]).forEach(function(o){allOrders.push(o);});});
   options.push({type:'cancel',label:'Cancel the stranded bookings',steps:affected.map(function(f){return{kind:'cancel',text:'Cancel '+HH(f.depMin)+' '+(f.dest||f.destCode)+' '+f.pax+'p'};}),moves:[],cancelOrders:allOrders,cancelFlights:affected.slice(),paxCancelled:affected.reduce(function(s,f){return s+f.pax;},0),maxDelay:0,askPax:false,stuck:[]});
-  options.sort(function(a,b){return (a.paxCancelled-b.paxCancelled)||(a.stuck.length-b.stuck.length)||((a.askPax?1:0)-(b.askPax?1:0))||(a.maxDelay-b.maxDelay);});
+  options.sort(function(a,b){return (a.paxCancelled-b.paxCancelled)||(a.stuck.length-b.stuck.length)||((a.askPax?1:0)-(b.askPax?1:0))||(a.maxDelay-b.maxDelay)||((a.moves||[]).length-(b.moves||[]).length);});
   return {affected:affected,location:loc,options:options.slice(0,4)};
 }
 window.rezdyBreakdownApply=function(i){
