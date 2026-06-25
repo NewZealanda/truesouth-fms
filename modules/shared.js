@@ -85,9 +85,9 @@ async function _sbFetch(url, opts){
   return r;
 }
 const sbF=async(t,q='',order='created_at')=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?select=*${q}&order=${order}.desc`,{headers:{...SH}});if(!r.ok){console.error('[sbF]',t,'status:',r.status,await r.text());return null;}return r.json();}catch(e){console.error('[sbF]',t,'exception:',e);return null;}};
-// Intro animation: the mountains-draw + plane-takeoff plays once (5.5s) on boot before the app is
+// Intro animation: the mountains-draw + plane-takeoff plays once (3.5s) on boot before the app is
 // revealed, unless the Skip button is pressed. INTRO_MS = how long the intro is held.
-const INTRO_MS=5500;
+const INTRO_MS=3500;
 // ── Fetch window: only load recent rows from large tables (tunable) ──
 const FETCH_DAYS=90;
 const _fetchSince=()=>new Date(Date.now()-FETCH_DAYS*864e5).toISOString().slice(0,10);
@@ -540,7 +540,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.53';
+const APP_VER='v26.54';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

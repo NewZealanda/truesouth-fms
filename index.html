@@ -323,11 +323,11 @@ input[type=number] { -moz-appearance: textfield; }
 @keyframes ts-fade-in{0%{opacity:0}100%{opacity:1}}
 #loading-overlay{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background-size:cover;background-position:center;animation:ts-fade-in .2s ease}
 /* Mountains-draw + plane-takeoff loading animation */
-#loading-overlay .ts-scene{position:relative;width:300px;height:170px;animation:tsm-fade 5.5s ease-in-out forwards}
+#loading-overlay .ts-scene{position:relative;width:300px;height:170px;animation:tsm-fade 3.5s ease-in-out forwards}
 #loading-overlay .ts-mtns{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-#loading-overlay .ts-mtn-path{stroke-dasharray:1;stroke-dashoffset:1;animation:tsm-draw 5.5s ease-in-out forwards}
+#loading-overlay .ts-mtn-path{stroke-dasharray:1;stroke-dashoffset:1;animation:tsm-draw 3.5s ease-in-out forwards}
 #loading-overlay .ts-runway2{position:absolute;left:18px;bottom:16px;width:130px;height:2px;border-radius:2px;background:linear-gradient(90deg,rgba(255,255,255,.5),rgba(255,255,255,0))}
-#loading-overlay .ts-plane2{position:absolute;left:18px;bottom:14px;animation:tsm-plane 5.5s linear forwards;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+#loading-overlay .ts-plane2{position:absolute;left:18px;bottom:14px;animation:tsm-plane 3.5s linear forwards;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
 @keyframes tsm-fade{0%{opacity:0}4%{opacity:1}93%{opacity:1}100%{opacity:0}}
 @keyframes tsm-draw{0%{stroke-dashoffset:1}4%{stroke-dashoffset:1}40%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
 @keyframes tsm-plane{0%,40%{transform:translate(0,0) rotate(0deg);opacity:0}44%{opacity:1;transform:translate(6px,0) rotate(0deg)}52%{transform:translate(50px,-16px) rotate(-12deg)}96%{transform:translate(258px,-136px) rotate(-17deg);opacity:1}100%{transform:translate(282px,-150px) rotate(-17deg);opacity:0}}
@@ -425,9 +425,9 @@ async function _sbFetch(url, opts){
   return r;
 }
 const sbF=async(t,q='',order='created_at')=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?select=*${q}&order=${order}.desc`,{headers:{...SH}});if(!r.ok){console.error('[sbF]',t,'status:',r.status,await r.text());return null;}return r.json();}catch(e){console.error('[sbF]',t,'exception:',e);return null;}};
-// Intro animation: the mountains-draw + plane-takeoff plays once (5.5s) on boot before the app is
+// Intro animation: the mountains-draw + plane-takeoff plays once (3.5s) on boot before the app is
 // revealed, unless the Skip button is pressed. INTRO_MS = how long the intro is held.
-const INTRO_MS=5500;
+const INTRO_MS=3500;
 // ── Fetch window: only load recent rows from large tables (tunable) ──
 const FETCH_DAYS=90;
 const _fetchSince=()=>new Date(Date.now()-FETCH_DAYS*864e5).toISOString().slice(0,10);
@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.53';
+const APP_VER='v26.54';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3223,7 +3223,7 @@ function _tsLoadingScene(){
       +'<path class="ts-mtn-path" filter="url(#tsBrush)" pathLength="1" fill="none" stroke="rgba(255,255,255,.95)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" d="M4 158 L66 104 L118 132 L176 58 L232 128 L288 96 L316 152"></path>'
     +'</svg>'
     +'<div class="ts-runway2"></div>'
-    +'<div class="ts-plane2"><svg viewBox="0 0 24 24" width="30" height="30" fill="#ffffff"><path d="M2.5,19h19v2h-19V19z M22.07,9.64c-0.21-0.8-1.04-1.28-1.84-1.06L14.92,10L8,3.57L6.09,4.08l4.15,7.19l-4.97,1.33l-1.97-1.54l-1.45,0.39l2.59,4.49l17.28-4.64C21.81,11.27,22.28,10.44,22.07,9.64z"></path></svg></div>'
+    +'<div class="ts-plane2"><svg viewBox="0 0 24 24" width="30" height="30" fill="#ffffff" style="transform:scale(1.75);transform-origin:center"><path d="M2.5,19h19v2h-19V19z M22.07,9.64c-0.21-0.8-1.04-1.28-1.84-1.06L14.92,10L8,3.57L6.09,4.08l4.15,7.19l-4.97,1.33l-1.97-1.54l-1.45,0.39l2.59,4.49l17.28-4.64C21.81,11.27,22.28,10.44,22.07,9.64z"></path></svg></div>'
     +'</div>'
     +'<div class="ts-loading-text">Loading...</div>'
     +'<button onclick="window.tsSkipLoad()" style="margin-top:16px;padding:8px 22px;border-radius:20px;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.08);color:#fff;font-size:13px;font-weight:700;letter-spacing:.03em;cursor:pointer">Skip →</button>';
