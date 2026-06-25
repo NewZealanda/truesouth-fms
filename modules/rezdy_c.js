@@ -1140,6 +1140,7 @@ function _rzRenderSchedule(){
             '<span style="font-size:14px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(_grp.start)+' · '+_rzEsc(_rzBdCompact(_grp.bd||{a:_grp.pax,c:0,i:0}))+' '+_rzEsc(_grp.disp||_grp.product)+'<span style="color:#f59e0b">'+_rzEsc(_rzFbSummary(_grp._fb))+'</span></span>'+
             (_grp.pilot?'<span class="pill" title="'+(_grp.pilotChanged?('User change from auto allocation — auto chose '+_rzEsc(_grp.pilotAutoWas)):(_grp.pilotAuto?'Auto-allocated pilot':''))+'" style="background:rgba(96,165,250,.15);border:1px solid '+(_grp.pilotChanged?'#f59e0b':'rgba(96,165,250,.5)')+';color:'+(_grp.pilotChanged?'#f59e0b':'#60a5fa')+';font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">✈ '+_rzEsc(_grp.pilot)+(_grp.pilotChanged?' ✏':(_grp.pilotAuto?' ⚙':''))+' <span onclick="event.stopPropagation();window.rezdySchedClearPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
+          (_gac?'<button class="btn btn-ghost" style="font-size:12px;color:#f59e0b;border-color:rgba(245,158,11,.45)" title="Aircraft out of service — suggest a recovery" onclick="event.stopPropagation();window.rezdyBreakdownOpen(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')">🔧 Breakdown</button>':'')+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
       // Flyback (FLB/CCF): the seats are held in an outbound slot — let the operator set the actual
       // fly-back time here (defaults to 15:30). A 15-minute dropdown (no free-typed clock — that lost
@@ -1359,7 +1360,7 @@ function _rzRenderSchedule(){
     pilotsBar+='</div>';
   }
   pilotsBar+='</div>';
-  return hdr+pilotsBar+detailH+formH+grid;
+  return hdr+pilotsBar+detailH+formH+grid+((typeof _rzBreakdownModal==='function')?_rzBreakdownModal():'');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1715,6 +1716,112 @@ function _rzRenderPilotMovements(){
   var formH=_rzSchedEditForm();
   var grid='<div class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+headH+'<div style="display:flex;position:relative">'+axis+colsH+nowLine+'</div></div></div>';
   return hdr+formH+grid;
+}
+// ── Aircraft breakdown & recovery (suggestion only — nothing changes until a plan is confirmed) ────
+window.rezdyBreakdownOpen=function(blockKey){
+  var f=(_schedDayFlights(S.rezdyDate)||[]).find(function(x){return x.key===blockKey;});
+  var ac,fromMin;if(f){ac=f.ac;fromMin=f.depMin;}else{var p=String(blockKey||'').split('|');ac=p[0];fromMin=_rzMinsFromHHMM(p[1])||0;}
+  if(!ac||ac==='__unalloc__'||ac==='__misc__'){if(typeof toast==='function')toast('Allocate this flight to an aircraft first.','warn');return;}
+  S._rzBreak={ac:ac,fromMin:fromMin,hours:null,blockKey:blockKey};S._schedGroupKey=null;render();
+};
+window.rezdyBreakdownHours=function(h){if(!S._rzBreak)return;S._rzBreak.hours=h;try{S._rzBreak.opts=_rzBreakdownAnalyze(S._rzBreak.ac,S._rzBreak.fromMin,h);}catch(e){S._rzBreak.opts={affected:[],options:[]};}render();};
+window.rezdyBreakdownChange=function(){if(S._rzBreak){S._rzBreak.hours=null;S._rzBreak.opts=null;render();}};
+window.rezdyBreakdownClose=function(){S._rzBreak=null;render();};
+function _rzBreakdownAnalyze(brokenAc,fromMin,hours){
+  var winEnd=fromMin+hours*60;
+  var flights=(_schedDayFlights(S.rezdyDate)||[]).map(function(f){return {key:f.key,ac:f.ac,depMin:f.depMin,endMin:f.endMin};});
+  flights.forEach(function(f){
+    var parts=String(f.key).split('|');f.dest=(typeof _rzGroupDest==='function')?_rzGroupDest(parts[2]||''):(parts[2]||'');
+    f.orders=(typeof _rzOrdersForBlockKey==='function')?_rzOrdersForBlockKey(f.key):[];
+    var px=0;(f.orders||[]).forEach(function(o){var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(o);});if(b&&typeof _rzEffBreakdown==='function'){var bd=_rzEffBreakdown(b);px+=(bd.a||0)+(bd.c||0);}});
+    f.pax=px;
+  });
+  var affected=flights.filter(function(f){return f.ac===brokenAc&&f.depMin>=fromMin&&f.depMin<winEnd;}).sort(function(a,b){return a.depMin-b.depMin;});
+  function cap(ac){var a=(typeof _acSpec==='function')?_acSpec(ac):S.aircraft[ac];if(!a||!a.seats)return 0;return a.seats.length-1-(((a.removedSeats)||[]).length);}
+  var fleet=Object.keys(S.aircraft||{}).filter(function(id){return id!==brokenAc&&((S._rzManHidden||[]).indexOf(id)<0)&&((typeof _schedAcCanFly!=='function')||_schedAcCanFly(id));});
+  var byAc={};flights.forEach(function(f){(byAc[f.ac]=byAc[f.ac]||[]).push(f);});
+  var pilots=(typeof _rzAvailablePilots==='function')?_rzAvailablePilots():[];
+  function ratedAvail(ac){return !pilots.length||pilots.some(function(p){return p.rostered&&((typeof _pilotRatedForAc!=='function')||_pilotRatedForAc(p.code,ac));});}
+  function busyAt(ac,dep,end){var w=byAc[ac]||[];for(var i=0;i<w.length;i++){if(dep<w[i].endMin&&w[i].depMin<end)return true;}return false;}
+  // 1) Greedy SPARE cover: a spare aircraft free at the flight's time, with capacity + a rated pilot.
+  var used={};function spareFree(ac,dep,end){if(busyAt(ac,dep,end))return false;var u=used[ac]||[];for(var i=0;i<u.length;i++){if(dep<u[i][1]&&u[i][0]<end)return false;}return true;}
+  var reassign=[],stuck=[];
+  affected.forEach(function(f){
+    var spare=fleet.filter(function(ac){return cap(ac)>=f.pax&&ratedAvail(ac)&&spareFree(ac,f.depMin,f.endMin);}).sort(function(a,b){return cap(a)-cap(b);})[0];
+    if(spare){(used[spare]=used[spare]||[]).push([f.depMin,f.endMin]);reassign.push({flight:f,ac:spare});}else stuck.push(f);
+  });
+  // 2) Cancel-to-free: free an aircraft for a stuck flight by cancelling its conflicting (usually later) flights.
+  var freeMoves=[];
+  stuck.forEach(function(f){
+    var best=null;
+    fleet.forEach(function(ac){
+      if(cap(ac)<f.pax||!ratedAvail(ac))return;
+      var conflicts=(byAc[ac]||[]).filter(function(g){return f.depMin<g.endMin&&g.depMin<f.endMin;});
+      if(!conflicts.length)return;
+      var costP=conflicts.reduce(function(s,g){return s+g.pax;},0);
+      if(!best||costP<best.cost)best={ac:ac,cancels:conflicts,cost:costP};
+    });
+    if(best)freeMoves.push({flight:f,ac:best.ac,cancels:best.cancels});
+  });
+  var opts=[];
+  if(reassign.length||freeMoves.length){
+    var c1=[];freeMoves.forEach(function(m){m.cancels.forEach(function(c){c1.push(c);});});
+    var remain=affected.filter(function(f){return !reassign.some(function(r){return r.flight.key===f.key;})&&!freeMoves.some(function(m){return m.flight.key===f.key;});});
+    opts.push({type:'recover',reassign:reassign,freeMoves:freeMoves,cancelFlights:c1,stuck:remain,paxCancelled:c1.reduce(function(s,c){return s+c.pax;},0)});
+  }
+  opts.push({type:'cancel',reassign:[],freeMoves:[],cancelFlights:affected.slice(),stuck:[],paxCancelled:affected.reduce(function(s,f){return s+f.pax;},0)}); // last resort: cancel the stranded bookings
+  opts.sort(function(a,b){return (a.stuck.length-b.stuck.length)||(a.paxCancelled-b.paxCancelled);});
+  return {affected:affected,options:opts.slice(0,3)};
+}
+window.rezdyBreakdownApply=function(i){
+  var br=S._rzBreak;if(!br||!br.opts)return;var o=br.opts.options[i];if(!o)return;
+  if(typeof confirm==='function'&&!confirm('Apply this recovery plan? It reassigns / flags bookings on the calendar (you can undo by changing the aircraft back).'))return;
+  S._rzBookingAc=S._rzBookingAc||{};
+  o.reassign.forEach(function(r){(r.flight.orders||[]).forEach(function(ord){S._rzBookingAc[String(ord)]=r.ac;});});
+  o.freeMoves.forEach(function(m){(m.flight.orders||[]).forEach(function(ord){S._rzBookingAc[String(ord)]=m.ac;});});
+  S._rzBreakCancelled=S._rzBreakCancelled||{};
+  (o.cancelFlights||[]).forEach(function(f){(f.orders||[]).forEach(function(ord){S._rzBookingAc[String(ord)]='__none__';S._rzBreakCancelled[String(ord)]={date:S.rezdyDate,ts:Date.now()};});});
+  S._rzBreakdowns=S._rzBreakdowns||{};S._rzBreakdowns[br.ac]={fromMin:br.fromMin,hours:br.hours};
+  if(typeof auditLog==='function')auditLog('aircraft_breakdown',{ac:br.ac,hours:br.hours,reassigned:o.reassign.length+o.freeMoves.length,paxCancelled:o.paxCancelled});
+  if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
+  S._rzBreak=null;
+  if(typeof toast==='function')toast('Recovery applied — '+(o.reassign.length+o.freeMoves.length)+' flight(s) moved'+(o.paxCancelled?', '+o.paxCancelled+' pax flagged to cancel in Rezdy':''),'ok');
+  render();
+};
+function _rzBreakdownModal(){
+  var br=S._rzBreak;if(!br)return '';
+  var H=function(m){return _rzMinToHHMM(m);};
+  var h='<div onclick="if(event.target===this)window.rezdyBreakdownClose()" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto">';
+  h+='<div onclick="event.stopPropagation()" style="background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:20px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5)">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div class="st" style="margin:0">🔧 '+_rzEsc(String(br.ac).replace('ZK-',''))+' — breakdown</div><button onclick="window.rezdyBreakdownClose()" class="btn btn-ghost" style="font-size:12px">✕</button></div>';
+  if(br.hours==null){
+    h+='<div style="font-size:13px;color:var(--text2);margin-bottom:12px">Estimated time to fix? Flights of this aircraft departing within the window become unflyable.</div>';
+    h+='<div style="display:flex;flex-wrap:wrap;gap:8px">';
+    for(var hh=1;hh<=8;hh++)h+='<button onclick="window.rezdyBreakdownHours('+hh+')" style="padding:10px 18px;border-radius:10px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-weight:800;font-size:15px;cursor:pointer">'+hh+'h</button>';
+    h+='</div><div style="font-size:11px;color:var(--text3);margin-top:12px">More than 8h rolls into tomorrow — take the aircraft off availability in Resources instead.</div>';
+  }else{
+    var an=br.opts||{affected:[],options:[]},af=an.affected;
+    h+='<div style="font-size:12px;color:var(--text3);margin-bottom:10px">Out '+H(br.fromMin)+'–'+H(br.fromMin+br.hours*60)+' ('+br.hours+'h). <span onclick="window.rezdyBreakdownChange()" style="color:#60a5fa;cursor:pointer">change</span></div>';
+    if(!af.length){h+='<div class="card" style="text-align:center;color:var(--text3);padding:20px">No flights affected in that window. 🎉</div>';}
+    else{
+      h+='<div style="font-size:13px;font-weight:800;color:var(--text1);margin-bottom:4px">'+af.length+' flight(s) affected · '+af.reduce(function(s,f){return s+f.pax;},0)+' pax stranded</div>';
+      h+='<div style="font-size:11px;color:var(--text3);margin-bottom:12px">'+af.map(function(f){return H(f.depMin)+' '+(f.dest||'?')+' ·'+f.pax+'p';}).join('   ')+'</div>';
+      (an.options||[]).forEach(function(o,i){
+        var lbl=(o.type==='cancel')?'Cancel the stranded bookings':'Recover with spare aircraft'+(o.freeMoves.length?' + free up a tail':'');
+        var clean=!o.paxCancelled&&!o.stuck.length;
+        h+='<div class="card" style="margin-bottom:8px;border-left:4px solid '+(clean?'#22c55e':(o.stuck.length?'#ef4444':'#f59e0b'))+'">';
+        h+='<div style="font-size:13px;font-weight:800;color:var(--text1);margin-bottom:5px">Option '+(i+1)+': '+lbl+'</div>';
+        o.reassign.forEach(function(r){h+='<div style="font-size:12px;color:var(--text2)">↪ '+H(r.flight.depMin)+' '+(r.flight.dest||'')+' '+r.flight.pax+'p → <b>'+_rzEsc(String(r.ac).replace('ZK-',''))+'</b></div>';});
+        o.freeMoves.forEach(function(m){h+='<div style="font-size:12px;color:var(--text2)">↪ '+H(m.flight.depMin)+' '+(m.flight.dest||'')+' '+m.flight.pax+'p → <b>'+_rzEsc(String(m.ac).replace('ZK-',''))+'</b> <span style="color:#f59e0b">(cancel '+m.cancels.map(function(c){return H(c.depMin)+' '+(c.dest||'')+' '+c.pax+'p';}).join(', ')+')</span></div>';});
+        if(o.type==='cancel')o.cancelFlights.forEach(function(c){h+='<div style="font-size:12px;color:#f59e0b">✖ Cancel '+H(c.depMin)+' '+(c.dest||'')+' '+c.pax+'p</div>';});
+        h+='<div style="font-size:11px;color:var(--text3);margin-top:4px">'+(o.paxCancelled?o.paxCancelled+' pax to cancel':'no cancellations')+(o.stuck.length?' · <span style="color:#ef4444">'+o.stuck.length+' still uncovered</span>':'')+'</div>';
+        h+='<button onclick="window.rezdyBreakdownApply('+i+')" style="margin-top:8px;padding:7px 14px;border-radius:8px;border:none;background:var(--acc);color:#fff;font-weight:700;font-size:12px;cursor:pointer">Confirm this plan</button>';
+        h+='</div>';
+      });
+      h+='<div style="font-size:10px;color:var(--text3);margin-top:4px">Suggestion only — nothing changes until you confirm a plan. Cancellations are flagged on the calendar; action the refund/cancel in Rezdy.</div>';
+    }
+  }
+  h+='</div></div>';return h;
 }
 window.rezdySchedShowGroup=function(key){S._schedGroupKey=key;S._schedEdit=null;render();};
 // Jump from a calendar block's passenger detail straight to that booking in the Bookings tab.
