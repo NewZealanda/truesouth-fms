@@ -19,6 +19,19 @@ function _mfTitle(f){var d=f.data||{};return 'WO'+(d.woNo?' '+d.woNo:'')+' · '+
 var _MF_CHK=[['wo','Work Order completed'],['techlog','Tech Log completed, no Defects'],['hours','A/C Hours recorded on Tech Log'],['engperf','Engine Performance check sighted'],['rts','Return to Service sighted'],['dupinsp','Duplicate Inspection sighted'],['toolctrl','Tool Control Records sighted'],['testflight','Test Flight undertaken']];
 var _MF_SECTIONS={routine:'Routine Maintenance',unscheduled:'Unscheduled Maintenance',defect:'Defect Rectification'};
 
+// ── Sequential work-order numbers ───────────────────────────────────────────
+// WO numbers are <first 3 aircraft letters><n>, e.g. SLA64. The seed below is the LAST number used
+// on paper before the app took over; the next WO for an aircraft is max(seed, highest in the app)+1.
+function _mfWoPrefix(ac){return String(ac||'').replace(/^ZK-?/i,'').toUpperCase().slice(0,3);}
+var _MF_WO_SEED={SLA:63,SLB:18,SLD:114,SLQ:123,SDB:0};   // last-USED number per tail (next = +1)
+function _mfNextWoNo(ac){
+  var pre=_mfWoPrefix(ac);if(!pre)return '';
+  var max=_MF_WO_SEED[pre]||0;
+  var re=new RegExp('^'+pre+'\\s*0*(\\d+)$','i');
+  Object.keys(S._mfData||{}).forEach(function(k){var f=S._mfData[k];if(!f||f.status==='deleted')return;var m=String((f.data&&f.data.woNo)||'').trim().match(re);if(m){var n=parseInt(m[1],10);if(n>max)max=n;}});
+  return pre+(max+1);
+}
+
 // Per-aircraft last oil-change date (persisted in the maintenance blob). Editable on the form.
 function _mfOilChangeDate(ac){var m=S.maintenance||{};return (m.oilChange&&m.oilChange[ac])||'';}
 function _mfSetOilChangeDate(ac,date){S.maintenance=S.maintenance||{};S.maintenance.oilChange=S.maintenance.oilChange||{};if(date)S.maintenance.oilChange[ac]=date;else delete S.maintenance.oilChange[ac];if(typeof saveMaintenance==='function')saveMaintenance();}
@@ -136,6 +149,7 @@ function _mfDetachObs(woId){
 window.maintFormNew=function(type,ac){
   if(type!=='work_order')return;
   var f=_mfBlankWO(ac||S.maintEntryAc||'ZK-SLA');_mfMigrate(f);
+  f.data.woNo=_mfNextWoNo(f.aircraft);                      // auto sequential number (e.g. SLA64) — still editable
   _mfPullObs(f);                                            // seed line items from open observations
   S._mfData=S._mfData||{};S._mfData[f.id]=f;S._mfOpen=f.id;S._mfView='editor';
   _mfSave(f,true);
