@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.45';
+const APP_VER='v26.46';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -9476,7 +9476,9 @@ function renderMaintenance(){
   const ms=S.admin||{};
   const isAdmin=hasRolePerm('maint_bookings');
   const sub=S.maintTab||'overview';
-
+  // Work-order editor/list live ONLY on the Log tab — leaving Logs closes any open work order so it
+  // can't carry over to another maintenance view.
+  if(sub!=='log'&&S._mfView){S._mfView=null;S._mfOpen=null;}
 
   if(sub==='overview') return renderMaintOverview();
   if(sub==='log') return renderMaintLog();
@@ -9861,6 +9863,10 @@ function renderMaintLog(){
   const selAc=S.maintEntryAc||acs2[0];
   const logDays=S.maintLogDays||90;
   const logSubTab=S.maintLogSubTab||'hours';
+  // Keep the Work Order view bound to the SELECTED aircraft — a WO opened for one tail must not
+  // linger when the Log page is showing another tail (was: stale WO shown under other aircraft).
+  if(S._mfView==='editor'){var _ofw=(S._mfData||{})[S._mfOpen];if(!_ofw||_ofw.aircraft!==selAc){S._mfView=null;S._mfOpen=null;}}
+  else if(S._mfView==='list'&&S._mfListAc&&S._mfListAc!==selAc){S._mfView=null;S._mfListAc=null;}
   // Maintenance documents (Work Orders) take over the Log area when a form is open.
   if(typeof renderMaintFormEditor==='function'){
     if(S._mfView==='editor'&&S._mfOpen)return renderMaintFormEditor(S._mfOpen);
@@ -11129,6 +11135,7 @@ function renderMaintFormEditor(id){
       dt('Date',dateP,dateV)+'</div>';
   }
   var h='<div style="max-width:820px;margin:0 auto">';
+  h+=_mfAcBar(f.aircraft);   // aircraft selector at top — switching tail closes this WO and shows that tail's documents
   h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;flex-wrap:wrap">'+
     '<button onclick="window.maintFormShowList(\''+f.aircraft+'\')" class="btn btn-ghost" style="font-size:12px">‹ Saved</button>'+
     '<div class="st" style="margin:0">Work Order · '+_mfEsc(_mfAcDisp(f.aircraft))+'</div>'+

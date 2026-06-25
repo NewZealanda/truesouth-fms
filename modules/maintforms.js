@@ -449,6 +449,7 @@ function renderMaintFormEditor(id){
       dt('Date',dateP,dateV)+'</div>';
   }
   var h='<div style="max-width:820px;margin:0 auto">';
+  h+=_mfAcBar(f.aircraft);   // aircraft selector at top — switching tail closes this WO and shows that tail's documents
   h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;flex-wrap:wrap">'+
     '<button onclick="window.maintFormShowList(\''+f.aircraft+'\')" class="btn btn-ghost" style="font-size:12px">‹ Saved</button>'+
     '<div class="st" style="margin:0">Work Order · '+_mfEsc(_mfAcDisp(f.aircraft))+'</div>'+

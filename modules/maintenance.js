@@ -9,7 +9,9 @@ function renderMaintenance(){
   const ms=S.admin||{};
   const isAdmin=hasRolePerm('maint_bookings');
   const sub=S.maintTab||'overview';
-
+  // Work-order editor/list live ONLY on the Log tab — leaving Logs closes any open work order so it
+  // can't carry over to another maintenance view.
+  if(sub!=='log'&&S._mfView){S._mfView=null;S._mfOpen=null;}
 
   if(sub==='overview') return renderMaintOverview();
   if(sub==='log') return renderMaintLog();
@@ -394,6 +396,10 @@ function renderMaintLog(){
   const selAc=S.maintEntryAc||acs2[0];
   const logDays=S.maintLogDays||90;
   const logSubTab=S.maintLogSubTab||'hours';
+  // Keep the Work Order view bound to the SELECTED aircraft — a WO opened for one tail must not
+  // linger when the Log page is showing another tail (was: stale WO shown under other aircraft).
+  if(S._mfView==='editor'){var _ofw=(S._mfData||{})[S._mfOpen];if(!_ofw||_ofw.aircraft!==selAc){S._mfView=null;S._mfOpen=null;}}
+  else if(S._mfView==='list'&&S._mfListAc&&S._mfListAc!==selAc){S._mfView=null;S._mfListAc=null;}
   // Maintenance documents (Work Orders) take over the Log area when a form is open.
   if(typeof renderMaintFormEditor==='function'){
     if(S._mfView==='editor'&&S._mfOpen)return renderMaintFormEditor(S._mfOpen);
