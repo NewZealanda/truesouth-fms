@@ -314,7 +314,10 @@ window.rezdyLoadBookings=async function(opts){
   S._rezdyLoading=true;safeRender();
   const rows=await sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(S.rezdyDate));
   S._rezdyBookings=_rzMapBookings(rows,S.rezdyDate);_rzApplyManualBk();
-  S._pickupVans=null; // re-derive van layout from fresh bookings
+  // Do NOT null S._pickupVans here — that discarded the SAVED manual van layout and forced a full
+  // auto-allocate on every bookings load (day change / "Refresh from Rezdy"), which is why allocated
+  // pickups "reverted to their original state". _rzEnsureVans reconciles the saved layout against the
+  // refreshed bookings (drops cancelled ids, appends new ones), and rezdyLoadPickups restores the blob.
   S._rezdyLoading=false;
   render();
   // pull saved pickup arrangement for this date (overrides auto layout if present)
