@@ -59,7 +59,12 @@ function _rzBkPrintRow(b){
   var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
   var ac=_rzBookingAc(b,String(b.orderNumber||''));
   var acCell=ac?('<span style="display:inline-block;border:1.5px solid '+_rzAcCol(ac)+';color:'+_rzAcCol(ac)+';border-radius:10px;padding:1px 7px;font-weight:bold;font-size:10px;white-space:nowrap">'+_rzEsc(String(ac).replace('ZK-',''))+'</span>'):'—';
-  return '<tr><td>'+_rzEsc(b.customerName||'')+(b.phone?'<div class="ph">'+_rzEsc(b.phone)+'</div>':'')+'</td>'
+  // List every passenger name on the booking (Rezdy participants), not just the lead customer.
+  var paxNames=[];(b.items||[]).forEach(function(it){(it.participants||[]).forEach(function(p){var n=p&&p.name?String(p.name).trim():'';if(n)paxNames.push(n);});});
+  var lead=String(b.customerName||'').trim();
+  var extra=paxNames.filter(function(n){return n.toLowerCase()!==lead.toLowerCase();});
+  var paxH=extra.length?'<div class="px">'+extra.map(function(n){return '• '+_rzEsc(n);}).join('<br>')+'</div>':'';
+  return '<tr><td>'+_rzEsc(b.customerName||'')+(b.phone?'<div class="ph">'+_rzEsc(b.phone)+'</div>':'')+paxH+'</td>'
     +'<td>'+_rzEsc(b.orderNumber||'')+'</td>'
     +'<td class="c">'+_rzEsc(px)+'</td>'
     +'<td>'+_rzEsc(prod||'')+'</td>'
@@ -106,6 +111,7 @@ window.rezdyBookingsPrint=function(){
     +'.bk th{background:#eee;font-size:10px;text-transform:uppercase;letter-spacing:.03em}'
     +'.bk .c{text-align:center}.bk .r{text-align:right}'
     +'.ph{font-size:10px;color:#777}'
+    +'.px{font-size:10.5px;color:#333;margin-top:3px;line-height:1.35}'
     +'</style></head><body>'
     +'<h1>Bookings — '+_rzEsc(_rzDowLabel(S.rezdyDate))+'</h1>'
     +'<div class="sub">'+active.length+' active'+(cancelled.length?' · '+cancelled.length+' cancelled':'')+'</div>'
