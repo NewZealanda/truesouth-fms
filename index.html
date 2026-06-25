@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.62';
+const APP_VER='v26.63';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16803,15 +16803,20 @@ function _rzSearchSeat(dep,acId,paxList,coPic){
     }
     return res;
   }
-  var best=null,bestD=Infinity,bestBack=null,bestBackD=Infinity,count=0,CAP=2200,abort=false;
-  var infIds={};paxList.forEach(function(p){if(p.infant)infIds[p.id]=1;});
+  var best=null,bestKey=Infinity,count=0,CAP=2200,abort=false;
+  var infIds={},idgrp={};paxList.forEach(function(p){idgrp[p.id]=p.group;if(p.infant)infIds[p.id]=1;});
+  // Count pair-rows whose two seats hold DIFFERENT groups — a measure of how "un-paired" the layout is.
+  // A group of 4 in a clean 2×2 block adds none; a staggered group adds one per shared row.
+  function mixedRows(res){var m=0;rows.forEach(function(r){if(r.length===2){var a=res[r[0]],b=res[r[1]];if(a!=null&&b!=null&&idgrp[a]!==idgrp[b])m++;}});return m;}
   function consider(order){
     if(abort)return;if(++count>CAP){abort=true;return;}
     var res=layout(order);
     if(frontSingle!=null&&res[frontSingle]!=null&&infIds[res[frontSingle]])return; // hard: no infant host in seat 1
     var sc=_rzCandWBScore(dep,acId,res);if(!sc||!sc.ok)return;                       // within limits only
-    if(sc.dist<bestD){bestD=sc.dist;best=res;}
-    if(order.length&&order[order.length-1].inf&&sc.dist<bestBackD){bestBackD=sc.dist;bestBack=res;} // infant group at the back
+    var infLast=(order.length&&order[order.length-1].inf)?0:1;                       // prefer infant group rearmost
+    // Priority: fewest mixed rows (tidiest pairing) → infant at the back → CoG closest to centre.
+    var key=mixedRows(res)*1e6+infLast*1e3+sc.dist;
+    if(key<bestKey){bestKey=key;best=res;}
   }
   function permute(arr,k){if(abort)return;if(k===arr.length){consider(arr);return;}for(var i=k;i<arr.length;i++){var t=arr[k];arr[k]=arr[i];arr[i]=t;permute(arr,k+1);t=arr[k];arr[k]=arr[i];arr[i]=t;if(abort)return;}}
   if(rest.length<=7){permute(rest.slice(),0);}
@@ -16820,7 +16825,7 @@ function _rzSearchSeat(dep,acId,paxList,coPic){
     consider(rest.slice().sort(function(x,y){return x.w-y.w;}));
     consider(rest.filter(function(g){return !g.inf;}).sort(function(x,y){return y.w-x.w;}).concat(rest.filter(function(g){return g.inf;})));
   }
-  return bestBack||best;   // prefer infant-at-back within limits; else any within-limits
+  return best;   // tidiest pairing, infant at the back, balanced — within limits
 }
 window.rezdyManReseat=function(dep,acId){
   var list=(S._rzManPax||[]).filter(function(p){return p.ac===acId&&!p.infantOf&&_rzPaxDep(p)===dep;});
