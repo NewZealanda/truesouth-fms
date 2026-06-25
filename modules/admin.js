@@ -282,6 +282,20 @@ function renderAdminGDrive(){
       </div>
       ${S.uploadProgress?`<div style="margin-top:8px;font-size:12px;color:var(--ok-text)">${S.uploadProgress}</div>`:''}
     </div>
+    ${(function(){if(!S._woFoldersLoaded){S._woFoldersLoaded=true;if(window.loadWoFolders)window.loadWoFolders();}
+      var acs=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(a){return S.aircraft&&S.aircraft[a];});
+      var wf=S.gdriveWoFolders||{};
+      var rows=acs.map(function(a){var id=(wf[a]||'').trim();var c=(typeof AC_COL!=='undefined'&&AC_COL[a])||'#888';var nm=(typeof acDisp==='function')?acDisp(a):a;
+        return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'+
+          '<span style="flex-shrink:0;width:54px;font-size:12px;font-weight:800;color:'+c+'">'+nm+'</span>'+
+          '<input class="fi" type="text" placeholder="Paste Drive folder link or ID" value="'+(id?id.replace(/"/g,'&quot;'):'')+'" onblur="window.mfSetWoFolder(\''+a+'\',this.value)" style="flex:1;font-size:12px">'+
+          (id?'<span title="Folder set" style="flex-shrink:0;color:#22c55e;font-size:14px">✓</span>':'<span title="Not set" style="flex-shrink:0;color:#f59e0b;font-size:12px">—</span>')+
+        '</div>';}).join('');
+      return '<div style="margin-top:12px;padding:12px 14px;background:var(--card2);border-radius:8px;border:1px solid var(--border)">'+
+        '<div style="font-size:12px;font-weight:700;margin-bottom:4px;color:var(--text2)">Work Order folders <span style="font-weight:400;color:var(--text3)">(separate from loadsheets)</span></div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">Each aircraft’s work orders upload straight into its own Drive folder. In Google Drive open the folder, copy the URL from the address bar (it looks like <strong>drive.google.com/drive/folders/<em>1AbCd…</em></strong>) and paste it below — the ID is pulled out automatically. Shared-drive folders work too. Synced across devices.</div>'+
+        rows+'</div>';
+    })()}
   </div>`;
 }
 function renderAdminPeople(){

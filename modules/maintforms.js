@@ -32,6 +32,30 @@ function _mfNextWoNo(ac){
   return pre+(max+1);
 }
 
+// ── Work-order Drive folders (per aircraft, separate from Loadsheets) ────────
+// Each tail's work orders upload into its own existing Drive folder. Stored synced (ts_settings
+// key gdrive_wo_folders) so every device uploads to the same place. Paste a Drive folder LINK or ID.
+function _mfParseDriveId(s){s=String(s||'').trim();if(!s)return '';var m=s.match(/\/folders\/([A-Za-z0-9_-]+)/);if(m)return m[1];m=s.match(/[?&]id=([A-Za-z0-9_-]+)/);if(m)return m[1];if(/^[A-Za-z0-9_-]{12,}$/.test(s))return s;return '';}
+window.loadWoFolders=async function(){
+  try{var c=lsGet&&lsGet('ts_gdrive_wo_folders');if(c&&typeof c==='object')S.gdriveWoFolders=c;}catch(e){}
+  if(typeof SB==='undefined')return;
+  try{var r=await fetch(SB+'/rest/v1/ts_settings?key=eq.gdrive_wo_folders&select=value',{headers:SH});
+    if(r.ok){var rows=await r.json();if(rows&&rows[0]&&rows[0].value){S.gdriveWoFolders=typeof rows[0].value==='string'?JSON.parse(rows[0].value):rows[0].value;try{lsSet&&lsSet('ts_gdrive_wo_folders',S.gdriveWoFolders);}catch(e){}if(typeof safeRender==='function')safeRender();}}
+  }catch(e){}
+};
+function _saveWoFolders(){
+  try{lsSet&&lsSet('ts_gdrive_wo_folders',S.gdriveWoFolders||{});}catch(e){}
+  if(typeof sbMergeSave==='function')sbMergeSave('gdrive_wo_folders',S.gdriveWoFolders||{},function(m){S.gdriveWoFolders=m;try{lsSet&&lsSet('ts_gdrive_wo_folders',m);}catch(e){}});
+}
+window.mfSetWoFolder=function(ac,val){
+  var id=_mfParseDriveId(val);
+  S.gdriveWoFolders=S.gdriveWoFolders||{};
+  if(id)S.gdriveWoFolders[ac]=id;else delete S.gdriveWoFolders[ac];
+  _saveWoFolders();
+  if(typeof toast==='function')toast(id?(_mfAcDisp(ac)+' work-order folder set'):(_mfAcDisp(ac)+' folder cleared'),id?'ok':'info');
+  render();
+};
+
 // Per-aircraft last oil-change date (persisted in the maintenance blob). Editable on the form.
 function _mfOilChangeDate(ac){var m=S.maintenance||{};return (m.oilChange&&m.oilChange[ac])||'';}
 function _mfSetOilChangeDate(ac,date){S.maintenance=S.maintenance||{};S.maintenance.oilChange=S.maintenance.oilChange||{};if(date)S.maintenance.oilChange[ac]=date;else delete S.maintenance.oilChange[ac];if(typeof saveMaintenance==='function')saveMaintenance();}
@@ -282,9 +306,10 @@ window.maintFormUpload=async function(id){
       if(window.google&&window.google.accounts&&window.google.accounts.oauth2){init();}else{var s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=init;s.onerror=function(){rej(new Error('Failed to load Google sign-in'));};document.head.appendChild(s);}});
   }catch(e){if(typeof toast==='function')toast('Google sign-in failed: '+(e&&e.message||e),'err');return;}
   try{
-    var rootId=(S.gdriveFolderId||'').trim()||await window.ensureDriveFolder(S.gdriveFolder||'Loadsheets','root',token);
-    var woRoot=await window.ensureDriveFolder('Work Orders',rootId,token);
-    var acFolder=await window.ensureDriveFolder(f.aircraft||'AC',woRoot,token);
+    // Work orders go to the dedicated per-aircraft Drive folder set in Settings ▸ Drive (separate
+    // from Loadsheets). No auto-folder creation — upload straight into the configured folder.
+    var acFolder=((S.gdriveWoFolders||{})[f.aircraft]||'').trim();
+    if(!acFolder){if(typeof toast==='function')toast('No Work Order Drive folder set for '+_mfAcDisp(f.aircraft)+'. Set it in Settings ▸ Drive ▸ Work Order folders.','warn');return;}
     var d=f.data||{};
     var fname='WorkOrder_'+(f.aircraft||'AC')+'_'+((d.woNo||'').replace(/[^\w-]/g,'')||f.id.slice(-5))+'_'+(d.onDate||'').replace(/-/g,'')+'.html';
     var enc=new TextEncoder(),htmlBytes=enc.encode(_mfWorkOrderHtml(f)),CRLF='\r\n',b='-----mf_'+Date.now();
@@ -307,6 +332,7 @@ function _mfAcBar(selAc){
 function renderMaintDocSquares(ac){
   if(!S._mfLoaded){S._mfLoaded=true;if(window.loadMaintForms)window.loadMaintForms();}
   if(!S._maintObsLoaded){S._maintObsLoaded=true;if(window.loadMaintObs)window.loadMaintObs();}  // so a new WO can pull observations
+  if(!S._woFoldersLoaded){S._woFoldersLoaded=true;if(window.loadWoFolders)window.loadWoFolders();}  // so uploads know their Drive folders
   var wos=Object.keys(S._mfData||{}).map(function(k){return S._mfData[k];}).filter(function(f){return f.form_type==='work_order'&&f.aircraft===ac&&f.status!=='deleted';});
   function sq(onclick,icon,label,sub,col){
     return '<button onclick="'+onclick+'" style="flex:1 1 150px;min-width:140px;background:var(--card);border:1px solid var(--border2);border-top:3px solid '+col+';border-radius:12px;padding:16px 14px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:4px">'+
