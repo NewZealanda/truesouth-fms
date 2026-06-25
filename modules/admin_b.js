@@ -1497,9 +1497,10 @@ function renderAdminPerms(){
   // Permissions grouped by area so the (wide) grid is easy to scan and find things in.
   var PERM_GROUPS=[
     {cat:'Operations', col:'#2563eb', perms:[
-      {k:'operations',    lbl:'Ops',        tip:'Access to flight operations (manifests, loadsheets, seatmap, charter)'},
+      {k:'operations',    lbl:'Ops',        tip:'Access to flight operations (Bookings, Seatmap, Loadsheets, Charter)'},
+      {k:'calendar',      lbl:'Calendar',   tip:'Access the Calendar (the first tab in Operations) — needs Ops too'},
+      {k:'ground',        lbl:'Ground',     tip:'Access the Ground section — Transport, Pickups & My Pickups'},
       {k:'sign_loadsheet',lbl:'Sign',       tip:'Sign off on loadsheets as PIC'},
-      {k:'calendar',      lbl:'Calendar',   tip:'Access the Calendar tab'},
       {k:'resources',     lbl:'Scheduling', tip:'Access the Resource board + cost-aware aircraft/pilot allocation'}
     ]},
     {cat:'Maintenance', col:'#a78bfa', perms:[
@@ -1526,7 +1527,6 @@ function renderAdminPerms(){
     ]},
     {cat:'Coming soon', col:'#64748b', perms:[
       {k:'sms',           lbl:'SMS',         tip:'Safety Management System (placeholder — coming soon)'},
-      {k:'ground',        lbl:'Ground',      tip:'Ground operations module (placeholder — coming soon)'},
       {k:'vehicle_prestart',lbl:'Vehicle Prestart',tip:'Daily vehicle prestart checks (placeholder — coming soon)'},
       {k:'training_mod',  lbl:'Training',    tip:'Training records module (placeholder — coming soon)'}
     ]}
