@@ -301,7 +301,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -469,9 +469,11 @@ function _rzRenderPickups(){
     const _lbl=_rzTransDepLabel(t);const _unit=_drop?'drop':'pk';
     const _accent=_drop?RZ_DROP_COL:RZ_PK_COL; // pickups vs drop-offs colour-coded
     const _tEsc=_rzEsc(t).replace(/'/g,"\\'");
-    timeBar+='<div style="display:inline-flex;align-items:center;border-radius:12px;background:'+(on?_accent+'33':'var(--card2)')+';border:1px solid '+(on?_accent:'var(--border2)')+';overflow:hidden">'+
+    var _mergedIn=Object.keys(S._rzTransMerge||{}).filter(function(a){return _rzTransBase(a)===t&&a!==t;});
+    timeBar+='<div draggable="true" ondragstart="window.pickupDepDragStart(\''+_tEsc+'\',event)" ondragover="event.preventDefault();this.style.outline=\'2px solid '+_accent+'\';this.style.outlineOffset=\'1px\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.pickupDepDrop(\''+_tEsc+'\',event)" title="Drag onto another run to combine them" style="display:inline-flex;align-items:center;border-radius:12px;background:'+(on?_accent+'33':'var(--card2)')+';border:1px solid '+(on?_accent:'var(--border2)')+';overflow:hidden;cursor:grab">'+
       '<button onclick="window.rzTransMoveDep(\''+_tEsc+'\',-1,\''+_ordJs+'\')" title="Move earlier in the list" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:5px 5px 5px 7px"'+(ti===0?' disabled':'')+'>◀</button>'+
-      '<button onclick="window.pickupSetDepFilter(\''+_tEsc+'\')" title="'+(_drop?'Return drop-off run':'Pickup run')+'" style="background:none;border:none;border-left:3px solid '+_accent+';padding:4px 8px;font-size:11px;color:'+(on?'var(--text1)':'var(--text2)')+';cursor:pointer;font-weight:'+(on?'700':'400')+'"><b>'+_lbl+'</b> · '+grp.length+' '+_unit+' / '+pax+' pax</button>'+
+      '<button onclick="window.pickupSetDepFilter(\''+_tEsc+'\')" title="'+(_drop?'Return drop-off run':'Pickup run')+'" style="background:none;border:none;border-left:3px solid '+_accent+';padding:4px 8px;font-size:11px;color:'+(on?'var(--text1)':'var(--text2)')+';cursor:pointer;font-weight:'+(on?'700':'400')+'"><b>'+_lbl+'</b>'+(_mergedIn.length?' <span style="font-size:9px;color:'+_accent+'" title="Combined with '+_rzEsc(_mergedIn.map(_rzTransDepLabel).join(", "))+'">+'+_mergedIn.length+'</span>':'')+' · '+grp.length+' '+_unit+' / '+pax+' pax</button>'+
+      (_mergedIn.length?'<button onclick="window.pickupUnmergeBase(\''+_tEsc+'\')" title="Separate the combined runs" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:5px 4px">⊗</button>':'')+
       '<button onclick="window.rzTransMoveDep(\''+_tEsc+'\',1,\''+_ordJs+'\')" title="Move later in the list" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:5px 7px 5px 5px"'+(ti===times.length-1?' disabled':'')+'>▶</button>'+
     '</div>';
   });
@@ -672,9 +674,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','depTimeOv','depEndOv','plates'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','depTimeOv','depEndOv','plates','transMerge'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -705,6 +707,7 @@ function _pkApplyBlob(d){
   S._rzDepEndOv=(d.depEndOv&&typeof d.depEndOv==='object')?d.depEndOv:{};
   S._rzDepOrder=Array.isArray(d.depOrder)?d.depOrder:[];
   S._rzPlates=(d.plates&&typeof d.plates==='object')?d.plates:{};
+  S._rzTransMerge=(d.transMerge&&typeof d.transMerge==='object')?d.transMerge:{};
 }
 function _pkSnapshot(d){try{return JSON.parse(JSON.stringify(d));}catch(e){return null;}}
 function _pkEq(a,b){try{return JSON.stringify(a===undefined?null:a)===JSON.stringify(b===undefined?null:b);}catch(e){return false;}}

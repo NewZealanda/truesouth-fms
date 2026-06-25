@@ -508,9 +508,36 @@ function _rzPickups(){
       if(!sd){var did=id+'|D';var dloc=(ov[did]!=null&&ov[did]!=='')?ov[did]:loc;var dtime=(tov[did]!=null&&tov[did]!=='')?tov[did]:'';out.push(Object.assign({},base,{id:did,location:dloc,depart:_rzDropDep(pdep),pickupTime:dtime,dropoff:true}));}
     });
   });
+  // Combine runs: re-label any merged departure to its base so the whole board treats them as one run.
+  if(S._rzTransMerge&&Object.keys(S._rzTransMerge).length)out.forEach(function(p){p.depart=_rzTransBase(p.depart);});
   return out;
 }
 
+// ── Combine departure runs ──────────────────────────────────────────────────
+// S._rzTransMerge maps a departure A → the departure B it's been combined into. _rzPickups re-labels
+// A's pickups to B at the source, so the whole board (chips, filter, vehicles, drivers) treats them
+// as one run. Drag one departure chip onto another to combine.
+function _rzTransBase(dep){var m=S._rzTransMerge||{},seen={};while(m[dep]!=null&&!seen[dep]){seen[dep]=1;dep=m[dep];}return dep;}
+window.pickupDepDragStart=function(dep,e){S._rzDepDrag=String(dep);try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','dep:'+dep);}catch(_){}};
+window.pickupDepDrop=function(targetDep,e){if(e&&e.preventDefault)e.preventDefault();var src=S._rzDepDrag;S._rzDepDrag=null;if(src==null){try{var d=e.dataTransfer&&e.dataTransfer.getData('text/plain');if(d&&d.indexOf('dep:')===0)src=d.slice(4);}catch(_){}}if(src&&String(src)!==String(targetDep))window.pickupMergeDep(src,targetDep);};
+window.pickupMergeDep=function(a,b){
+  a=String(a);b=String(b);if(!a||!b||a===b)return;
+  S._rzTransMerge=S._rzTransMerge||{};
+  // refuse to create a cycle (if b already resolves back to a)
+  var base=b,seen={};while(S._rzTransMerge[base]!=null&&!seen[base]){seen[base]=1;base=S._rzTransMerge[base];}
+  if(base===a)return;
+  S._rzTransMerge[a]=b;
+  S._pickupDepFilter=_rzTransBase(b);
+  if(window.pickupSave)window.pickupSave(true);
+  if(typeof toast==='function')toast('Combined runs','ok');render();
+};
+window.pickupUnmergeBase=function(base){
+  base=String(base);var m=S._rzTransMerge||{};
+  var rm=Object.keys(m).filter(function(a){return _rzTransBase(a)===base&&a!==base;});
+  rm.forEach(function(a){delete m[a];});
+  if(window.pickupSave)window.pickupSave(true);
+  if(typeof toast==='function')toast('Separated combined runs','ok');render();
+};
 // Pickup-time as minutes for sorting (format "HHMM" e.g. "0930"); blank sorts last.
 function _rzPkTimeVal(p){if(!p||!p.pickupTime)return 99999;var m=/^(\d{2})(\d{2})$/.exec(String(p.pickupTime));return m?(+m[1])*60+(+m[2]):99999;}
 // ── default van allocation ──────────────────────────────────────────────────
