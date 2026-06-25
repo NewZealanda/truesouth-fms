@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.63';
+const APP_VER='v26.64';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16700,6 +16700,32 @@ function _rzRowPairs(acId,coSeat1){
   rows.forEach(function(r){r.sort(function(a,b){return a-b;});});
   return rows;
 }
+// Emergency-exit seat: an able-bodied ADULT must sit there (no child, no lap-infant host). Seat 13 on
+// the Caravans. Returns the seat index or null if this aircraft has no such pax seat.
+var _RZ_EXIT_IDX=13;
+function _rzExitSeat(acId){var a=(typeof _acSpec==='function')?_acSpec(acId):S.aircraft[acId];if(!a||!a.seats||!a.seats[_RZ_EXIT_IDX])return null;if((a.removedSeats||[]).indexOf(_RZ_EXIT_IDX)>=0)return null;return _RZ_EXIT_IDX;}
+// If the exit seat sits within this group's seats and its occupant isn't an eligible adult, swap with
+// an eligible adult from the SAME group's seats (no group split). eligOf(id)->bool.
+function _rzFixExitInGroup(res,seats,exitSeat,eligOf){
+  if(exitSeat==null||seats.indexOf(exitSeat)<0)return;
+  if(res[exitSeat]==null||eligOf(res[exitSeat]))return;
+  for(var i=0;i<seats.length;i++){var s=seats[i];if(s===exitSeat)continue;if(res[s]!=null&&eligOf(res[s])){var t=res[exitSeat];res[exitSeat]=res[s];res[s]=t;return;}}
+}
+// Final, engine-agnostic guarantee: if the exit seat holds a child or lap-infant host, swap in an
+// able-bodied adult — prefer the SAME group (no split), else the nearest eligible adult (never the
+// front single, so an infant host can't be pushed into seat 1). No-op if there's no eligible adult.
+function _rzExitSeatGuard(sm,acId,paxList,coPic){
+  var exit=_rzExitSeat(acId);if(exit==null||!sm||sm[exit]==null)return sm;
+  var elig={},grpOf={};paxList.forEach(function(p){elig[p.id]=(!p.child&&!p.infant);grpOf[p.id]=p.group;});
+  if(elig[sm[exit]])return sm;
+  var a=S.aircraft[acId];var rows=_rzRowPairs(acId,!!coPic);var frontSingle=(rows[0]&&rows[0].length===1&&!coPic)?rows[0][0]:null;
+  var occGrp=grpOf[sm[exit]];
+  var cand=Object.keys(sm).map(Number).filter(function(s){return s!==exit&&s!==frontSingle&&elig[sm[s]];});
+  if(!cand.length)return sm;
+  cand.sort(function(x,y){var sgx=(grpOf[sm[x]]===occGrp)?0:1,sgy=(grpOf[sm[y]]===occGrp)?0:1;if(sgx!==sgy)return sgx-sgy;return Math.abs(((a.seats[x]||{}).arm||0)-((a.seats[exit]||{}).arm||0))-Math.abs(((a.seats[y]||{}).arm||0)-((a.seats[exit]||{}).arm||0));});
+  var s=cand[0],t=sm[exit];sm[exit]=sm[s];sm[s]=t;
+  return sm;
+}
 function _rzSmartSeat(acId,paxList,opts){
   var a=S.aircraft[acId];if(!a||!a.seats||!paxList||!paxList.length)return{};
   var coPilot=(opts&&opts.coSeat1!=null)?opts.coSeat1:seat1IsCoPilot(acId);
@@ -16714,12 +16740,17 @@ function _rzSmartSeat(acId,paxList,opts){
   // Flat list of the PAIR-row seats, front→back (these tile two-per-row).
   var P=[];(frontSingle!=null?rows.slice(1):rows).forEach(function(r){r.forEach(function(s){P.push(s);});});
   var result={};
-  // Seat one group across its seats: heaviest member most-forward, infant host rearmost.
+  var exitSeat=_rzExitSeat(acId);
+  var _elig={};paxList.forEach(function(p){_elig[p.id]=(!p.child&&!p.infant);});       // able-bodied adult (exit-eligible)
+  var eligOf=function(id){return !!_elig[id];};
+  // Seat one group across its seats: heaviest member most-forward, infant host rearmost. If the exit
+  // seat falls in this group, swap an able-bodied adult into it (infant host / child step back a seat).
   function assignGroup(g,seats){
     var byArm=seats.slice().sort(function(x,y){return arm(x)-arm(y);});               // front→back
     var nonInf=g.pax.filter(function(p){return !p.infant;}).sort(mcmp);
     var mem=nonInf.concat(g.pax.filter(function(p){return p.infant;}));               // infant host last → rear
     byArm.forEach(function(s,i){if(mem[i])result[s]=mem[i].id;});
+    _rzFixExitInGroup(result,seats,exitSeat,eligOf);
   }
   // Weight bias: 'heavy' = heaviest groups/members toward the FRONT (CoG forward, default);
   // 'light' = lightest forward (shifts CoG aft). rezdyManReseat tries both and keeps whichever stays
@@ -16793,6 +16824,9 @@ function _rzSearchSeat(dep,acId,paxList,coPic){
   if(frontSingle!=null&&solos.length)anchor=solos[0];
   var rest=groups.filter(function(g){return g!==anchor;});
   var restSeats=anchor?seats.filter(function(s){return s!==frontSingle;}):seats.slice();
+  var exitSeat=_rzExitSeat(acId);
+  var _elig={};paxList.forEach(function(p){_elig[p.id]=(!p.child&&!p.infant);});
+  var eligOf=function(id){return !!_elig[id];};
   function layout(order){
     var res={};if(anchor)res[frontSingle]=anchor.pax[0].id;
     var si=0;
@@ -16800,6 +16834,7 @@ function _rzSearchSeat(dep,acId,paxList,coPic){
       var byArm=gs.slice().sort(function(x,y){return arm(x)-arm(y);});
       var mem=g.pax.filter(function(p){return !p.infant;}).sort(function(x,y){return wOf(y)-wOf(x);}).concat(g.pax.filter(function(p){return p.infant;}));
       byArm.forEach(function(s,i){if(mem[i])res[s]=mem[i].id;});
+      _rzFixExitInGroup(res,gs,exitSeat,eligOf);   // able-bodied adult in the exit seat (host/child step back)
     }
     return res;
   }
@@ -16814,8 +16849,9 @@ function _rzSearchSeat(dep,acId,paxList,coPic){
     if(frontSingle!=null&&res[frontSingle]!=null&&infIds[res[frontSingle]])return; // hard: no infant host in seat 1
     var sc=_rzCandWBScore(dep,acId,res);if(!sc||!sc.ok)return;                       // within limits only
     var infLast=(order.length&&order[order.length-1].inf)?0:1;                       // prefer infant group rearmost
-    // Priority: fewest mixed rows (tidiest pairing) → infant at the back → CoG closest to centre.
-    var key=mixedRows(res)*1e6+infLast*1e3+sc.dist;
+    var exitBad=(exitSeat!=null&&res[exitSeat]!=null&&!eligOf(res[exitSeat]))?1:0;     // adult in the exit seat (hard preference)
+    // Priority: able-bodied adult in the exit seat → fewest mixed rows → infant at the back → CoG centred.
+    var key=exitBad*1e9+mixedRows(res)*1e6+infLast*1e3+sc.dist;
     if(key<bestKey){bestKey=key;best=res;}
   }
   function permute(arr,k){if(abort)return;if(k===arr.length){consider(arr);return;}for(var i=k;i<arr.length;i++){var t=arr[k];arr[k]=arr[i];arr[i]=t;permute(arr,k+1);t=arr[k];arr[k]=arr[i];arr[i]=t;if(abort)return;}}
@@ -16837,7 +16873,7 @@ window.rezdyManReseat=function(dep,acId){
     var w=parseFloat((typeof _rzPaxWeight==='function')?_rzPaxWeight(p,_declMode):p.weight);
     if(isNaN(w)){var d=parseFloat(p.declared);w=isNaN(d)?0:d;}
     var hasInf=!!(p.infantName)||_allPax.some(function(x){return x.infantOf===p.id;}); // host of a lap infant
-    return {id:p.id,weight:w,bag:0,group:p.group||'',infant:hasInf};
+    return {id:p.id,weight:w,bag:0,group:p.group||'',infant:hasInf,child:(p.type==='child')};
   });
   var _coPic=!!(S._rzManCoPic||{})[acId];
   // Prefer keeping booking groups in CONSECUTIVE rows (the groups-first seater), but only when that
@@ -16884,6 +16920,8 @@ window.rezdyManReseat=function(dep,acId){
   // Lap-infant rule on the seatmap: keep an infant host out of the front seat (the groups-first
   // seater doesn't guard internally; heavy-front already does).
   try{sm=_seatMapInfantGuard(sm,acId,paxList,_coPic)||sm;}catch(e){}
+  // Emergency-exit rule: an able-bodied ADULT must occupy the exit seat (no child / lap-infant host).
+  try{sm=_rzExitSeatGuard(sm,acId,paxList,_coPic)||sm;}catch(e){}
   // Any passenger who couldn't get a seat (cabin full — e.g. a co-pilot just took seat 1) is
   // bumped back to the UNALLOCATED pool rather than left allocated-but-seatless (which carries no
   // W&B contribution and confuses the count). Clearing .ac returns them to the pool.
