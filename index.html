@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.58';
+const APP_VER='v26.59';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16702,11 +16702,15 @@ function _rzSmartSeat(acId,paxList,opts){
   var light=!!(opts&&opts.order==='light');
   var gcmp=function(x,y){return light?(x.w-y.w):(y.w-x.w);};
   var mcmp=function(x,y){return light?(wOf(x)-wOf(y)):(wOf(y)-wOf(x));};
-  // Classify (non-infant by parity; infants always handled last → back).
-  var solos=groups.filter(function(g){return g.size===1&&!g.inf;}).sort(gcmp);
-  var evens=groups.filter(function(g){return g.size>=2&&g.size%2===0&&!g.inf;}).sort(gcmp);
-  var odds =groups.filter(function(g){return g.size>=3&&g.size%2===1&&!g.inf;}).sort(gcmp);
-  var infs =groups.filter(function(g){return g.inf;}).sort(gcmp);
+  // infBack (default true): reserve the REAR rows for infant groups. When false, infant groups flow by
+  // weight like any other group (so a heavy infant group can move forward to balance CoG) — but an
+  // infant host is NEVER allowed to anchor the front single seat (that stays a hard rule).
+  var infBack=!(opts&&opts.infBack===false);
+  var flow=infBack?groups.filter(function(g){return !g.inf;}):groups;   // groups in the pair-seat flow
+  var solos=flow.filter(function(g){return g.size===1;}).sort(gcmp);
+  var evens=flow.filter(function(g){return g.size>=2&&g.size%2===0;}).sort(gcmp);
+  var odds =flow.filter(function(g){return g.size>=3&&g.size%2===1;}).sort(gcmp);
+  var infs =infBack?groups.filter(function(g){return g.inf;}).sort(gcmp):[];  // forced to the rear only when infBack
 
   // Build the seat sequence + group fill order so that:
   //  • a SOLO takes the front single seat (or, failing a solo, one member of an odd group anchors it);
@@ -16714,13 +16718,17 @@ function _rzSmartSeat(acId,paxList,opts){
   //  • ODD groups + extra solos fill the remaining pair seats contiguously (their odd seat shares a row
   //    with the next group — a clean group boundary);
   //  • INFANT groups come LAST → the rear rows, host in the rearmost seat.
+  // The front single anchor must be NON-INFANT (an infant host can never sit in seat 1).
+  var soloAnchor=null;for(var _si=0;_si<solos.length;_si++){if(!solos[_si].inf){soloAnchor=solos[_si];break;}}
+  var oddAnchor=null;for(var _oi=0;_oi<odds.length;_oi++){if(!odds[_oi].inf){oddAnchor=odds[_oi];break;}}
   var seq, frontFill;
-  if(frontSingle!=null&&!solos.length&&odds.length){
-    // No solo to take the front single → let an odd group anchor it; odds lead so they stay contiguous.
+  if(frontSingle!=null&&!soloAnchor&&oddAnchor){
+    // No non-infant solo for the front single → a non-infant odd group anchors it; it leads the pair seats.
     seq=[frontSingle].concat(P);
-    frontFill=odds.concat(evens).concat(solos);
+    odds=odds.filter(function(g){return g!==oddAnchor;});
+    frontFill=[oddAnchor].concat(odds).concat(evens).concat(solos);
   }else{
-    if(frontSingle!=null&&solos.length){result[frontSingle]=solos.shift().pax[0].id;} // heaviest solo → front single
+    if(frontSingle!=null&&soloAnchor){result[frontSingle]=soloAnchor.pax[0].id;solos=solos.filter(function(g){return g!==soloAnchor;});} // solo → front single
     seq=P.slice();                                                                     // front single (if any) handled / left empty
     frontFill=evens.concat(odds).concat(solos);                                        // evens first → pair-aligned
   }
@@ -16762,19 +16770,29 @@ window.rezdyManReseat=function(dep,acId){
     // heavy load can stay within limits without splitting groups. Pick the BEST-balanced of those that
     // are within W&B; only if NONE keep the groups together within limits do we fall back to the
     // groups-first / heavy-front engines (which may split a group to chase CoG).
-    var _smart=[];
+    // Try group-together candidates with the infant pinned to the BACK first; if none are within
+    // limits, the FIRST rule we relax is "infant at the back" (infant may move forward — but NEVER into
+    // seat 1). Only if no group-together layout works at all do we split the groups.
+    var okBack=null,dBack=Infinity, okRelax=null,dRelax=Infinity, any=null,dAny=Infinity;
     if(typeof _rzSmartSeat==='function'){
-      ['heavy','light'].forEach(function(ord){var c=_rzSmartSeat(acId,paxList,{coSeat1:_coPic,order:ord})||{};if(Object.keys(c).length===paxList.length)_smart.push(c);});
+      [true,false].forEach(function(ib){
+        ['heavy','light'].forEach(function(ord){
+          var c=_rzSmartSeat(acId,paxList,{coSeat1:_coPic,order:ord,infBack:ib})||{};
+          if(Object.keys(c).length!==paxList.length)return;
+          var s=_rzCandWBScore(dep,acId,c);if(!s)return;
+          if(s.dist<dAny){dAny=s.dist;any=c;}
+          if(s.ok){if(ib){if(s.dist<dBack){dBack=s.dist;okBack=c;}}else{if(s.dist<dRelax){dRelax=s.dist;okRelax=c;}}}
+        });
+      });
     }
-    var bestOk=null,bestOkD=Infinity,bestAny=null,bestAnyD=Infinity;
-    _smart.forEach(function(c){var s=_rzCandWBScore(dep,acId,c);if(!s)return;if(s.ok&&s.dist<bestOkD){bestOkD=s.dist;bestOk=c;}if(s.dist<bestAnyD){bestAnyD=s.dist;bestAny=c;}});
-    if(bestOk){sm=bestOk;}                                              // a groups-together layout that's within limits ✓
+    if(okBack){sm=okBack;}                                              // groups together + infant at back + within limits ✓
+    else if(okRelax){sm=okRelax;}                                       // relax infant-at-back (still not seat 1) to stay within limits
     else{
       var smG=assignSeats(acId,paxList,{coSeat1:_coPic})||{};            // groups-first consecutive rows
       var smH=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};  // heaviest forward (may split)
       if(Object.keys(smG).length&&_rzCandWBOk(dep,acId,smG)){sm=smG;}
       else if(Object.keys(smH).length&&_rzCandWBOk(dep,acId,smH)){sm=smH;}
-      else{sm=bestAny||(Object.keys(smH).length?smH:smG);}              // nothing within limits → keep groups together (CoG-closest), pilot fixes via fuel/cargo
+      else{sm=any||(Object.keys(smH).length?smH:smG);}                  // nothing within limits → keep groups together (CoG-closest), pilot fixes via fuel/cargo
     }
   }catch(e){try{sm=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};}catch(e2){sm={};}}
   if(_coPic)_rzReserveCoSeat(sm,acId); // safety: ensure seat 1 stays clear for the co-pilot
