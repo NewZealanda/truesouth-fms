@@ -1360,7 +1360,7 @@ function _rzRenderSchedule(){
     pilotsBar+='</div>';
   }
   pilotsBar+='</div>';
-  return hdr+pilotsBar+detailH+formH+grid+((typeof _rzBreakdownModal==='function')?_rzBreakdownModal():'');
+  return hdr+((typeof _rzBreakdownBanner==='function')?_rzBreakdownBanner():'')+pilotsBar+detailH+formH+grid+((typeof _rzBreakdownModal==='function')?_rzBreakdownModal():'');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1728,7 +1728,7 @@ window.rezdyBreakdownHours=function(h){if(!S._rzBreak)return;S._rzBreak.hours=h;
 window.rezdyBreakdownChange=function(){if(S._rzBreak){S._rzBreak.hours=null;S._rzBreak.opts=null;render();}};
 window.rezdyBreakdownClose=function(){S._rzBreak=null;render();};
 function _rzBreakdownAnalyze(brokenAc,fromMin,hours){
-  var winEnd=fromMin+hours*60;
+  var winEnd=(hours>=99)?(24*60):(fromMin+hours*60);   // 7+ (99) = rest of the day
   var flights=(_schedDayFlights(S.rezdyDate)||[]).map(function(f){return {key:f.key,ac:f.ac,depMin:f.depMin,endMin:f.endMin};});
   flights.forEach(function(f){
     var parts=String(f.key).split('|');f.dest=(typeof _rzGroupDest==='function')?_rzGroupDest(parts[2]||''):(parts[2]||'');
@@ -1777,17 +1777,41 @@ window.rezdyBreakdownApply=function(i){
   var br=S._rzBreak;if(!br||!br.opts)return;var o=br.opts.options[i];if(!o)return;
   if(typeof confirm==='function'&&!confirm('Apply this recovery plan? It reassigns / flags bookings on the calendar (you can undo by changing the aircraft back).'))return;
   S._rzBookingAc=S._rzBookingAc||{};
-  o.reassign.forEach(function(r){(r.flight.orders||[]).forEach(function(ord){S._rzBookingAc[String(ord)]=r.ac;});});
-  o.freeMoves.forEach(function(m){(m.flight.orders||[]).forEach(function(ord){S._rzBookingAc[String(ord)]=m.ac;});});
+  // Snapshot every order we touch so the whole recovery can be UNDONE (e.g. the aircraft is fixed).
+  var _prior={},_cancKeys=[];function _snap(ord){ord=String(ord);if(!(ord in _prior))_prior[ord]=(ord in S._rzBookingAc)?S._rzBookingAc[ord]:null;}
+  o.reassign.forEach(function(r){(r.flight.orders||[]).forEach(function(ord){_snap(ord);S._rzBookingAc[String(ord)]=r.ac;});});
+  o.freeMoves.forEach(function(m){(m.flight.orders||[]).forEach(function(ord){_snap(ord);S._rzBookingAc[String(ord)]=m.ac;});});
   S._rzBreakCancelled=S._rzBreakCancelled||{};
-  (o.cancelFlights||[]).forEach(function(f){(f.orders||[]).forEach(function(ord){S._rzBookingAc[String(ord)]='__none__';S._rzBreakCancelled[String(ord)]={date:S.rezdyDate,ts:Date.now()};});});
+  (o.cancelFlights||[]).forEach(function(f){(f.orders||[]).forEach(function(ord){_snap(ord);S._rzBookingAc[String(ord)]='__none__';S._rzBreakCancelled[String(ord)]={date:S.rezdyDate,ts:Date.now()};_cancKeys.push(String(ord));});});
   S._rzBreakdowns=S._rzBreakdowns||{};S._rzBreakdowns[br.ac]={fromMin:br.fromMin,hours:br.hours};
+  S._rzBreakUndo={ac:br.ac,prior:_prior,cancelledKeys:_cancKeys,ts:Date.now()};
   if(typeof auditLog==='function')auditLog('aircraft_breakdown',{ac:br.ac,hours:br.hours,reassigned:o.reassign.length+o.freeMoves.length,paxCancelled:o.paxCancelled});
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
   S._rzBreak=null;
-  if(typeof toast==='function')toast('Recovery applied — '+(o.reassign.length+o.freeMoves.length)+' flight(s) moved'+(o.paxCancelled?', '+o.paxCancelled+' pax flagged to cancel in Rezdy':''),'ok');
+  if(typeof toast==='function')toast('Recovery applied — '+(o.reassign.length+o.freeMoves.length)+' flight(s) moved'+(o.paxCancelled?', '+o.paxCancelled+' pax flagged to cancel in Rezdy':'')+'. Undo available if it comes back.','ok');
   render();
 };
+// Undo the last applied recovery — restores the original aircraft allocation (use if the aircraft is fixed).
+window.rezdyBreakdownUndo=function(){
+  var u=S._rzBreakUndo;if(!u){if(typeof toast==='function')toast('Nothing to undo.','info');return;}
+  S._rzBookingAc=S._rzBookingAc||{};
+  Object.keys(u.prior).forEach(function(ord){if(u.prior[ord]==null)delete S._rzBookingAc[ord];else S._rzBookingAc[ord]=u.prior[ord];});
+  if(S._rzBreakCancelled)(u.cancelledKeys||[]).forEach(function(ord){delete S._rzBreakCancelled[ord];});
+  if(S._rzBreakdowns&&u.ac)delete S._rzBreakdowns[u.ac];
+  S._rzBreakUndo=null;
+  if(typeof auditLog==='function')auditLog('aircraft_breakdown_undo',{ac:u.ac});
+  if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
+  if(typeof toast==='function')toast(String(u.ac).replace('ZK-','')+' restored — recovery undone.','ok');
+  render();
+};
+// Banner shown while an aircraft is flagged broken-down, with the Undo control.
+function _rzBreakdownBanner(){
+  var bd=S._rzBreakdowns||{};var acs=Object.keys(bd);if(!acs.length)return '';
+  return '<div class="card" style="border-left:4px solid #f59e0b;background:rgba(245,158,11,.08);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--text1)">🔧 Out of service: '+acs.map(function(a){return _rzEsc(String(a).replace('ZK-',''));}).join(', ')+' — recovery applied.</div>'+
+    (S._rzBreakUndo?'<button onclick="window.rezdyBreakdownUndo()" class="btn btn-ghost" style="font-size:12px;color:#60a5fa;border-color:rgba(96,165,250,.5)">↩ Undo recovery</button>':'')+
+  '</div>';
+}
 function _rzBreakdownModal(){
   var br=S._rzBreak;if(!br)return '';
   var H=function(m){return _rzMinToHHMM(m);};
@@ -1797,11 +1821,12 @@ function _rzBreakdownModal(){
   if(br.hours==null){
     h+='<div style="font-size:13px;color:var(--text2);margin-bottom:12px">Estimated time to fix? Flights of this aircraft departing within the window become unflyable.</div>';
     h+='<div style="display:flex;flex-wrap:wrap;gap:8px">';
-    for(var hh=1;hh<=8;hh++)h+='<button onclick="window.rezdyBreakdownHours('+hh+')" style="padding:10px 18px;border-radius:10px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-weight:800;font-size:15px;cursor:pointer">'+hh+'h</button>';
-    h+='</div><div style="font-size:11px;color:var(--text3);margin-top:12px">More than 8h rolls into tomorrow — take the aircraft off availability in Resources instead.</div>';
+    for(var hh=1;hh<=6;hh++)h+='<button onclick="window.rezdyBreakdownHours('+hh+')" style="padding:10px 18px;border-radius:10px;border:1px solid var(--border2);background:var(--card2);color:var(--text1);font-weight:800;font-size:15px;cursor:pointer">'+hh+'h</button>';
+    h+='<button onclick="window.rezdyBreakdownHours(99)" title="7+ hours — out for the rest of the day" style="padding:10px 18px;border-radius:10px;border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#f59e0b;font-weight:800;font-size:15px;cursor:pointer">7+ h</button>';
+    h+='</div><div style="font-size:11px;color:var(--text3);margin-top:12px">7+ h covers the rest of the day. If it rolls into tomorrow, take the aircraft off availability in Resources.</div>';
   }else{
     var an=br.opts||{affected:[],options:[]},af=an.affected;
-    h+='<div style="font-size:12px;color:var(--text3);margin-bottom:10px">Out '+H(br.fromMin)+'–'+H(br.fromMin+br.hours*60)+' ('+br.hours+'h). <span onclick="window.rezdyBreakdownChange()" style="color:#60a5fa;cursor:pointer">change</span></div>';
+    h+='<div style="font-size:12px;color:var(--text3);margin-bottom:10px">Out '+(br.hours>=99?('from '+H(br.fromMin)+' · rest of day (7+ h)'):(H(br.fromMin)+'–'+H(br.fromMin+br.hours*60)+' ('+br.hours+'h)'))+'. <span onclick="window.rezdyBreakdownChange()" style="color:#60a5fa;cursor:pointer">change</span></div>';
     if(!af.length){h+='<div class="card" style="text-align:center;color:var(--text3);padding:20px">No flights affected in that window. 🎉</div>';}
     else{
       h+='<div style="font-size:13px;font-weight:800;color:var(--text1);margin-bottom:4px">'+af.length+' flight(s) affected · '+af.reduce(function(s,f){return s+f.pax;},0)+' pax stranded</div>';
