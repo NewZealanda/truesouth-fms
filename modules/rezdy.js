@@ -69,16 +69,53 @@ window.pickupVehRemove=function(i){var veh=_rzVehicles();if(veh.length<=1)return
 //   S._pickupDrivers: {"vi|dep":name} who drives van vi for THAT departure
 //   S._pickupAck:     {"vi|dep":{sig,ids,at,by}} driver's acknowledgement of THAT run
 function _pkKey(vi,dep){return vi+'|'+(dep==null?'':dep);}
-function _rzVanParked(vi,dep){return !!(S._pickupSpare||{})[_pkKey(vi,dep)];}
+// Van indices BEYOND the owned fleet are manually-created "Taxi" vans (drag a pickup to the empty
+// space to make one). They hold overflow, render amber, are driverless, and can be converted to a
+// real vehicle by dropping a spare van/Subi onto them. Created only by the operator — never auto.
+function _rzIsTaxiVan(vi){return vi>=_rzVehicles().length;}
+function _rzVanParked(vi,dep){if(_rzIsTaxiVan(vi))return false;return !!(S._pickupSpare||{})[_pkKey(vi,dep)];}
 function _rzActiveVanCount(dep){var n=_rzVehicles().length,c=0;for(var i=0;i<n;i++)if(!_rzVanParked(i,dep))c++;return c;}
 function _rzVanDriver(vi,dep){var d=(S._pickupDrivers||{})[_pkKey(vi,dep)];d=(d==null?'':String(d)).trim();return d||null;}
 window.pickupVehParkDragStart=function(vi,e){S._pickupVehDrag=vi;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','veh:'+vi);}catch(_){}};
 window.pickupActivateVehicle=function(vi,dep){S._pickupSpare=S._pickupSpare||{};delete S._pickupSpare[_pkKey(vi,dep)];if(window.pickupSave)window.pickupSave(true);render();};
 window.pickupParkVehicle=function(vi,dep){if(_rzActiveVanCount(dep)<=1){if(typeof toast==='function')toast('Keep at least one active vehicle for this departure.','warn');return;}S._pickupSpare=S._pickupSpare||{};S._pickupSpare[_pkKey(vi,dep)]=1;if(window.pickupSave)window.pickupSave(true);render();};
 window.pickupDropActivateVehicle=function(e,dep){if(e&&e.preventDefault)e.preventDefault();var vi=S._pickupVehDrag;S._pickupVehDrag=null;if(vi==null||vi==='')return;window.pickupActivateVehicle(parseInt(vi,10),dep);};
-function _rzVehSeats(vi){var v=_rzVehicles()[vi];return (v&&v.seats)||11;}
-function _rzVehColor(vi){var v=_rzVehicles()[vi];return (v&&v.color)||'#64748b';}
-function _rzVehName(vi){var v=_rzVehicles()[vi];return (v&&v.name)||('Van '+(vi+1));}
+function _rzVehSeats(vi){if(_rzIsTaxiVan(vi))return 11;var v=_rzVehicles()[vi];return (v&&v.seats)||11;}
+function _rzVehColor(vi){if(_rzIsTaxiVan(vi))return '#f59e0b';var v=_rzVehicles()[vi];return (v&&v.color)||'#64748b';}
+function _rzVehName(vi){if(_rzIsTaxiVan(vi)){var t=vi-_rzVehicles().length+1;return '🚕 Taxi'+(t>1?(' '+t):'');}var v=_rzVehicles()[vi];return (v&&v.name)||('Van '+(vi+1));}
+// Create / convert manual Taxi overflow vans.
+window.pickupDropNewTaxi=function(e,dep){
+  if(e&&e.preventDefault)e.preventDefault();
+  var id=S._rezdyDragId;try{if(!id&&e.dataTransfer)id=e.dataTransfer.getData('text/plain');}catch(_){}
+  S._rezdyDragId=null;
+  if(!id||String(id).indexOf('driver:')===0||String(id).indexOf('veh:')===0)return; // pickups only
+  if(!Array.isArray(S._pickupVans))return;
+  S._pickupVans=S._pickupVans.map(function(v){return v.filter(function(x){return x!==id;});}); // pull from any van
+  S._pickupVans.push([id]);                                                                    // new Taxi van
+  if(window.pickupSave)window.pickupSave(true);render();
+};
+// A drop on a Taxi card: a spare VEHICLE → convert; a pickup → just add it (overload allowed).
+window.pickupTaxiDrop=function(taxiVi,e,dep){
+  if(e&&e.preventDefault)e.preventDefault();
+  var veh=S._pickupVehDrag;
+  if(veh==null||veh===''){try{var d=e.dataTransfer&&e.dataTransfer.getData('text/plain');if(d&&d.indexOf('veh:')===0)veh=parseInt(d.slice(4),10);}catch(_){}}
+  if(veh!=null&&veh!==''){window.pickupConvertTaxi(taxiVi,parseInt(veh,10),dep);return;}
+  window.pickupDropOnVan(taxiVi,e,dep);
+};
+// Drop a spare van/Subi onto a Taxi → move the taxi's pickups into that real vehicle, activate it
+// for this departure, drop the now-empty taxi, and open its driver picker.
+window.pickupConvertTaxi=function(taxiVi,vehVi,dep){
+  S._pickupVehDrag=null;
+  if(!Array.isArray(S._pickupVans)||!S._pickupVans[taxiVi]||_rzIsTaxiVan(vehVi))return;
+  var ids=S._pickupVans[taxiVi].slice();
+  S._pickupVans[vehVi]=(S._pickupVans[vehVi]||[]).concat(ids);
+  S._pickupVans.splice(taxiVi,1);                     // taxiVi > vehVi, so vehVi's index is unaffected
+  if(S._pickupSpare)delete S._pickupSpare[_pkKey(vehVi,dep)]; // un-park / activate it
+  if(window.pickupSave)window.pickupSave(true);
+  S._pickupVanDriverPick=_pkKey(vehVi,dep);            // "...and a driver" — open the driver picker
+  if(typeof toast==='function')toast(_rzVehName(vehVi)+' now covers that run — pick a driver','ok');
+  render();
+};
 // Departure label "0800" → minutes since midnight (for the "next departure" default).
 function _rzDepMin(t){var m=/(\d{1,2}):?(\d{2})/.exec(String(t||''));return m?(+m[1])*60+(+m[2]):9999;}
 
@@ -506,7 +543,7 @@ function _rzEnsureVans(){
   const ids=pickups.map(function(p){return p.id;});
   const depOf={};pickups.forEach(function(p){depOf[p.id]=(p.depart||'—');});
   let vans=S._pickupVans;
-  const valid=Array.isArray(vans)&&vans.length===_rzVehicles().length&&vans.every(Array.isArray);
+  const valid=Array.isArray(vans)&&vans.length>=_rzVehicles().length&&vans.every(Array.isArray); // ≥: extra buckets = manual Taxi vans
   // First ACTIVE (non-parked) van FOR A DEPARTURE — catches new/displaced pickups of that run.
   var _faCache={};
   function _firstActiveVan(dep){if(_faCache[dep]!=null)return _faCache[dep];var fa=-1,n=_rzVehicles().length;for(var i=0;i<n;i++){if(!_rzVanParked(i,dep)){fa=i;break;}}_faCache[dep]=fa;return fa;}
@@ -528,6 +565,8 @@ function _rzEnsureVans(){
       move.forEach(function(id){var dep=depOf[id]||'—';var fa=_firstActiveVan(dep);if(fa>=0&&fa!==vi&&S._pickupVans[fa])S._pickupVans[fa].push(id);else S._pickupVans[vi].push(id);});
     }
   });
+  // Drop any empty TRAILING Taxi vans (a converted/emptied overflow van shouldn't linger).
+  while(S._pickupVans.length>_rzVehicles().length&&!(S._pickupVans[S._pickupVans.length-1]||[]).length)S._pickupVans.pop();
   if(!S._pickupCollected||typeof S._pickupCollected!=='object')S._pickupCollected={};
   return pickups;
 }

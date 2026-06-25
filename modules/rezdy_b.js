@@ -484,14 +484,16 @@ function _rzRenderPickups(){
     const pax=depFilter?(_byDepLoad[depFilter]||0):_rzVanPax(vanIds,pickups);
     const over=depFilter?(pax>seats):(_maxDep>seats);
     const col=_rzVehColor(vi);
-    vansH+='<div ondragover="event.preventDefault();this.style.outline=\'2px solid '+(over?'#ef4444':col)+'\'" ondragleave="this.style.outline=\'\'" ondrop="window.pickupDropOnVan('+vi+',event,\''+_depJs+'\');this.style.outline=\'\'" '+
+    var _isTaxi=_rzIsTaxiVan(vi);
+    if(_isTaxi&&!pax)return; // a manual Taxi van with nothing for this view → hide it
+    vansH+='<div ondragover="event.preventDefault();this.style.outline=\'2px solid '+(over?'#ef4444':col)+'\'" ondragleave="this.style.outline=\'\'" ondrop="window.'+(_isTaxi?'pickupTaxiDrop':'pickupDropOnVan')+'('+vi+',event,\''+_depJs+'\');this.style.outline=\'\'" '+
       'style="flex:1 1 260px;min-width:240px;background:'+(over?'rgba(239,68,68,.09)':'var(--card)')+';border:'+(over?'2px solid #ef4444':'1px solid var(--border)')+';border-top:'+(over?'5px':'3px')+' solid '+(over?'#ef4444':col)+';border-radius:10px;padding:12px;box-shadow:'+(over?'0 0 0 1px rgba(239,68,68,.3)':'none')+'">';
     vansH+='<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">'+
       '<div style="font-weight:800;font-size:14px;color:'+(over?'#ef4444':col)+'">'+_rzEsc(_rzVehName(vi))+'</div>'+
       '<div style="display:flex;align-items:center;gap:8px">'+
         (over?'<span style="font-size:11px;font-weight:900;color:#fff;background:#ef4444;padding:3px 9px;border-radius:13px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">⚠ Overloaded '+pax+'/'+seats+'</span>'
              :'<span style="font-size:12px;font-weight:700;color:var(--text2)">'+pax+' / '+seats+' pax</span>')+
-        '<button onclick="window.pickupParkVehicle('+vi+',\''+_depJs+'\')" title="Park this vehicle for this departure (move it to spares)" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:10px;font-weight:700;padding:3px 8px">Park</button>'+
+        (_isTaxi?'<span style="font-size:10px;font-weight:800;color:#f59e0b;white-space:nowrap">drop a van/Subi here ↧</span>':'<button onclick="window.pickupParkVehicle('+vi+',\''+_depJs+'\')" title="Park this vehicle for this departure (move it to spares)" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:10px;font-weight:700;padding:3px 8px">Park</button>')+
       '</div></div>';
     // Driver / taxi slot — PER DEPARTURE. Tap to assign; drop a driver bubble; no driver = taxi.
     var drv=_rzVanDriver(vi,depFilter);
@@ -560,6 +562,8 @@ function _rzRenderPickups(){
   if(_rzVehicles().some(function(v,vi){return _rzVanParked(vi,depFilter);})){
     vansH+='<div ondragover="event.preventDefault();this.style.borderColor=\'var(--acc)\';this.style.color=\'var(--text2)\'" ondragleave="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\'" ondrop="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\';window.pickupDropActivateVehicle(event,\''+_depJs+'\')" style="flex:1 1 200px;min-width:180px;align-self:stretch;min-height:90px;display:flex;align-items:center;justify-content:center;text-align:center;border:2px dashed var(--border2);border-radius:10px;color:var(--text3);font-size:12px;font-weight:700;padding:12px">🚐 Drop a spare vehicle here to add it</div>';
   }
+  // Drop a PASSENGER here → spins up a new Taxi van (overflow). Drop a spare van/Subi onto it to convert.
+  vansH+='<div ondragover="event.preventDefault();this.style.borderColor=\'#f59e0b\';this.style.color=\'#f59e0b\'" ondragleave="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\'" ondrop="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\';window.pickupDropNewTaxi(event,\''+_depJs+'\')" style="flex:1 1 200px;min-width:180px;align-self:stretch;min-height:90px;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;text-align:center;border:2px dashed var(--border2);border-radius:10px;color:var(--text3);font-size:12px;font-weight:700;padding:12px"><span style="font-size:20px">🚕</span>Drop a passenger here<br>for a new taxi</div>';
   vansH+='</div>';
 
   // Self-drive: listed to the side (only the selected departure).
@@ -855,7 +859,7 @@ window.pickupDropOnVan=function(vi,e,dep){
   }
   let id=S._rezdyDragId;
   try{if(!id&&e.dataTransfer)id=e.dataTransfer.getData('text/plain');}catch(_){}
-  if(!id||id.indexOf('driver:')===0||!Array.isArray(S._pickupVans))return;
+  if(!id||id.indexOf('driver:')===0||id.indexOf('veh:')===0||!Array.isArray(S._pickupVans))return; // ignore driver/vehicle drags
   // remove from any van, append to target
   S._pickupVans=S._pickupVans.map(function(v){return v.filter(function(x){return x!==id;});});
   if(!S._pickupVans[vi])S._pickupVans[vi]=[];
