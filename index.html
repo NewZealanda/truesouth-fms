@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.82';
+const APP_VER='v26.83';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3280,7 +3280,7 @@ document.addEventListener('keydown',function(e){
     var _da=document.activeElement,_dt=_da&&_da.tagName;
     if(_dt==='INPUT'||_dt==='SELECT'||_dt==='TEXTAREA'||(_da&&_da.isContentEditable))return;
     if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
-    if(((S.section==='operations'&&(S.tab==='bookings'||S.tab==='rseatmap'||S.tab==='rloadsheets'))||S.section==='ground'||S.section==='calendar')&&typeof window.rezdyShiftDate==='function'){
+    if(((S.section==='operations'&&(S.tab==='calendar'||S.tab==='bookings'||S.tab==='rseatmap'||S.tab==='rloadsheets'))||S.section==='ground')&&typeof window.rezdyShiftDate==='function'){
       e.preventDefault();window.rezdyShiftDate(e.key==='ArrowRight'?1:-1);
     }
     return;
@@ -3302,8 +3302,8 @@ document.addEventListener('keydown',function(e){
       var _mn=_mc+_dir;if(_mn<0)_mn=_mt.length-1;if(_mn>=_mt.length)_mn=0;
       e.preventDefault();S.maintTab=_mt[_mn];render();return;
     }
-    // Calendar: cycle the day.
-    if(S.section==='calendar'&&typeof window.rezdyShiftDate==='function'){
+    // Calendar tab: cycle the DAY (it's a day view), not the ops tabs.
+    if(S.section==='operations'&&S.tab==='calendar'&&typeof window.rezdyShiftDate==='function'){
       e.preventDefault();window.rezdyShiftDate(_dir);return;
     }
     if(S.section!=='operations')return;
@@ -3316,13 +3316,13 @@ document.addEventListener('keydown',function(e){
 // Cycle the tier-2 sub-tabs of the current section (shared by arrow keys and mobile swipe).
 window._cycleTier2=function(dir){
   if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
-  if(S.section==='operations'){
+  if(S.section==='operations'&&S.tab==='calendar'){
+    // Calendar tab: swipe cycles the DAY (it's a day view), not the ops tabs.
+    if(typeof window.rezdyShiftDate==='function'){window.rezdyShiftDate(dir);}
+  } else if(S.section==='operations'){
     var tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');
     var cur=tabs.indexOf(S.tab);if(cur<0)cur=0;var nx=(cur+dir+tabs.length)%tabs.length;
     if(typeof window.switchOpsTab==='function')window.switchOpsTab(tabs[nx]);
-  } else if(S.section==='calendar'){
-    // Calendar: cycle the DAY (swipe outside the grid / arrow keys).
-    if(typeof window.rezdyShiftDate==='function'){window.rezdyShiftDate(dir);}
   }
 };
 // Mobile: a clear horizontal swipe cycles the tier-2 tabs. Guards so it never hijacks a
@@ -3424,7 +3424,7 @@ var HOME_OPTIONS=[
   {id:'rseatmap',label:'Seatmap',section:'operations',tab:'rseatmap'},
   {id:'rloadsheets',label:'Loadsheets',section:'operations',tab:'rloadsheets'},
   {id:'ground',label:'Transport (Ground)',section:'ground'},
-  {id:'calendar',label:'Calendar',section:'calendar'},
+  {id:'calendar',label:'Calendar',section:'operations',tab:'calendar'},
   {id:'maintenance',label:'Maintenance',section:'maintenance'},
   {id:'roster',label:'Roster',section:'roster'},
   {id:'leave',label:'Leave',section:'leave'},
@@ -3482,6 +3482,9 @@ function render(){
     else if(S.rezdyTab==='mypickups'){S.section='ground';S._groundSecTab='mypickups';}
     else{S.section='calendar';}
   }
+  // Calendar moved INTO Operations as its FIRST tab (v26.83). Remap any calendar-section nav
+  // (drawer, home pref, deep links, internal renders) onto Operations ▸ Calendar.
+  if(S.section==='calendar'){S.section='operations';S.tab='calendar';}
   // ── Nav migration (v26.12): Flight Record / Logbooks / Flight & Duty are now bundled into one
   // 'pilotbag' section as tier-2 tabs. Remap any restored last-view / home-pref / deep link.
   if(S.section==='flightrecord'||S.section==='logbook'||S.section==='flightduty'){S._pilotBagTab=S.section;S.section='pilotbag';}
@@ -3845,16 +3848,11 @@ function renderDrawer(){
     var _sodOn=sec==='startday';
     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'startday\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_sodOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_sodOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_sodOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🌅</span><span style="flex:1">Start of Day</span></button>';
   }
-  // Calendar — its own tier-1 section (was Rezdy ▸ Calendar), gated on the 'calendar' permission.
-  // Pinned to the TOP of the drawer.
-  if(hasRolePerm('calendar')){
-    var _calOn=sec==='calendar';
-    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'calendar\';S.rezdyTab=\'schedule\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_calOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_calOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_calOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📅</span><span style="flex:1">Calendar</span></button>';
-  }
   if(_canOps){
     h+=_secBtn('Operations','operations','✈️');
     if(_isExp('operations')){
       var _isLegacyLs=isLs&&t!=='rloadsheets';
+      if(hasRolePerm('calendar'))h+=_subBtn('Calendar',t==='calendar'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('calendar')");
       h+=_subBtn('Bookings',t==='bookings'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('bookings')");
       h+=_subBtn('Seatmap',t==='rseatmap'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('rseatmap')");
       h+=_subBtn('Loadsheets',t==='rloadsheets'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('rloadsheets')");
@@ -3959,12 +3957,14 @@ function renderOpsSubTabs(){
   const isLsView=!!(S.activeTabId||S._newLsTab);
   const isLegacyLs=isLsView&&opsTab!=='rloadsheets'; // the legacy loadsheet editor (S.tab='loadsheet')
   const savedCount=(S.saved||[]).filter(function(s){return s.status!=='deleted';}).length;
-  var tabs=[
+  var tabs=[];
+  if(hasRolePerm('calendar'))tabs.push({lbl:'Calendar',on:opsTab==='calendar',onclick:"window.switchOpsTab('calendar')"});
+  tabs.push(
     {lbl:'Bookings',on:opsTab==='bookings'&&!isLegacyLs,onclick:"window.switchOpsTab('bookings')"},
     {lbl:'Seatmap',on:opsTab==='rseatmap'&&!isLegacyLs,onclick:"window.switchOpsTab('rseatmap')"},
     {lbl:'Loadsheets',on:opsTab==='rloadsheets',onclick:"window.switchOpsTab('rloadsheets')"},
     {lbl:'Saved ('+savedCount+')',on:opsTab==='saved'&&!isLegacyLs,onclick:"window.switchOpsTab('saved')"}
-  ];
+  );
   if(hasRolePerm('charter'))tabs.push({lbl:'Charter',on:opsTab==='charter'&&!isLegacyLs,onclick:"window.switchOpsTab('charter')"});
   return _tier2(tabs);
 }
@@ -4176,8 +4176,9 @@ function _renderPlaceholderSection(title,icon,sub){
 }
 function renderOperations(){
   const opsTab=S.tab||'bookings';
-  // Content routing — the Rezdy-powered Operations flow: Bookings / Seatmap / Loadsheets.
+  // Content routing — the Rezdy-powered Operations flow: Calendar / Bookings / Seatmap / Loadsheets.
   // (The legacy manifest/seatmap/loadsheet-tab UI was retired in v23.76.)
+  if(opsTab==='calendar'){if(hasRolePerm('calendar')){try{return renderCalendar();}catch(e){return '<div class="card" style="color:var(--err-text)">Calendar error: '+e.message+'</div>';}}return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';}
   if(opsTab==='rseatmap'){try{return window.rezdyOpsSeatmap();}catch(e){return '<div class="card" style="color:var(--err-text)">Seatmap error: '+e.message+'</div>';}}
   if(opsTab==='rloadsheets'){try{return window.rezdyOpsLoadsheets();}catch(e){return '<div class="card" style="color:var(--err-text)">Loadsheets error: '+e.message+'</div>';}}
   if(opsTab==='saved'){if(S._presSection&&S._presSection!=='saved')broadcastPresence(null);return renderSaved();}
