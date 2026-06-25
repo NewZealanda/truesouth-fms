@@ -507,6 +507,7 @@ function _schedScoreLt(a,b){for(var i=0;i<a.length;i++){if(a[i]<b[i])return true
 // less wasted capacity. If nothing can cover pax, returns the whole fleet (max lift, best effort).
 function _schedPickFleet(pax,fleet){
   var n=fleet.length;if(!n)return [];
+  if(n>24)return fleet.slice();   // subset enumeration is 2^n — guard against a hang on an unrealistically large fleet
   var best=null;
   for(var mask=1;mask<(1<<n);mask++){
     var cap=0,cost=0,cnt=0,pri=0;
@@ -775,6 +776,7 @@ function _schedDepFltHrs(dests,airvan){var mx=0;(dests&&dests.length?dests:['MF'
 // call in a pilot" comparison, which limits the day to the crewable aircraft count).
 function _schedPlanPick(pax,cand,maxNew,groups){
   var n=cand.length;if(!n)return [];if(maxNew==null)maxNew=Infinity;
+  if(n>24)cand=cand.slice(0,24),n=24;   // subset enumeration is 2^n — cap to avoid a hang if candidates ever balloon
   var best=null,partial=null;
   for(var mask=1;mask<(1<<n);mask++){
     var cap=0,inc=0,cnt=0,fer=0,pri=0,nw=0,caps=[];

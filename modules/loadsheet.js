@@ -121,8 +121,8 @@ window.lsSeatEditPopup=function(idx){
     var pNm=plus>0?rawVal.slice(0,plus).trim():rawVal.trim();
     var iNm=plus>0?rawVal.slice(plus+3).trim():'';
     var out='';
-    if(pNm)out+='<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.35);font-size:13px;font-weight:700;color:#c4b5fd;white-space:nowrap">'+pNm+'</span>';
-    if(iNm)out+='<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 10px;border-radius:20px;background:rgba(236,72,153,.15);border:1px solid rgba(236,72,153,.35);font-size:12px;font-weight:700;color:#ec4899;white-space:nowrap;margin-left:4px">👶 '+iNm+'</span>';
+    if(pNm)out+='<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.35);font-size:13px;font-weight:700;color:#c4b5fd;white-space:nowrap">'+esc(pNm)+'</span>';
+    if(iNm)out+='<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 10px;border-radius:20px;background:rgba(236,72,153,.15);border:1px solid rgba(236,72,153,.35);font-size:12px;font-weight:700;color:#ec4899;white-space:nowrap;margin-left:4px">👶 '+esc(iNm)+'</span>';
     return out;
   }
   var _initVal=_initNm+(_initInfant?' + '+_initInfant:'');
@@ -277,7 +277,7 @@ function renderLoadsheet(){
   // Signature presence (f.sig) is the ground truth — don't show the "needs signing" banner on a
   // loadsheet that already carries a signature even if its saved status is a stale 'unsigned'.
   const draftBanner=(f.status==='unsigned'&&!f.sig)?`<div class="pill-blue" style="display:block;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px;text-transform:none;letter-spacing:0">🖊 Unsigned loadsheet — pilot needs to sign below</div>`:'';
-  const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;render();}">Clear & Start Blank</button>`;
+  const clearBtn=`<button class="btn btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="if(confirm('Clear this loadsheet and start blank?')){S.lsForms[S.lsAc]=bF_ac('ZK-'+S.lsAc);S.form=S.lsForms[S.lsAc];S.editId=null;autoSaveLS();render();}">Clear & Start Blank</button>`;
 
 
   // Fuel display

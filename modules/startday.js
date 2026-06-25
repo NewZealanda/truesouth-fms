@@ -51,7 +51,7 @@ function _sodScan(){
     var d=byDA[k];var cap=_sodAcCap(d.ac);
     if(cap&&d.seat>cap)add('red','Over capacity',_sodDepShort(d.dep)+' '+_sodSh(d.ac)+' · '+d.seat+' pax in '+cap+' seats','rseatmap');
     try{
-      var wb=(typeof _rzManAcWB==='function')?_rzManAcWB(d.dep,d.ac):null;
+      var wb=(d.dep&&typeof _rzManAcWB==='function')?_rzManAcWB(d.dep,d.ac):null;
       if(wb){
         if(wb.towOk===false)add('red','Over MTOW',_sodDepShort(d.dep)+' '+_sodSh(d.ac)+(wb.tow?(' · TOW '+Math.round(wb.tow)+'kg'):''),'rloadsheets');
         else if(wb.cogOk===false)add('red','CofG out of limits',_sodDepShort(d.dep)+' '+_sodSh(d.ac),'rloadsheets');
@@ -115,10 +115,12 @@ window.sodRun=async function(){
     }catch(e){}
     S._sodStep='Allocating pilots…';
     try{if(window.schedAutoPilots&&typeof _schedEnabled==='function'&&_schedEnabled())window.schedAutoPilots();}catch(e){}
-  }catch(e){}
-  S._sodRunning=false;S._sodStep='';S._sodRan=Date.now();
-  if(typeof toast==='function')toast('Start-of-day complete — review anything flagged below.','ok');
-  render();
+  }finally{
+    // Always release the spinner, even if a step throws — otherwise the button stays disabled forever.
+    S._sodRunning=false;S._sodStep='';S._sodRan=Date.now();
+    if(typeof toast==='function')toast('Start-of-day complete — review anything flagged below.','ok');
+    try{render();}catch(e){}
+  }
 };
 
 // Deep-link from an exception row to the page that fixes it.
@@ -193,6 +195,113 @@ function renderStartDay(){
       h+='</div>';
     });
   }
+
+  h+='</div>';
+  return h;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TODAY AT A GLANCE — the landing dashboard. Read-only snapshot of the day:
+//  the departures board (time · dest · aircraft · pax · pilot), headline counts,
+//  an attention banner that links to Start of Day, transport + money summary, and
+//  quick links into the rest of the app. Recomputes on every render.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _todayFlights(date){
+  var flights=((typeof _schedDayFlights==='function')?(_schedDayFlights(date)||[]):[]).map(function(f){
+    var parts=String(f.key||'').split('|');
+    var dest=(typeof _rzGroupDest==='function')?_rzGroupDest(parts[2]||''):(parts[2]||'');
+    var orders=(typeof _rzOrdersForBlockKey==='function')?(_rzOrdersForBlockKey(f.key)||[]):[];
+    var a=0,c=0,i=0;
+    orders.forEach(function(o){var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(o);});if(b&&typeof _rzEffBreakdown==='function'){var e=_rzEffBreakdown(b);a+=(e.a||0);c+=(e.c||0);i+=(e.i||0);}});
+    var hhmm=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';
+    var pilot=(typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(f.ac,hhmm):null;
+    return {ac:f.ac,dest:dest,depMin:f.depMin,hhmm:hhmm,end:(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.endMin):'',a:a,c:c,i:i,pax:a+c+i,pilot:pilot};
+  }).sort(function(a,b){return a.depMin-b.depMin;});
+  return flights;
+}
+
+window.todayNav=function(sec,tab){
+  if(sec==='operations'){if(typeof window.switchOpsTab==='function'){window.switchOpsTab(tab||'bookings');return;}S.section='operations';S.tab=tab||'bookings';render();return;}
+  if(sec==='ground'){S.section='ground';S._groundSecTab='transport';render();return;}
+  if(sec==='calendar'){S.section='calendar';S.rezdyTab='schedule';render();return;}
+  S.section=sec;render();
+};
+
+function renderHomeToday(){
+  var date=(S&&S.rezdyDate)||'';
+  var dow=(typeof _rzDowLabel==='function')?_rzDowLabel(date):date;
+  var scan=_sodScan();
+  var flights=_todayFlights(date);
+  var hr=new Date().getHours();
+  var greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
+  var who=(S.user&&(S.user.name||S.user.firstName))?(', '+String(S.user.name||S.user.firstName).split(' ')[0]):'';
+  var canShift=(typeof window.rezdyShiftDate==='function');
+  var acCol=(typeof _rzAcCol==='function')?_rzAcCol:function(){return 'var(--text2)';};
+  var sodOK=!!(S.user&&S.user.superAdmin); // Start-of-Day is superadmin-only for now
+  var h='<div class="page">';
+
+  // Header
+  h+='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px">';
+  h+='<div><div class="st" style="margin:0">'+_sodEsc(greet)+_sodEsc(who)+'</div><div style="font-size:12px;color:var(--text3);margin-top:2px">'+_sodEsc(dow)+'</div></div>';
+  if(canShift)h+='<div style="display:flex;gap:6px;align-items:center">'
+    +'<button class="btn btn-ghost" style="font-size:13px;padding:5px 11px" onclick="window.rezdyShiftDate(-1)">‹</button>'
+    +'<button class="btn btn-ghost" style="font-size:13px;padding:5px 11px" onclick="window.rezdyShiftDate(1)">›</button></div>';
+  h+='</div>';
+
+  // Attention banner (links into Start of Day only for superadmin while it's gated)
+  var sodClick=sodOK?'onclick="S.section=\'startday\';render()" style="cursor:pointer;':'style="';
+  if(!scan.loaded){
+    h+='<div '+sodClick+'background:var(--card);border:1px solid var(--border2);border-left:4px solid #60a5fa;border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;color:var(--text1)">Bookings not loaded yet'+(sodOK?' — open <b>Start of Day</b> to pull today.':'.')+'</span>'+(sodOK?'<span style="color:var(--text3)">›</span>':'')+'</div>';
+  }else if(scan.ex.length){
+    var reds=scan.ex.filter(function(e){return e.sev==='red';}).length;
+    var col=reds?'#ef4444':'#f59e0b';
+    h+='<div '+sodClick+'background:var(--card);border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">'
+      +'<span style="font-size:13px;color:var(--text1)"><b>'+scan.ex.length+'</b> item'+(scan.ex.length===1?'':'s')+' need attention'+(reds?' · <span style="color:#ef4444;font-weight:700">'+reds+' critical</span>':'')+'</span>'+(sodOK?'<span style="color:var(--text3)">Open Start of Day ›</span>':'')+'</div>';
+  }else{
+    h+='<div style="background:var(--card);border:1px solid var(--border2);border-left:4px solid #22c55e;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--text1)">✅ All set for today — nothing flagged.</div>';
+  }
+
+  // Headline counts
+  var st=scan.stats;var paxTot=st.pax.a+st.pax.c+st.pax.i;
+  function chip(lbl,val){return '<div style="flex:1;min-width:74px;text-align:center;background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:9px 6px"><div style="font-size:19px;font-weight:800;color:var(--text1)">'+val+'</div><div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em">'+lbl+'</div></div>';}
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+chip('Flights',flights.length)+chip('Pax',paxTot+(st.pax.i?(' +'+st.pax.i+'i'):''))+chip('Aircraft',st.aircraft)+chip('Bookings',st.bookings)+'</div>';
+
+  // Departures board
+  h+='<div class="card" style="margin-bottom:12px"><div class="st" style="margin-bottom:8px">Departures</div>';
+  if(!flights.length){
+    h+='<div style="font-size:13px;color:var(--text3);text-align:center;padding:16px 0">No flights scheduled'+(scan.loaded?'':' — load bookings in Start of Day')+'.</div>';
+  }else{
+    flights.forEach(function(f){
+      var pilotH=f.pilot?('<span style="font-weight:700;color:var(--text1)">'+_sodEsc(f.pilot)+'</span>'):'<span style="color:#f59e0b">no pilot</span>';
+      var paxH=f.a+(f.c?('+'+f.c+'c'):'')+(f.i?('+'+f.i+'i'):'');
+      h+='<div onclick="window.todayNav(\'calendar\')" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border2)">'
+        +'<div style="width:46px;font-weight:800;font-size:14px;color:var(--text1)">'+_sodEsc(f.hhmm)+'</div>'
+        +'<span style="display:inline-block;border:1.5px solid '+acCol(f.ac)+';color:'+acCol(f.ac)+';border-radius:9px;padding:1px 7px;font-weight:bold;font-size:10.5px;white-space:nowrap">'+_sodEsc(_sodSh(f.ac))+'</span>'
+        +'<span style="flex:1;font-size:12.5px;color:var(--text2)">'+_sodEsc(f.dest||'')+' · '+paxH+'p</span>'
+        +'<span style="font-size:12px">'+pilotH+'</span>'
+        +'</div>';
+    });
+  }
+  h+='</div>';
+
+  // Transport + money summary
+  var owe=0,oweN=0;(S._rezdyBookings||[]).forEach(function(b){if(typeof _rzIsCancelled==='function'&&_rzIsCancelled(b))return;var bal=parseFloat(b.balanceDue);if(isFinite(bal)&&bal>0){owe+=bal;oweN++;}});
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
+  h+='<div onclick="window.todayNav(\'ground\')" style="flex:1;min-width:150px;cursor:pointer;background:var(--card);border:1px solid var(--border2);border-radius:10px;padding:11px 13px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em">Transport</div><div style="font-size:14px;font-weight:700;color:var(--text1);margin-top:2px">Pickups & vans ›</div></div>';
+  if(oweN)h+='<div onclick="window.todayNav(\'operations\',\'bookings\')" style="flex:1;min-width:150px;cursor:pointer;background:var(--card);border:1px solid var(--border2);border-left:4px solid #f59e0b;border-radius:10px;padding:11px 13px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em">Owing</div><div style="font-size:14px;font-weight:700;color:var(--text1);margin-top:2px">'+_sodEsc((typeof _rzMoney==='function')?_rzMoney(owe,'NZD'):('$'+Math.round(owe)))+' · '+oweN+' booking'+(oweN===1?'':'s')+' ›</div></div>';
+  h+='</div>';
+
+  // Quick links
+  h+='<div class="st" style="margin-bottom:8px">Jump to</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
+  function ql(lbl,icon,onclick){return '<button onclick="'+onclick+'" class="btn btn-ghost" style="flex:1;min-width:104px;padding:11px 8px;font-size:13px;display:flex;flex-direction:column;align-items:center;gap:4px"><span style="font-size:18px">'+icon+'</span>'+lbl+'</button>';}
+  if(sodOK)h+=ql('Start of Day','🌅',"S.section='startday';render()");
+  h+=ql('Bookings','📋',"window.todayNav('operations','bookings')");
+  h+=ql('Seatmap','💺',"window.todayNav('operations','rseatmap')");
+  h+=ql('Calendar','📅',"window.todayNav('calendar')");
+  h+=ql('Transport','🚐',"window.todayNav('ground')");
+  if(typeof hasRolePerm==='function'&&hasRolePerm('roster'))h+=ql('Roster','🗓️',"S.section='roster';render()");
+  h+='</div>';
 
   h+='</div>';
   return h;

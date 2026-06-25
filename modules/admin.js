@@ -1141,7 +1141,7 @@ window.lsDropOnUnalloc=function(e){
       if(f.paxType)delete f.paxType[S._dragSeat];
       if(f.paxPaymentReq)delete f.paxPaymentReq[S._dragSeat];
     }
-    S._dragSeat=null;render();
+    S._dragSeat=null;autoSaveLS();render();
   }
 };
 window.startDragForm=(ev,idx,acId)=>{S.dragState={fromFormIdx:idx,fromFormAc:acId};ev.dataTransfer.setData('text/plain',String(idx));};

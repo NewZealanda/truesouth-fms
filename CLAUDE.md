@@ -90,7 +90,21 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- Latest version: **v25.97** — built+verified. **`ARCHITECTURE_REVIEW_v25.97.md` is the latest
+- **v26.76 (latest)** — NEW **Start of Day** + **Today** screens (`modules/startday.js`): one-action
+  morning flow (pull Rezdy → declared-weight preview → allocate aircraft + pilots) + a live exceptions
+  dashboard, and an at-a-glance landing dashboard (departures board, counts, owing, quick links). `today`
+  is selectable as a home via the "Open the app to" picker (default landing stays Bookings/operations);
+  both pinned to the top of the drawer. **`ARCHITECTURE_REVIEW_v26.76.md`
+  is the latest sweep**: XSS in loadsheet pax-pills + presence bar escaped; `lsDropOnUnalloc` + loadsheet
+  "Clear" now call `autoSaveLS()`; `sodRun` try/finally; scheduling subset-enum guards. A **nightly automated
+  sweep** is scheduled (`nightly-fms-sweep`, ~00:04 daily): full app bug sweep + architecture audit +
+  testing + morning report. ⚠️ v26.75–v26.76 are built + in the working tree but **uncommitted** — a stale
+  `.git/HEAD.lock` blocked commits (NOT deleted, per rules); clear it and commit.
+- Breakdown recovery engine (v26.66–v26.72, **superadmin-only / WIP**, hidden behind `S.user.superAdmin`):
+  where-it-broke axis (base vs stranded) + recovery moves (spare / bring-parked-online / ferry-extra-run /
+  rebook-later / split-across-tails / fill-spare-seats-then-cancel / outstation empty-collect) with Undo +
+  1–6h/7+ duration.
+- Earlier: **v25.97** — built+verified. **`ARCHITECTURE_REVIEW_v25.97.md` is the latest
   full bug sweep** (3-area parallel audit: calendar pointer-drag/overrides, scheduling allocator,
   architecture/security/persistence). Fixed in v25.97: H1 manual-pilot double-book, A1 spurious
   "moved" banner, A2 stuck drag preview, A3 unalloc no-op reassign, A4 drag NaN guard, M3 Branches

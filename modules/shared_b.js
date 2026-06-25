@@ -1385,9 +1385,9 @@ function presBarInner(section){
     +others.map(function(e){
       var uid=e[0];var p=e[1];
       const init=p.code||(p.name||'?').trim().split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
-      return'<div title="'+p.name+'" style="display:flex;align-items:center;gap:2px">'
-        +'<div style="width:22px;height:22px;border-radius:50%;background:'+p.color+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">'+init+'</div>'
-        +(isAdmin?'<button onclick="window._presKick(\''+uid+'\')" style="background:none;border:none;color:var(--text3);font-size:13px;line-height:1;cursor:pointer;padding:0;opacity:.5;flex-shrink:0" title="Force logout '+p.name+'">×</button>':'')
+      return'<div title="'+esc(p.name)+'" style="display:flex;align-items:center;gap:2px">'
+        +'<div style="width:22px;height:22px;border-radius:50%;background:'+esc(p.color)+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">'+esc(init)+'</div>'
+        +(isAdmin?'<button onclick="window._presKick(\''+esc(uid)+'\')" style="background:none;border:none;color:var(--text3);font-size:13px;line-height:1;cursor:pointer;padding:0;opacity:.5;flex-shrink:0" title="Force logout '+esc(p.name)+'">×</button>':'')
         +'</div>';
     }).join('<span style="color:var(--border2);font-size:10px;padding:0 2px">·</span>')
     +'</div>';
