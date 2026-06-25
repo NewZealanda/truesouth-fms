@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.43';
+const APP_VER='v26.44';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -10944,7 +10944,7 @@ function _mfWorkOrderHtml(f){
     'table{width:100%;border-collapse:collapse;margin-bottom:10px}th,td{border:1px solid #999;padding:4px 6px;font-size:11px;vertical-align:top}th{background:#eee;text-align:left}'+
     'td.c{text-align:center;width:58px}td.n{width:22px;text-align:center;color:#666}td.lbl{width:140px;font-weight:bold}'+
     '.grid{display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:10px}.fld{font-size:11px}.fld b{display:block;color:#555;font-weight:600;font-size:10px}'+
-    '.sign{display:flex;gap:30px;margin-top:8px}.sign>div{flex:1;border-top:1px solid #333;padding-top:3px;font-size:11px;color:#333}'+
+    '.sign{display:flex;gap:30px;margin-top:34px}.sign>div{flex:1}.sign .sighd{font-size:11px;font-weight:700;color:#333;margin-bottom:2px}.sign .sigspace{display:flex;align-items:flex-end;margin-bottom:2px}.sign .sigspace img{max-height:60px;display:block}.sign .sigline{border-top:1px solid #333;padding-top:3px;font-size:11px;color:#333}'+
     '.ck{font-size:11px;margin:2px 0;display:flex;align-items:center;gap:6px}.ck .box{display:inline-block;min-width:24px;height:14px;border:1px solid #333;text-align:center;line-height:13px;font-size:9px;padding:0 2px}'+
     '.cols{display:flex;gap:24px}.note{font-size:10px;color:#666;margin-top:10px}</style></head><body>'+
     '<div style="text-align:center;margin-bottom:6px"><img src="'+_MF_SLA_LOGO+'" alt="Southern Lakes Aviation" style="height:64px;width:auto"></div>'+
@@ -10959,15 +10959,21 @@ function _mfWorkOrderHtml(f){
     '</div>'+
     '<table><thead><tr><th colspan="3">Please carry out the following</th><th class="c">Completed</th><th class="c">Eng. Initial</th><th class="c">Deferred</th></tr></thead><tbody>'+
       listRows('6','Routine Maintenance','routine')+listRows('7','Unscheduled Maintenance','unscheduled')+listRows('8','Defect Rectification','defect')+
-      '<tr><td class="n">9</td><td class="lbl">Oil used since last inspection</td><td class="txt">'+(oc.qts.toFixed(1))+' qts since last oil change'+(d.oil&&d.oil.lastChange?' ('+_mfEsc(d.oil.lastChange)+(oc.days!=null?', '+oc.days+' days':'')+')':'')+(d.oil&&d.oil.note?' — '+_mfEsc(d.oil.note):'')+'</td><td class="c"></td><td class="c"></td><td class="c"></td></tr>'+
     '</tbody></table>'+
+    '<div class="grid" style="margin-bottom:10px"><div class="fld" style="flex:1 1 100%"><b>9. Oil used since last inspection</b>'+(oc.qts.toFixed(1))+' qts since last oil change'+(d.oil&&d.oil.lastChange?' ('+_mfEsc(d.oil.lastChange)+(oc.days!=null?', '+oc.days+' days':'')+')':'')+(d.oil&&d.oil.note?' — '+_mfEsc(d.oil.note):'')+'</div></div>'+
     '<div class="grid"><div class="fld"><b>10. Notify SLA about</b></div>'+
       '<div class="fld"><b>Price</b>'+yn(d.notifyPrice)+'</div><div class="fld"><b>Delays</b>'+yn(d.notifyDelays)+'</div><div class="fld"><b>Extra Work</b>'+yn(d.notifyExtra)+'</div></div>'+
     '<div class="grid"><div class="fld" style="flex:1 1 100%"><b>11. Engineers Comments</b>'+_mfEsc(d.comments)+'</div></div>'+
     '<div class="grid"><div class="fld"><b>12. Send Record for logbook updates to</b>'+_mfEsc(d.sendRecordTo)+'</div>'+
       '<div class="fld"><b>13. Send Invoice to</b>'+_mfEsc(d.sendInvoiceTo)+'</div></div>'+
-    '<div class="sign"><div><b>14. SLA</b> '+_mfEsc(d.slaName)+'<br>'+sig(d.slaSig)+'<br>Date: '+_mfEsc(d.slaDate)+'</div>'+
-      '<div><b>15. Engineer</b> '+_mfEsc(d.engName)+'<br>'+sig(d.engSig)+'<br>Date: '+_mfEsc(d.engDate)+'</div></div>'+
+    '<div class="sign">'+
+      '<div><div class="sighd">14. SLA — '+_mfEsc(d.slaName)+'</div>'+
+        '<div class="sigspace"'+(d.slaSig?'':' style="height:66px"')+'>'+(d.slaSig?'<img src="'+d.slaSig+'">':'')+'</div>'+
+        '<div class="sigline">Signature &nbsp;·&nbsp; Date: '+_mfEsc(d.slaDate)+'</div></div>'+
+      '<div><div class="sighd">15. Engineer — '+_mfEsc(d.engName)+'</div>'+
+        '<div class="sigspace"'+(d.engSig?'':' style="height:66px"')+'>'+(d.engSig?'<img src="'+d.engSig+'">':'')+'</div>'+
+        '<div class="sigline">Signature &nbsp;·&nbsp; Date: '+_mfEsc(d.engDate)+'</div></div>'+
+    '</div>'+
     '<div style="margin-top:12px;border-top:1px solid #ccc;padding-top:8px"><b style="font-size:11px">SLA Pilot Checklist</b>'+
       '<div class="cols"><div>'+ckRow('wo','Work Order completed')+ckRow('techlog','Tech Log completed, no Defects')+ckRow('hours','A/C Hours recorded on Tech Log')+ckRow('engperf','Engine Performance check sighted')+'</div>'+
       '<div>'+ckRow('rts','Return to Service sighted')+ckRow('dupinsp','Duplicate Inspection sighted')+ckRow('toolctrl','Tool Control Records sighted')+ckRow('testflight','Test Flight undertaken')+'</div></div></div>'+
@@ -11122,7 +11128,8 @@ function renderMaintFormEditor(id){
     fld('3. Aircraft Type','acType',d.acType)+fld('4. Aircraft Registration','acReg',d.acReg||f.aircraft)+
     dt('5a. On Date','onDate',d.onDate)+dt('5b. Or Date','orDate',d.orDate)+'</div></div>';
   h+='<div class="card" style="margin-bottom:10px"><div class="st" style="font-size:13px;margin-bottom:8px">Please carry out the following</div>'+
-    section('6','Routine Maintenance','routine')+section('7','Unscheduled Maintenance','unscheduled')+section('8','Defect Rectification','defect')+oilSection()+'</div>';
+    section('6','Routine Maintenance','routine')+section('7','Unscheduled Maintenance','unscheduled')+section('8','Defect Rectification','defect')+'</div>';
+  h+='<div class="card" style="margin-bottom:10px">'+oilSection()+'</div>';
   h+='<div class="card" style="margin-bottom:10px"><div style="display:flex;flex-direction:column;gap:10px">'+
     '<div style="font-size:12px;font-weight:700;color:var(--text1)">10. Notify SLA about</div>'+
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">'+ynSel('Price','notifyPrice',d.notifyPrice)+ynSel('Delays','notifyDelays',d.notifyDelays)+ynSel('Extra Work','notifyExtra',d.notifyExtra)+'</div>'+
