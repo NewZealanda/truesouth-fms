@@ -437,16 +437,13 @@ function _rzRenderPickups(){
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0"><span style="color:'+RZ_PK_COL+';font-weight:700">'+_nPk+' pickups</span> · <span style="color:'+RZ_DROP_COL+';font-weight:700">'+_nDrop+' drop-offs</span> · '+_rzVehicles().length+' vehicles'+(selfDrive.length?' · '+selfDrive.length+' self-drive':'')+'</p></div>'+
     '<div style="display:flex;gap:6px;flex-shrink:0">'+
       '<button class="btn btn-ghost" style="font-size:12px'+(S._rzTransByAc?';border-color:rgba(96,165,250,.6);color:#60a5fa':'')+'" onclick="window.rzTransToggleByAc()" title="Group each van\'s stops by the aircraft flown">'+(S._rzTransByAc?'✈ By aircraft ✓':'✈ By aircraft')+'</button>'+
-      '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(74,222,128,.5);color:#4ade80" onclick="window.pickupSave()">💾 Save</button>'+
     '</div></div>';
 
   // departure-time selector — click a time to focus the board on that departure's run.
-  // A Save button sits here too, right by where pickups are reordered/edited (changes auto-save,
-  // but operators asked for a Save close to the action).
+  // Every change (move, reorder, driver, park) auto-saves immediately — no Save button needed.
   let timeBar='<div class="card" style="padding:10px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700">Departure</div>'+
     '<div style="display:flex;gap:6px;flex-shrink:0">'+
       '<button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;font-weight:700" onclick="window.pickupAutoAllocate()" title="Re-allocate every van automatically (saves)">↺ Auto-allocate</button>'+
-      '<button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;border-color:rgba(74,222,128,.5);color:#4ade80;font-weight:700" onclick="window.pickupSave()" title="Save the transport list & order">💾 Save pickups</button>'+
     '</div></div><div style="display:flex;flex-wrap:wrap;gap:6px">';
   var _ordJs=encodeURIComponent(JSON.stringify(times.slice()));
   times.forEach(function(t,ti){
@@ -480,7 +477,7 @@ function _rzRenderPickups(){
     vansH+='<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">'+
       '<div style="font-weight:800;font-size:14px;color:'+col+'">'+_rzEsc(_rzVehName(vi))+'</div>'+
       '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:700;color:'+(over?'#ef4444':'var(--text2)')+'">'+pax+' / '+seats+' pax'+(over?' ⚠':'')+'</span>'+
-      '<button onclick="window.pickupParkVehicle('+vi+',\''+_depJs+'\')" title="Park this vehicle for this departure (move it to spares)" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:10px;font-weight:700;padding:3px 8px">Park</button></div></div>';
+      (_rzIsTaxiVan(vi)?'':'<button onclick="window.pickupParkVehicle('+vi+',\''+_depJs+'\')" title="Park this vehicle for this departure (move it to spares)" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:10px;font-weight:700;padding:3px 8px">Park</button>')+'</div></div>';
     // Driver / taxi slot — PER DEPARTURE. Tap to assign; drop a driver bubble; no driver = taxi.
     var drv=_rzVanDriver(vi,depFilter);
     var _dpOpen=(S._pickupVanDriverPick===_pkKey(vi,depFilter));
@@ -816,6 +813,7 @@ window.rezdyLoadPickups=async function(){
 
 window.pickupAutoAllocate=function(){
   S._pickupVans=_rzAutoVans(_rzPickups());
+  if(typeof _rzEnsureVans==='function')_rzEnsureVans(); // spill any overflow into Taxi vans before saving
   if(window.pickupSave)window.pickupSave(true); // PERSIST — otherwise a live re-pull reverts it
   toast('Vans auto-allocated','ok');
   render();
