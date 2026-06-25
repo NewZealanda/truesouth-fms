@@ -1140,7 +1140,7 @@ function _rzRenderSchedule(){
             '<span style="font-size:14px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(_grp.start)+' · '+_rzEsc(_rzBdCompact(_grp.bd||{a:_grp.pax,c:0,i:0}))+' '+_rzEsc(_grp.disp||_grp.product)+'<span style="color:#f59e0b">'+_rzEsc(_rzFbSummary(_grp._fb))+'</span></span>'+
             (_grp.pilot?'<span class="pill" title="'+(_grp.pilotChanged?('User change from auto allocation — auto chose '+_rzEsc(_grp.pilotAutoWas)):(_grp.pilotAuto?'Auto-allocated pilot':''))+'" style="background:rgba(96,165,250,.15);border:1px solid '+(_grp.pilotChanged?'#f59e0b':'rgba(96,165,250,.5)')+';color:'+(_grp.pilotChanged?'#f59e0b':'#60a5fa')+';font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">✈ '+_rzEsc(_grp.pilot)+(_grp.pilotChanged?' ✏':(_grp.pilotAuto?' ⚙':''))+' <span onclick="event.stopPropagation();window.rezdySchedClearPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
-          (_gac?'<button class="btn btn-ghost" style="font-size:12px;color:#f59e0b;border-color:rgba(245,158,11,.45)" title="Aircraft out of service — suggest a recovery" onclick="event.stopPropagation();window.rezdyBreakdownOpen(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')">🔧 Breakdown</button>':'')+
+          ((_gac&&S.user&&S.user.superAdmin)?'<button class="btn btn-ghost" style="font-size:12px;color:#f59e0b;border-color:rgba(245,158,11,.45)" title="Aircraft out of service — suggest a recovery (superadmin only, work in progress)" onclick="event.stopPropagation();window.rezdyBreakdownOpen(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')">🔧 Breakdown</button>':'')+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
       // Flyback (FLB/CCF): the seats are held in an outbound slot — let the operator set the actual
       // fly-back time here (defaults to 15:30). A 15-minute dropdown (no free-typed clock — that lost
@@ -1904,6 +1904,7 @@ window.rezdyBreakdownUndo=function(){
 };
 // Banner shown while an aircraft is flagged broken-down, with the Undo control.
 function _rzBreakdownBanner(){
+  if(!(S.user&&S.user.superAdmin))return '';   // breakdown feature is superadmin-only for now (WIP)
   var bd=S._rzBreakdowns||{};var acs=Object.keys(bd);if(!acs.length)return '';
   return '<div class="card" style="border-left:4px solid #f59e0b;background:rgba(245,158,11,.08);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">'+
     '<div style="font-size:13px;font-weight:700;color:var(--text1)">🔧 Out of service: '+acs.map(function(a){return _rzEsc(String(a).replace('ZK-',''));}).join(', ')+' — recovery applied.</div>'+
