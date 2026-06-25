@@ -94,6 +94,15 @@ window.pickupDropNewTaxi=function(e,dep){
   S._pickupVans.push([id]);                                                                    // new Taxi van
   if(window.pickupSave)window.pickupSave(true);render();
 };
+// The single combined empty-space drop zone: a spare VEHICLE → activate it as a new run; a PASSENGER
+// (pickup) → start a new taxi list (which you then drop a vehicle + driver onto).
+window.pickupDropCombined=function(e,dep){
+  if(e&&e.preventDefault)e.preventDefault();
+  var veh=S._pickupVehDrag;
+  if(veh==null||veh===''){try{var d=e.dataTransfer&&e.dataTransfer.getData('text/plain');if(d&&d.indexOf('veh:')===0)veh=parseInt(d.slice(4),10);}catch(_){}}
+  if(veh!=null&&veh!==''){window.pickupActivateVehicle(parseInt(veh,10),dep);return;} // spare vehicle → add the run
+  window.pickupDropNewTaxi(e,dep);                                                     // passenger → new taxi list
+};
 // A drop on a Taxi card: a spare VEHICLE → convert; a pickup → just add it (overload allowed).
 window.pickupTaxiDrop=function(taxiVi,e,dep){
   if(e&&e.preventDefault)e.preventDefault();

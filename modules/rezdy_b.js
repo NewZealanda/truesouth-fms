@@ -562,12 +562,9 @@ function _rzRenderPickups(){
     }
     vansH+='</div>';
   });
-  // Drop zone to add a spare vehicle to THIS departure's run.
-  if(_rzVehicles().some(function(v,vi){return _rzVanParked(vi,depFilter);})){
-    vansH+='<div ondragover="event.preventDefault();this.style.borderColor=\'var(--acc)\';this.style.color=\'var(--text2)\'" ondragleave="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\'" ondrop="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\';window.pickupDropActivateVehicle(event,\''+_depJs+'\')" style="flex:1 1 200px;min-width:180px;align-self:stretch;min-height:90px;display:flex;align-items:center;justify-content:center;text-align:center;border:2px dashed var(--border2);border-radius:10px;color:var(--text3);font-size:12px;font-weight:700;padding:12px">🚐 Drop a spare vehicle here to add it</div>';
-  }
-  // Drop a PASSENGER here → spins up a new Taxi van (overflow). Drop a spare van/Subi onto it to convert.
-  vansH+='<div ondragover="event.preventDefault();this.style.borderColor=\'#f59e0b\';this.style.color=\'#f59e0b\'" ondragleave="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\'" ondrop="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\';window.pickupDropNewTaxi(event,\''+_depJs+'\')" style="flex:1 1 200px;min-width:180px;align-self:stretch;min-height:90px;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;text-align:center;border:2px dashed var(--border2);border-radius:10px;color:var(--text3);font-size:12px;font-weight:700;padding:12px"><span style="font-size:20px">🚕</span>Drop a passenger here<br>for a new taxi</div>';
+  // One combined drop zone: drop a spare VEHICLE here to add a run, or a PASSENGER to start a new
+  // taxi list (then drop a vehicle + driver onto it).
+  vansH+='<div ondragover="event.preventDefault();this.style.borderColor=\'var(--acc)\';this.style.color=\'var(--text2)\'" ondragleave="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\'" ondrop="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text3)\';window.pickupDropCombined(event,\''+_depJs+'\')" style="flex:1 1 200px;min-width:180px;align-self:stretch;min-height:90px;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;text-align:center;border:2px dashed var(--border2);border-radius:10px;color:var(--text3);font-size:12px;font-weight:700;padding:12px"><span style="font-size:20px">➕</span>Drop a <b>vehicle</b> to add a run<br>or a <b>passenger</b> for a new taxi list</div>';
   vansH+='</div>';
 
   // Self-drive: listed to the side (only the selected departure).
