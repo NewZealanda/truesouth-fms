@@ -11,7 +11,7 @@ function renderMaintenance(){
   const sub=S.maintTab||'overview';
   // Work-order editor/list live ONLY on the Log tab — leaving Logs closes any open work order so it
   // can't carry over to another maintenance view.
-  if(sub!=='log'&&S._mfView){S._mfView=null;S._mfOpen=null;}
+  if(sub!=='log'){S._mfView=null;S._mfOpen=null;S._maintDoc=null;}
 
   if(sub==='overview') return renderMaintOverview();
   if(sub==='log') return renderMaintLog();
@@ -298,7 +298,7 @@ function renderMaintOverview(){
         </div>`).join('')+
       '</div>':''}
       ${isAdmin?`<div style="margin-top:10px">
-        <button onclick="event.stopPropagation();S.maintEditAc='${ac}';S.maintTab='bookings';window.scrollTo(0,0);render()" style="width:100%;padding:5px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;color:var(--text2)">Edit Check / Bookings</button>
+        <button onclick="event.stopPropagation();S.maintEditAc='${ac}';S.maintEntryAc='${ac}';S.maintTab='log';S._maintDoc='bookings';window.scrollTo(0,0);render()" style="width:100%;padding:5px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;color:var(--text2)">Edit Check / Bookings</button>
       </div>`:''}
       ${(function(){const lbl=_lastUpdatedLabel(ac);return lbl?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;font-size:12px;font-weight:600;color:var(--text2)">${lbl}</div>`:'';})()}
     </div>`;
@@ -404,6 +404,14 @@ function renderMaintLog(){
   if(typeof renderMaintFormEditor==='function'){
     if(S._mfView==='editor'&&S._mfOpen)return renderMaintFormEditor(S._mfOpen);
     if(S._mfView==='list')return renderMaintFormsList(S._mfListAc||selAc);
+  }
+  // Bundled document views (Bookings / Observations / Other Documents) open inline within Logs.
+  if(S._maintDoc){
+    var _back='<div style="max-width:980px;margin:0 auto 10px"><button onclick="window.maintDocBack()" class="btn btn-ghost" style="font-size:12px">‹ Back to documents</button></div>';
+    if(S._maintDoc==='bookings'&&hasRolePerm('maint_bookings')&&typeof renderMaintBookings==='function')return _back+renderMaintBookings();
+    if(S._maintDoc==='observations'&&typeof renderMaintObservations==='function')return _back+renderMaintObservations();
+    if(S._maintDoc==='otherdocs'&&typeof renderMaintOtherDocs==='function')return _back+renderMaintOtherDocs(selAc);
+    S._maintDoc=null;
   }
 
   // ── Entry form ──

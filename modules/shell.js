@@ -674,8 +674,8 @@ function renderDrawer(){
       h+=_mn('Overview','overview');
       h+=_mn('Logs','log');
       h+=_mn('Aircraft','aircraft');
-      h+=_mn('Observations','observations');
-      if(hasRolePerm('maint_bookings')){h+=_mn('Bookings','bookings');h+=_mn('Estimator','estimator');}
+      // Observations + Bookings live in the Logs document hub now.
+      if(hasRolePerm('maint_bookings'))h+=_mn('Estimator','estimator');
       h+=_mn('Search','search');
     }
   }
@@ -761,9 +761,10 @@ var _MAINT_TAB_LBL={overview:'Overview',log:'Logs',aircraft:'Aircraft',observati
 // Ordered maintenance tier-2 tab ids (permission-aware). Single source of truth for the tab bar
 // AND the ←/→ arrow-key cycling.
 function _maintTabIds(){
+  // Observations + Bookings moved INTO the Logs document hub (v26.47) — no longer their own tabs.
   return hasRolePerm('maint_bookings')
-    ?['overview','log','aircraft','observations','bookings','estimator','search']
-    :['overview','log','aircraft','observations','search'];
+    ?['overview','log','aircraft','estimator','search']
+    :['overview','log','aircraft','search'];
 }
 // Unified 2nd-tier segmented tab strip. tabs:[{lbl,on,onclick}]. Same look everywhere.
 function _tier2(tabs){if(!tabs||!tabs.length)return '';return '<div class="t2bar">'+tabs.map(function(t){return '<button tabindex="-1" class="t2tab'+(t.on?' on':'')+'" onclick="'+t.onclick+'">'+t.lbl+'</button>';}).join('')+'</div>';}

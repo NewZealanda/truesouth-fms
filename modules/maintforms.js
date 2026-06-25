@@ -15,7 +15,14 @@ function _mfEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</
 function _mfAcType(ac){var sp=(typeof _acSpec==='function')?_acSpec(ac):null;if(sp&&sp.layout==='ga8')return 'GA8';if(ac)return 'C208B';return '';}
 function _mfNowDate(){return (typeof _todayLocal==='function')?_todayLocal():new Date().toISOString().slice(0,10);}
 function _mfAcDisp(ac){return (typeof acDisp==='function')?acDisp(ac):String(ac||'');}
-function _mfTitle(f){var d=f.data||{};return 'WO'+(d.woNo?' '+d.woNo:'')+' · '+_mfAcDisp(f.aircraft)+(d.onDate?' · '+d.onDate:'');}
+function _mfTitle(f){var d=f.data||{};if(f.form_type==='other_doc')return (d.filename||'Document')+' · '+_mfAcDisp(f.aircraft);return 'WO'+(d.woNo?' '+d.woNo:'')+' · '+_mfAcDisp(f.aircraft)+(d.onDate?' · '+d.onDate:'');}
+// Shared Google Drive OAuth token (full-drive scope), used by WO + document uploads.
+function _mfDriveToken(){
+  return new Promise(function(res,rej){
+    function init(){google.accounts.oauth2.initTokenClient({client_id:S.gdriveClientId,scope:'https://www.googleapis.com/auth/drive',callback:function(r){if(r.error)rej(new Error(r.error));else res(r.access_token);}}).requestAccessToken();}
+    if(window.google&&window.google.accounts&&window.google.accounts.oauth2){init();}else{var s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=init;s.onerror=function(){rej(new Error('Failed to load Google sign-in'));};document.head.appendChild(s);}
+  });
+}
 var _MF_CHK=[['wo','Work Order completed'],['techlog','Tech Log completed, no Defects'],['hours','A/C Hours recorded on Tech Log'],['engperf','Engine Performance check sighted'],['rts','Return to Service sighted'],['dupinsp','Duplicate Inspection sighted'],['toolctrl','Tool Control Records sighted'],['testflight','Test Flight undertaken']];
 var _MF_SECTIONS={routine:'Routine Maintenance',unscheduled:'Unscheduled Maintenance',defect:'Defect Rectification'};
 
@@ -346,7 +353,12 @@ function renderMaintDocSquares(ac){
   if(!S._mfLoaded){S._mfLoaded=true;if(window.loadMaintForms)window.loadMaintForms();}
   if(!S._maintObsLoaded){S._maintObsLoaded=true;if(window.loadMaintObs)window.loadMaintObs();}  // so a new WO can pull observations
   if(!S._woFoldersLoaded){S._woFoldersLoaded=true;if(window.loadWoFolders)window.loadWoFolders();}  // so uploads know their Drive folders
-  var wos=Object.keys(S._mfData||{}).map(function(k){return S._mfData[k];}).filter(function(f){return f.form_type==='work_order'&&f.aircraft===ac&&f.status!=='deleted';});
+  var all=Object.keys(S._mfData||{}).map(function(k){return S._mfData[k];});
+  var wos=all.filter(function(f){return f.form_type==='work_order'&&f.aircraft===ac&&f.status!=='deleted';});
+  var docs=all.filter(function(f){return f.form_type==='other_doc'&&f.aircraft===ac&&f.status!=='deleted';});
+  var openDef=((S.maintObs||{})[ac]||[]).filter(function(e){return e.type==='defect'&&e.status!=='resolved';}).length;
+  var bks=((S.maintenance&&S.maintenance.bookings)||{})[ac]||[];
+  var canBook=(typeof hasRolePerm==='function')&&hasRolePerm('maint_bookings');
   function sq(onclick,icon,label,sub,col){
     return '<button onclick="'+onclick+'" style="flex:1 1 150px;min-width:140px;background:var(--card);border:1px solid var(--border2);border-top:3px solid '+col+';border-radius:12px;padding:16px 14px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:4px">'+
       '<div style="font-size:24px">'+icon+'</div><div style="font-size:14px;font-weight:800;color:var(--text1)">'+label+'</div>'+
@@ -357,7 +369,76 @@ function renderMaintDocSquares(ac){
     '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
       sq("window.maintFormNew('work_order','"+ac+"')",'📝','New Work Order','Create &amp; fill a new SLA 13 work order','#2563eb')+
       sq("window.maintFormShowList('"+ac+"')",'📁','Work Orders','Saved · print · upload · delete ('+wos.length+')','#f59e0b')+
+      (canBook?sq("window.maintDocOpen('bookings')",'📅','Bookings','Schedule '+_mfEsc(_mfAcDisp(ac))+' into maintenance ('+bks.length+')','#a78bfa'):'')+
+      sq("window.maintDocOpen('observations')",'👁','Observations','Observations &amp; defects'+(openDef?' · '+openDef+' open':''),'#06b6d4')+
+      sq("window.maintDocOpen('otherdocs')",'📎','Other Documents','Scan &amp; file other documents ('+docs.length+')','#22c55e')+
     '</div></div>';
+}
+window.maintDocOpen=function(view){S._maintDoc=view;S._mfView=null;S._mfOpen=null;render();};
+window.maintDocBack=function(){S._maintDoc=null;render();};
+
+// ── Other Documents (scan & file arbitrary docs to the aircraft's Drive folder) ──────────────
+window.maintDocUploadPick=function(ac){
+  var inp=document.createElement('input');inp.type='file';inp.accept='image/*,application/pdf';
+  inp.onchange=function(){if(inp.files&&inp.files[0])window.maintDocUpload(ac,inp.files[0]);};
+  inp.click();
+};
+window.maintDocUpload=async function(ac,file){
+  if(!file)return;
+  if(!S.gdriveClientId){if(typeof toast==='function')toast('Set the Google Drive Client ID in Settings ▸ Drive first.','warn');return;}
+  var acFolder=((S.gdriveWoFolders||{})[ac]||'').trim();
+  if(!acFolder){if(typeof toast==='function')toast('No Drive folder set for '+_mfAcDisp(ac)+'. Set it in Settings ▸ Drive ▸ Work Order folders.','warn');return;}
+  if(typeof toast==='function')toast('Uploading '+file.name+'…','info');
+  var token;try{token=await _mfDriveToken();}catch(e){if(typeof toast==='function')toast('Google sign-in failed: '+(e&&e.message||e),'err');return;}
+  try{
+    var buf=await file.arrayBuffer();var fileBytes=new Uint8Array(buf);
+    var CRLF='\r\n',b='-----doc_'+Date.now();var enc=new TextEncoder();
+    var meta=JSON.stringify({name:file.name,parents:[acFolder]});
+    var pre=enc.encode('--'+b+CRLF+'Content-Type: application/json; charset=UTF-8'+CRLF+CRLF+meta+CRLF+'--'+b+CRLF+'Content-Type: '+(file.type||'application/octet-stream')+CRLF+CRLF);
+    var post=enc.encode(CRLF+'--'+b+'--');
+    var body=new Uint8Array(pre.length+fileBytes.length+post.length);body.set(pre,0);body.set(fileBytes,pre.length);body.set(post,pre.length+fileBytes.length);
+    var r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'multipart/related; boundary='+b},body:body});
+    if(!r.ok){var t=await r.text();if(typeof toast==='function')toast('Drive upload failed ('+r.status+'): '+t.slice(0,100),'err');return;}
+    var j=await r.json();
+    var rec={id:'doc_'+Date.now()+'_'+Math.floor(Math.random()*1e4),form_type:'other_doc',aircraft:ac,status:'open',drive_uploaded:true,
+      data:{filename:file.name,driveId:j.id,link:j.webViewLink||('https://drive.google.com/file/d/'+j.id+'/view'),mime:file.type||'',size:file.size||0,uploadedAt:new Date().toISOString(),by:(S.user&&S.user.name)||''},
+      created_at:new Date().toISOString(),updated_at:new Date().toISOString(),updated_by:(S.user&&S.user.name)||''};
+    S._mfData=S._mfData||{};S._mfData[rec.id]=rec;_mfSave(rec,true);
+    if(typeof auditLog==='function')auditLog('maint_doc_upload',{id:rec.id,file:file.name,aircraft:ac});
+    if(typeof toast==='function')toast('Filed to Drive: '+file.name,'ok');render();
+  }catch(e){if(typeof toast==='function')toast('Upload failed — '+e,'err');}
+};
+window.maintDocDelete=function(id){
+  var f=(S._mfData||{})[id];if(!f)return;
+  if(typeof confirm==='function'&&!confirm('Remove this document from the list? (The file stays in Google Drive.)'))return;
+  if(typeof auditLog==='function')auditLog('maint_doc_delete',{id:id,aircraft:f.aircraft,title:_mfTitle(f)});
+  delete S._mfData[id];try{lsSet&&lsSet('ts_maint_forms_cache',S._mfData);}catch(e){}
+  if(typeof sbU==='function')sbU('ts_maint_forms',[{id:id,form_type:'other_doc',aircraft:f.aircraft||null,data:f.data,status:'deleted',updated_at:new Date().toISOString(),updated_by:(S.user&&S.user.name)||''}]).catch(function(){});
+  render();
+};
+function renderMaintOtherDocs(ac){
+  if(!S._mfLoaded){S._mfLoaded=true;if(window.loadMaintForms)window.loadMaintForms();}
+  if(!S._woFoldersLoaded){S._woFoldersLoaded=true;if(window.loadWoFolders)window.loadWoFolders();}
+  var docs=Object.keys(S._mfData||{}).map(function(k){return S._mfData[k];}).filter(function(f){return f.form_type==='other_doc'&&f.aircraft===ac&&f.status!=='deleted';}).sort(function(a,b){return String(b.updated_at||'').localeCompare(String(a.updated_at||''));});
+  var folderSet=!!((S.gdriveWoFolders||{})[ac]||'').trim();
+  var h='<div style="max-width:820px;margin:0 auto">';
+  h+=_mfAcBar(ac);
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap">'+
+    '<div class="st" style="margin:0">Other Documents · '+_mfEsc(_mfAcDisp(ac))+'</div>'+
+    '<button onclick="window.maintDocUploadPick(\''+ac+'\')" style="font-size:12px;padding:7px 14px;border-radius:8px;border:none;background:var(--acc);color:#fff;font-weight:700;cursor:pointer">⬆ Scan / Upload</button></div>';
+  h+='<div style="font-size:11px;color:var(--text3);margin-bottom:12px;line-height:1.6">Photograph or scan a document and upload it — it files straight into '+_mfEsc(_mfAcDisp(ac))+'’s Drive folder and is logged here for everyone.'+(folderSet?'':' <span style="color:#f59e0b">Set this aircraft’s Drive folder in Settings ▸ Drive first.</span>')+'</div>';
+  if(!docs.length)h+='<div class="card" style="text-align:center;color:var(--text3);padding:30px">No documents filed for '+_mfEsc(_mfAcDisp(ac))+' yet.</div>';
+  docs.forEach(function(f){var d=f.data||{};var dt=(d.uploadedAt||'').slice(0,10);
+    h+='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
+      '<div style="flex:1;min-width:160px">'+
+        '<div style="font-size:14px;font-weight:700;color:var(--text1);word-break:break-word">📎 '+_mfEsc(d.filename||'Document')+'</div>'+
+        '<div style="font-size:11px;color:var(--text3)">'+(dt?_mfEsc(dt)+' · ':'')+_mfEsc(d.by||'')+'</div></div>'+
+      '<div style="display:flex;gap:6px;flex-shrink:0">'+
+        '<a href="'+_mfEsc(d.link||'#')+'" target="_blank" rel="noopener" class="btn btn-ghost" style="font-size:12px;text-decoration:none;color:#60a5fa;border-color:rgba(96,165,250,.5)">Open ↗</a>'+
+        '<button onclick="window.maintDocDelete(\''+f.id+'\')" class="btn btn-ghost" style="font-size:12px;color:#ef4444;border-color:rgba(239,68,68,.4)">🗑</button>'+
+      '</div></div>';
+  });
+  h+='</div>';return h;
 }
 function renderMaintFormsList(ac){
   var wos=Object.keys(S._mfData||{}).map(function(k){return S._mfData[k];}).filter(function(f){return f.form_type==='work_order'&&f.aircraft===ac&&f.status!=='deleted';}).sort(function(a,b){return String(b.updated_at||'').localeCompare(String(a.updated_at||''));});
