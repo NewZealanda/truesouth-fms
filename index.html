@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.64';
+const APP_VER='v26.65';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16701,9 +16701,17 @@ function _rzRowPairs(acId,coSeat1){
   return rows;
 }
 // Emergency-exit seat: an able-bodied ADULT must sit there (no child, no lap-infant host). Seat 13 on
-// the Caravans. Returns the seat index or null if this aircraft has no such pax seat.
-var _RZ_EXIT_IDX=13;
-function _rzExitSeat(acId){var a=(typeof _acSpec==='function')?_acSpec(acId):S.aircraft[acId];if(!a||!a.seats||!a.seats[_RZ_EXIT_IDX])return null;if((a.removedSeats||[]).indexOf(_RZ_EXIT_IDX)>=0)return null;return _RZ_EXIT_IDX;}
+// the Caravans (c208), seat 6 on the Airvans (ga8). Falls back to the rearmost pax seat if that index
+// doesn't exist (e.g. a smaller variant). Returns null if there's no pax seat at all.
+function _rzExitSeat(acId){
+  var a=(typeof _acSpec==='function')?_acSpec(acId):S.aircraft[acId];if(!a||!a.seats)return null;
+  var idx=(a.layout==='ga8')?6:13;
+  if(!a.seats[idx]||(a.removedSeats||[]).indexOf(idx)>=0){
+    var ps=(typeof paxSeatIdxs==='function')?paxSeatIdxs(acId,false):[];if(!ps.length)return null;
+    idx=ps.reduce(function(m,i){return (((a.seats[i]||{}).arm||0)>((a.seats[m]||{}).arm||0))?i:m;},ps[0]);
+  }
+  return idx;
+}
 // If the exit seat sits within this group's seats and its occupant isn't an eligible adult, swap with
 // an eligible adult from the SAME group's seats (no group split). eligOf(id)->bool.
 function _rzFixExitInGroup(res,seats,exitSeat,eligOf){
@@ -16960,21 +16968,25 @@ window.rezdyManAllocate=function(){
   // 1) Honour the booking-noted aircraft when it still has room (a pin).
   var unpinned=[];
   unalloc.forEach(function(p){var hint=(p.acHint&&fleet.indexOf(p.acHint)>=0)?p.acHint:null;if(hint&&free(hint)>0)place(p,hint);else unpinned.push(p);});
-  // 2) Build booking groups from the rest (solos = size-1 groups).
+  // 2) Build booking groups from the rest (solos = size-1 groups). Flag infant-carrying groups.
   var gMap={};unpinned.forEach(function(p){var k=(p.group&&String(p.group).trim())||('solo:'+p.id);(gMap[k]||(gMap[k]={pax:[]})).pax.push(p);});
-  var groups=Object.keys(gMap).map(function(k){var g=gMap[k];g.size=g.pax.length;g.w=g.pax.reduce(function(s,p){return s+(parseFloat(p.weight)||0);},0);return g;});
+  function _isCaravan(id){var a=(typeof _acSpec==='function')?_acSpec(id):S.aircraft[id];return !(a&&a.layout==='ga8');}
+  var groups=Object.keys(gMap).map(function(k){var g=gMap[k];g.size=g.pax.length;g.w=g.pax.reduce(function(s,p){return s+(parseFloat(p.weight)||0);},0);g.inf=g.pax.some(function(p){return p.infantName||pax.some(function(x){return x.infantOf===p.id;});});return g;});
   // 3) Largest groups first (claim contiguous space before small groups fragment it); heaviest as tiebreak.
   groups.sort(function(a,b){return (b.size-a.size)||(b.w-a.w);});
   var overflow=0;
   groups.forEach(function(g){
     var members=g.pax.slice();
-    // a) whole group fits on ONE aircraft → best-fit (smallest free space that still holds it all,
-    //    so a bigger group can still claim a bigger gap). Keeps the group together.
-    var fit=fleet.filter(function(id){return free(id)>=members.length;}).sort(function(a,b){return free(a)-free(b);})[0];
+    // Packing (fewest aircraft, tightest fit) comes FIRST so we never burn an extra aircraft just to
+    // keep an infant off the Airvan. Caravan is only a TIEBREAK for an infant group when two aircraft
+    // are otherwise equal — a soft preference, the infant goes wherever makes the numbers work.
+    var carTie=function(a,b){return g.inf?((_isCaravan(a)?0:1)-(_isCaravan(b)?0:1)):0;};
+    // a) whole group fits on ONE aircraft → best-fit (smallest free space that still holds it all).
+    var fit=fleet.filter(function(id){return free(id)>=members.length;}).sort(function(a,b){return (free(a)-free(b))||carTie(a,b);})[0];
     if(fit){members.forEach(function(p){place(p,fit);});return;}
     // b) must split → fill the aircraft with the MOST room first, then the remainder (fewest aircraft).
     while(members.length){
-      var best=fleet.filter(function(id){return free(id)>0;}).sort(function(a,b){return free(b)-free(a);})[0];
+      var best=fleet.filter(function(id){return free(id)>0;}).sort(function(a,b){return (free(b)-free(a))||carTie(a,b);})[0];
       if(!best){overflow+=members.length;break;}
       var n=Math.min(free(best),members.length);for(var i=0;i<n;i++)place(members.shift(),best);
     }
