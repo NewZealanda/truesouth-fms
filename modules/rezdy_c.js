@@ -209,7 +209,9 @@ function _rzSmartSeat(acId,paxList,opts){
   var lo=0;
   frontFill.forEach(function(g){var seats=[];for(var k=0;k<g.size&&lo<frontLimit;k++)seats.push(seq[lo++]);if(seats.length)assignGroup(g,seats);});
   var bi=frontLimit;
-  infs.forEach(function(g){var seats=[];for(var k=0;k<g.size&&bi<seq.length;k++)seats.push(seq[bi++]);if(seats.length)assignGroup(g,seats);});
+  infs.forEach(function(g){var seats=[];for(var k=0;k<g.size&&bi<seq.length;k++)seats.push(seq[bi++]);
+    if(seats.length<g.size&&frontSingle!=null&&result[frontSingle]==null){seats.unshift(frontSingle);} // big group overflows to the front single (host still seated rearmost by arm)
+    if(seats.length)assignGroup(g,seats);});
   // Anyone still unseated (front fillers overran the reserved tail) → drop into any remaining seat.
   var taken={};Object.keys(result).forEach(function(s){taken[result[s]]=1;});
   var freeSeats=seq.filter(function(s){return result[s]==null;});if(frontSingle!=null&&result[frontSingle]==null)freeSeats.unshift(frontSingle);
