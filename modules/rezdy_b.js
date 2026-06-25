@@ -484,12 +484,15 @@ function _rzRenderPickups(){
     const pax=depFilter?(_byDepLoad[depFilter]||0):_rzVanPax(vanIds,pickups);
     const over=depFilter?(pax>seats):(_maxDep>seats);
     const col=_rzVehColor(vi);
-    vansH+='<div ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="window.pickupDropOnVan('+vi+',event,\''+_depJs+'\');this.style.outline=\'\'" '+
-      'style="flex:1 1 260px;min-width:240px;background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px">';
+    vansH+='<div ondragover="event.preventDefault();this.style.outline=\'2px solid '+(over?'#ef4444':col)+'\'" ondragleave="this.style.outline=\'\'" ondrop="window.pickupDropOnVan('+vi+',event,\''+_depJs+'\');this.style.outline=\'\'" '+
+      'style="flex:1 1 260px;min-width:240px;background:'+(over?'rgba(239,68,68,.09)':'var(--card)')+';border:'+(over?'2px solid #ef4444':'1px solid var(--border)')+';border-top:'+(over?'5px':'3px')+' solid '+(over?'#ef4444':col)+';border-radius:10px;padding:12px;box-shadow:'+(over?'0 0 0 1px rgba(239,68,68,.3)':'none')+'">';
     vansH+='<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">'+
-      '<div style="font-weight:800;font-size:14px;color:'+col+'">'+_rzEsc(_rzVehName(vi))+'</div>'+
-      '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:700;color:'+(over?'#ef4444':'var(--text2)')+'">'+pax+' / '+seats+' pax'+(over?' ⚠':'')+'</span>'+
-      (_rzIsTaxiVan(vi)?'':'<button onclick="window.pickupParkVehicle('+vi+',\''+_depJs+'\')" title="Park this vehicle for this departure (move it to spares)" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:10px;font-weight:700;padding:3px 8px">Park</button>')+'</div></div>';
+      '<div style="font-weight:800;font-size:14px;color:'+(over?'#ef4444':col)+'">'+_rzEsc(_rzVehName(vi))+'</div>'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        (over?'<span style="font-size:11px;font-weight:900;color:#fff;background:#ef4444;padding:3px 9px;border-radius:13px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">⚠ Overloaded '+pax+'/'+seats+'</span>'
+             :'<span style="font-size:12px;font-weight:700;color:var(--text2)">'+pax+' / '+seats+' pax</span>')+
+        '<button onclick="window.pickupParkVehicle('+vi+',\''+_depJs+'\')" title="Park this vehicle for this departure (move it to spares)" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:10px;font-weight:700;padding:3px 8px">Park</button>'+
+      '</div></div>';
     // Driver / taxi slot — PER DEPARTURE. Tap to assign; drop a driver bubble; no driver = taxi.
     var drv=_rzVanDriver(vi,depFilter);
     var _dpOpen=(S._pickupVanDriverPick===_pkKey(vi,depFilter));
@@ -826,7 +829,6 @@ window.rezdyLoadPickups=async function(){
 
 window.pickupAutoAllocate=function(){
   S._pickupVans=_rzAutoVans(_rzPickups());
-  if(typeof _rzEnsureVans==='function')_rzEnsureVans(); // spill any overflow into Taxi vans before saving
   if(window.pickupSave)window.pickupSave(true); // PERSIST — otherwise a live re-pull reverts it
   toast('Vans auto-allocated','ok');
   render();

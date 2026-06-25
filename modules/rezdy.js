@@ -69,19 +69,16 @@ window.pickupVehRemove=function(i){var veh=_rzVehicles();if(veh.length<=1)return
 //   S._pickupDrivers: {"vi|dep":name} who drives van vi for THAT departure
 //   S._pickupAck:     {"vi|dep":{sig,ids,at,by}} driver's acknowledgement of THAT run
 function _pkKey(vi,dep){return vi+'|'+(dep==null?'':dep);}
-// Van indices BEYOND the owned fleet are overflow "Taxi" vans (created on demand when pickups exceed
-// our vehicles' capacity). They cap at 11 seats, render amber, and can never be parked.
-function _rzIsTaxiVan(vi){return vi>=_rzVehicles().length;}
-function _rzVanParked(vi,dep){if(_rzIsTaxiVan(vi))return false;return !!(S._pickupSpare||{})[_pkKey(vi,dep)];}
+function _rzVanParked(vi,dep){return !!(S._pickupSpare||{})[_pkKey(vi,dep)];}
 function _rzActiveVanCount(dep){var n=_rzVehicles().length,c=0;for(var i=0;i<n;i++)if(!_rzVanParked(i,dep))c++;return c;}
 function _rzVanDriver(vi,dep){var d=(S._pickupDrivers||{})[_pkKey(vi,dep)];d=(d==null?'':String(d)).trim();return d||null;}
 window.pickupVehParkDragStart=function(vi,e){S._pickupVehDrag=vi;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','veh:'+vi);}catch(_){}};
 window.pickupActivateVehicle=function(vi,dep){S._pickupSpare=S._pickupSpare||{};delete S._pickupSpare[_pkKey(vi,dep)];if(window.pickupSave)window.pickupSave(true);render();};
 window.pickupParkVehicle=function(vi,dep){if(_rzActiveVanCount(dep)<=1){if(typeof toast==='function')toast('Keep at least one active vehicle for this departure.','warn');return;}S._pickupSpare=S._pickupSpare||{};S._pickupSpare[_pkKey(vi,dep)]=1;if(window.pickupSave)window.pickupSave(true);render();};
 window.pickupDropActivateVehicle=function(e,dep){if(e&&e.preventDefault)e.preventDefault();var vi=S._pickupVehDrag;S._pickupVehDrag=null;if(vi==null||vi==='')return;window.pickupActivateVehicle(parseInt(vi,10),dep);};
-function _rzVehSeats(vi){if(_rzIsTaxiVan(vi))return 11;var v=_rzVehicles()[vi];return (v&&v.seats)||11;}
-function _rzVehColor(vi){if(_rzIsTaxiVan(vi))return '#f59e0b';var v=_rzVehicles()[vi];return (v&&v.color)||'#64748b';}
-function _rzVehName(vi){if(_rzIsTaxiVan(vi)){var t=vi-_rzVehicles().length+1;return '🚕 Taxi'+(t>1?(' '+t):'');}var v=_rzVehicles()[vi];return (v&&v.name)||('Van '+(vi+1));}
+function _rzVehSeats(vi){var v=_rzVehicles()[vi];return (v&&v.seats)||11;}
+function _rzVehColor(vi){var v=_rzVehicles()[vi];return (v&&v.color)||'#64748b';}
+function _rzVehName(vi){var v=_rzVehicles()[vi];return (v&&v.name)||('Van '+(vi+1));}
 // Departure label "0800" → minutes since midnight (for the "next departure" default).
 function _rzDepMin(t){var m=/(\d{1,2}):?(\d{2})/.exec(String(t||''));return m?(+m[1])*60+(+m[2]):9999;}
 
@@ -387,21 +384,8 @@ window.rezdyRenameDep=function(dep){
   if(typeof sbMergeSave==='function')sbMergeSave('rz_depnames',S._rzDepNames||{},function(m){S._rzDepNames=m;try{lsSet&&lsSet('ts_rz_depnames',m);}catch(e){}});
   render();
 };
-// Which fleet aircraft a booking is allocated to — read from the comments / custom fields
-// (the operator writes e.g. "SLA" or "ZK-SLB" in Rezdy the day before). Returns an ac id or null.
-function _rzAircraftFromComments(b){
-  var hay=' '+String((b&&b.comments)||'');
-  var f=(b&&b.fields)||{};Object.keys(f).forEach(function(k){hay+=' '+String(f[k]||'');});
-  ((b&&b.items)||[]).forEach(function(it){hay+=' '+String((it&&it.comments)||'')+' '+String((it&&it.notes)||'');});
-  hay=hay.toUpperCase();
-  var ids=Object.keys((typeof S!=='undefined'&&S.aircraft)||{});
-  if(!ids.length)ids=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'];
-  for(var i=0;i<ids.length;i++){
-    var code=ids[i].replace(/^ZK-?/i,'');
-    if(new RegExp('(^|[^A-Z0-9])(ZK-?)?'+code+'($|[^A-Z0-9])').test(hay))return ids[i];
-  }
-  return null;
-}
+// Aircraft assignment comes ONLY from the auto-allocator or a user override — never parsed from
+// Rezdy comments/notes (removed v26.89, per operator request).
 // Self-drive bookings shouldn't go in a van.
 function _rzIsSelfDrive(loc){return /self.?drive|own (car|transport|vehicle)|no pickup|no transfer|drive (your|them)self/i.test(String(loc||''));}
 // Manual "self-drive / no pickup needed" override (set on the booking when a customer drives
@@ -522,7 +506,7 @@ function _rzEnsureVans(){
   const ids=pickups.map(function(p){return p.id;});
   const depOf={};pickups.forEach(function(p){depOf[p.id]=(p.depart||'—');});
   let vans=S._pickupVans;
-  const valid=Array.isArray(vans)&&vans.length>=_rzVehicles().length&&vans.every(Array.isArray); // ≥: extra buckets = Taxi overflow vans
+  const valid=Array.isArray(vans)&&vans.length===_rzVehicles().length&&vans.every(Array.isArray);
   // First ACTIVE (non-parked) van FOR A DEPARTURE — catches new/displaced pickups of that run.
   var _faCache={};
   function _firstActiveVan(dep){if(_faCache[dep]!=null)return _faCache[dep];var fa=-1,n=_rzVehicles().length;for(var i=0;i<n;i++){if(!_rzVanParked(i,dep)){fa=i;break;}}_faCache[dep]=fa;return fa;}
@@ -544,47 +528,8 @@ function _rzEnsureVans(){
       move.forEach(function(id){var dep=depOf[id]||'—';var fa=_firstActiveVan(dep);if(fa>=0&&fa!==vi&&S._pickupVans[fa])S._pickupVans[fa].push(id);else S._pickupVans[vi].push(id);});
     }
   });
-  // OVERFLOW → TAXI. Our own vehicles fill first; any per-departure surplus (a van over its seats)
-  // spills into Taxi vans (11-seat cap each, created on demand). Taxi vans are driverless by default
-  // (an external taxi) — assign one of our drivers only if we have a spare. Keeps owned vans ≤ capacity.
-  _rzSpillOverflow(pickups,depOf);
   if(!S._pickupCollected||typeof S._pickupCollected!=='object')S._pickupCollected={};
   return pickups;
-}
-// Move per-departure surplus out of OWNED vans into Taxi vans (indices ≥ fleet size). 11 seats/taxi van.
-function _rzSpillOverflow(pickups,depOf){
-  var nOwned=_rzVehicles().length;
-  var byId={};(pickups||[]).forEach(function(p){byId[p.id]=p;});
-  depOf=depOf||{};(pickups||[]).forEach(function(p){if(depOf[p.id]==null)depOf[p.id]=(p.depart||'—');});
-  var pax=function(id){var p=byId[id];return p?(p.pax||0):0;};
-  var depsAll={};(pickups||[]).forEach(function(p){depsAll[p.depart||'—']=1;});
-  Object.keys(depsAll).forEach(function(dep){
-    for(var vi=0;vi<nOwned;vi++){
-      if(_rzVanParked(vi,dep))continue;
-      var seats=_rzVehSeats(vi),load=0,surplus=[];
-      (S._pickupVans[vi]||[]).forEach(function(id){if(depOf[id]!==dep)return;if(load+pax(id)<=seats)load+=pax(id);else surplus.push(id);});
-      if(!surplus.length)continue;
-      surplus.forEach(function(id){
-        S._pickupVans[vi]=S._pickupVans[vi].filter(function(x){return x!==id;});
-        var placed=false;
-        // 1) fill OUR OWN vehicles first — any other active owned van with room for this departure
-        for(var ov=0;ov<nOwned&&!placed;ov++){
-          if(ov===vi||_rzVanParked(ov,dep))continue;
-          var oload=0;(S._pickupVans[ov]||[]).forEach(function(x){if(depOf[x]===dep)oload+=pax(x);});
-          if(oload+pax(id)<=_rzVehSeats(ov)){S._pickupVans[ov].push(id);placed=true;}
-        }
-        // 2) then existing Taxi vans (11-seat cap)
-        for(var tv=nOwned;tv<S._pickupVans.length&&!placed;tv++){
-          var tload=0;(S._pickupVans[tv]||[]).forEach(function(x){if(depOf[x]===dep)tload+=pax(x);});
-          if(tload+pax(id)<=11){S._pickupVans[tv].push(id);placed=true;}
-        }
-        // 3) else a new Taxi van
-        if(!placed)S._pickupVans.push([id]);
-      });
-    }
-  });
-  // trim trailing empty Taxi vans
-  while(S._pickupVans.length>nOwned&&!(S._pickupVans[S._pickupVans.length-1]||[]).length)S._pickupVans.pop();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -808,7 +753,7 @@ function _rzNewBookingModal(){
 }
 // The aircraft assigned to a booking: a manual pill override, else whatever the comments note.
 // The '__none__' sentinel means explicitly unallocated (overrides any comment).
-function _rzBookingAc(b,order){order=String(order);var ov=(S._rzBookingAc||{})[order];if(ov==='__none__')return null;if(ov)return ov;var auto=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;if(auto)return auto;return _rzAircraftFromComments(b);}
+function _rzBookingAc(b,order){order=String(order);var ov=(S._rzBookingAc||{})[order];if(ov==='__none__')return null;if(ov)return ov;var auto=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;return auto||null;}
 // True when a booking's aircraft is coming from cost-aware auto-allocation (no manual override).
 function _rzBookingAcIsAuto(b,order){order=String(order);if((S._rzBookingAc||{})[order])return false;return !!((typeof _schedAutoAcFor==='function')&&_schedAutoAcFor(order));}
 // Aircraft selector pills for one booking. Comments supply the default; a pill overrides it; the
