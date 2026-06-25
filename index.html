@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.59';
+const APP_VER='v26.60';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16748,6 +16748,55 @@ function _rzSmartSeat(acId,paxList,opts){
   var fi=0;groups.forEach(function(g){g.pax.forEach(function(p){if(!taken[p.id]&&fi<freeSeats.length){result[freeSeats[fi++]]=p.id;taken[p.id]=1;}});});
   return result;
 }
+// "Move people around after seating": a permutation search over GROUP ORDER. Groups stay together
+// (each a contiguous block, filled front→back), the heaviest member of a block sits forward and an
+// infant host sits at the block's rear — and NEVER in seat 1. Every ordering is W&B-scored; we keep
+// the most-balanced layout that's within limits, preferring the infant group at the very back. This
+// finds balanced layouts the structured seater can't (e.g. an even group seated at the back).
+function _rzSearchSeat(dep,acId,paxList,coPic){
+  var a=S.aircraft[acId];if(!a||!a.seats||!paxList||!paxList.length)return null;
+  var rows=rowPairsForAc(acId,coPic);if(!rows.length)return null;
+  var arm=function(i){return (a.seats[i]&&a.seats[i].arm)||0;};
+  var wOf=function(p){var w=parseFloat(p&&p.weight);return isNaN(w)?0:w;};
+  var seats=[];rows.forEach(function(r){r.forEach(function(s){seats.push(s);});}); // front→back, incl front single
+  if(seats.length<paxList.length)return null;
+  var frontSingle=(rows[0]&&rows[0].length===1&&!coPic)?seats[0]:null;
+  var gMap={};paxList.forEach(function(p){var k=(p.group&&String(p.group).trim())||('solo:'+p.id);(gMap[k]||(gMap[k]={pax:[]})).pax.push(p);});
+  var groups=Object.keys(gMap).map(function(k){var g=gMap[k];g.size=g.pax.length;g.w=g.pax.reduce(function(s,p){return s+wOf(p);},0);g.inf=g.pax.some(function(p){return p.infant;});return g;});
+  // A non-infant solo claims the front single (keeps it out of the permutation + off-limits to infants).
+  var anchor=null;var solos=groups.filter(function(g){return g.size===1&&!g.inf;}).sort(function(x,y){return y.w-x.w;});
+  if(frontSingle!=null&&solos.length)anchor=solos[0];
+  var rest=groups.filter(function(g){return g!==anchor;});
+  var restSeats=anchor?seats.filter(function(s){return s!==frontSingle;}):seats.slice();
+  function layout(order){
+    var res={};if(anchor)res[frontSingle]=anchor.pax[0].id;
+    var si=0;
+    for(var gi=0;gi<order.length;gi++){var g=order[gi];var gs=restSeats.slice(si,si+g.size);si+=g.size;
+      var byArm=gs.slice().sort(function(x,y){return arm(x)-arm(y);});
+      var mem=g.pax.filter(function(p){return !p.infant;}).sort(function(x,y){return wOf(y)-wOf(x);}).concat(g.pax.filter(function(p){return p.infant;}));
+      byArm.forEach(function(s,i){if(mem[i])res[s]=mem[i].id;});
+    }
+    return res;
+  }
+  var best=null,bestD=Infinity,bestBack=null,bestBackD=Infinity,count=0,CAP=2200,abort=false;
+  var infIds={};paxList.forEach(function(p){if(p.infant)infIds[p.id]=1;});
+  function consider(order){
+    if(abort)return;if(++count>CAP){abort=true;return;}
+    var res=layout(order);
+    if(frontSingle!=null&&res[frontSingle]!=null&&infIds[res[frontSingle]])return; // hard: no infant host in seat 1
+    var sc=_rzCandWBScore(dep,acId,res);if(!sc||!sc.ok)return;                       // within limits only
+    if(sc.dist<bestD){bestD=sc.dist;best=res;}
+    if(order.length&&order[order.length-1].inf&&sc.dist<bestBackD){bestBackD=sc.dist;bestBack=res;} // infant group at the back
+  }
+  function permute(arr,k){if(abort)return;if(k===arr.length){consider(arr);return;}for(var i=k;i<arr.length;i++){var t=arr[k];arr[k]=arr[i];arr[i]=t;permute(arr,k+1);t=arr[k];arr[k]=arr[i];arr[i]=t;if(abort)return;}}
+  if(rest.length<=7){permute(rest.slice(),0);}
+  else{ // too many groups to fully permute → score a few sensible orders
+    consider(rest.slice().sort(function(x,y){return y.w-x.w;}));
+    consider(rest.slice().sort(function(x,y){return x.w-y.w;}));
+    consider(rest.filter(function(g){return !g.inf;}).sort(function(x,y){return y.w-x.w;}).concat(rest.filter(function(g){return g.inf;})));
+  }
+  return bestBack||best;   // prefer infant-at-back within limits; else any within-limits
+}
 window.rezdyManReseat=function(dep,acId){
   var list=(S._rzManPax||[]).filter(function(p){return p.ac===acId&&!p.infantOf&&_rzPaxDep(p)===dep;});
   var _declMode=(typeof _rzManDeclMode==='function')?_rzManDeclMode(dep,acId):false;
@@ -16788,11 +16837,17 @@ window.rezdyManReseat=function(dep,acId){
     if(okBack){sm=okBack;}                                              // groups together + infant at back + within limits ✓
     else if(okRelax){sm=okRelax;}                                       // relax infant-at-back (still not seat 1) to stay within limits
     else{
-      var smG=assignSeats(acId,paxList,{coSeat1:_coPic})||{};            // groups-first consecutive rows
-      var smH=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};  // heaviest forward (may split)
-      if(Object.keys(smG).length&&_rzCandWBOk(dep,acId,smG)){sm=smG;}
-      else if(Object.keys(smH).length&&_rzCandWBOk(dep,acId,smH)){sm=smH;}
-      else{sm=any||(Object.keys(smH).length?smH:smG);}                  // nothing within limits → keep groups together (CoG-closest), pilot fixes via fuel/cargo
+      // The structured layouts don't balance → rearrange the group blocks (seats aren't fixed) to find
+      // ANY within-limits layout that keeps groups together.
+      var srch=(typeof _rzSearchSeat==='function')?_rzSearchSeat(dep,acId,paxList,_coPic):null;
+      if(srch){sm=srch;}
+      else{
+        var smG=assignSeats(acId,paxList,{coSeat1:_coPic})||{};            // groups-first consecutive rows
+        var smH=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};  // heaviest forward (may split)
+        if(Object.keys(smG).length&&_rzCandWBOk(dep,acId,smG)){sm=smG;}
+        else if(Object.keys(smH).length&&_rzCandWBOk(dep,acId,smH)){sm=smH;}
+        else{sm=any||(Object.keys(smH).length?smH:smG);}                  // nothing within limits → keep groups together (CoG-closest), pilot fixes via fuel/cargo
+      }
     }
   }catch(e){try{sm=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};}catch(e2){sm={};}}
   if(_coPic)_rzReserveCoSeat(sm,acId); // safety: ensure seat 1 stays clear for the co-pilot
