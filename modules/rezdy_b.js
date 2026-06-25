@@ -1515,7 +1515,18 @@ window.rezdyPreviewToManifest=async function(){
   var dep=_rzCurBookingsDep();
   if(!dep){if(typeof toast==='function')toast('No departure selected to preview.','info');return;}
   window.rezdyManPull(dep,true);
-  S._rzManDepFilter=dep;
+  // FRESH allocation for the previewed departure(s): clear any prior (possibly stale) aircraft/seat
+  // assignment for these pax, then run the allocator so Preview always shows the current best layout
+  // (groups together + within W&B) rather than a leftover seating. Seatmap deps are TIME·DEST, the
+  // bookings dep is TIME — match on the time part.
+  var _t=String(dep).split('·')[0];
+  var smDeps=((typeof _rzManDeps==='function')?_rzManDeps():[]).filter(function(d){return String(d).split('·')[0]===_t;});
+  if(smDeps.length){
+    (S._rzManPax||[]).forEach(function(p){if(!p.infantOf&&smDeps.indexOf(_rzPaxDep(p))>=0)p.ac=null;});
+    S._rzManSeats=S._rzManSeats||{};Object.keys(S._rzManSeats).forEach(function(k){if(smDeps.some(function(sd){return k.indexOf(sd)>=0;}))delete S._rzManSeats[k];});
+    smDeps.forEach(function(sd){S._rzManDepFilter=sd;if(typeof window.rezdyManAllocate==='function')window.rezdyManAllocate();});
+    S._rzManDepFilter=smDeps[0];
+  } else {S._rzManDepFilter=dep;}
   if(typeof window.switchOpsTab==='function')window.switchOpsTab('rseatmap');
 };
 // Default passenger rows from a booking's Rezdy participants at DECLARED weights (used for the
