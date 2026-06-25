@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.85';
+const APP_VER='v26.86';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3302,12 +3302,10 @@ document.addEventListener('keydown',function(e){
       var _mn=_mc+_dir;if(_mn<0)_mn=_mt.length-1;if(_mn>=_mt.length)_mn=0;
       e.preventDefault();S.maintTab=_mt[_mn];render();return;
     }
-    // Calendar tab: cycle the DAY (it's a day view), not the ops tabs.
-    if(S.section==='operations'&&S.tab==='calendar'&&typeof window.rezdyShiftDate==='function'){
-      e.preventDefault();window.rezdyShiftDate(_dir);return;
-    }
     if(S.section!=='operations')return;
-    var _tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
+    // Plain ←/→ cycle the Operations tier-2 tabs (Calendar ↔ Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved ↔ Charter).
+    // Day switching is Cmd/Ctrl + ←/→ (handled above).
+    var _tabs=[];if(typeof hasRolePerm==='function'&&hasRolePerm('calendar'))_tabs.push('calendar');_tabs.push('bookings','rseatmap','rloadsheets','saved');if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
     var _cur=_tabs.indexOf(S.tab);if(_cur<0)_cur=0;
     var _next=_cur+_dir;if(_next<0)_next=_tabs.length-1;if(_next>=_tabs.length)_next=0;
     e.preventDefault();if(typeof window.switchOpsTab==='function')window.switchOpsTab(_tabs[_next]);
@@ -3316,11 +3314,8 @@ document.addEventListener('keydown',function(e){
 // Cycle the tier-2 sub-tabs of the current section (shared by arrow keys and mobile swipe).
 window._cycleTier2=function(dir){
   if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
-  if(S.section==='operations'&&S.tab==='calendar'){
-    // Calendar tab: swipe cycles the DAY (it's a day view), not the ops tabs.
-    if(typeof window.rezdyShiftDate==='function'){window.rezdyShiftDate(dir);}
-  } else if(S.section==='operations'){
-    var tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');
+  if(S.section==='operations'){
+    var tabs=[];if(typeof hasRolePerm==='function'&&hasRolePerm('calendar'))tabs.push('calendar');tabs.push('bookings','rseatmap','rloadsheets','saved');if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');
     var cur=tabs.indexOf(S.tab);if(cur<0)cur=0;var nx=(cur+dir+tabs.length)%tabs.length;
     if(typeof window.switchOpsTab==='function')window.switchOpsTab(tabs[nx]);
   }
@@ -22598,9 +22593,9 @@ window.trainExit=function(done){S._train=null;if(done&&typeof toast==='function'
 // ── Tips & Tricks — hidden shortcuts / sneaky features people might not know about ──────────────
 var _TRAIN_TIPS=[
   {icon:'👆',title:'Quad-tap to your Flight Record',body:'Tap any blank space on the screen four times quickly and you jump straight to your Flight Record — handy in the aircraft. Taps on buttons, fields or cards don\'t count, only empty space.'},
-  {icon:'⬅➡',title:'Arrow keys cycle the page',body:'On a keyboard, ← and → move around the section you\'re in: Operations flips through its sub-tabs (Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved ↔ Ground), Maintenance flips its tabs, the Roster shifts a week, and the Calendar steps a day.'},
-  {icon:'⌘',title:'⌘ / Ctrl + arrows change the day',body:'Hold ⌘ (Mac) or Ctrl (Windows) with ← / → to step the DATE one day at a time on Bookings, Seatmap, Loadsheets, Ground and the Calendar — the same as the ◁ ▷ buttons.'},
-  {icon:'👉',title:'Swipe to switch (phone)',body:'On a phone, a firm sideways swipe cycles the sub-tabs in Operations, or the day on the Calendar. Swipe left for the next one, right to go back.'},
+  {icon:'⬅➡',title:'Arrow keys cycle the tabs',body:'On a keyboard, ← and → flip through the tier-2 tabs of the section you\'re in: Operations cycles Calendar ↔ Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved, and Maintenance flips its tabs. (The Roster shifts a week.) To change the DAY, hold ⌘/Ctrl — see below.'},
+  {icon:'⌘',title:'⌘ / Ctrl + arrows change the day',body:'Hold ⌘ (Mac) or Ctrl (Windows) with ← / → to step the DATE one day at a time on Calendar, Bookings, Seatmap, Loadsheets and Ground — the same as the ◁ ▷ buttons.'},
+  {icon:'👉',title:'Swipe to switch tabs (phone)',body:'On a phone, a firm sideways swipe cycles the Operations sub-tabs (Calendar, Bookings, Seatmap, Loadsheets, Saved). Swipe left for the next one, right to go back. Use the ◁ ▷ buttons to change the day.'},
   {icon:'🗓',title:'Drag calendar blocks',body:'On the Calendar, drag a flight block\'s TOP edge to set its departure, its BOTTOM edge to set the return, or grab the MIDDLE to move it — drop it on another aircraft\'s column to reassign. A single tap just opens it.'},
   {icon:'🧑‍✈',title:'Hold a pilot on the ground',body:'In Pilot movements, tap a pilot\'s ＋ to add an all-day note/meeting and the allocator will keep them off the aircraft.'},
   {icon:'🏠',title:'Set your start page',body:'Tap your name (top-right) and choose which page the app opens to, so you always land on Bookings, the Calendar, your Flight Record — whatever you use most.'},

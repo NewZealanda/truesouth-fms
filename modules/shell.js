@@ -87,12 +87,10 @@ document.addEventListener('keydown',function(e){
       var _mn=_mc+_dir;if(_mn<0)_mn=_mt.length-1;if(_mn>=_mt.length)_mn=0;
       e.preventDefault();S.maintTab=_mt[_mn];render();return;
     }
-    // Calendar tab: cycle the DAY (it's a day view), not the ops tabs.
-    if(S.section==='operations'&&S.tab==='calendar'&&typeof window.rezdyShiftDate==='function'){
-      e.preventDefault();window.rezdyShiftDate(_dir);return;
-    }
     if(S.section!=='operations')return;
-    var _tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
+    // Plain ←/→ cycle the Operations tier-2 tabs (Calendar ↔ Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved ↔ Charter).
+    // Day switching is Cmd/Ctrl + ←/→ (handled above).
+    var _tabs=[];if(typeof hasRolePerm==='function'&&hasRolePerm('calendar'))_tabs.push('calendar');_tabs.push('bookings','rseatmap','rloadsheets','saved');if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
     var _cur=_tabs.indexOf(S.tab);if(_cur<0)_cur=0;
     var _next=_cur+_dir;if(_next<0)_next=_tabs.length-1;if(_next>=_tabs.length)_next=0;
     e.preventDefault();if(typeof window.switchOpsTab==='function')window.switchOpsTab(_tabs[_next]);
@@ -101,11 +99,8 @@ document.addEventListener('keydown',function(e){
 // Cycle the tier-2 sub-tabs of the current section (shared by arrow keys and mobile swipe).
 window._cycleTier2=function(dir){
   if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
-  if(S.section==='operations'&&S.tab==='calendar'){
-    // Calendar tab: swipe cycles the DAY (it's a day view), not the ops tabs.
-    if(typeof window.rezdyShiftDate==='function'){window.rezdyShiftDate(dir);}
-  } else if(S.section==='operations'){
-    var tabs=['bookings','rseatmap','rloadsheets','saved'];if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');
+  if(S.section==='operations'){
+    var tabs=[];if(typeof hasRolePerm==='function'&&hasRolePerm('calendar'))tabs.push('calendar');tabs.push('bookings','rseatmap','rloadsheets','saved');if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');
     var cur=tabs.indexOf(S.tab);if(cur<0)cur=0;var nx=(cur+dir+tabs.length)%tabs.length;
     if(typeof window.switchOpsTab==='function')window.switchOpsTab(tabs[nx]);
   }
