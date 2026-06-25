@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.70';
+const APP_VER='v26.71';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -18351,16 +18351,46 @@ function _rzBreakdownAnalyze(brokenAc,fromMin,hours,loc){
     if(!used)return null;
     return{steps:steps,moves:moves,stuck:stuck,askPax:false,maxDelay:maxDelay,paxCancelled:stuck.reduce(function(s,f){return s+f.pax;},0)};
   }
+  // Partial recovery: seat as many of the broken flight's groups as will FIT into spare seats on
+  // flights already going (same dest) + any free tails, then cancel only the leftover. Groups kept
+  // whole. This beats an all-or-nothing cancel when a few seats are going spare anyway.
+  function buildFillPlan(){
+    if(!affected.length)return null;
+    var commit=newCommit(),steps=[],moves=[],cancelled=[],maxDelay=0,askPax=false,placedAny=false;
+    affected.forEach(function(F){
+      var slots=[];
+      flights.forEach(function(G){if(G.ac===brokenAc||G.key===F.key||G.destCode!==F.destCode)return;if(loc==='base'&&G.depMin<F.depMin)return;var spare=cap(G.ac)-G.pax-planPaxOn(G,commit);if(spare>0)slots.push({ac:G.ac,left:spare,delay:Math.max(0,(loc==='out'?G.endMin-F.endMin:G.depMin-F.depMin)),existing:true,flight:G,orders:[]});});
+      slots.sort(function(a,b){return (a.delay-b.delay)||(b.left-a.left);});
+      var budget=freePilotsAt(F.depMin,F.depMin+F.dur),tailsOpen=0;
+      function openTailFor(g){var best=null;fleet.forEach(function(ac){if(slots.some(function(s){return s.ac===ac;}))return;if(!ratedAvail(ac)||cap(ac)<g.pax)return;var dep,end,delay;if(loc==='out'){dep=Math.max(fromMin,freeAfterPlan(ac,commit));end=dep+F.dur;if(end>DAY_END||busyPlan(ac,dep,end,commit))return;delay=Math.max(0,end-F.endMin);}else{dep=F.depMin;end=F.depMin+F.dur;if(busyPlan(ac,dep,end,commit)||freeAfterPlan(ac,commit)>dep)return;delay=0;}if(!best||cap(ac)>cap(best.ac)||(cap(ac)===cap(best.ac)&&(isParked(ac)?1:0)<(isParked(best.ac)?1:0)))best={ac:ac,dep:dep,end:end,delay:delay};});return best;}
+      var ords=(F.orders||[]).map(function(o){return {order:o,pax:ordPax(o)};}).sort(function(a,b){return b.pax-a.pax;});
+      ords.forEach(function(g){
+        var s=slots.filter(function(x){return x.left>=g.pax;}).sort(function(a,b){return (a.delay-b.delay)||((a.existing?0:1)-(b.existing?0:1))||(a.left-b.left);})[0];
+        if(s){s.left-=g.pax;s.orders.push(g.order);return;}
+        if(tailsOpen<budget){var t=openTailFor(g);if(t){tailsOpen++;slots.push({ac:t.ac,left:cap(t.ac)-g.pax,delay:t.delay,existing:false,parked:isParked(t.ac),depAt:t.dep,orders:[g.order]});return;}}
+        cancelled.push(g);
+      });
+      slots.forEach(function(s){if(!s.orders.length)return;var paxN=s.orders.reduce(function(t,o){return t+ordPax(o);},0);
+        if(s.existing){commit.rebook[s.flight.key]=(commit.rebook[s.flight.key]||0)+paxN;}else{commitSlot(commit,s.ac,s.depAt,s.depAt+F.dur);}
+        moves.push({orders:s.orders,toAc:s.ac});if(s.delay)askPax=true;maxDelay=Math.max(maxDelay,s.delay||0);placedAny=true;
+        steps.push({kind:'fill',text:'Seat '+paxN+'p of '+HH(F.depMin)+' '+(F.dest||F.destCode)+' on <b>'+sh(s.ac)+'</b>'+(s.existing?' '+HH(s.flight.depMin)+' departure':(s.parked?' (bring parked online)':' (spare tail)'))+(s.delay?' (+'+s.delay+'m)':'')});});
+    });
+    if(!placedAny)return null;
+    var cancOrders=cancelled.map(function(g){return g.order;}),cancPax=cancelled.reduce(function(s,g){return s+g.pax;},0);
+    if(cancPax)steps.push({kind:'cancel',text:'Cancel the remaining '+cancPax+'p — no seats available'});
+    return {steps:steps,moves:moves,cancelOrders:cancOrders,stuck:[],askPax:askPax,maxDelay:maxDelay,paxCancelled:cancPax,label:(cancPax?('Seat what fits — cancel '+cancPax+'p'):'Spread across spare seats')};
+  }
   function rk(map){return function(c){return map[c.kind]!=null?map[c.kind]:5;};}
   function brLabel(p){if(p.stuck.length)return 'Partial — '+p.paxCancelled+'p still stuck';var k={};p.steps.forEach(function(s){k[s.kind]=1;});
     if(k.split)return 'Split the load across '+p.moves.length+' aircraft';
     if(k.rebook)return 'Rebook to a later flight';if(k.piggyback)return 'Bring back on another aircraft';if(k.collect)return 'Empty positioning flight to collect';if(k.ferry)return 'Ferry an aircraft for an extra run';if(k.parked)return 'Bring a parked aircraft online';return 'Recover with a spare aircraft';}
   var raw=[buildPlan(rk({spare:0,parked:1,collect:1,piggyback:1,ferry:2,rebook:3}))];
   var splitP=buildSplitPlan();if(splitP&&splitP.steps.length)raw.push(splitP);
+  var fillP=buildFillPlan();if(fillP&&fillP.steps.length)raw.push(fillP);
   if(loc==='out')raw.push(buildPlan(rk({collect:0,parked:0,piggyback:1})));
   else{raw.push(buildPlan(rk({ferry:0,spare:1,parked:1})));raw.push(buildPlan(rk({rebook:0,piggyback:0,spare:1,parked:1})));raw.push(buildPlan(rk({parked:0,collect:0,spare:1})));}
   var seen={},options=[];
-  raw.forEach(function(p){if(!p.steps.length)return;var sig=p.moves.map(function(m){return m.orders.join('+')+'>'+m.toAc;}).join('|')+'#'+p.paxCancelled;if(seen[sig])return;seen[sig]=1;options.push({type:'recover',label:brLabel(p),steps:p.steps,moves:p.moves,cancelOrders:[],cancelFlights:p.stuck.slice(),paxCancelled:p.paxCancelled,maxDelay:p.maxDelay,askPax:p.askPax,stuck:p.stuck.slice()});});
+  raw.forEach(function(p){if(!p.steps.length)return;var sig=p.moves.map(function(m){return m.orders.join('+')+'>'+m.toAc;}).join('|')+'#'+p.paxCancelled+'#'+((p.cancelOrders||[]).join(','));if(seen[sig])return;seen[sig]=1;options.push({type:'recover',label:p.label||brLabel(p),steps:p.steps,moves:p.moves,cancelOrders:(p.cancelOrders||[]),cancelFlights:(p.stuck||[]).slice(),paxCancelled:p.paxCancelled,maxDelay:p.maxDelay,askPax:p.askPax,stuck:(p.stuck||[]).slice()});});
   var allOrders=[];affected.forEach(function(f){(f.orders||[]).forEach(function(o){allOrders.push(o);});});
   options.push({type:'cancel',label:'Cancel the stranded bookings',steps:affected.map(function(f){return{kind:'cancel',text:'Cancel '+HH(f.depMin)+' '+(f.dest||f.destCode)+' '+f.pax+'p'};}),moves:[],cancelOrders:allOrders,cancelFlights:affected.slice(),paxCancelled:affected.reduce(function(s,f){return s+f.pax;},0),maxDelay:0,askPax:false,stuck:[]});
   options.sort(function(a,b){return (a.paxCancelled-b.paxCancelled)||(a.stuck.length-b.stuck.length)||((a.askPax?1:0)-(b.askPax?1:0))||(a.maxDelay-b.maxDelay)||((a.moves||[]).length-(b.moves||[]).length);});
