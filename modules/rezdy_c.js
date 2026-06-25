@@ -149,6 +149,9 @@ function _rzManAcWB(dep,acId){try{var f=_rzManAcForm(dep,acId);return f?calcForm
 // Would a CANDIDATE seat map (idx → pax id) keep this aircraft within W&B limits? Builds the same
 // form the loadsheet would, but seats from the candidate plan rather than the committed one.
 function _rzCandWBOk(dep,acId,sm){try{if(!sm||!Object.keys(sm).length)return false;var f=_rzManAcForm(dep,acId,sm);if(!f)return false;var r=calcFormWB(f);return !!(r&&r.towOk&&r.lwOk&&r.cogOk);}catch(e){return false;}}
+// W&B score for a candidate seat map: {ok, dist} where dist = how far CoG is from the centre of the
+// envelope (smaller is better). null on failure. Lets the seater prefer the most-balanced layout.
+function _rzCandWBScore(dep,acId,sm){try{if(!sm||!Object.keys(sm).length)return null;var f=_rzManAcForm(dep,acId,sm);if(!f)return null;var r=calcFormWB(f);if(!r)return null;var a=(typeof _acSpec==='function')?_acSpec(acId):S.aircraft[acId];var ctr=a?((a.cogMin+a.cogMax)/2):0;var cog=(r.towCog!=null)?r.towCog:ctr;return {ok:!!(r.towOk&&r.lwOk&&r.cogOk),dist:Math.abs(cog-ctr)};}catch(e){return null;}}
 // Re-seat one departure's aircraft using the shared seat-assignment engine (groups together,
 // front-to-back). Returns the seat map.
 // Rules-based seatmap seater (Andrew's rules). Returns idx→paxId. Used as the FIRST candidate in
@@ -176,15 +179,21 @@ function _rzSmartSeat(acId,paxList,opts){
   // Seat one group across its seats: heaviest member most-forward, infant host rearmost.
   function assignGroup(g,seats){
     var byArm=seats.slice().sort(function(x,y){return arm(x)-arm(y);});               // front→back
-    var nonInf=g.pax.filter(function(p){return !p.infant;}).sort(function(x,y){return wOf(y)-wOf(x);});
+    var nonInf=g.pax.filter(function(p){return !p.infant;}).sort(mcmp);
     var mem=nonInf.concat(g.pax.filter(function(p){return p.infant;}));               // infant host last → rear
     byArm.forEach(function(s,i){if(mem[i])result[s]=mem[i].id;});
   }
+  // Weight bias: 'heavy' = heaviest groups/members toward the FRONT (CoG forward, default);
+  // 'light' = lightest forward (shifts CoG aft). rezdyManReseat tries both and keeps whichever stays
+  // within weight & balance — so groups can stay together across the limit range.
+  var light=!!(opts&&opts.order==='light');
+  var gcmp=function(x,y){return light?(x.w-y.w):(y.w-x.w);};
+  var mcmp=function(x,y){return light?(wOf(x)-wOf(y)):(wOf(y)-wOf(x));};
   // Classify (non-infant by parity; infants always handled last → back).
-  var solos=groups.filter(function(g){return g.size===1&&!g.inf;}).sort(function(x,y){return y.w-x.w;});
-  var evens=groups.filter(function(g){return g.size>=2&&g.size%2===0&&!g.inf;}).sort(function(x,y){return y.w-x.w;});
-  var odds =groups.filter(function(g){return g.size>=3&&g.size%2===1&&!g.inf;}).sort(function(x,y){return y.w-x.w;});
-  var infs =groups.filter(function(g){return g.inf;}).sort(function(x,y){return y.w-x.w;});
+  var solos=groups.filter(function(g){return g.size===1&&!g.inf;}).sort(gcmp);
+  var evens=groups.filter(function(g){return g.size>=2&&g.size%2===0&&!g.inf;}).sort(gcmp);
+  var odds =groups.filter(function(g){return g.size>=3&&g.size%2===1&&!g.inf;}).sort(gcmp);
+  var infs =groups.filter(function(g){return g.inf;}).sort(gcmp);
 
   // Build the seat sequence + group fill order so that:
   //  • a SOLO takes the front single seat (or, failing a solo, one member of an odd group anchors it);
@@ -236,12 +245,23 @@ window.rezdyManReseat=function(dep,acId){
   // seater (heaviest forward) which optimises CoG even if it splits a group.
   var sm={};
   try{
-    var smS=(typeof _rzSmartSeat==='function')?(_rzSmartSeat(acId,paxList,{coSeat1:_coPic})||{}):{};  // Andrew's rules
-    if(Object.keys(smS).length===paxList.length&&_rzCandWBOk(dep,acId,smS)){sm=smS;}                   // accept only if it seats EVERYONE within W&B
+    // Build group-preserving candidates (Andrew's rules) with the weight biased forward AND aft, so a
+    // heavy load can stay within limits without splitting groups. Pick the BEST-balanced of those that
+    // are within W&B; only if NONE keep the groups together within limits do we fall back to the
+    // groups-first / heavy-front engines (which may split a group to chase CoG).
+    var _smart=[];
+    if(typeof _rzSmartSeat==='function'){
+      ['heavy','light'].forEach(function(ord){var c=_rzSmartSeat(acId,paxList,{coSeat1:_coPic,order:ord})||{};if(Object.keys(c).length===paxList.length)_smart.push(c);});
+    }
+    var bestOk=null,bestOkD=Infinity,bestAny=null,bestAnyD=Infinity;
+    _smart.forEach(function(c){var s=_rzCandWBScore(dep,acId,c);if(!s)return;if(s.ok&&s.dist<bestOkD){bestOkD=s.dist;bestOk=c;}if(s.dist<bestAnyD){bestAnyD=s.dist;bestAny=c;}});
+    if(bestOk){sm=bestOk;}                                              // a groups-together layout that's within limits ✓
     else{
-      var smG=assignSeats(acId,paxList,{coSeat1:_coPic})||{};            // groups-first → consecutive rows
+      var smG=assignSeats(acId,paxList,{coSeat1:_coPic})||{};            // groups-first consecutive rows
+      var smH=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};  // heaviest forward (may split)
       if(Object.keys(smG).length&&_rzCandWBOk(dep,acId,smG)){sm=smG;}
-      else{var smH=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};sm=Object.keys(smH).length?smH:smG;}
+      else if(Object.keys(smH).length&&_rzCandWBOk(dep,acId,smH)){sm=smH;}
+      else{sm=bestAny||(Object.keys(smH).length?smH:smG);}              // nothing within limits → keep groups together (CoG-closest), pilot fixes via fuel/cargo
     }
   }catch(e){try{sm=assignSeatsHeavyFront(acId,paxList,{coSeat1:_coPic})||{};}catch(e2){sm={};}}
   if(_coPic)_rzReserveCoSeat(sm,acId); // safety: ensure seat 1 stays clear for the co-pilot
