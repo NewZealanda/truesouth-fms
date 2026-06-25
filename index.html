@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.51';
+const APP_VER='v26.52';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -14793,6 +14793,7 @@ function _rzRenderBookings(){
     '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.rezdyNewBookingOpen()">+ New booking</button>'+
       (allRows.length?'<button class="btn btn-ghost" style="font-size:12px" title="Print the day’s bookings" onclick="window.rezdyBookingsPrint()">🖨 Print</button>':'')+
+      '<button class="btn btn-ghost" style="font-size:12px;padding:7px 12px" title="Preview the seatmap with declared weights — includes passengers not yet checked in" onclick="window.rezdyPreviewToManifest()">👁 Preview</button>'+
       '<button class="btn btn-primary" style="font-size:12px;padding:7px 12px'+(_ciCount?'':';opacity:.55')+'" title="Send this departure’s checked-in passengers to the Seatmap" onclick="window.rezdyPushToManifest()">⤒ Push to seatmap'+(_ciCount?' ('+_ciCount+')':'')+'</button>'+
     '</div>'+
     '</div>';
@@ -16267,29 +16268,57 @@ window.rezdyPushToManifest=async function(){
   window.rezdyManPull(dep);
   S._rzManDepFilter=dep; // focus the seatmap on the pushed departure
 };
-// Pull checked-in pax into the Seatmap. With a departure scope, ONLY that departure's pax are
-// (re)built; pax from other departures and manually-added pax are preserved.
-window.rezdyManPull=function(depScope){
+// Preview the seatmap with DECLARED weights — includes passengers not yet checked in. Jumps to the
+// Seatmap so the layout + weight & balance can be eyeballed before check-in.
+window.rezdyPreviewToManifest=async function(){
+  if(!S._rezdyBookings){if(window.rezdyLoadBookings)window.rezdyLoadBookings();if(typeof toast==='function')toast('Loading bookings — tap Preview again in a moment.','info');return;}
+  if(!S._rzManLoaded&&window.rezdyLoadManifest){try{await window.rezdyLoadManifest();}catch(_){}}
+  var dep=_rzCurBookingsDep();
+  if(!dep){if(typeof toast==='function')toast('No departure selected to preview.','info');return;}
+  window.rezdyManPull(dep,true);
+  S._rzManDepFilter=dep;
+  if(typeof window.switchOpsTab==='function')window.switchOpsTab('rseatmap');
+};
+// Default passenger rows from a booking's Rezdy participants at DECLARED weights (used for the
+// seatmap PREVIEW before anyone is checked in). Mirrors the fresh-capture rows in rezdyCheckinOpen.
+function _rzDeclaredRows(b,order){
+  var parts=[];(b.items||[]).forEach(function(it){(it.participants||[]).forEach(function(p){parts.push(p);});});
+  var m=(S._rezdyPaxMeta||{})[order]||{};var types=m.types||{};var infantOf=m.infantOf||{};
+  var bd=_rzBreakdown(b)||_rzEffBreakdown(b)||{a:0,c:0,i:0};
+  var total=Math.max((bd.a||0)+(bd.c||0)+(bd.i||0),parts.length,1);
+  var rows=[];
+  for(var i=0;i<total;i++){var p=parts[i];var t=p?((infantOf[i]!=null)?'infant':(types[i]||_rzAgeType(p))):'adult';
+    rows.push({name:p&&p.name?String(p.name).trim():'',type:(t==='infant'?'infant':t==='child'?'child':'adult'),attach:(infantOf[i]!=null&&infantOf[i]<total?infantOf[i]:null),declared:(p?_rzDeclared(p.weight):null),actual:null});}
+  var firstNon=null;for(var k=0;k<rows.length;k++){if(rows[k].type!=='infant'){firstNon=k;break;}}
+  rows.forEach(function(r){if(r.type==='infant'&&(r.attach==null||!rows[r.attach]||rows[r.attach].type==='infant'))r.attach=firstNon;});
+  return rows;
+}
+// Pull pax into the Seatmap. With a departure scope, ONLY that departure's pax are (re)built; pax from
+// other departures and manually-added pax are preserved. `preview` ALSO includes bookings that aren't
+// checked in yet, using their declared weights (Rezdy +4kg) — a planning view before check-in.
+window.rezdyManPull=function(depScope,preview){
   if(!S._rezdyBookings){if(window.rezdyLoadBookings)window.rezdyLoadBookings();toast('Loading bookings — tap Push again in a moment.','info');return;}
   var existing={};(S._rzManPax||[]).forEach(function(p){existing[p.id]=p;});
-  var fresh=[];
+  var fresh=[];var notCheckedIn=0;
   (S._rezdyBookings||[]).forEach(function(b){
     if(_rzIsCancelled(b))return;
     if(depScope&&_rzBookingDep(b)!==depScope)return; // only the pushed departure
     var order=String(b.orderNumber||'');
     if(_rzIsNoShow(order))return; // no-shows are explicitly excluded from the seatmap push
-    // Only CHECKED-IN passengers appear in the seatmap (with captured names + weights).
     var ci=_rzCheckinPax(order);
-    if(!(S._rzBookingCheckedIn||{})[order]||!ci)return;
+    var isCheckedIn=!!((S._rzBookingCheckedIn||{})[order])&&!!ci;
+    if(!isCheckedIn&&!preview)return;                     // normal push: checked-in only
+    var rows=ci||_rzDeclaredRows(b,order);                // preview: captured rows if any, else declared from the booking
+    if(!rows||!rows.length)return;
+    if(!isCheckedIn)notCheckedIn++;
     var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
     var acHint=_rzBookingAc(b,order);
-    ci.forEach(function(r,i){
+    rows.forEach(function(r,i){
       var id=order+'|c'+i;var ex=existing[id];var isInf=r.type==='infant';
       // Weight = actual if captured, else the declared weight (Rezdy +4kg) flagged as declared.
-      // declared is ALSO kept on every pax so an aircraft can switch to all-declared mode.
       var hasA=!isInf&&r.actual!=null;var useDecl=!isInf&&!hasA&&r.declared!=null;
       var wv=isInf?'':(hasA?String(r.actual):(useDecl?String(r.declared):''));
-      fresh.push({id:id,name:r.name||'',weight:wv,declared:(r.declared!=null?r.declared:null),declaredWeight:useDecl,type:isInf?'adult':(r.type==='child'?'child':'adult'),infantName:null,group:order,paymentReq:owing,ac:ex?ex.ac:null,acHint:acHint,infantOf:isInf?(r.attach!=null?order+'|c'+r.attach:undefined):(ex?ex.infantOf:undefined)});
+      fresh.push({id:id,name:r.name||'',weight:wv,declared:(r.declared!=null?r.declared:null),declaredWeight:useDecl,type:isInf?'adult':(r.type==='child'?'child':'adult'),infantName:null,group:order,paymentReq:owing,ac:ex?ex.ac:null,acHint:acHint,infantOf:isInf?(r.attach!=null?order+'|c'+r.attach:undefined):(ex?ex.infantOf:undefined),_preview:!isCheckedIn});
     });
   });
   // Lap infants follow their host's aircraft (they aren't seated).
@@ -16305,7 +16334,8 @@ window.rezdyManPull=function(depScope){
     return false;                                         // full refresh when unscoped
   });
   S._rzManPax=keep.concat(fresh);_rzManSave();
-  toast(fresh.length+' checked-in pax pushed to seatmap'+(depScope&&depScope!=='—'?' · '+depScope:''),'ok');
+  if(preview)toast('Preview: '+fresh.length+' pax at declared weights'+(notCheckedIn?' ('+notCheckedIn+' booking'+(notCheckedIn===1?'':'s')+' not checked in)':'')+(depScope&&depScope!=='—'?' · '+depScope:''),'ok');
+  else toast(fresh.length+' checked-in pax pushed to seatmap'+(depScope&&depScope!=='—'?' · '+depScope:''),'ok');
   render();
 };
 // ── Combine departures ── merge two (or more) departures into one seatmap group so they share
