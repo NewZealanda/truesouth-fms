@@ -1,0 +1,199 @@
+// === MODULE: startday.js === v26.74 ===
+// ─────────────────────────────────────────────────────────────────────────────
+//  START OF DAY — one-action morning flow + exceptions dashboard.
+//  Pressing "Run start of day" pulls Rezdy bookings, runs the declared-weight
+//  seatmap preview + aircraft allocation, and auto-allocates pilots. The screen
+//  then surfaces ONLY the things that need a human: bookings with no aircraft,
+//  aircraft over capacity, W&B / CofG fails, split groups, flights with no (or an
+//  unrated) pilot, transport without drivers, and balances owing. Every row deep-
+//  links to the page where you fix it. The scan is read-only and recomputes on
+//  every render, so it always reflects the live state — even before you press Run.
+//  Also hosts renderHomeToday() (the "today at a glance" landing) — see below.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _sodSh(ac){return String(ac||'').replace(/^ZK-?/,'');}
+function _sodEsc(s){return (typeof _rzEsc==='function')?_rzEsc(s):String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function _sodDepShort(dep){var p=String(dep||'').split('·');return (p[0]||'')+(p[1]?(' '+p[1]):'');}
+function _sodAcCap(ac){var a=(typeof _acSpec==='function')?_acSpec(ac):(S.aircraft||{})[ac];if(!a||!a.seats)return 0;return a.seats.length-1-(((a.removedSeats)||[]).length);}
+
+// Scan the current operations day and return stats + a prioritised exceptions list.
+// Pure read of state — never mutates. Heavily guarded so a missing helper can't break the page.
+function _sodScan(){
+  var date=(S&&S.rezdyDate)||'';
+  var out={date:date,loaded:!!(S&&S._rezdyBookings),stats:{bookings:0,pax:{a:0,c:0,i:0},flights:0,aircraft:0},ex:[]};
+  if(!out.loaded)return out;
+  var ex=out.ex;
+  function add(sev,cat,msg,jump,order){ex.push({sev:sev,cat:cat,msg:msg,jump:jump,order:order||null});}
+  var bks=(S._rezdyBookings||[]).filter(function(b){return !(typeof _rzIsCancelled==='function'&&_rzIsCancelled(b))&&!(typeof _rzIsNoShow==='function'&&_rzIsNoShow(String(b.orderNumber||'')));});
+  out.stats.bookings=bks.length;
+  bks.forEach(function(b){if(typeof _rzEffBreakdown==='function'){var e=_rzEffBreakdown(b);out.stats.pax.a+=(e.a||0);out.stats.pax.c+=(e.c||0);out.stats.pax.i+=(e.i||0);}});
+
+  // 1) Bookings with NO aircraft assigned.
+  bks.forEach(function(b){
+    var o=String(b.orderNumber||'');
+    var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,o):null;
+    if(!ac){
+      var e=(typeof _rzEffBreakdown==='function')?_rzEffBreakdown(b):{a:0,c:0,i:0};
+      var dep=(typeof _rzBookingDep==='function')?_rzBookingDep(b):'';
+      add('red','No aircraft',(b.customerName||o)+' · '+((e.a||0)+(e.c||0)+(e.i||0))+'p · '+((typeof _rzDepDisplay==='function')?_rzDepDisplay(dep):dep),'bookings',o);
+    }
+  });
+
+  // 2) Capacity + Weight & Balance per (departure, aircraft) from the seatmap pax.
+  var byDA={};
+  (S._rzManPax||[]).forEach(function(p){
+    if(!p.ac)return;
+    var dep=(typeof _rzPaxDep==='function')?_rzPaxDep(p):'';
+    var k=dep+'@@'+p.ac;var d=byDA[k]||(byDA[k]={dep:dep,ac:p.ac,seat:0,pax:0});
+    d.pax++;if(!p.infantOf)d.seat++;
+  });
+  Object.keys(byDA).forEach(function(k){
+    var d=byDA[k];var cap=_sodAcCap(d.ac);
+    if(cap&&d.seat>cap)add('red','Over capacity',_sodDepShort(d.dep)+' '+_sodSh(d.ac)+' · '+d.seat+' pax in '+cap+' seats','rseatmap');
+    try{
+      var wb=(typeof _rzManAcWB==='function')?_rzManAcWB(d.dep,d.ac):null;
+      if(wb){
+        if(wb.towOk===false)add('red','Over MTOW',_sodDepShort(d.dep)+' '+_sodSh(d.ac)+(wb.tow?(' · TOW '+Math.round(wb.tow)+'kg'):''),'rloadsheets');
+        else if(wb.cogOk===false)add('red','CofG out of limits',_sodDepShort(d.dep)+' '+_sodSh(d.ac),'rloadsheets');
+        else if(wb.lwOk===false)add('amber','Over landing weight',_sodDepShort(d.dep)+' '+_sodSh(d.ac),'rloadsheets');
+        if(wb.reserveOk===false)add('amber','Below fuel reserve',_sodDepShort(d.dep)+' '+_sodSh(d.ac),'rloadsheets');
+      }
+    }catch(e){}
+  });
+
+  // 3) Split groups — a booking's pax ended up on more than one aircraft.
+  var grp={};
+  (S._rzManPax||[]).forEach(function(p){if(p.infantOf||!p.ac)return;(grp[p.group]=grp[p.group]||{})[p.ac]=1;});
+  Object.keys(grp).forEach(function(o){var acs=Object.keys(grp[o]);if(acs.length>1)add('amber','Group split','Booking '+o+' across '+acs.map(_sodSh).join(' + '),'rseatmap',o);});
+
+  // 4) Pilots — flights with no pilot, or a pilot not rated for the aircraft.
+  var flights=(typeof _schedDayFlights==='function')?(_schedDayFlights(date)||[]):[];
+  out.stats.flights=flights.length;
+  var acSet={};
+  flights.forEach(function(f){
+    acSet[f.ac]=1;
+    var hhmm=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';
+    var pc=(typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(f.ac,hhmm):null;
+    if(!pc)add('amber','No pilot',hhmm+' '+_sodSh(f.ac),'calendar');
+    else if(typeof _pilotRatedForAc==='function'&&!_pilotRatedForAc(pc,f.ac))add('red','Pilot not rated',pc+' on '+_sodSh(f.ac)+' '+hhmm,'calendar');
+  });
+  out.stats.aircraft=Object.keys(acSet).length;
+
+  // 5) Transport — there are pickups to do but no drivers assigned yet.
+  var needPk=false;
+  bks.forEach(function(b){(b.items||[]).forEach(function(it){if(it.pickup&&!(typeof _rzIsSelfDrive==='function'&&_rzIsSelfDrive(it.pickup)))needPk=true;});});
+  var anyDriver=false;var pd=(S._pickupDrivers||{});Object.keys(pd).forEach(function(kk){if(pd[kk])anyDriver=true;});
+  if(needPk&&!anyDriver)add('amber','Transport','Pickups need drivers assigned','ground');
+
+  // 6) Balances owing.
+  bks.forEach(function(b){var bal=parseFloat(b.balanceDue);if(isFinite(bal)&&bal>0)add('amber','Balance owing',(b.customerName||b.orderNumber)+' · '+((typeof _rzMoney==='function')?_rzMoney(bal,b.currency):(bal+''))+' owing','bookings',String(b.orderNumber||''));});
+
+  // Prioritise: red before amber, then by category.
+  var sevRank={red:0,amber:1};
+  ex.sort(function(a,b){return (sevRank[a.sev]-sevRank[b.sev])||String(a.cat).localeCompare(String(b.cat));});
+  return out;
+}
+
+// One-action morning orchestration: pull bookings → load manifest → declared-weight
+// preview pull → allocate unallocated pax per departure → auto-allocate pilots.
+// Each step is guarded; a failure in one step doesn't abort the rest.
+window.sodRun=async function(){
+  if(S._sodRunning)return;
+  S._sodRunning=true;S._sodStep='Loading bookings…';render();
+  try{
+    try{if(window.rezdyLoadBookings)await window.rezdyLoadBookings();}catch(e){}
+    S._sodStep='Loading seatmap…';
+    try{if(!S._rzManLoaded&&window.rezdyLoadManifest)await window.rezdyLoadManifest();}catch(e){}
+    S._sodStep='Previewing weights…';
+    try{if(window.rezdyManPull)window.rezdyManPull(null,true);}catch(e){}   // whole-day declared-weight preview
+    S._sodStep='Allocating aircraft…';
+    try{
+      var deps=(typeof _rzManDeps==='function')?(_rzManDeps()||[]):[];
+      var savedFilter=S._rzManDepFilter;
+      deps.forEach(function(d){S._rzManDepFilter=d;if(typeof window.rezdyManAllocate==='function')window.rezdyManAllocate();});
+      S._rzManDepFilter=savedFilter;
+    }catch(e){}
+    S._sodStep='Allocating pilots…';
+    try{if(window.schedAutoPilots&&typeof _schedEnabled==='function'&&_schedEnabled())window.schedAutoPilots();}catch(e){}
+  }catch(e){}
+  S._sodRunning=false;S._sodStep='';S._sodRan=Date.now();
+  if(typeof toast==='function')toast('Start-of-day complete — review anything flagged below.','ok');
+  render();
+};
+
+// Deep-link from an exception row to the page that fixes it.
+window.sodJump=function(target,order){
+  if(order){S._rezdyOpen=S._rezdyOpen||{};S._rezdyOpen[String(order)]=true;
+    var _b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(order);});
+    if(_b&&typeof _rzBookingDep==='function'){try{S._bkDepFilter=(typeof _rzIsCancelled==='function'&&_rzIsCancelled(_b))?'__cancelled__':_rzBookingDep(_b);}catch(e){}}
+  }
+  if(target==='bookings'||target==='rseatmap'||target==='rloadsheets'){
+    if(typeof window.switchOpsTab==='function')window.switchOpsTab(target);else{S.section='operations';S.tab=target;render();}
+  }else if(target==='calendar'){S.section='calendar';S.rezdyTab='schedule';render();}
+  else if(target==='ground'){S.section='ground';S._groundSecTab='transport';render();}
+  else{S.section='operations';render();}
+};
+
+function renderStartDay(){
+  var scan=_sodScan();
+  var date=scan.date;
+  var dow=(typeof _rzDowLabel==='function')?_rzDowLabel(date):date;
+  var canShift=(typeof window.rezdyShiftDate==='function');
+  var h='<div class="page">';
+
+  // Header + day nav
+  h+='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px">';
+  h+='<div><div class="st" style="margin:0">🌅 Start of Day</div><div style="font-size:12px;color:var(--text3);margin-top:2px">'+_sodEsc(dow)+'</div></div>';
+  if(canShift)h+='<div style="display:flex;gap:6px;align-items:center">'
+    +'<button class="btn btn-ghost" style="font-size:13px;padding:5px 11px" onclick="window.rezdyShiftDate(-1)">‹</button>'
+    +'<button class="btn btn-ghost" style="font-size:12px;padding:5px 11px" onclick="window.rezdySetDate&&window.rezdySetDate(_todayLocal?_todayLocal():new Date().toISOString().slice(0,10))">Today</button>'
+    +'<button class="btn btn-ghost" style="font-size:13px;padding:5px 11px" onclick="window.rezdyShiftDate(1)">›</button></div>';
+  h+='</div>';
+
+  // Primary action
+  var running=!!S._sodRunning;
+  h+='<div class="card" style="margin-bottom:12px;text-align:center;padding:18px">';
+  h+='<button onclick="window.sodRun()" '+(running?'disabled ':'')+'style="display:inline-flex;align-items:center;gap:9px;padding:13px 26px;border-radius:12px;border:none;background:'+(running?'var(--card2)':'var(--acc)')+';color:#fff;font-weight:800;font-size:16px;cursor:'+(running?'default':'pointer')+'">'+(running?('⏳ '+_sodEsc(S._sodStep||'Working…')):'▶ Run start of day')+'</button>';
+  h+='<div style="font-size:11.5px;color:var(--text3);margin-top:10px;max-width:440px;margin-left:auto;margin-right:auto">Pulls bookings, previews weights, allocates aircraft + pilots, then lists anything that needs attention.</div>';
+  if(S._sodRan)h+='<div style="font-size:11px;color:var(--text3);margin-top:6px">Last run '+_sodEsc((typeof _rzMinToHHMM==='function'&&typeof _todayLocal==='function')?new Date(S._sodRan).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):new Date(S._sodRan).toLocaleTimeString())+'</div>';
+  h+='</div>';
+
+  if(!scan.loaded){
+    h+='<div class="card" style="text-align:center;color:var(--text3);padding:28px">Bookings not loaded yet — press <b>Run start of day</b> to pull today\'s bookings.</div></div>';
+    return h;
+  }
+
+  // Stats strip
+  var st=scan.stats;
+  function chip(lbl,val){return '<div style="flex:1;min-width:78px;text-align:center;background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:9px 6px"><div style="font-size:19px;font-weight:800;color:var(--text1)">'+val+'</div><div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em">'+lbl+'</div></div>';}
+  var paxTot=st.pax.a+st.pax.c+st.pax.i;
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
+  h+=chip('Bookings',st.bookings);
+  h+=chip('Pax',paxTot+(st.pax.i?(' +'+st.pax.i+'i'):''));
+  h+=chip('Flights',st.flights);
+  h+=chip('Aircraft',st.aircraft);
+  h+='</div>';
+
+  // Exceptions
+  var ex=scan.ex;
+  if(!ex.length){
+    h+='<div class="card" style="text-align:center;padding:30px;border-left:4px solid #22c55e"><div style="font-size:34px">✅</div><div class="st" style="margin:8px 0 2px">All clear</div><div style="font-size:12.5px;color:var(--text3)">Nothing needs attention for '+_sodEsc(dow)+'.</div></div>';
+  }else{
+    var reds=ex.filter(function(e){return e.sev==='red';}).length;
+    var ambers=ex.length-reds;
+    h+='<div style="font-size:13px;font-weight:800;color:var(--text1);margin-bottom:8px">'+ex.length+' need'+(ex.length===1?'s':'')+' attention'
+      +(reds?'  <span style="color:#ef4444">● '+reds+' critical</span>':'')
+      +(ambers?'  <span style="color:#f59e0b">● '+ambers+' check</span>':'')+'</div>';
+    ex.forEach(function(e){
+      var col=e.sev==='red'?'#ef4444':'#f59e0b';
+      h+='<div onclick="window.sodJump(\''+e.jump+'\''+(e.order?(',\''+_sodEsc(String(e.order)).replace(/'/g,"\\'")+'\''):'')+')" style="cursor:pointer;display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:10px;padding:10px 12px;margin-bottom:7px">';
+      h+='<span style="flex-shrink:0;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:'+col+';background:'+(e.sev==='red'?'rgba(239,68,68,.12)':'rgba(245,158,11,.12)')+';padding:3px 8px;border-radius:999px;white-space:nowrap">'+_sodEsc(e.cat)+'</span>';
+      h+='<span style="flex:1;font-size:13px;color:var(--text1)">'+_sodEsc(e.msg)+'</span>';
+      h+='<span style="flex-shrink:0;color:var(--text3);font-size:13px">›</span>';
+      h+='</div>';
+    });
+  }
+
+  h+='</div>';
+  return h;
+}
