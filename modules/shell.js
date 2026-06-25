@@ -631,7 +631,7 @@ function renderDrawer(){
   if(_canOps){
     h+=_secBtn('Operations','operations','✈️');
     if(_isExp('operations')){
-      var _isLegacyLs=isLs&&t!=='rloadsheets';
+      var _isLegacyLs=t==='loadsheet'||String(t||'').indexOf('ls_')===0; // only the legacy editor suppresses highlight (not a stale open-tab id)
       if(hasRolePerm('calendar'))h+=_subBtn('Calendar',t==='calendar'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('calendar')");
       h+=_subBtn('Bookings',t==='bookings'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('bookings')");
       h+=_subBtn('Seatmap',t==='rseatmap'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('rseatmap')");
@@ -734,8 +734,9 @@ function renderOpsSubTabs(){
   const _opsNavPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
   const _isOpsAdminPlus=role==='superadmin'||role==='admin';
   const opsTab=S.tab||'bookings';
-  const isLsView=!!(S.activeTabId||S._newLsTab);
-  const isLegacyLs=isLsView&&opsTab!=='rloadsheets'; // the legacy loadsheet editor (S.tab='loadsheet')
+  // Only the LEGACY loadsheet editor (S.tab='loadsheet'/'ls_*') suppresses the active-tab highlight.
+  // A stale open-loadsheet tab id (S.activeTabId) must NOT un-highlight Bookings/Seatmap/etc.
+  const isLegacyLs=opsTab==='loadsheet'||String(opsTab).indexOf('ls_')===0;
   const savedCount=(S.saved||[]).filter(function(s){return s.status!=='deleted';}).length;
   var tabs=[];
   if(hasRolePerm('calendar'))tabs.push({lbl:'Calendar',on:opsTab==='calendar',onclick:"window.switchOpsTab('calendar')"});

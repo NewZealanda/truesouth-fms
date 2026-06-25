@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.96';
+const APP_VER='v26.97';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3846,7 +3846,7 @@ function renderDrawer(){
   if(_canOps){
     h+=_secBtn('Operations','operations','✈️');
     if(_isExp('operations')){
-      var _isLegacyLs=isLs&&t!=='rloadsheets';
+      var _isLegacyLs=t==='loadsheet'||String(t||'').indexOf('ls_')===0; // only the legacy editor suppresses highlight (not a stale open-tab id)
       if(hasRolePerm('calendar'))h+=_subBtn('Calendar',t==='calendar'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('calendar')");
       h+=_subBtn('Bookings',t==='bookings'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('bookings')");
       h+=_subBtn('Seatmap',t==='rseatmap'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('rseatmap')");
@@ -3949,8 +3949,9 @@ function renderOpsSubTabs(){
   const _opsNavPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
   const _isOpsAdminPlus=role==='superadmin'||role==='admin';
   const opsTab=S.tab||'bookings';
-  const isLsView=!!(S.activeTabId||S._newLsTab);
-  const isLegacyLs=isLsView&&opsTab!=='rloadsheets'; // the legacy loadsheet editor (S.tab='loadsheet')
+  // Only the LEGACY loadsheet editor (S.tab='loadsheet'/'ls_*') suppresses the active-tab highlight.
+  // A stale open-loadsheet tab id (S.activeTabId) must NOT un-highlight Bookings/Seatmap/etc.
+  const isLegacyLs=opsTab==='loadsheet'||String(opsTab).indexOf('ls_')===0;
   const savedCount=(S.saved||[]).filter(function(s){return s.status!=='deleted';}).length;
   var tabs=[];
   if(hasRolePerm('calendar'))tabs.push({lbl:'Calendar',on:opsTab==='calendar',onclick:"window.switchOpsTab('calendar')"});
@@ -15259,7 +15260,7 @@ function _rzRenderPickups(){
   driversBar+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
   displayDrivers.forEach(function(nm){
     var isAsg=assigned.indexOf(nm)>=0;var isExtra=_extra.indexOf(nm)>=0; // manually added / called in — show the ✕ even while assigned to a van (removing clears the van too)
-    driversBar+='<div draggable="true" ondragstart="window.pickupDriverDragStart(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\',event)" title="Drag onto a van to assign" style="display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:16px;background:'+(isAsg?'rgba(74,222,128,.12)':'rgba(124,58,237,.12)')+';border:1px solid '+(isAsg?'rgba(74,222,128,.5)':'rgba(124,58,237,.45)')+';cursor:grab;font-size:12px;font-weight:700;color:'+(isAsg?'#4ade80':'#c4b5fd')+'">'+(isAsg?'✓ ':'👤 ')+_rzEsc(nm)+(isExtra?'<span onclick="event.stopPropagation();window.pickupRemoveExtraDriver(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\')" style="cursor:pointer;opacity:.55;margin-left:2px" title="Remove driver / un-call-in — clears them off any van and reverts their roster day">✕</span>':'')+'</div>';
+    driversBar+='<div draggable="true" ondragstart="window.pickupDriverDragStart(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\',event)" title="Drag onto a van to assign" style="display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:16px;background:'+(isAsg?'rgba(74,222,128,.12)':'rgba(124,58,237,.12)')+';border:1px solid '+(isAsg?'rgba(74,222,128,.5)':'rgba(124,58,237,.45)')+';cursor:grab;font-size:12px;font-weight:700;color:'+(isAsg?'#4ade80':'#c4b5fd')+'">'+(isAsg?'✓ ':'👤 ')+_rzEsc(nm)+((isExtra||isAsg)?'<span onclick="event.stopPropagation();window.pickupRemoveExtraDriver(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\')" style="cursor:pointer;opacity:.55;margin-left:2px" title="Remove driver — clears them off every van they\'re on (and un-calls-in if they were called in)">✕</span>':'')+'</div>';
   });
   driversBar+='<button onclick="window.pickupToggleDriverPicker()" title="Add another driver" style="width:30px;height:30px;border-radius:16px;border:1px dashed var(--border2);background:'+(S._pickupDriverPickerOpen?'rgba(124,58,237,.15)':'transparent')+';color:var(--text2);font-size:18px;cursor:pointer;line-height:1;display:inline-flex;align-items:center;justify-content:center">'+(S._pickupDriverPickerOpen?'×':'+')+'</button>';
   driversBar+='</div>';
