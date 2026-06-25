@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.60';
+const APP_VER='v26.61';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16675,10 +16675,24 @@ function _rzCandWBScore(dep,acId,sm){try{if(!sm||!Object.keys(sm).length)return 
 //  • the front single seat (seat 1, when it's a pax seat) gets a SOLO or one member of an ODD group,
 //    with the rest of that group in the consecutive seats;
 //  • infant-carrying groups seated toward the BACK, host in the rearmost seat of the group.
+// Pax-seat rows front→back, pairing seats whose arms are within a small TOLERANCE (some aircraft
+// have a ~1-unit arm difference between the two seats of a physical row — e.g. SLB seats 10/11 —
+// which exact-arm grouping would wrongly treat as two separate single rows and split a group across
+// the aisle). The real arms are still used for W&B; this only decides which seats form a pair-row.
+function _rzRowPairs(acId,coSeat1){
+  var a=(typeof _acSpec==='function')?_acSpec(acId):S.aircraft[acId];if(!a||!a.seats)return[];
+  var idxs=paxSeatIdxs(acId,coSeat1);if(!idxs.length)return[];
+  var sorted=idxs.slice().sort(function(x,y){return ((a.seats[x]&&a.seats[x].arm)||0)-((a.seats[y]&&a.seats[y].arm)||0);});
+  var TOL=5,rows=[],cur=[],base=null;
+  sorted.forEach(function(i){var arm=(a.seats[i]&&a.seats[i].arm)||0;if(base===null||Math.abs(arm-base)<=TOL){cur.push(i);if(base===null)base=arm;}else{rows.push(cur);cur=[i];base=arm;}});
+  if(cur.length)rows.push(cur);
+  rows.forEach(function(r){r.sort(function(a,b){return a-b;});});
+  return rows;
+}
 function _rzSmartSeat(acId,paxList,opts){
   var a=S.aircraft[acId];if(!a||!a.seats||!paxList||!paxList.length)return{};
   var coPilot=(opts&&opts.coSeat1!=null)?opts.coSeat1:seat1IsCoPilot(acId);
-  var rows=rowPairsForAc(acId,coPilot);if(!rows.length)return{};   // front→back, each [idx] or [idx,idx]
+  var rows=_rzRowPairs(acId,coPilot);if(!rows.length)return{};   // front→back, each [idx] or [idx,idx]
   var arm=function(i){return (a.seats[i]&&a.seats[i].arm)||0;};
   var wOf=function(p){var w=parseFloat(p&&p.weight);return isNaN(w)?0:w;};
   var gMap={};
@@ -16755,7 +16769,7 @@ function _rzSmartSeat(acId,paxList,opts){
 // finds balanced layouts the structured seater can't (e.g. an even group seated at the back).
 function _rzSearchSeat(dep,acId,paxList,coPic){
   var a=S.aircraft[acId];if(!a||!a.seats||!paxList||!paxList.length)return null;
-  var rows=rowPairsForAc(acId,coPic);if(!rows.length)return null;
+  var rows=_rzRowPairs(acId,coPic);if(!rows.length)return null;   // arm-tolerant pairing
   var arm=function(i){return (a.seats[i]&&a.seats[i].arm)||0;};
   var wOf=function(p){var w=parseFloat(p&&p.weight);return isNaN(w)?0:w;};
   var seats=[];rows.forEach(function(r){r.forEach(function(s){seats.push(s);});}); // front→back, incl front single
