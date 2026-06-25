@@ -884,7 +884,7 @@ window.rezdyCheckinOpen=function(order){
   // Every infant needs a host (default to the first non-infant passenger).
   var firstNon=null;for(var k=0;k<rows.length;k++){if(rows[k].type!=='infant'){firstNon=k;break;}}
   rows.forEach(function(r){if(r.type==='infant'&&(r.attach==null||!rows[r.attach]||rows[r.attach].type==='infant'))r.attach=firstNon;});
-  S._rzCheckinDraft={order:order,rows:rows};render();
+  S._rzCheckinDraft={order:order,rows:rows,plate:((S._rzPlates||{})[order]||{}).plate||''};render();
 };
 window.rezdyCheckinField=function(i,field,val){var d=S._rzCheckinDraft;if(!d||!d.rows[i])return;d.rows[i][field]=val;}; // no render (keep input focus)
 window.rezdyCheckinAttach=function(i,val){var d=S._rzCheckinDraft;if(!d||!d.rows[i])return;d.rows[i].attach=(val===''?null:parseInt(val,10));};
@@ -925,6 +925,10 @@ window.rezdyCheckinSave=function(){
     return o;
   })};
   S._rzBookingCheckedIn=S._rzBookingCheckedIn||{};S._rzBookingCheckedIn[d.order]=true;
+  // Self-drive numberplate(s): keep the existing "entered" tick if they're just editing the plate.
+  S._rzPlates=S._rzPlates||{};var _pl=String(d.plate||'').trim();
+  if(_pl){var _ex=S._rzPlates[d.order];S._rzPlates[d.order]={plate:_pl,done:!!(_ex&&_ex.done)};}
+  else if(S._rzPlates[d.order])delete S._rzPlates[d.order];
   S._rzCheckinDraft=null;
   if(window.pickupSave)window.pickupSave(true);
   if(typeof toast==='function')toast('Checked in ✓','ok');render();
@@ -939,6 +943,11 @@ function _rzBookingLunches(b){
   return out;
 }
 function _rzBookingHasLunch(b){return _rzBookingLunches(b).length>0;}
+// Self-drive numberplate(s) captured at check-in (we hand-enter these into a separate system later).
+// Stored per order as {plate, done}; persisted in the pickup blob (field 'plates').
+function _rzPlate(order){return (S._rzPlates||{})[String(order||'')]||null;}
+window.rezdyCheckinPlate=function(val){var d=S._rzCheckinDraft;if(d)d.plate=val;}; // no render — keep input focus
+window.rezdyPlateToggleDone=function(order){order=String(order||'');S._rzPlates=S._rzPlates||{};var p=S._rzPlates[order];if(!p||!p.plate)return;p.done=!p.done;if(window.pickupSave)window.pickupSave(true);render();};
 function _rzCheckinModal(){
   var d=S._rzCheckinDraft;if(!d)return '';
   var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===d.order;});
@@ -961,6 +970,13 @@ function _rzCheckinModal(){
       '<div style="display:flex;flex-direction:column;gap:5px">'+_ciLun.map(function(e){var q=parseInt(e.qty,10)||1;return '<div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700;color:#fde68a"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;background:#f59e0b;color:#3a2c06;font-weight:900;border-radius:6px;font-size:13px">×'+q+'</span>'+_rzEsc(e.name)+'</div>';}).join('')+'</div>'+
     '</div>';
   }
+  // Self-drive numberplate(s) — recorded here, hand-entered into the separate system later.
+  var _ciSelf=(typeof _rzManualSelfDrive==='function'&&_rzManualSelfDrive(d.order))||(!!b&&(b.items||[]).some(function(it){return it.pickup&&typeof _rzIsSelfDrive==='function'&&_rzIsSelfDrive(it.pickup);}));
+  h+='<div style="background:'+(_ciSelf?'rgba(59,130,246,.12)':'var(--card2)')+';border:1px solid '+(_ciSelf?'#3b82f6':'var(--border2)')+';border-radius:9px;padding:11px 13px;margin:0 0 12px">'+
+    '<div style="font-size:12.5px;font-weight:800;color:'+(_ciSelf?'#60a5fa':'var(--text2)')+';margin-bottom:6px">🚗 Self-drive numberplate(s)'+(_ciSelf?' — self-drive booking':'')+'</div>'+
+    '<input type="text" value="'+_rzEsc(d.plate||'')+'" oninput="window.rezdyCheckinPlate(this.value)" placeholder="e.g. ABC123 — comma-separate if more than one" style="width:100%;box-sizing:border-box;font-size:16px;padding:9px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px;letter-spacing:.04em">'+
+    '<div style="font-size:11px;color:var(--text3);margin-top:5px">A <b>P</b> shows on the booking; tick it off in the booking dropdown once it’s in the separate system.</div>'+
+  '</div>';
   d.rows.forEach(function(r,i){
     var isInf=r.type==='infant';
     var tl=r.type==='child'?'C':isInf?'i':'A';
@@ -1559,6 +1575,7 @@ function _rzBookingCard(b){
          '<span onclick="window.rezdyToggleRow(\''+oE+'\')" style="cursor:pointer;color:var(--text2);display:inline-block;transition:transform .12s;'+(open?'transform:rotate(90deg)':'')+'">▸</span>'+
          '<span style="font-size:15px;font-weight:800;color:var(--text1)">'+_rzEsc(b.customerName||ono)+'</span>'+
          (_rzBookingHasLunch(b)?'<span title="Lunch / meal ordered" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:#f59e0b;color:#3a2c06;font-weight:900;font-size:11px;border-radius:4px;flex-shrink:0;line-height:1">L</span>':'')+
+         (function(){var _pl=_rzPlate(ono);if(!_pl||!_pl.plate)return '';var _pt='Numberplate '+_pl.plate+(_pl.done?' (entered into system)':' (enter into the separate system)');return '<span title="'+_rzEsc(_pt)+'" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:'+(_pl.done?'#22c55e':'#3b82f6')+';color:#fff;font-weight:900;font-size:11px;border-radius:4px;flex-shrink:0;line-height:1">P</span>';})()+
          '<span style="font-size:11px;color:var(--text3)">#'+_rzEsc(ono)+'</span>'+
        '</div>'+
        '<div style="font-size:11px;color:var(--text3);margin-top:3px">'+_rzBdCompact(bd)+(prod?' '+_rzEsc(prod):'')+'</div>'+
