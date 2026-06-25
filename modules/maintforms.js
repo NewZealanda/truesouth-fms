@@ -57,7 +57,11 @@ window.mfSetWoFolder=function(ac,val){
 };
 
 // Per-aircraft last oil-change date (persisted in the maintenance blob). Editable on the form.
-function _mfOilChangeDate(ac){var m=S.maintenance||{};return (m.oilChange&&m.oilChange[ac])||'';}
+// Seeded with the initial last-change dates; once "Reset oil tracker this check?" is ticked the
+// stored value overrides the seed. SDB oil is tracked by the lessor's maintenance provider — skip it.
+var _MF_OIL_SEED={'ZK-SLA':'2026-05-25','ZK-SLB':'2026-06-03','ZK-SLD':'2026-04-07','ZK-SLQ':'2026-06-02'};
+function _mfOilTracked(ac){return ac!=='ZK-SDB';}
+function _mfOilChangeDate(ac){var m=S.maintenance||{};return (m.oilChange&&m.oilChange[ac])||_MF_OIL_SEED[ac]||'';}
 function _mfSetOilChangeDate(ac,date){S.maintenance=S.maintenance||{};S.maintenance.oilChange=S.maintenance.oilChange||{};if(date)S.maintenance.oilChange[ac]=date;else delete S.maintenance.oilChange[ac];if(typeof saveMaintenance==='function')saveMaintenance();}
 // Oil consumed (qts) + days for an aircraft between `from` (exclusive) and `to` (inclusive), from the logs.
 function _mfOilCalc(ac,from,to){
@@ -280,7 +284,10 @@ function _mfWorkOrderHtml(f){
     '<table><thead><tr><th colspan="3">Please carry out the following</th><th class="c">Completed</th><th class="c">Eng. Initial</th><th class="c">Deferred</th></tr></thead><tbody>'+
       listRows('6','Routine Maintenance','routine')+listRows('7','Unscheduled Maintenance','unscheduled')+listRows('8','Defect Rectification','defect')+
     '</tbody></table>'+
-    '<div class="grid" style="margin-bottom:10px"><div class="fld" style="flex:1 1 100%"><b>9. Oil used since last inspection</b>'+(oc.qts.toFixed(1))+' qts since last oil change'+(d.oil&&d.oil.lastChange?' ('+_mfEsc(d.oil.lastChange)+(oc.days!=null?', '+oc.days+' days':'')+')':'')+(d.oil&&d.oil.note?' — '+_mfEsc(d.oil.note):'')+'</div></div>'+
+    (_mfOilTracked(f.aircraft)
+      ? '<div class="grid" style="margin-bottom:6px"><div class="fld" style="flex:1 1 100%"><b>9. Oil used since last inspection</b>'+(oc.qts.toFixed(1))+' qts since last oil change'+(d.oil&&d.oil.lastChange?' ('+_mfEsc(d.oil.lastChange)+(oc.days!=null?', '+oc.days+' days':'')+')':'')+(d.oil&&d.oil.note?' — '+_mfEsc(d.oil.note):'')+'</div></div>'+
+        '<div style="border:2px solid #333;border-radius:6px;padding:7px 11px;margin-bottom:12px;display:flex;align-items:center;gap:10px"><span style="display:inline-block;width:18px;height:18px;border:2px solid #333;text-align:center;line-height:15px;font-size:14px;font-weight:bold">'+((d.oil&&d.oil.updateChange)?'✓':'')+'</span><span style="font-size:13px;font-weight:bold">Reset oil tracker this check?</span></div>'
+      : '<div class="grid" style="margin-bottom:10px"><div class="fld" style="flex:1 1 100%"><b>9. Oil used since last inspection</b>Tracked by the lessor’s maintenance provider.</div></div>')+
     '<div class="grid"><div class="fld"><b>10. Notify SLA about</b></div>'+
       '<div class="fld"><b>Price</b>'+yn(d.notifyPrice)+'</div><div class="fld"><b>Delays</b>'+yn(d.notifyDelays)+'</div><div class="fld"><b>Extra Work</b>'+yn(d.notifyExtra)+'</div></div>'+
     '<div class="grid"><div class="fld" style="flex:1 1 100%"><b>11. Engineers Comments</b>'+_mfEsc(d.comments)+'</div></div>'+
@@ -407,14 +414,22 @@ function renderMaintFormEditor(id){
   // Oil section (9): editable last-change date + calculated consumption + update toggle.
   var oc=_mfOilCalc(f.aircraft,d.oil&&d.oil.lastChange,d.onDate);
   function oilSection(){
-    return '<div style="border:1px solid var(--border2);border-radius:8px;padding:10px;margin-bottom:8px">'+
+    if(!_mfOilTracked(f.aircraft)){
+      return '<div style="border:1px solid var(--border2);border-radius:8px;padding:10px">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:4px">9. Oil used since last inspection</div>'+
+        '<div style="font-size:12px;color:var(--text3)">'+_mfEsc(_mfAcDisp(f.aircraft))+' oil is tracked by the lessor’s maintenance provider — not tracked here.</div></div>';
+    }
+    return '<div style="border:1px solid var(--border2);border-radius:8px;padding:10px">'+
       '<div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:6px">9. Oil used since last inspection</div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;align-items:end">'+
         '<div><label style="font-size:11px;color:var(--text3);font-weight:600">Last oil change (SLA)</label><input type="date" value="'+_mfEsc(d.oil&&d.oil.lastChange)+'" onchange="window.mfOilSetLastChange(\''+id+'\',this.value)" style="'+_in+'"></div>'+
         '<div><label style="font-size:11px;color:var(--text3);font-weight:600">Calculated to On Date ('+_mfEsc(d.onDate)+')</label><div style="padding:8px 10px;background:var(--card2);border:1px solid var(--border2);border-radius:7px;font-size:13px;font-weight:700;color:var(--text1)">'+oc.qts.toFixed(1)+' qts'+(oc.days!=null?' · '+oc.days+' days':'')+'</div></div>'+
       '</div>'+
       (d.oil&&d.oil.lastChange?'':'<div style="font-size:11px;color:#f59e0b;margin-top:6px">Set a last-oil-change date to calculate consumption.</div>')+
-      '<label style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" '+((d.oil&&d.oil.updateChange)?'checked':'')+' onchange="window.mfOilUpdateToggle(\''+id+'\')" style="width:15px;height:15px;accent-color:var(--accent)"> This work order changed the oil — set '+_mfEsc(_mfAcDisp(f.aircraft))+'\'s last oil change to '+_mfEsc(d.onDate)+'</label>'+
+      '<label style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:11px 13px;border:2px solid #f59e0b;border-radius:9px;background:rgba(245,158,11,.13);cursor:pointer">'+
+        '<input type="checkbox" '+((d.oil&&d.oil.updateChange)?'checked':'')+' onchange="window.mfOilUpdateToggle(\''+id+'\')" style="width:20px;height:20px;accent-color:#f59e0b;flex-shrink:0">'+
+        '<span style="font-size:14px;font-weight:800;color:var(--text1)">Reset oil tracker this check?</span>'+
+        '<span style="font-size:11px;color:var(--text3);margin-left:auto;text-align:right">resets the next check’s start date to '+_mfEsc(d.onDate)+'</span></label>'+
       '<input value="'+_mfEsc(d.oil&&d.oil.note)+'" placeholder="Oil note (optional)" oninput="window.mfField(\''+id+'\',\'oil.note\',this.value)" style="'+_in+';margin-top:8px">'+
     '</div>';
   }
