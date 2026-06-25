@@ -807,8 +807,10 @@ function _schedLockMap(){var c=_schedCfg();if(!c.locks||typeof c.locks!=='object
 // A departure is LOCKED if manually pinned, or (on today) its time has already passed — the
 // optimiser leaves it exactly as flown/assigned and only re-plans the rest of the day around it.
 function _schedDepLocked(date,time){
-  var m=(_schedLockMap()[date]||{})[time];if(m)return true;
-  if(date===_resToday()&&_schedMinOf(time)!=null&&_schedMinOf(time)<=_schedNowMin())return true;
+  var m=(_schedLockMap()[date]||{})[time];if(m)return true;   // manual pin only
+  // Auto-lock-on-flown DISABLED for now (was: lock a departure once its time has passed today). It
+  // was freezing already-departed runs with an incomplete aircraft set, so the optimiser left pax
+  // unallocated instead of re-planning. Re-enable with a toggle later if wanted.
   return false;
 }
 function _schedDepManualLock(date,time){return !!((_schedLockMap()[date]||{})[time]);}
