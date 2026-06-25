@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.83';
+const APP_VER='v26.85';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -14119,6 +14119,8 @@ function _rzBookingHasLunch(b){return _rzBookingLunches(b).length>0;}
 function _rzPlate(order){return (S._rzPlates||{})[String(order||'')]||null;}
 window.rezdyCheckinPlate=function(val){var d=S._rzCheckinDraft;if(d)d.plate=val;}; // no render — keep input focus
 window.rezdyPlateToggleDone=function(order){order=String(order||'');S._rzPlates=S._rzPlates||{};var p=S._rzPlates[order];if(!p||!p.plate)return;p.done=!p.done;if(window.pickupSave)window.pickupSave(true);render();};
+// Edit the numberplate directly from the booking dropdown (keeps the "entered" tick if just editing).
+window.rezdyPlateSet=function(order,val){order=String(order||'');val=String(val||'').trim();S._rzPlates=S._rzPlates||{};if(val){var ex=S._rzPlates[order];S._rzPlates[order]={plate:val,done:!!(ex&&ex.done)};}else delete S._rzPlates[order];if(window.pickupSave)window.pickupSave(true);render();};
 function _rzCheckinModal(){
   var d=S._rzCheckinDraft;if(!d)return '';
   var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===d.order;});
@@ -15096,11 +15098,15 @@ function _rzBookingDetail(b){
   var srcH='<div style="'+_pan+'"><div style="'+sec+'">Source</div><span class="pill" style="background:var(--card);border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px">'+_rzEsc(_rzSourceLabel(b))+'</span></div>';
   // Self-drive numberplate(s) captured at check-in + a "done" tick once entered into the external system.
   var _plObj=(typeof _rzPlate==='function')?_rzPlate(_bdOrder):null;
+  var _plVal=(_plObj&&_plObj.plate)||'';
+  var _plDone=!!(_plObj&&_plObj.done);
+  var _plSelf=(typeof _rzManualSelfDrive==='function'&&_rzManualSelfDrive(_bdOrder))||((b.items||[]).some(function(it){return it.pickup&&typeof _rzIsSelfDrive==='function'&&_rzIsSelfDrive(it.pickup);}));
   var plH='';
-  if(_plObj&&_plObj.plate){
-    plH='<div style="'+_pan+(_plObj.done?'':';border-color:#3b82f6')+'"><div style="'+sec+'">🚗 Self-drive numberplate</div>'+
-      '<div style="font-size:15px;font-weight:800;color:var(--text1);letter-spacing:.06em">'+_rzEsc(_plObj.plate)+'</div>'+
-      '<label style="display:inline-flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer;font-size:12px;font-weight:700;color:'+(_plObj.done?'#4ade80':'#60a5fa')+'"><input type="checkbox" '+(_plObj.done?'checked':'')+' onchange="window.rezdyPlateToggleDone(\''+_bdOE+'\')" style="width:16px;height:16px;cursor:pointer">'+(_plObj.done?'Entered into system ✓':'Mark entered into system')+'</label></div>';
+  if(_plVal||_plSelf){
+    plH='<div style="'+_pan+((_plVal&&!_plDone)?';border-color:#3b82f6':'')+'"><div style="'+sec+'">🚗 Self-drive numberplate'+(_plSelf&&!_plVal?' — self-drive':'')+'</div>'+
+      '<input type="text" value="'+_rzEsc(_plVal)+'" onchange="window.rezdyPlateSet(\''+_bdOE+'\',this.value)" placeholder="e.g. ABC123 — comma-separate if more than one" style="width:100%;box-sizing:border-box;font-size:15px;font-weight:700;letter-spacing:.05em;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px">'+
+      (_plVal?'<label style="display:inline-flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer;font-size:12px;font-weight:700;color:'+(_plDone?'#4ade80':'#60a5fa')+'"><input type="checkbox" '+(_plDone?'checked':'')+' onchange="window.rezdyPlateToggleDone(\''+_bdOE+'\')" style="width:16px;height:16px;cursor:pointer">'+(_plDone?'Entered into system ✓':'Mark entered into system')+'</label>':'')+
+    '</div>';
   }
   return bubsH+'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start">'+
     '<div style="flex:1 1 300px;min-width:240px;display:flex;flex-direction:column;gap:8px">'+paxH+exH+'</div>'+
@@ -17534,9 +17540,29 @@ function _rzRenderLoadsheets(){
     var _ed='';try{_ed=renderLoadsheet();}catch(e){_ed='<div class="card" style="color:var(--err-text)">Loadsheet error: '+_rzEsc(e.message)+'</div>';}
     return h+'<div id="flash-loadsheet">'+_ed+'</div>';
   }
+  // ── Saved loadsheets for this day — pinned to the TOP (like the maintenance work-orders list) ──
+  var openIds={};(S._rzLsTabs||[]).forEach(function(t){openIds[t.id]=1;});
+  var savedToday=(S.saved||[]).filter(function(s){return s.form&&s.form.date===S.rezdyDate&&s.status!=='deleted'&&!openIds[s.id];})
+    .sort(function(a,b){return String((a.form&&a.form.ac)||'').localeCompare(String((b.form&&b.form.ac)||''));});
+  if(savedToday.length){
+    h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:8px">📁 Saved loadsheets ('+savedToday.length+') — tap to open</div>';
+    savedToday.forEach(function(s){
+      var signed=s.status==='complete'||s.status==='signed'||(s.form&&s.form.sig);
+      var ac=(s.form&&s.form.ac)||'';var col=_rzAcCol(ac);var etd=(s.form&&s.form.etd)||'';var idE=String(s.id).replace(/'/g,"\\'");
+      h+='<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:9px;margin-bottom:7px">'+
+        '<span style="font-size:14px">'+(signed?'✅':'📄')+'</span>'+
+        '<div style="flex:1;min-width:0;cursor:pointer" onclick="window.rezdyOpenLsTab(\''+idE+'\')">'+
+          '<div style="font-size:14px;font-weight:800;color:'+col+'">'+_rzEsc(String(ac).replace('ZK-',''))+(etd?' <span style="font-size:11px;color:var(--text3);font-weight:600">· ETD '+_rzEsc(etd)+'</span>':'')+'</div>'+
+          '<div style="font-size:10px;color:var(--text3)">'+(signed?'Signed':'Unsigned')+' · saved</div>'+
+        '</div>'+
+        '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="window.rezdyOpenLsTab(\''+idE+'\')">Open</button>'+
+      '</div>';
+    });
+    h+='</div>';
+  }
   // ── List mode (no active tab) ──
   if(!tabs.length){
-    h+='<div class="card" style="text-align:center;padding:22px;color:var(--text3);font-size:13px">No open loadsheets for this day yet.<br>Create one from the <b>Seatmap</b>, start a blank above, or open a saved one below.</div>';
+    h+='<div class="card" style="text-align:center;padding:22px;color:var(--text3);font-size:13px">No open loadsheets for this day yet.<br>Create one from the <b>Seatmap</b>, start a blank above, or open a saved one from the list above.</div>';
   }else{
     h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:8px">Open tabs ('+tabs.length+')</div>';
     tabs.forEach(function(t){
@@ -17552,18 +17578,6 @@ function _rzRenderLoadsheets(){
         '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="window.rezdyOpenLsTab(\''+idE+'\')">Open</button>'+
         '<button onclick="window.rezdyLsClosePrompt(\''+idE+'\')" title="Close…" style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:0 2px">✕</button>'+
       '</div>';
-    });
-    h+='</div>';
-  }
-  // Saved loadsheets for this date that aren't currently open.
-  var openIds={};(S._rzLsTabs||[]).forEach(function(t){openIds[t.id]=1;});
-  var savedToday=(S.saved||[]).filter(function(s){return s.form&&s.form.date===S.rezdyDate&&s.status!=='deleted'&&!openIds[s.id];});
-  if(savedToday.length){
-    h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:8px">Saved this day — tap to open into the shared tabs</div>';
-    savedToday.forEach(function(s){
-      var signed=s.status==='complete'||s.status==='signed'||(s.form&&s.form.sig);
-      var ac=(s.form&&s.form.ac)||'';var col=_rzAcCol(ac);var etd=(s.form&&s.form.etd)||'';var idE=String(s.id).replace(/'/g,"\\'");
-      h+='<button class="btn btn-ghost" style="width:100%;text-align:left;font-size:12px;margin-bottom:5px;border-left:3px solid '+col+'" onclick="window.rezdyOpenLsTab(\''+idE+'\')">'+(signed?'✅ ':'○ ')+_rzEsc(String(ac).replace('ZK-',''))+(etd?' · ETD '+_rzEsc(etd):'')+'</button>';
     });
     h+='</div>';
   }

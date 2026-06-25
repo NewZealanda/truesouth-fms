@@ -259,11 +259,15 @@ function _rzBookingDetail(b){
   var srcH='<div style="'+_pan+'"><div style="'+sec+'">Source</div><span class="pill" style="background:var(--card);border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px">'+_rzEsc(_rzSourceLabel(b))+'</span></div>';
   // Self-drive numberplate(s) captured at check-in + a "done" tick once entered into the external system.
   var _plObj=(typeof _rzPlate==='function')?_rzPlate(_bdOrder):null;
+  var _plVal=(_plObj&&_plObj.plate)||'';
+  var _plDone=!!(_plObj&&_plObj.done);
+  var _plSelf=(typeof _rzManualSelfDrive==='function'&&_rzManualSelfDrive(_bdOrder))||((b.items||[]).some(function(it){return it.pickup&&typeof _rzIsSelfDrive==='function'&&_rzIsSelfDrive(it.pickup);}));
   var plH='';
-  if(_plObj&&_plObj.plate){
-    plH='<div style="'+_pan+(_plObj.done?'':';border-color:#3b82f6')+'"><div style="'+sec+'">🚗 Self-drive numberplate</div>'+
-      '<div style="font-size:15px;font-weight:800;color:var(--text1);letter-spacing:.06em">'+_rzEsc(_plObj.plate)+'</div>'+
-      '<label style="display:inline-flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer;font-size:12px;font-weight:700;color:'+(_plObj.done?'#4ade80':'#60a5fa')+'"><input type="checkbox" '+(_plObj.done?'checked':'')+' onchange="window.rezdyPlateToggleDone(\''+_bdOE+'\')" style="width:16px;height:16px;cursor:pointer">'+(_plObj.done?'Entered into system ✓':'Mark entered into system')+'</label></div>';
+  if(_plVal||_plSelf){
+    plH='<div style="'+_pan+((_plVal&&!_plDone)?';border-color:#3b82f6':'')+'"><div style="'+sec+'">🚗 Self-drive numberplate'+(_plSelf&&!_plVal?' — self-drive':'')+'</div>'+
+      '<input type="text" value="'+_rzEsc(_plVal)+'" onchange="window.rezdyPlateSet(\''+_bdOE+'\',this.value)" placeholder="e.g. ABC123 — comma-separate if more than one" style="width:100%;box-sizing:border-box;font-size:15px;font-weight:700;letter-spacing:.05em;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px">'+
+      (_plVal?'<label style="display:inline-flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer;font-size:12px;font-weight:700;color:'+(_plDone?'#4ade80':'#60a5fa')+'"><input type="checkbox" '+(_plDone?'checked':'')+' onchange="window.rezdyPlateToggleDone(\''+_bdOE+'\')" style="width:16px;height:16px;cursor:pointer">'+(_plDone?'Entered into system ✓':'Mark entered into system')+'</label>':'')+
+    '</div>';
   }
   return bubsH+'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start">'+
     '<div style="flex:1 1 300px;min-width:240px;display:flex;flex-direction:column;gap:8px">'+paxH+exH+'</div>'+

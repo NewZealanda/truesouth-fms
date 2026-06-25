@@ -948,6 +948,8 @@ function _rzBookingHasLunch(b){return _rzBookingLunches(b).length>0;}
 function _rzPlate(order){return (S._rzPlates||{})[String(order||'')]||null;}
 window.rezdyCheckinPlate=function(val){var d=S._rzCheckinDraft;if(d)d.plate=val;}; // no render — keep input focus
 window.rezdyPlateToggleDone=function(order){order=String(order||'');S._rzPlates=S._rzPlates||{};var p=S._rzPlates[order];if(!p||!p.plate)return;p.done=!p.done;if(window.pickupSave)window.pickupSave(true);render();};
+// Edit the numberplate directly from the booking dropdown (keeps the "entered" tick if just editing).
+window.rezdyPlateSet=function(order,val){order=String(order||'');val=String(val||'').trim();S._rzPlates=S._rzPlates||{};if(val){var ex=S._rzPlates[order];S._rzPlates[order]={plate:val,done:!!(ex&&ex.done)};}else delete S._rzPlates[order];if(window.pickupSave)window.pickupSave(true);render();};
 function _rzCheckinModal(){
   var d=S._rzCheckinDraft;if(!d)return '';
   var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===d.order;});

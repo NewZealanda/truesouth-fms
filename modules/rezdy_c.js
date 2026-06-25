@@ -917,9 +917,29 @@ function _rzRenderLoadsheets(){
     var _ed='';try{_ed=renderLoadsheet();}catch(e){_ed='<div class="card" style="color:var(--err-text)">Loadsheet error: '+_rzEsc(e.message)+'</div>';}
     return h+'<div id="flash-loadsheet">'+_ed+'</div>';
   }
+  // ── Saved loadsheets for this day — pinned to the TOP (like the maintenance work-orders list) ──
+  var openIds={};(S._rzLsTabs||[]).forEach(function(t){openIds[t.id]=1;});
+  var savedToday=(S.saved||[]).filter(function(s){return s.form&&s.form.date===S.rezdyDate&&s.status!=='deleted'&&!openIds[s.id];})
+    .sort(function(a,b){return String((a.form&&a.form.ac)||'').localeCompare(String((b.form&&b.form.ac)||''));});
+  if(savedToday.length){
+    h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:8px">📁 Saved loadsheets ('+savedToday.length+') — tap to open</div>';
+    savedToday.forEach(function(s){
+      var signed=s.status==='complete'||s.status==='signed'||(s.form&&s.form.sig);
+      var ac=(s.form&&s.form.ac)||'';var col=_rzAcCol(ac);var etd=(s.form&&s.form.etd)||'';var idE=String(s.id).replace(/'/g,"\\'");
+      h+='<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:9px;margin-bottom:7px">'+
+        '<span style="font-size:14px">'+(signed?'✅':'📄')+'</span>'+
+        '<div style="flex:1;min-width:0;cursor:pointer" onclick="window.rezdyOpenLsTab(\''+idE+'\')">'+
+          '<div style="font-size:14px;font-weight:800;color:'+col+'">'+_rzEsc(String(ac).replace('ZK-',''))+(etd?' <span style="font-size:11px;color:var(--text3);font-weight:600">· ETD '+_rzEsc(etd)+'</span>':'')+'</div>'+
+          '<div style="font-size:10px;color:var(--text3)">'+(signed?'Signed':'Unsigned')+' · saved</div>'+
+        '</div>'+
+        '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="window.rezdyOpenLsTab(\''+idE+'\')">Open</button>'+
+      '</div>';
+    });
+    h+='</div>';
+  }
   // ── List mode (no active tab) ──
   if(!tabs.length){
-    h+='<div class="card" style="text-align:center;padding:22px;color:var(--text3);font-size:13px">No open loadsheets for this day yet.<br>Create one from the <b>Seatmap</b>, start a blank above, or open a saved one below.</div>';
+    h+='<div class="card" style="text-align:center;padding:22px;color:var(--text3);font-size:13px">No open loadsheets for this day yet.<br>Create one from the <b>Seatmap</b>, start a blank above, or open a saved one from the list above.</div>';
   }else{
     h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:8px">Open tabs ('+tabs.length+')</div>';
     tabs.forEach(function(t){
@@ -935,18 +955,6 @@ function _rzRenderLoadsheets(){
         '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="window.rezdyOpenLsTab(\''+idE+'\')">Open</button>'+
         '<button onclick="window.rezdyLsClosePrompt(\''+idE+'\')" title="Close…" style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:0 2px">✕</button>'+
       '</div>';
-    });
-    h+='</div>';
-  }
-  // Saved loadsheets for this date that aren't currently open.
-  var openIds={};(S._rzLsTabs||[]).forEach(function(t){openIds[t.id]=1;});
-  var savedToday=(S.saved||[]).filter(function(s){return s.form&&s.form.date===S.rezdyDate&&s.status!=='deleted'&&!openIds[s.id];});
-  if(savedToday.length){
-    h+='<div class="card"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-bottom:8px">Saved this day — tap to open into the shared tabs</div>';
-    savedToday.forEach(function(s){
-      var signed=s.status==='complete'||s.status==='signed'||(s.form&&s.form.sig);
-      var ac=(s.form&&s.form.ac)||'';var col=_rzAcCol(ac);var etd=(s.form&&s.form.etd)||'';var idE=String(s.id).replace(/'/g,"\\'");
-      h+='<button class="btn btn-ghost" style="width:100%;text-align:left;font-size:12px;margin-bottom:5px;border-left:3px solid '+col+'" onclick="window.rezdyOpenLsTab(\''+idE+'\')">'+(signed?'✅ ':'○ ')+_rzEsc(String(ac).replace('ZK-',''))+(etd?' · ETD '+_rzEsc(etd):'')+'</button>';
     });
     h+='</div>';
   }
