@@ -509,6 +509,16 @@ function _rzPkTimeVal(p){if(!p||!p.pickupTime)return 99999;var m=/^(\d{2})(\d{2}
 // capacity then flowing into Van 2, then 3 — never overloading a van.
 // Hilton sits the opposite direction, so its pickups always get their own vehicle.
 function _rzIsHilton(loc){return /hilton/i.test(String(loc||''));}
+// Append a pickup id to a Taxi list (overflow bucket, index ≥ fleet size, 11 seats per departure).
+function _rzPushTaxi(vans,pickups,id,dep){
+  var nOwned=_rzVehicles().length;
+  var pax=function(x){var p=_rzPickupById(pickups,x);return p?(p.pax||0):0;};
+  for(var tv=nOwned;tv<vans.length;tv++){
+    var tload=0;(vans[tv]||[]).forEach(function(x){var p=_rzPickupById(pickups,x);if(p&&(p.depart||'—')===dep)tload+=pax(x);});
+    if(tload+pax(id)<=11){vans[tv].push(id);return;}
+  }
+  vans.push([id]);
+}
 function _rzAutoVans(pickups){
   pickups=(pickups||[]).filter(function(p){return !p.selfDrive;}); // self-drive never goes in a van
   var N=_rzVehicles().length;
@@ -518,15 +528,23 @@ function _rzAutoVans(pickups){
   // PER DEPARTURE (a van parked for the 0800 run can still drive 1200). Hilton gets its own vehicle.
   const byDep={};pickups.forEach(function(p){(byDep[p.depart||'—']=byDep[p.depart||'—']||[]).push(p);});
   Object.keys(byDep).sort().forEach(function(dep){
-    var act=[];for(let i=0;i<N;i++)if(!_rzVanParked(i,dep))act.push(i);if(!act.length)act=[0];
+    var act=[];for(let i=0;i<N;i++)if(!_rzVanParked(i,dep))act.push(i);
     const grp=byDep[dep];
     const hilton=grp.filter(function(p){return _rzIsHilton(p.location);}).sort(byTime);
     const others=grp.filter(function(p){return !_rzIsHilton(p.location);}).sort(byTime);
+    if(!act.length){
+      // No vehicle assigned to this run → it's a TAXI list (overflow buckets). Operator drops a van
+      // onto it to convert, or Auto-assign activates vehicles.
+      others.concat(hilton).forEach(function(p){_rzPushTaxi(vans,pickups,p.id,dep);});
+      return;
+    }
     const load=[];for(let i=0;i<N;i++)load.push(0);
     let ai=0; // pointer into this departure's active-vehicle list
     const place=function(p){
       var vi=act[ai];
       if(load[vi]>0 && load[vi]+p.pax>_rzVehSeats(vi) && ai<act.length-1){ai++;vi=act[ai];}
+      // if the last active vehicle is full too, spill to a Taxi list rather than overload silently
+      if(ai===act.length-1 && load[vi]>0 && load[vi]+p.pax>_rzVehSeats(vi)){_rzPushTaxi(vans,pickups,p.id,dep);return;}
       vans[vi].push(p.id);load[vi]+=p.pax;
     };
     others.forEach(place);
@@ -548,13 +566,19 @@ function _rzEnsureVans(){
   var _faCache={};
   function _firstActiveVan(dep){if(_faCache[dep]!=null)return _faCache[dep];var fa=-1,n=_rzVehicles().length;for(var i=0;i<n;i++){if(!_rzVanParked(i,dep)){fa=i;break;}}_faCache[dep]=fa;return fa;}
   if(!valid){
+    // DEFAULT for a fresh day: PARK every vehicle for every departure — each run starts as a Taxi
+    // list, and the operator adds vehicles as required (drag a van onto a list, or Auto-assign).
+    var _deps0={};pickups.forEach(function(p){if(!p.selfDrive)_deps0[p.depart||'—']=1;});
+    S._pickupSpare=S._pickupSpare||{};
+    Object.keys(_deps0).forEach(function(dep){for(var vi=0;vi<_rzVehicles().length;vi++)S._pickupSpare[_pkKey(vi,dep)]=1;});
     S._pickupVans=_rzAutoVans(pickups);
   }else{
-    // keep saved placement, drop stale + self-drive ids, append any new ids to their departure's first active van
+    // keep saved placement, drop stale + self-drive ids, append any new ids to their departure's first
+    // active van — or to a Taxi list when that run has no vehicle assigned (all parked).
     const sd={};pickups.forEach(function(p){if(p.selfDrive)sd[p.id]=1;});
     const placed={};
     S._pickupVans=vans.map(function(v){return v.filter(function(id){if(placed[id]||sd[id]||ids.indexOf(id)<0)return false;placed[id]=1;return true;});});
-    ids.forEach(function(id){if(!placed[id]&&!sd[id]){var dep=depOf[id]||'—';var fa=_firstActiveVan(dep);if(fa<0)fa=0;S._pickupVans[fa].push(id);}});
+    ids.forEach(function(id){if(!placed[id]&&!sd[id]){var dep=depOf[id]||'—';var fa=_firstActiveVan(dep);if(fa<0)_rzPushTaxi(S._pickupVans,pickups,id,dep);else S._pickupVans[fa].push(id);}});
   }
   // Move any pickup whose van is parked FOR ITS departure into that departure's first active van.
   S._pickupVans.forEach(function(vanIds,vi){
@@ -562,7 +586,7 @@ function _rzEnsureVans(){
     vanIds.forEach(function(id){var dep=depOf[id];if(dep!=null&&_rzVanParked(vi,dep))move.push(id);else keep.push(id);});
     if(move.length){
       S._pickupVans[vi]=keep;
-      move.forEach(function(id){var dep=depOf[id]||'—';var fa=_firstActiveVan(dep);if(fa>=0&&fa!==vi&&S._pickupVans[fa])S._pickupVans[fa].push(id);else S._pickupVans[vi].push(id);});
+      move.forEach(function(id){var dep=depOf[id]||'—';var fa=_firstActiveVan(dep);if(fa>=0&&fa!==vi&&S._pickupVans[fa])S._pickupVans[fa].push(id);else if(fa<0)_rzPushTaxi(S._pickupVans,pickups,id,dep);else S._pickupVans[vi].push(id);});
     }
   });
   // Drop any empty TRAILING Taxi vans (a converted/emptied overflow van shouldn't linger).

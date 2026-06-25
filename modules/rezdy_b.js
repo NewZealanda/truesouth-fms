@@ -459,7 +459,7 @@ function _rzRenderPickups(){
   // Every change (move, reorder, driver, park) auto-saves immediately — no Save button needed.
   let timeBar='<div class="card" style="padding:10px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700">Departure</div>'+
     '<div style="display:flex;gap:6px;flex-shrink:0">'+
-      '<button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;font-weight:700" onclick="window.pickupAutoAllocate()" title="Re-allocate every van automatically (saves)">↺ Auto-allocate</button>'+
+      '<button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;font-weight:700;border-color:rgba(124,58,237,.5);color:#c4b5fd" onclick="window.pickupAutoAssign()" title="Activate vehicles + assign drivers automatically; overflow stays a taxi list">⚡ Auto-assign</button>'+
     '</div></div><div style="display:flex;flex-wrap:wrap;gap:6px">';
   var _ordJs=encodeURIComponent(JSON.stringify(times.slice()));
   times.forEach(function(t,ti){
@@ -841,6 +841,44 @@ window.pickupAutoAllocate=function(){
   toast('Vans auto-allocated','ok');
   render();
 };
+// Auto-assign: activate vehicles to cover every run, park the ones left empty, distribute pickups,
+// and assign available drivers. Anything that doesn't fit a vehicle stays a Taxi list.
+window.pickupAutoAssign=function(){
+  var pickups=_rzPickups();
+  var depOf={};pickups.forEach(function(p){depOf[p.id]=(p.depart||'—');});
+  var deps={};pickups.forEach(function(p){if(!p.selfDrive)deps[p.depart||'—']=1;});
+  var nOwned=_rzVehicles().length;
+  S._pickupSpare={};                                  // un-park everything so the allocator can use all vehicles
+  S._pickupVans=_rzAutoVans(pickups);                 // smart distribution across all vehicles (overflow → taxi)
+  // Re-park any vehicle that ended up empty for a given departure (so it shows as spare, not an empty card).
+  S._pickupSpare={};
+  Object.keys(deps).forEach(function(dep){
+    for(var vi=0;vi<nOwned;vi++){
+      var has=(S._pickupVans[vi]||[]).some(function(id){return depOf[id]===dep;});
+      if(!has)S._pickupSpare[_pkKey(vi,dep)]=1;
+    }
+  });
+  _rzAutoAssignDrivers(pickups,depOf,deps);
+  if(window.pickupSave)window.pickupSave(true);
+  toast('Auto-assigned vehicles + drivers','ok');
+  render();
+};
+// Round-robin the day's available drivers onto each departure's ACTIVE vehicles (taxis stay driverless).
+function _rzAutoAssignDrivers(pickups,depOf,deps){
+  var avail=(typeof _rzAvailableDrivers==='function')?_rzAvailableDrivers().slice():[];
+  if(!avail.length)return;
+  var nOwned=_rzVehicles().length;
+  S._pickupDrivers=S._pickupDrivers||{};
+  Object.keys(deps).forEach(function(dep){
+    var pool=avail.slice();
+    for(var vi=0;vi<nOwned;vi++){
+      if(_rzVanParked(vi,dep))continue;
+      var has=(S._pickupVans[vi]||[]).some(function(id){return depOf[id]===dep;});
+      if(!has)continue;
+      if(!_rzVanDriver(vi,dep)&&pool.length)S._pickupDrivers[_pkKey(vi,dep)]=pool.shift();
+    }
+  });
+}
 
 window.pickupToggleCollected=function(id){
   if(!S._pickupCollected)S._pickupCollected={};
