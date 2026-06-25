@@ -1111,17 +1111,8 @@ window.forceUploadAll=async function(){
   S.uploadProgress=null;
   toast('Drive upload: '+ok+' uploaded'+(fail?' ('+fail+' failed)':''),'ok');render();
 };
-(function(){
-  function msTo1159(){var n=new Date(),t=new Date(n);t.setHours(23,59,0,0);if(t<=n)t.setDate(t.getDate()+1);return t-n;}
-  function daily(){
-    if(S.gdriveEnabled&&S.gdriveClientId){
-      var last=lsGet('ts_drive_last_upload');
-      if(!last||new Date(last).toDateString()!==new Date().toDateString()){window.forceUploadAll&&window.forceUploadAll();}
-    }
-    setTimeout(daily,24*60*60*1000);
-  }
-  setTimeout(daily,msTo1159());
-})();
+// (Removed v26.43) The 11:59 PM daily auto-upload sweep + the Settings "Force Upload Now" button.
+// Loadsheets still upload on sign / via their own cloud icon; work orders via the WO ☁ Drive button.
 
 // ── MAINTENANCE MODULE ──
 // Seed data from spreadsheet import

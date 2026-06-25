@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.42';
+const APP_VER='v26.43';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -6176,51 +6176,45 @@ function renderAdminStatistics(){
 }
 function renderAdminGDrive(){
   const enabled=S.gdriveEnabled;
-  return `<div class="card"><div class="st">Google Drive PDF Upload</div>
+  if(!S._woFoldersLoaded){S._woFoldersLoaded=true;if(window.loadWoFolders)window.loadWoFolders();}
+  // ── 1. Google sign-in (shared by every Drive upload) ──
+  var oauth=`<div class="card"><div class="st">Google sign-in</div>
+    <div><label>Google OAuth Client ID</label>
+      <input class="fi" type="text" placeholder="xxxxxxx.apps.googleusercontent.com"
+        value="${S.gdriveClientId||''}" onblur="S.gdriveClientId=this.value;lsSet('gdrive_client_id',this.value)">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">Shared by all Drive uploads (loadsheets and work orders). From Google Cloud Console → APIs &amp; Services → Credentials; add your Netlify URL as an authorised origin.</div></div>
+  </div>`;
+  // ── 2. Loadsheets ──
+  var loadsheets=`<div class="card"><div class="st">Loadsheets</div>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:12px;background:var(--card2);border-radius:8px">
-      <div style="flex:1"><div style="font-weight:600;margin-bottom:2px">Upload to Google Drive</div>
+      <div style="flex:1"><div style="font-weight:600;margin-bottom:2px">Upload loadsheets to Google Drive</div>
         <div style="font-size:12px;color:var(--text3)">Toggle off for testing</div></div>
       <div onclick="S.gdriveEnabled=!S.gdriveEnabled;lsSet('gdrive_enabled',S.gdriveEnabled);render()"
         style="width:48px;height:26px;border-radius:13px;background:${enabled?'#7B9EC6':'#334155'};cursor:pointer;position:relative;transition:background .2s">
         <div style="width:22px;height:22px;border-radius:50%;background:#fff;position:absolute;top:2px;left:${enabled?'24px':'2px'};transition:left .2s"></div>
       </div>
     </div>
-    <div style="margin-bottom:12px"><label>Google OAuth Client ID</label>
-      <input class="fi" type="text" placeholder="xxxxxxx.apps.googleusercontent.com"
-        value="${S.gdriveClientId||''}" onblur="S.gdriveClientId=this.value;lsSet('gdrive_client_id',this.value)">
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">From Google Cloud Console → APIs &amp; Services → Credentials. Add your Netlify URL as an authorised origin.</div></div>
-    <div style="margin-bottom:12px"><label>Existing Folder ID <span style="font-weight:400;color:var(--text3);font-size:10px">(recommended — paste from Drive URL)</span></label>
+    <div style="margin-bottom:12px"><label>Loadsheets folder ID <span style="font-weight:400;color:var(--text3);font-size:10px">(paste from Drive URL)</span></label>
       <input class="fi" type="text" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs"
         value="${S.gdriveFolderId||''}" onblur="S.gdriveFolderId=this.value;lsSet('gdrive_folder_id',this.value)">
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">Copy the folder ID from the Drive URL after <strong>/folders/</strong>.</div></div>
-
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">Open the Drive folder and copy the ID from the URL after <strong>/folders/</strong>.</div></div>
     <div style="padding:10px 14px;background:${enabled?'var(--ok-bg)':'var(--warn-bg)'};border:1px solid ${enabled?'var(--ok-border)':'var(--warn-border)'};border-radius:8px;color:${enabled?'var(--ok-text)':'var(--warn-text)'};font-size:13px;font-weight:600">
-      ${enabled?'✓ Drive upload ENABLED — signed loadsheets will upload automatically':'⚠ Testing mode — loadsheets save to Supabase only, not Drive'}
+      ${enabled?'✓ Drive upload ENABLED for loadsheets':'⚠ Testing mode — loadsheets save to Supabase only, not Drive'}
     </div>
-    <div style="margin-top:12px;padding:12px 14px;background:var(--card2);border-radius:8px;border:1px solid var(--border)">
-      <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text2)">Scheduled &amp; Manual Upload</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">Signed loadsheets upload automatically at <strong style="color:var(--text)">11:59 PM</strong> daily. Only loadsheets not yet uploaded are sent.</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button onclick="window.forceUploadAll()" style="padding:8px 16px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">⬆ Force Upload Now</button>
-        <span style="font-size:11px;color:var(--text3)">${S.driveLastUpload?'Last: '+S.driveLastUpload:S.driveQueue&&S.driveQueue.length?S.driveQueue.length+' queued':''}</span>
-      </div>
-      ${S.uploadProgress?`<div style="margin-top:8px;font-size:12px;color:var(--ok-text)">${S.uploadProgress}</div>`:''}
-    </div>
-    ${(function(){if(!S._woFoldersLoaded){S._woFoldersLoaded=true;if(window.loadWoFolders)window.loadWoFolders();}
-      var acs=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(a){return S.aircraft&&S.aircraft[a];});
-      var wf=S.gdriveWoFolders||{};
-      var rows=acs.map(function(a){var id=(wf[a]||'').trim();var c=(typeof AC_COL!=='undefined'&&AC_COL[a])||'#888';var nm=(typeof acDisp==='function')?acDisp(a):a;
-        return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'+
-          '<span style="flex-shrink:0;width:54px;font-size:12px;font-weight:800;color:'+c+'">'+nm+'</span>'+
-          '<input class="fi" type="text" placeholder="Paste Drive folder link or ID" value="'+(id?id.replace(/"/g,'&quot;'):'')+'" onblur="window.mfSetWoFolder(\''+a+'\',this.value)" style="flex:1;font-size:12px">'+
-          (id?'<span title="Folder set" style="flex-shrink:0;color:#22c55e;font-size:14px">✓</span>':'<span title="Not set" style="flex-shrink:0;color:#f59e0b;font-size:12px">—</span>')+
-        '</div>';}).join('');
-      return '<div style="margin-top:12px;padding:12px 14px;background:var(--card2);border-radius:8px;border:1px solid var(--border)">'+
-        '<div style="font-size:12px;font-weight:700;margin-bottom:4px;color:var(--text2)">Work Order folders <span style="font-weight:400;color:var(--text3)">(separate from loadsheets)</span></div>'+
-        '<div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">Each aircraft’s work orders upload straight into its own Drive folder. In Google Drive open the folder, copy the URL from the address bar (it looks like <strong>drive.google.com/drive/folders/<em>1AbCd…</em></strong>) and paste it below — the ID is pulled out automatically. Shared-drive folders work too. Synced across devices.</div>'+
-        rows+'</div>';
-    })()}
   </div>`;
+  // ── 3. Work Order folders (per aircraft, separate from loadsheets) ──
+  var acs=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(a){return S.aircraft&&S.aircraft[a];});
+  var wf=S.gdriveWoFolders||{};
+  var rows=acs.map(function(a){var id=(wf[a]||'').trim();var c=(typeof AC_COL!=='undefined'&&AC_COL[a])||'#888';var nm=(typeof acDisp==='function')?acDisp(a):a;
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'+
+      '<span style="flex-shrink:0;width:54px;font-size:12px;font-weight:800;color:'+c+'">'+nm+'</span>'+
+      '<input class="fi" type="text" placeholder="Paste Drive folder link or ID" value="'+(id?id.replace(/"/g,'&quot;'):'')+'" onblur="window.mfSetWoFolder(\''+a+'\',this.value)" style="flex:1;font-size:12px">'+
+      (id?'<span title="Folder set" style="flex-shrink:0;color:#22c55e;font-size:14px">✓</span>':'<span title="Not set" style="flex-shrink:0;color:#f59e0b;font-size:12px">—</span>')+
+    '</div>';}).join('');
+  var workorders='<div class="card"><div class="st">Work Order folders</div>'+
+    '<div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6">Each aircraft’s work orders upload straight into its own Drive folder (separate from loadsheets). In Google Drive open the folder, copy the URL from the address bar — it looks like <strong>drive.google.com/drive/folders/<em>1AbCd…</em></strong> — and paste it below. The ID is pulled out automatically. Shared-drive folders work too. Synced across devices.</div>'+
+    rows+'</div>';
+  return oauth+loadsheets+workorders;
 }
 function renderAdminPeople(){
   const isAdmin=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
@@ -8886,17 +8880,8 @@ window.forceUploadAll=async function(){
   S.uploadProgress=null;
   toast('Drive upload: '+ok+' uploaded'+(fail?' ('+fail+' failed)':''),'ok');render();
 };
-(function(){
-  function msTo1159(){var n=new Date(),t=new Date(n);t.setHours(23,59,0,0);if(t<=n)t.setDate(t.getDate()+1);return t-n;}
-  function daily(){
-    if(S.gdriveEnabled&&S.gdriveClientId){
-      var last=lsGet('ts_drive_last_upload');
-      if(!last||new Date(last).toDateString()!==new Date().toDateString()){window.forceUploadAll&&window.forceUploadAll();}
-    }
-    setTimeout(daily,24*60*60*1000);
-  }
-  setTimeout(daily,msTo1159());
-})();
+// (Removed v26.43) The 11:59 PM daily auto-upload sweep + the Settings "Force Upload Now" button.
+// Loadsheets still upload on sign / via their own cloud icon; work orders via the WO ☁ Drive button.
 
 // ── MAINTENANCE MODULE ──
 // Seed data from spreadsheet import
