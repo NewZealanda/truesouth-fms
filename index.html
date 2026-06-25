@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.56';
+const APP_VER='v26.57';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16781,10 +16781,11 @@ function _rzReserveCoSeat(sm,acId){
   var pid=sm[1];delete sm[1];if(free!=null)sm[free]=pid; // else pid becomes unseated overflow
 }
 function _rzManCap(id){var a=S.aircraft[id];return (a&&a.seats)?paxSeatIdxs(id,!!(S._rzManCoPic||{})[id]).length:0;}
-// Allocate this departure's unallocated passengers to aircraft using the same rules as the main
-// seatmap allocator: a booking-noted aircraft (acHint) acts like a pin; the rest keep their
-// booking group together, heaviest first, and flow to the aircraft with the most spare capacity
-// (load-balanced across the fleet). Each aircraft is then seated by the shared W&B engine.
+// Allocate this departure's unallocated passengers to aircraft. A booking-noted aircraft (acHint)
+// acts like a pin; the rest are packed by booking group, keeping each group on as FEW aircraft as
+// possible (split a big group only as far as capacity forces). Largest groups are placed first
+// (best-fit when they fit whole; fill the biggest gap first when they must split). Each aircraft is
+// then seated by the shared W&B engine.
 window.rezdyManAllocate=function(){
   var dep=_rzManSelDep();if(!dep||dep==='—'){var ds=_rzManDeps();dep=ds[0];}
   var pax=S._rzManPax||[];
@@ -16798,14 +16799,30 @@ window.rezdyManAllocate=function(){
   // 1) Honour the booking-noted aircraft when it still has room (a pin).
   var unpinned=[];
   unalloc.forEach(function(p){var hint=(p.acHint&&fleet.indexOf(p.acHint)>=0)?p.acHint:null;if(hint&&free(hint)>0)place(p,hint);else unpinned.push(p);});
-  // 2) Keep groups together, heaviest first.
-  unpinned.sort(function(a,b){if((a.group||'')!==(b.group||''))return String(a.group||'').localeCompare(String(b.group||''));return (parseFloat(b.weight||0))-(parseFloat(a.weight||0));});
-  // 3) Each flows to the aircraft with the MOST spare capacity.
-  unpinned.forEach(function(p){var best=fleet.filter(function(id){return free(id)>0;}).sort(function(a,b){return free(b)-free(a);})[0];if(best)place(p,best);else if(typeof toast==='function')toast('No seat left for '+(p.name||'a passenger')+' — add an aircraft.','warn');});
-  // 4) Seat each aircraft (groups together, heavy-front for CoG).
+  // 2) Build booking groups from the rest (solos = size-1 groups).
+  var gMap={};unpinned.forEach(function(p){var k=(p.group&&String(p.group).trim())||('solo:'+p.id);(gMap[k]||(gMap[k]={pax:[]})).pax.push(p);});
+  var groups=Object.keys(gMap).map(function(k){var g=gMap[k];g.size=g.pax.length;g.w=g.pax.reduce(function(s,p){return s+(parseFloat(p.weight)||0);},0);return g;});
+  // 3) Largest groups first (claim contiguous space before small groups fragment it); heaviest as tiebreak.
+  groups.sort(function(a,b){return (b.size-a.size)||(b.w-a.w);});
+  var overflow=0;
+  groups.forEach(function(g){
+    var members=g.pax.slice();
+    // a) whole group fits on ONE aircraft → best-fit (smallest free space that still holds it all,
+    //    so a bigger group can still claim a bigger gap). Keeps the group together.
+    var fit=fleet.filter(function(id){return free(id)>=members.length;}).sort(function(a,b){return free(a)-free(b);})[0];
+    if(fit){members.forEach(function(p){place(p,fit);});return;}
+    // b) must split → fill the aircraft with the MOST room first, then the remainder (fewest aircraft).
+    while(members.length){
+      var best=fleet.filter(function(id){return free(id)>0;}).sort(function(a,b){return free(b)-free(a);})[0];
+      if(!best){overflow+=members.length;break;}
+      var n=Math.min(free(best),members.length);for(var i=0;i<n;i++)place(members.shift(),best);
+    }
+  });
+  // 4) Seat each aircraft (groups together, pair-aligned, CoG, infant rules).
   fleet.forEach(function(id){window.rezdyManReseat(dep,id);});
   _rzManSave();render();
-  if(typeof toast==='function')toast('Allocated '+unalloc.length+' to aircraft','ok');
+  if(overflow&&typeof toast==='function')toast('Allocated '+(unalloc.length-overflow)+' — '+overflow+' couldn\'t fit, add an aircraft.','warn');
+  else if(typeof toast==='function')toast('Allocated '+unalloc.length+' to aircraft','ok');
 };
 // Drag a passenger bubble onto a specific seat. PIC seat (0) is locked. If the target seat is
 // taken by someone in the SAME aircraft, the two swap; otherwise place and clear the old seat.
