@@ -391,8 +391,8 @@ function _rzRenderPickups(){
   let driversBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:8px">Drivers <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(drag onto a van)</span></div>';
   driversBar+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
   displayDrivers.forEach(function(nm){
-    var isAsg=assigned.indexOf(nm)>=0;var isExtra=_extra.indexOf(nm)>=0; // manually added / called in (the call-in roster stamp also lands them in _avail — still removable)
-    driversBar+='<div draggable="true" ondragstart="window.pickupDriverDragStart(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\',event)" title="Drag onto a van to assign" style="display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:16px;background:'+(isAsg?'rgba(74,222,128,.12)':'rgba(124,58,237,.12)')+';border:1px solid '+(isAsg?'rgba(74,222,128,.5)':'rgba(124,58,237,.45)')+';cursor:grab;font-size:12px;font-weight:700;color:'+(isAsg?'#4ade80':'#c4b5fd')+'">'+(isAsg?'✓ ':'👤 ')+_rzEsc(nm)+(isExtra&&!isAsg?'<span onclick="event.stopPropagation();window.pickupRemoveExtraDriver(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\')" style="cursor:pointer;opacity:.55;margin-left:2px" title="Remove driver / un-call-in (reverts their roster day if they were called in)">✕</span>':'')+'</div>';
+    var isAsg=assigned.indexOf(nm)>=0;var isExtra=_extra.indexOf(nm)>=0; // manually added / called in — show the ✕ even while assigned to a van (removing clears the van too)
+    driversBar+='<div draggable="true" ondragstart="window.pickupDriverDragStart(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\',event)" title="Drag onto a van to assign" style="display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:16px;background:'+(isAsg?'rgba(74,222,128,.12)':'rgba(124,58,237,.12)')+';border:1px solid '+(isAsg?'rgba(74,222,128,.5)':'rgba(124,58,237,.45)')+';cursor:grab;font-size:12px;font-weight:700;color:'+(isAsg?'#4ade80':'#c4b5fd')+'">'+(isAsg?'✓ ':'👤 ')+_rzEsc(nm)+(isExtra?'<span onclick="event.stopPropagation();window.pickupRemoveExtraDriver(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\')" style="cursor:pointer;opacity:.55;margin-left:2px" title="Remove driver / un-call-in — clears them off any van and reverts their roster day">✕</span>':'')+'</div>';
   });
   driversBar+='<button onclick="window.pickupToggleDriverPicker()" title="Add another driver" style="width:30px;height:30px;border-radius:16px;border:1px dashed var(--border2);background:'+(S._pickupDriverPickerOpen?'rgba(124,58,237,.15)':'transparent')+';color:var(--text2);font-size:18px;cursor:pointer;line-height:1;display:inline-flex;align-items:center;justify-content:center">'+(S._pickupDriverPickerOpen?'×':'+')+'</button>';
   driversBar+='</div>';
@@ -1044,7 +1044,17 @@ function _rzDriverPickRows(onPickJs){
   return h;
 }
 window.pickupAddDriver=function(name){if(!name)return;S._pickupExtraDrivers=S._pickupExtraDrivers||[];if(S._pickupExtraDrivers.indexOf(name)<0)S._pickupExtraDrivers.push(name);S._pickupDriverPickerOpen=false;_rzDriverCalledInSync(name);window.pickupSave(true);render();};
-window.pickupRemoveExtraDriver=function(name){S._pickupExtraDrivers=(S._pickupExtraDrivers||[]).filter(function(n){return n!==name;});_rzDriverCalledInSync(name);window.pickupSave(true);render();};
+window.pickupRemoveExtraDriver=function(name){
+  name=(name||'').trim();if(!name)return;
+  // If they're currently driving any van(s), clear those assignments (and their acks) too — so a
+  // called-in driver can be removed in one tap without first hunting down which van they're on.
+  var keys=[];Object.keys(S._pickupDrivers||{}).forEach(function(k){if(String(S._pickupDrivers[k]||'').trim()===name)keys.push(k);});
+  if(keys.length&&typeof confirm==='function'&&!confirm(name+' is assigned to '+keys.length+' van'+(keys.length===1?'':'s')+'. Remove them and clear those van assignment'+(keys.length===1?'':'s')+'?'))return;
+  keys.forEach(function(k){delete S._pickupDrivers[k];if(S._pickupAck&&S._pickupAck[k]!=null)delete S._pickupAck[k];});
+  S._pickupExtraDrivers=(S._pickupExtraDrivers||[]).filter(function(n){return n!==name;});
+  _rzDriverCalledInSync(name);   // reverts their 'called_in' roster day once they're no longer driving anything
+  window.pickupSave(true);render();
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  (2b) MY PICKUPS — mobile-first run sheet for the signed-in driver
