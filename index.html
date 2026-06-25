@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.50';
+const APP_VER='v26.51';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -17866,6 +17866,7 @@ function _rzPilotMovements(){
   var byPilot={};function ensure(p){return byPilot[p]||(byPilot[p]=[]);}
   Object.keys(fBy).forEach(function(k){
     var pilot=man[k]||auto[k];if(!pilot)return;var f=fBy[k];var mb=blocksById[k];
+    var _pForced=(!!man[k]&&!!auto[k]&&man[k]!==auto[k]),_pAutoWas=auto[k];   // manually forced off the optimiser's pick
     if(mb){
       var lbl=(mb.aircraft&&mb.aircraft!=='__misc__'&&mb.aircraft!=='__pilot__'?String(mb.aircraft).replace(/^ZK-?/,'')+' ':'')+(mb.label||mb.ftype||'Block');
       ensure(pilot).push({start:mb.start,end:mb.end,label:lbl,kind:'manual',ico:'🔧',ac:mb.aircraft});
@@ -17876,7 +17877,7 @@ function _rzPilotMovements(){
     } else {
       var parts=String(k).split('|'),ac=parts[0],prod=parts[2]||'';
       var dest=(typeof _rzGroupDest==='function')?_rzGroupDest(prod):'';
-      ensure(pilot).push({start:_rzMinToHHMM(f.depMin),end:_rzMinToHHMM(f.endMin),label:(ac&&ac!=='__unalloc__'?String(ac).replace(/^ZK-?/,''):'?')+(dest?' '+dest:''),kind:'flight',ico:'✈',ac:ac});
+      ensure(pilot).push({start:_rzMinToHHMM(f.depMin),end:_rzMinToHHMM(f.endMin),label:(ac&&ac!=='__unalloc__'?String(ac).replace(/^ZK-?/,''):'?')+(dest?' '+dest:''),kind:'flight',ico:'✈',ac:ac,forced:_pForced,autoWas:_pAutoWas});
     }
   });
   // Pilot meetings (__pilot__ single-pilot) + multi-attendee meetings (misc): copy into each PILOT
@@ -17928,8 +17929,9 @@ function _rzRenderPilotMovements(){
       var n=Math.max(1,m._cols||1),idx=m._idx||0,OFF=12;
       var posS='left:'+(2+idx*OFF)+'px;width:calc(100% - '+((n-1)*OFF+4)+'px);z-index:'+(idx+1)+';';
       var clk=(m.kind==='meeting'&&m.id)?('onclick="window.schedEditBlock(\''+_rzEsc(String(m.id)).replace(/'/g,"\\'")+'\')" '):'';
+      var _fIcon=m.forced?'<span title="'+_rzEsc('Pilot forced by user'+(m.autoWas?' — optimal '+String(m.autoWas):''))+'" style="cursor:help;color:#f59e0b">✋</span> ':'';
       blocksH+='<div '+clk+'style="position:absolute;'+posS+'top:'+top+'px;height:'+ht+'px;background:'+col+'22;border:1px '+(m.kind==='drive'?'dashed':'solid')+' '+col+';border-left:3px solid '+col+';border-radius:6px;padding:'+(compact?'1px 5px':'2px 6px')+';overflow:hidden;box-sizing:border-box;line-height:1.2'+(clk?';cursor:pointer':'')+'">'+
-        '<div style="font-weight:800;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(m.ico||'')+' '+_rzEsc(m.label)+'</div>'+
+        '<div style="font-weight:800;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_fIcon+(m.ico||'')+' '+_rzEsc(m.label)+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rzEsc(m.start+'–'+m.end)+'</div>')+
       '</div>';
     });
