@@ -444,6 +444,42 @@ function _notifFmtMsg(msg){
     return '<span style="display:inline-block;padding:1px 8px;border-radius:20px;background:'+col+'22;border:1px solid '+col+'66;color:'+col+';font-weight:700;font-size:11px;line-height:1.5">'+code+'</span>';
   });
 }
+// ── Notification deep-linking ──
+// Every notification should click through to the relevant part of the app. _notifTargetLabel gives
+// the destination chip; notifGo marks it read, closes the panel, and navigates there.
+function _notifTargetLabel(n){
+  switch((n&&n.type)||''){
+    case 'pickup_assigned': return 'My Pickups';
+    case 'noshow':          return 'Bookings';
+    case 'loadsheet_pic':   return 'Loadsheet';
+    case 'maintenance':     return 'Maintenance';
+    case 'leave_submitted': return 'Approvals';
+    case 'scheduling':      return 'Calendar';
+    default: return ((n&&n.type)||'').indexOf('leave_')===0 ? 'My Leave' : '';
+  }
+}
+function _notifNavigate(n){
+  var t=(n&&n.type)||'';
+  try{
+    if(t==='loadsheet_pic'&&n.reference_id&&typeof window.openLoadsheetFromNotif==='function'){window.openLoadsheetFromNotif(n.reference_id);return;}
+    if(t==='maintenance'&&typeof window.openMaintFromNotif==='function'){window.openMaintFromNotif();return;}
+    if(t==='pickup_assigned'){S.section='ground';S._groundSecTab='mypickups';render();return;}
+    if(t==='noshow'){S.section='operations';S.tab='bookings';S.activeTabId=null;S._newLsTab=false;render();return;}
+    if(t==='leave_submitted'){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='approvals';render();return;}
+    if(t.indexOf('leave_')===0){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='my';render();return;}
+    if(t==='scheduling'){S.section='calendar';S.rezdyTab='schedule';render();return;}
+  }catch(e){}
+  render();
+}
+window.notifGo=function(id){
+  var n=(S._notifications||[]).find(function(x){return x.id===id;});
+  if(!n)return;
+  if(typeof window.markNotifRead==='function')window.markNotifRead(id);
+  S._notifOpen=false;
+  if(!_notifTargetLabel(n)){render();return;}                 // text-only notification → just dismiss the panel
+  if(typeof window._navAway==='function')window._navAway(function(){_notifNavigate(n);});
+  else _notifNavigate(n);
+};
 // ── Notification panel ──
 function renderNotificationPanel(){
   var notifs=S._notifications||[];
@@ -468,20 +504,14 @@ function renderNotificationPanel(){
     h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No notifications</div>';
   } else {
     notifs.forEach(function(n){
-      h+='<div style="padding:12px 16px;border-bottom:1px solid var(--border);background:'+(n.read?'transparent':'rgba(124,58,237,.07)')+'">';
+      var tgt=_notifTargetLabel(n),clickable=!!tgt;
+      h+='<div '+(clickable?'onclick="window.notifGo(\''+n.id+'\')" ':'')+'style="padding:12px 16px;border-bottom:1px solid var(--border);background:'+(n.read?'transparent':'rgba(124,58,237,.07)')+(clickable?';cursor:pointer':'')+'">';
       if(!n.read){h+='<div style="width:6px;height:6px;border-radius:50%;background:#c084fc;display:inline-block;margin-right:6px;vertical-align:middle"></div>';}
       h+='<div style="font-size:12px;color:'+(n.read?'var(--text2)':'var(--text)')+';line-height:1.5;display:inline">'+_notifFmtMsg(n.message)+'</div>';
-      h+='<div style="font-size:10px;color:var(--text3);margin-top:4px">'+new Date(n.created_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</div>';
-      if(n.type==='leave_submitted'&&n.reference_id){
-        h+='<div><button tabindex="-1" onclick="window.markNotifRead(\''+n.id+'\');S.section=\'leave\';_lvInit();S._leave.tab=\'approvals\';S._notifOpen=false;render()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">View request →</button></div>';
-      }
-      if(n.type==='loadsheet_pic'&&n.reference_id){
-        h+='<div><button tabindex="-1" onclick="window.markNotifRead(\''+n.id+'\');window.openLoadsheetFromNotif(\''+n.reference_id+'\')" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">Open loadsheet →</button></div>';
-      }
-      if(n.type==='maintenance'){
-        h+='<div><button tabindex="-1" onclick="window.markNotifRead(\''+n.id+'\');window.openMaintFromNotif()" style="font-size:11px;color:#a78bfa;background:none;border:none;cursor:pointer;padding:0;margin-top:4px">Open maintenance →</button></div>';
-      }
-      h+='</div>';
+      h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:5px">';
+      h+='<span style="font-size:10px;color:var(--text3)">'+new Date(n.created_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</span>';
+      if(clickable)h+='<span style="font-size:11px;color:#a78bfa;font-weight:700;white-space:nowrap">'+tgt+' →</span>';
+      h+='</div></div>';
     });
     h+='<div style="padding:10px 16px;border-top:1px solid var(--border);text-align:center;position:sticky;bottom:0;background:var(--card)"><button tabindex="-1" onclick="window.clearAllNotifications()" style="font-size:12px;color:#f87171;background:none;border:none;cursor:pointer;padding:4px">🗑 Clear all notifications</button></div>';
   }
