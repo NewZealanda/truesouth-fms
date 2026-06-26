@@ -65,7 +65,7 @@ document.addEventListener('keydown',function(e){
     var _da=document.activeElement,_dt=_da&&_da.tagName;
     if(_dt==='INPUT'||_dt==='SELECT'||_dt==='TEXTAREA'||(_da&&_da.isContentEditable))return;
     if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
-    if(((S.section==='operations'&&(S.tab==='calendar'||S.tab==='bookings'||S.tab==='rseatmap'||S.tab==='rloadsheets'))||S.section==='ground')&&typeof window.rezdyShiftDate==='function'){
+    if(((S.section==='operations'&&(S.tab==='calendar'||S.tab==='bookings'||S.tab==='rseatmap'||S.tab==='rloadsheets'))||S.section==='ground'||S.section==='weather')&&typeof window.rezdyShiftDate==='function'){
       e.preventDefault();window.rezdyShiftDate(e.key==='ArrowRight'?1:-1);
     }
     return;

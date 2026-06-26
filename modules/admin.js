@@ -1482,7 +1482,7 @@ window.openAcLoadsheet=function(acId){generateLoadsheet(acId);};
 // copy each time. Signed/complete sheets are never matched here (they keep every copy).
 function _lsFlightKey(form){if(!form)return '';return String(form.ac||'')+'|'+String(form.date||'')+'|'+String(form.etd||form.dep||'');}
 function _lsFindActiveDraft(form){var fk=_lsFlightKey(form);if(!fk||fk==='||')return null;
-  return (S.saved||[]).find(function(s){return s&&s.status!=='complete'&&s.status!=='deleted'&&s.form&&_lsFlightKey(s.form)===fk;})||null;}
+  return (S.saved||[]).find(function(s){return s&&s.status!=='complete'&&s.status!=='deleted'&&s.form&&!s.form.sig&&_lsFlightKey(s.form)===fk;})||null;}   // also skip a signed-but-unsubmitted draft
 function generateLoadsheet(acId){
   // acId may be a duplicate-instance seat key (e.g. "ZK-SLA_2"); resolve specs/physical.
   const d=curDisp();const a=_acSpec(acId);if(!a)return;

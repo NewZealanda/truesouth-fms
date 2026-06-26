@@ -1290,7 +1290,7 @@ window.wxSubmit=function(status){
   if(typeof toast==='function')toast('Weather call recorded: '+_wxStatusLabel(status),status==='cancelled'?'warn':'ok');
   render();
 };
-window.wxClear=function(dep){if(S._rzWxCalls)delete S._rzWxCalls[String(dep)];S._wxOpen=null;if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();render();};
+window.wxClear=function(dep){if(S._rzWxCalls)delete S._rzWxCalls[String(dep)];S._wxOpen=null;if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();if(typeof auditLog==='function')auditLog('weather_call_clear',{dep:dep});render();};
 // Reminder check: 15 min before the deadline (deadline = depart − 1h), if no call yet, notify each PIC
 // of that departure ONCE. The "_notified" flag rides in the synced blob so other devices don't re-send.
 function _wxCheckReminders(){
@@ -1303,6 +1303,7 @@ function _wxCheckReminders(){
       var call=_wxCall(dep.time);if(call&&call.status)return;             // already called
       var deadline=dep.depMin-_wxLeadMin();var windowStart=deadline-_wxNotifyBeforeDeadlineMin();
       if(nowMin<windowStart||nowMin>deadline)return;                     // not in the 15-min reminder window
+      if(!(dep.pics||[]).length)return;                                  // no PIC allocated yet → don't burn the reminder flag
       S._rzWxCalls=S._rzWxCalls||{};var rec=S._rzWxCalls[dep.time]||{};
       if(rec._notified)return;                                          // already reminded (synced flag)
       rec._notified=true;S._rzWxCalls[dep.time]=rec;changed=true;
@@ -1322,14 +1323,16 @@ function _rzWxUserForPilot(code){
   if(!code)return null;code=String(code).trim();
   var crew=(S.crew||[]).find(function(c){return (c.code||'').toUpperCase()===code.toUpperCase();});
   var nm=(crew&&crew.n)||'';
-  return (S.users||[]).find(function(u){return (u.linkedCrew&&crew&&u.linkedCrew===crew.n)||(nm&&u.name===nm)||(u.name||'').toUpperCase()===code.toUpperCase();})||null;
+  var ln=function(s){return String(s||'').trim().toLowerCase();};
+  return (S.users||[]).find(function(u){return (u.linkedCrew&&crew&&ln(u.linkedCrew)===ln(crew.n))||(nm&&u.name===nm)||(u.name||'').toUpperCase()===code.toUpperCase();})||null;
 }
 try{setInterval(function(){try{_wxCheckReminders();}catch(e){}},60000);}catch(_e){}
 function _wxDayLabel(iso,baseDate){var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];try{var d=new Date(iso+'T00:00:00');var b=baseDate?new Date(baseDate+'T00:00:00'):new Date();var diff=Math.round((d-b)/86400000);if(diff===1)return 'Tomorrow';return days[d.getDay()]+' '+d.getDate();}catch(e){return iso;}}
 function _rzRenderWeatherCalls(){
   if(!S._schedBlocks){if(window.rezdyLoadSchedule)window.rezdyLoadSchedule();}
   var date=S.rezdyDate;var deps=_wxDepartures(date);
-  var h='<div class="card"><div class="st">Weather calls</div>'+
+  var h=((typeof _rzDateRow==='function')?_rzDateRow('weather'):'')+   // date-navigable like the rest of Operations (◁ ▷ Today)
+    '<div class="card"><div class="st">Weather calls</div>'+
     '<p style="font-size:12px;color:var(--text3);margin:0 0 8px">'+_rzEsc(_rzDowLabel(date))+' · a weather call is needed ~1h before each departure (an 0800 flight by 0700). Any pilot can record one.</p>';
   if(!deps.length){h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No departures scheduled for this day.</div></div>';return h;}
   var nd=_wxNextDays(date);var draft=S._wxDraft||{};
