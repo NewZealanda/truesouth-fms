@@ -326,7 +326,8 @@ input[type=number] { -moz-appearance: textfield; }
 #loading-overlay .ts-scene{position:relative;width:300px;height:170px;animation:tsm-fade 3.5s ease-in-out forwards}
 #loading-overlay .ts-mtns{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 #loading-overlay .ts-mtn-path{stroke-dasharray:1;stroke-dashoffset:1;animation:tsm-draw 3.5s ease-in-out forwards}
-#loading-overlay .ts-runway2{position:absolute;left:18px;bottom:16px;width:130px;height:2px;border-radius:2px;background:linear-gradient(90deg,rgba(255,255,255,.5),rgba(255,255,255,0))}
+#loading-overlay .ts-runway2{position:absolute;left:18px;right:18px;bottom:16px;height:2px;border-radius:2px;background:rgba(255,255,255,.9);box-shadow:0 0 8px rgba(255,255,255,.6);animation:ts-glow 1.5s ease-in-out infinite}
+@keyframes ts-glow{0%,100%{opacity:.2;box-shadow:0 0 4px rgba(255,255,255,.25)}50%{opacity:1;box-shadow:0 0 12px rgba(255,255,255,.85)}}
 #loading-overlay .ts-plane2{position:absolute;left:18px;bottom:14px;animation:tsm-plane 3.5s linear forwards;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
 @keyframes tsm-fade{0%{opacity:0}4%{opacity:1}93%{opacity:1}100%{opacity:0}}
 @keyframes tsm-draw{0%{stroke-dashoffset:1}4%{stroke-dashoffset:1}40%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
@@ -892,7 +893,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.18';
+const APP_VER='v27.19';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -18201,12 +18202,15 @@ function _rzRenderSchedule(){
       var _forcedIcon=_fc.length?'<span title="'+_rzEsc(_fc.join(' · '))+'" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#f59e0b" onpointerdown="event.stopPropagation()">✋</span>':'';
       // Pilot auto-allocated (not user-forced) → a small green ⚙ on the block.
       var _autoIcon=(isBk&&b.pilotAuto)?'<span title="Pilot auto-allocated" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#22c55e" onpointerdown="event.stopPropagation()">⚙</span>':'';
+      // Pilot DOUBLE-BOOKED — the same pilot is on another flight that overlaps this one in time.
+      var _pcfl=isBk&&(S._schedPilotConflict||{})[b.order];
+      var _conflictIcon=_pcfl?'<span title="⚠ '+_rzEsc(_pcfl)+' is double-booked — also flying an overlapping departure. Reassign a pilot on one of them." style="pointer-events:auto;cursor:help;font-size:11px;margin-right:3px;color:#ef4444;font-weight:900" onpointerdown="event.stopPropagation()">⚠</span>':'';
       // Departed (locked) → a small 🛫 marker; the aircraft is pinned for this flight.
       var _departedIcon=(isBk&&typeof _schedDepManualLock==='function'&&_schedDepManualLock(S.rezdyDate,String(b.order||'').split('|')[1]))?'<span title="Departed — aircraft locked" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#22c55e" onpointerdown="event.stopPropagation()">🛫</span>':'';
       blocksH+='<div'+_pdown+(isBk?' data-bkkey="'+_rzEsc(String(b.order))+'"':'')+(_mlvl?' title="'+_rzEsc(_mtip)+'"':' title="Drag to move · drag the top/bottom edge to set departure/return · tap to open"')+' ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:grab;overflow:hidden;box-sizing:border-box;line-height:1.25;touch-action:none;user-select:none'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
         (_canResize?'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:6px 6px 0 0;cursor:ns-resize"></div><div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:0 0 6px 6px;cursor:ns-resize"></div>':'')+
-        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_forcedIcon+_autoIcon+_departedIcon+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
+        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_conflictIcon+_forcedIcon+_autoIcon+_departedIcon+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';
     });
@@ -22131,7 +22135,15 @@ function _schedComputeBlockPilots(flights){
     var freeAt={};avail.forEach(function(p){freeAt[p.code]=-1e9;});   // everyone starts in QN
     var stranded=0;
     rots.forEach(function(r){r.assigned=null;});
-    rots.forEach(function(r){if(r.manual.length){r.assigned=r.manual[0];r.manual.forEach(function(mp){freeAt[mp]=Math.max(freeAt[mp]==null?-1e9:freeAt[mp],r.end);});}});
+    // Manual picks first (rots are start-ordered) — but a manual pin is only honoured if the pilot is
+    // actually FREE then. A manual pick that overlaps an earlier commitment for the SAME pilot is
+    // impossible (one plane at a time), so it's left UNASSIGNED for the auto loop to fill with a free
+    // pilot (or "no pilot"), instead of silently double-booking them.
+    rots.forEach(function(r){
+      if(!r.manual.length)return;var mp=r.manual[0];
+      if((freeAt[mp]!=null&&freeAt[mp]>r.start)||_pilotBusy(mp,r.start,r.end)){return;}   // pilot already out → conflict, leave to auto
+      r.assigned=mp;freeAt[mp]=r.end;
+    });
     rots.forEach(function(r){
       if(r.assigned)return;
       var cands=avail.filter(function(p){return !excl[p.code]&&_pilotRatedForAc(p.code,r.ac)&&(freeAt[p.code]==null||freeAt[p.code]<=r.start)&&!_pilotBusy(p.code,r.start,r.end);});
@@ -22157,6 +22169,17 @@ function _schedComputeBlockPilots(flights){
   var out={};
   rots.forEach(function(r){if(r.assigned)r.keys.forEach(function(k){out[k]=r.assigned;});});
   Object.keys(manual).forEach(function(k){if(manual[k])out[k]=manual[k];});
+  // Detect pilot DOUBLE-BOOKINGS for a calendar warning: the EFFECTIVE pilot the calendar shows is the
+  // manual pin (if any) else the auto pick. If the same pilot lands on two TIME-OVERLAPPING rotations
+  // (e.g. a stale manual pin ignoring that they're already airborne), they can't be in two places —
+  // flag every flight key on both so the block can warn the operator to reassign one.
+  var _eff=rots.map(function(r){var mp=null;r.keys.forEach(function(k){if(!mp&&manual[k])mp=manual[k];});return {r:r,p:mp||r.assigned||null};});
+  var conflict={};
+  for(var ci=0;ci<_eff.length;ci++){for(var cj=ci+1;cj<_eff.length;cj++){
+    var ea=_eff[ci],eb=_eff[cj];if(!ea.p||ea.p!==eb.p)continue;
+    if(ea.r.start<eb.r.end&&eb.r.start<ea.r.end){ea.r.keys.forEach(function(k){conflict[k]=ea.p;});eb.r.keys.forEach(function(k){conflict[k]=eb.p;});}
+  }}
+  S._schedPilotConflict=conflict;
   return out;
 }
 // Read the auto-allocated pilot. S._schedAutoPilots is keyed by flight (ac|HH:MM|prod) when the

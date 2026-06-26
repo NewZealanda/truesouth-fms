@@ -635,7 +635,15 @@ function _schedComputeBlockPilots(flights){
     var freeAt={};avail.forEach(function(p){freeAt[p.code]=-1e9;});   // everyone starts in QN
     var stranded=0;
     rots.forEach(function(r){r.assigned=null;});
-    rots.forEach(function(r){if(r.manual.length){r.assigned=r.manual[0];r.manual.forEach(function(mp){freeAt[mp]=Math.max(freeAt[mp]==null?-1e9:freeAt[mp],r.end);});}});
+    // Manual picks first (rots are start-ordered) — but a manual pin is only honoured if the pilot is
+    // actually FREE then. A manual pick that overlaps an earlier commitment for the SAME pilot is
+    // impossible (one plane at a time), so it's left UNASSIGNED for the auto loop to fill with a free
+    // pilot (or "no pilot"), instead of silently double-booking them.
+    rots.forEach(function(r){
+      if(!r.manual.length)return;var mp=r.manual[0];
+      if((freeAt[mp]!=null&&freeAt[mp]>r.start)||_pilotBusy(mp,r.start,r.end)){return;}   // pilot already out → conflict, leave to auto
+      r.assigned=mp;freeAt[mp]=r.end;
+    });
     rots.forEach(function(r){
       if(r.assigned)return;
       var cands=avail.filter(function(p){return !excl[p.code]&&_pilotRatedForAc(p.code,r.ac)&&(freeAt[p.code]==null||freeAt[p.code]<=r.start)&&!_pilotBusy(p.code,r.start,r.end);});
@@ -661,6 +669,17 @@ function _schedComputeBlockPilots(flights){
   var out={};
   rots.forEach(function(r){if(r.assigned)r.keys.forEach(function(k){out[k]=r.assigned;});});
   Object.keys(manual).forEach(function(k){if(manual[k])out[k]=manual[k];});
+  // Detect pilot DOUBLE-BOOKINGS for a calendar warning: the EFFECTIVE pilot the calendar shows is the
+  // manual pin (if any) else the auto pick. If the same pilot lands on two TIME-OVERLAPPING rotations
+  // (e.g. a stale manual pin ignoring that they're already airborne), they can't be in two places —
+  // flag every flight key on both so the block can warn the operator to reassign one.
+  var _eff=rots.map(function(r){var mp=null;r.keys.forEach(function(k){if(!mp&&manual[k])mp=manual[k];});return {r:r,p:mp||r.assigned||null};});
+  var conflict={};
+  for(var ci=0;ci<_eff.length;ci++){for(var cj=ci+1;cj<_eff.length;cj++){
+    var ea=_eff[ci],eb=_eff[cj];if(!ea.p||ea.p!==eb.p)continue;
+    if(ea.r.start<eb.r.end&&eb.r.start<ea.r.end){ea.r.keys.forEach(function(k){conflict[k]=ea.p;});eb.r.keys.forEach(function(k){conflict[k]=eb.p;});}
+  }}
+  S._schedPilotConflict=conflict;
   return out;
 }
 // Read the auto-allocated pilot. S._schedAutoPilots is keyed by flight (ac|HH:MM|prod) when the

@@ -326,7 +326,8 @@ input[type=number] { -moz-appearance: textfield; }
 #loading-overlay .ts-scene{position:relative;width:300px;height:170px;animation:tsm-fade 3.5s ease-in-out forwards}
 #loading-overlay .ts-mtns{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 #loading-overlay .ts-mtn-path{stroke-dasharray:1;stroke-dashoffset:1;animation:tsm-draw 3.5s ease-in-out forwards}
-#loading-overlay .ts-runway2{position:absolute;left:18px;bottom:16px;width:130px;height:2px;border-radius:2px;background:linear-gradient(90deg,rgba(255,255,255,.5),rgba(255,255,255,0))}
+#loading-overlay .ts-runway2{position:absolute;left:18px;right:18px;bottom:16px;height:2px;border-radius:2px;background:rgba(255,255,255,.9);box-shadow:0 0 8px rgba(255,255,255,.6);animation:ts-glow 1.5s ease-in-out infinite}
+@keyframes ts-glow{0%,100%{opacity:.2;box-shadow:0 0 4px rgba(255,255,255,.25)}50%{opacity:1;box-shadow:0 0 12px rgba(255,255,255,.85)}}
 #loading-overlay .ts-plane2{position:absolute;left:18px;bottom:14px;animation:tsm-plane 3.5s linear forwards;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
 @keyframes tsm-fade{0%{opacity:0}4%{opacity:1}93%{opacity:1}100%{opacity:0}}
 @keyframes tsm-draw{0%{stroke-dashoffset:1}4%{stroke-dashoffset:1}40%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
