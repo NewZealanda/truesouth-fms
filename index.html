@@ -892,7 +892,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.16';
+const APP_VER='v27.17';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2731,6 +2731,15 @@ document.addEventListener('visibilitychange',function(){
     var _rUnsaved=(typeof _rosterUnsaved==='function')&&_rosterUnsaved();
     // Reconnect realtime if the socket dropped while backgrounded, and resume presence.
     if(S.user&&(!_rtWs||_rtWs.readyState!==1)){try{initRealtime();}catch(e){}}
+    // Mobile sleep PAUSES the setTimeout that refreshes the JWT, so on return the token can be expired
+    // and the next save (e.g. signing a loadsheet) 401s and is queued. Proactively refresh the session
+    // when we come back if it's expired/near-expiry, then flush any queued writes so a signed loadsheet
+    // /flight record that 401'd while the phone was asleep uploads as soon as we're back.
+    if(S.user){try{
+      var _near=(typeof AUTH_PHASE_C!=='undefined'&&AUTH_PHASE_C&&_sbSession&&_sbSession.expires_at&&(_sbSession.expires_at-Date.now())<180000);
+      if(_near&&typeof _sbRefresh==='function'){_sbRefresh().then(function(){if(typeof _syncFlush==='function')_syncFlush();},function(){});}
+      else if(typeof _syncFlush==='function'){_syncFlush();}
+    }catch(e){}}
     if(S._presSection){clearInterval(_presInterval);broadcastPresence(S._presSection);_presInterval=setInterval(_presTick,9000);}
     // Came back after a longer absence: refresh the data IN PLACE instead of a full
     // page reload. The old location.reload() flashed the login screen and visibly
