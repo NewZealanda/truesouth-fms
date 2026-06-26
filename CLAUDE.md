@@ -90,7 +90,18 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.09 (latest)** — **allocator constraint ranking made explicit + visible.** The cost-aware
+- **v27.11 (latest)** — **Logbook: co-pilot auto-from-calendar + flight-card notes surfaced.**
+  flightrecord.js. Field is `copilot` (lowercase, existing DB column) — a personal Logbook (`_lbRender`)
+  already had a Co-Pilot column but nothing populated it. New `_frCoPilotForAc(ac)` reads the calendar
+  co-pilot (`_rzSchedCoPilotFor` over `_schedDayFlights` for that tail) and auto-fills it on the OFF-BLOCKS
+  draft (`frUseFlight`), `frOffBlocks`, `frAddManual`, and logbook `frLbAdd`; editable on the flight card
+  + both edit forms; shown in the Aircraft-records table (new Co-pilot column), resolved to a name via
+  `_frPilotName`. NOTES: the OFF-BLOCKS flight card now has a Notes textarea (carried into the record);
+  the personal Logbook gained a **Notes** column + edit field (was only "Details"); the Aircraft-records
+  Notes column now WRAPS (was truncated). (Co-pilot is recorded on the PIC's record; does not yet credit
+  the co-pilot's own F&D/logbook — possible follow-up.) v27.10 = Allocation-order card wording fix +
+  pilots-don't-restrict-aircraft note.
+- **v27.09** — **allocator constraint ranking made explicit + visible.** The cost-aware
   aircraft/passenger allocator already enforced the hierarchy Andrew wants (confirmed in code, no
   behaviour change): (1) HARD seat capacity — a subset only qualifies if seats ≥ pax AND every booking
   group packs whole (`_schedCanPack`); (2) lowest TOTAL DAY cost — `_schedDayPlan` plans every UNLOCKED
