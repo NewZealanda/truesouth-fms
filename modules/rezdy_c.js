@@ -1086,7 +1086,7 @@ function _rzRenderSchedule(){
       // in other slots keep their own return time). 1200-held (or overridden) → default 15:30. The block
       // STARTS at the fly-back time and runs ~40 min: a 15:30 flyback renders 15:30–16:10.
       var _fbHeld=g.start;var _fbOv=(S._rzFlybackTime||{})[_rzFbTimeKey(g.product,_fbHeld)];
-      if(_fbOv||sm===720){
+      if(_fbOv||(typeof _rzFbHasDefault==='function'&&_rzFbHasDefault(_fbHeld))){
         var _ft=_rzFbTime(g.product,_fbHeld);var _fm=_rzMinsFromHHMM(_ft);if(_fm==null)_fm=930;
         g._fbHeld=_fbHeld;g._fbTime=_ft;
         g.start=_rzMinToHHMM(_fm);
@@ -1166,11 +1166,12 @@ function _rzRenderSchedule(){
       if(_rzIsFlyback(_grp.product)){
         var _fbHeldK=_grp._fbHeld||_grp.start;
         var _fbHasOv=!!((S._rzFlybackTime||{})[_rzFbTimeKey(_grp.product,_fbHeldK)]);
+        var _fbDef=(typeof _rzFbDefaultTime==='function')?_rzFbDefaultTime(_fbHeldK):'15:30';
         detailH+='<div style="display:flex;align-items:center;gap:8px;margin:0 0 8px;flex-wrap:wrap">'+
           '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700">🛬 Flyback time</span>'+
           '<select onchange="window.rezdySetFlybackTime(\''+_rzEsc(_grp.product)+'\',\''+_rzEsc(_fbHeldK)+'\',this.value)" style="padding:7px 10px;border-radius:8px;border:1px solid rgba(245,158,11,.5);background:var(--card);color:var(--text1);font-size:15px;font-weight:800">'+_rzTimeOpts((_grp._fbTime||_grp.start),'12:00','19:45')+'</select>'+
           '<span style="font-size:11px;color:var(--text3)">when they actually fly back (seats held in the '+_rzEsc(_fbHeldK)+' slot)</span>'+
-          (_fbHasOv?'<button onclick="window.rezdySetFlybackTime(\''+_rzEsc(_grp.product)+'\',\''+_rzEsc(_fbHeldK)+'\',\'\')" style="background:none;border:none;color:#60a5fa;font-size:11px;cursor:pointer;text-decoration:underline">reset to 15:30</button>':'')+
+          (_fbHasOv?'<button onclick="window.rezdySetFlybackTime(\''+_rzEsc(_grp.product)+'\',\''+_rzEsc(_fbHeldK)+'\',\'\')" style="background:none;border:none;color:#60a5fa;font-size:11px;cursor:pointer;text-decoration:underline">reset to '+_rzEsc(_fbDef)+'</button>':'')+
         '</div>';
       } else if(_grp._timeMoved||_grp._origStart){
         // A non-flyback departure whose time was nudged on the calendar — show + allow reset.

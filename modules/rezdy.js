@@ -1189,7 +1189,12 @@ function _rzTimeOpts(sel,from,to){
   return list.map(function(m){var hh=String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');return '<option value="'+hh+'"'+(m===sm?' selected':'')+'>'+hh+'</option>';}).join('');
 }
 function _rzFbTimeKey(prod,held){return String(prod||'')+'|'+String(held||'');}
-function _rzFbTime(prod,held){var v=(S._rzFlybackTime||{})[_rzFbTimeKey(prod,held)];return (v&&/^\d{1,2}:\d{2}$/.test(v))?v:'15:30';}
+// Default fly-back RETURN time per HELD outbound slot (the seats are held there to block that
+// departure; the plane actually flies back later). Operator can drag/override per slot.
+var _RZ_FB_DEFAULTS={'10:30':'14:00','12:00':'15:30','13:00':'16:15'};
+function _rzFbDefaultTime(held){return _RZ_FB_DEFAULTS[String(held||'')]||'15:30';}
+function _rzFbHasDefault(held){return !!_RZ_FB_DEFAULTS[String(held||'')];}
+function _rzFbTime(prod,held){var v=(S._rzFlybackTime||{})[_rzFbTimeKey(prod,held)];return (v&&/^\d{1,2}:\d{2}$/.test(v))?v:_rzFbDefaultTime(held);}
 window.rezdySetFlybackTime=function(prod,held,val){
   S._rzFlybackTime=S._rzFlybackTime||{};var k=_rzFbTimeKey(prod,held);
   val=String(val||'').trim();

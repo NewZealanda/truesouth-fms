@@ -90,7 +90,14 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.01 (latest)** — calendar block polish. (1) Co-pilot now shows in the block TITLE as
+- **v27.02 (latest)** — **per-held-slot flyback default return times.** `_RZ_FB_DEFAULTS`
+  (rezdy.js) maps the HELD outbound slot → default return: `10:30→14:00`, `12:00→15:30`, `13:00→16:15`.
+  `_rzFbTime` falls back to `_rzFbDefaultTime(held)` (was hardcoded 15:30); the calendar flyback render
+  gate is now `_fbOv||_rzFbHasDefault(_fbHeld)` (was `sm===720`), so 10:30/12:00/13:00-held flybacks all
+  show at their own return time, keyed per slot, still draggable (override persists per slot). Detail
+  "reset to …" label shows the slot's default. Other (unmapped) slots fall back to held-slot display
+  until dragged. To add a slot default, edit `_RZ_FB_DEFAULTS`.
+- **v27.01** — calendar block polish. (1) Co-pilot now shows in the block TITLE as
   `JC+MS/SLQ 3A FLB` (label at bkBlocks `g.label`, adds `+coPilot` after the PIC); the small `✈JC+MS`
   second-line text was removed. (2) A small green ⚙ (`_autoIcon`) shows on a block when the pilot was
   auto-allocated (`b.pilotAuto`), beside the amber ✋ forced icon. (3) Flyback held-slot behaviour
