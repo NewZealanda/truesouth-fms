@@ -447,9 +447,10 @@ function renderLoginInner(){
           <div style="display:flex;align-items:center;width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;box-sizing:border-box;overflow:hidden">
             <input id="li_e" type="text" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
               oninput="window.updateLoginSuffix&&window.updateLoginSuffix()"
-              style="flex:0 0 auto;width:78px;min-width:56px;padding:0;background:transparent;border:none;color:#fff;font-size:16px;outline:none;-webkit-user-select:text;user-select:text;touch-action:manipulation"
+              style="flex:0 0 auto;width:72px;min-width:40px;padding:0;background:transparent;border:none;color:#fff;font-size:16px;outline:none;-webkit-user-select:text;user-select:text;touch-action:manipulation"
               onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
-            <span id="li_e_sfx" style="color:rgba(255,255,255,.42);font-size:16px;white-space:nowrap;pointer-events:none;user-select:none">@truesouthflights.co.nz</span>
+            <span id="li_e_sfx" style="color:#fff;font-size:16px;white-space:nowrap;pointer-events:none;user-select:none">@truesouthflights.co.nz</span>
+            <img alt="" src="data:," onerror="window.updateLoginSuffix&&window.updateLoginSuffix()" style="display:none">
           </div>
         </div>
         <div style="margin-bottom:24px">

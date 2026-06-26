@@ -931,7 +931,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.33';
+const APP_VER='v27.35';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3059,9 +3059,9 @@ window.updateLoginSuffix=function(){
   if(!m){m=document.createElement('span');m.id='li_e_meas';m.style.cssText='position:absolute;left:-9999px;top:0;white-space:pre;visibility:hidden;pointer-events:none';document.body.appendChild(m);}
   var cs=getComputedStyle(e);m.style.fontSize=cs.fontSize;m.style.fontFamily=cs.fontFamily;m.style.fontWeight=cs.fontWeight;m.style.letterSpacing=cs.letterSpacing;
   m.textContent=e.value||e.placeholder||'yourname';
-  var pad=16;                                  // left padding(14) + ~2 so the suffix nearly touches the text
+  var pad=3;                                   // input has no internal padding now → just a hair for the caret, so the suffix TOUCHES the text and moves with it as you type
   var avail=(e.parentElement?e.parentElement.clientWidth:320)-(s?s.offsetWidth:200)-6;
-  e.style.flex='0 0 auto';e.style.width=Math.max(60,Math.min(m.offsetWidth+pad,avail))+'px';
+  e.style.flex='0 0 auto';e.style.width=Math.max(40,Math.min(m.offsetWidth+pad,avail))+'px';
 };
 function logout(){
   if(AUTH_PHASE_C){
@@ -3727,9 +3727,10 @@ function renderLoginInner(){
           <div style="display:flex;align-items:center;width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;box-sizing:border-box;overflow:hidden">
             <input id="li_e" type="text" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
               oninput="window.updateLoginSuffix&&window.updateLoginSuffix()"
-              style="flex:0 0 auto;width:78px;min-width:56px;padding:0;background:transparent;border:none;color:#fff;font-size:16px;outline:none;-webkit-user-select:text;user-select:text;touch-action:manipulation"
+              style="flex:0 0 auto;width:72px;min-width:40px;padding:0;background:transparent;border:none;color:#fff;font-size:16px;outline:none;-webkit-user-select:text;user-select:text;touch-action:manipulation"
               onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
-            <span id="li_e_sfx" style="color:rgba(255,255,255,.42);font-size:16px;white-space:nowrap;pointer-events:none;user-select:none">@truesouthflights.co.nz</span>
+            <span id="li_e_sfx" style="color:#fff;font-size:16px;white-space:nowrap;pointer-events:none;user-select:none">@truesouthflights.co.nz</span>
+            <img alt="" src="data:," onerror="window.updateLoginSuffix&&window.updateLoginSuffix()" style="display:none">
           </div>
         </div>
         <div style="margin-bottom:24px">
@@ -22885,6 +22886,15 @@ function _schedStartAutoNotify(){if(S._schedNotifyTimer)return;S._schedNotifyTim
 // ─────────────────────────────────────────────────────────────────────────────
 
 function _sodSh(ac){return String(ac||'').replace(/^ZK-?/,'');}
+// Resolve a flight's pilot the SAME way the calendar does — by the flight KEY first (so a flyback,
+// whose key is its held outbound slot but whose depMin is the return time, still finds its pilot),
+// then fall back to the aircraft+time lookup. Matches _rzSchedPilotFor's conflict-skip behaviour.
+function _sodPilotFor(f){
+  if(!f)return null;var k=f.key;
+  if(k){var conf=(S._schedPilotConflict||{})[k];var man=conf?null:((S._schedPilots||{})[k]);var p=man||(S._schedAutoPilots||{})[k];if(p)return p;}
+  var hhmm=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';
+  return (typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(f.ac,hhmm):null;
+}
 function _sodEsc(s){return (typeof _rzEsc==='function')?_rzEsc(s):String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function _sodDepShort(dep){var p=String(dep||'').split('·');return (p[0]||'')+(p[1]?(' '+p[1]):'');}
 function _sodAcCap(ac){var a=(typeof _acSpec==='function')?_acSpec(ac):(S.aircraft||{})[ac];if(!a||!a.seats)return 0;return a.seats.length-1-(((a.removedSeats)||[]).length);}
@@ -22946,7 +22956,7 @@ function _sodScan(){
   flights.forEach(function(f){
     acSet[f.ac]=1;
     var hhmm=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';
-    var pc=(typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(f.ac,hhmm):null;
+    var pc=_sodPilotFor(f);
     if(!pc)add('amber','No pilot',hhmm+' '+_sodSh(f.ac),'calendar');
     else if(typeof _pilotRatedForAc==='function'&&!_pilotRatedForAc(pc,f.ac))add('red','Pilot not rated',pc+' on '+_sodSh(f.ac)+' '+hhmm,'calendar');
   });
@@ -23088,7 +23098,7 @@ function _todayFlights(date){
     var a=0,c=0,i=0;
     orders.forEach(function(o){var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(o);});if(b&&typeof _rzEffBreakdown==='function'){var e=_rzEffBreakdown(b);a+=(e.a||0);c+=(e.c||0);i+=(e.i||0);}});
     var hhmm=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';
-    var pilot=(typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(f.ac,hhmm):null;
+    var pilot=_sodPilotFor(f);
     return {ac:f.ac,dest:dest,depMin:f.depMin,hhmm:hhmm,end:(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.endMin):'',a:a,c:c,i:i,pax:a+c+i,pilot:pilot};
   }).sort(function(a,b){return a.depMin-b.depMin;});
   return flights;

@@ -12,6 +12,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 function _sodSh(ac){return String(ac||'').replace(/^ZK-?/,'');}
+// Resolve a flight's pilot the SAME way the calendar does — by the flight KEY first (so a flyback,
+// whose key is its held outbound slot but whose depMin is the return time, still finds its pilot),
+// then fall back to the aircraft+time lookup. Matches _rzSchedPilotFor's conflict-skip behaviour.
+function _sodPilotFor(f){
+  if(!f)return null;var k=f.key;
+  if(k){var conf=(S._schedPilotConflict||{})[k];var man=conf?null:((S._schedPilots||{})[k]);var p=man||(S._schedAutoPilots||{})[k];if(p)return p;}
+  var hhmm=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';
+  return (typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(f.ac,hhmm):null;
+}
 function _sodEsc(s){return (typeof _rzEsc==='function')?_rzEsc(s):String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function _sodDepShort(dep){var p=String(dep||'').split('·');return (p[0]||'')+(p[1]?(' '+p[1]):'');}
 function _sodAcCap(ac){var a=(typeof _acSpec==='function')?_acSpec(ac):(S.aircraft||{})[ac];if(!a||!a.seats)return 0;return a.seats.length-1-(((a.removedSeats)||[]).length);}
@@ -73,7 +82,7 @@ function _sodScan(){
   flights.forEach(function(f){
     acSet[f.ac]=1;
     var hhmm=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';
-    var pc=(typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(f.ac,hhmm):null;
+    var pc=_sodPilotFor(f);
     if(!pc)add('amber','No pilot',hhmm+' '+_sodSh(f.ac),'calendar');
     else if(typeof _pilotRatedForAc==='function'&&!_pilotRatedForAc(pc,f.ac))add('red','Pilot not rated',pc+' on '+_sodSh(f.ac)+' '+hhmm,'calendar');
   });
@@ -215,7 +224,7 @@ function _todayFlights(date){
     var a=0,c=0,i=0;
     orders.forEach(function(o){var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(o);});if(b&&typeof _rzEffBreakdown==='function'){var e=_rzEffBreakdown(b);a+=(e.a||0);c+=(e.c||0);i+=(e.i||0);}});
     var hhmm=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';
-    var pilot=(typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(f.ac,hhmm):null;
+    var pilot=_sodPilotFor(f);
     return {ac:f.ac,dest:dest,depMin:f.depMin,hhmm:hhmm,end:(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.endMin):'',a:a,c:c,i:i,pax:a+c+i,pilot:pilot};
   }).sort(function(a,b){return a.depMin-b.depMin;});
   return flights;

@@ -1203,9 +1203,9 @@ window.updateLoginSuffix=function(){
   if(!m){m=document.createElement('span');m.id='li_e_meas';m.style.cssText='position:absolute;left:-9999px;top:0;white-space:pre;visibility:hidden;pointer-events:none';document.body.appendChild(m);}
   var cs=getComputedStyle(e);m.style.fontSize=cs.fontSize;m.style.fontFamily=cs.fontFamily;m.style.fontWeight=cs.fontWeight;m.style.letterSpacing=cs.letterSpacing;
   m.textContent=e.value||e.placeholder||'yourname';
-  var pad=16;                                  // left padding(14) + ~2 so the suffix nearly touches the text
+  var pad=3;                                   // input has no internal padding now → just a hair for the caret, so the suffix TOUCHES the text and moves with it as you type
   var avail=(e.parentElement?e.parentElement.clientWidth:320)-(s?s.offsetWidth:200)-6;
-  e.style.flex='0 0 auto';e.style.width=Math.max(60,Math.min(m.offsetWidth+pad,avail))+'px';
+  e.style.flex='0 0 auto';e.style.width=Math.max(40,Math.min(m.offsetWidth+pad,avail))+'px';
 };
 function logout(){
   if(AUTH_PHASE_C){
