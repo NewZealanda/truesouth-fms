@@ -78,7 +78,12 @@ function _rzActiveVanCount(dep){var n=_rzVehicles().length,c=0;for(var i=0;i<n;i
 function _rzVanDriver(vi,dep){var d=(S._pickupDrivers||{})[_pkKey(vi,dep)];d=(d==null?'':String(d)).trim();return d||null;}
 window.pickupVehParkDragStart=function(vi,e){S._pickupVehDrag=vi;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','veh:'+vi);}catch(_){}};
 window.pickupActivateVehicle=function(vi,dep){S._pickupSpare=S._pickupSpare||{};delete S._pickupSpare[_pkKey(vi,dep)];if(window.pickupSave)window.pickupSave(true);render();};
-window.pickupParkVehicle=function(vi,dep){if(_rzActiveVanCount(dep)<=1){if(typeof toast==='function')toast('Keep at least one active vehicle for this departure.','warn');return;}S._pickupSpare=S._pickupSpare||{};S._pickupSpare[_pkKey(vi,dep)]=1;if(window.pickupSave)window.pickupSave(true);render();};
+// Park a vehicle. ALL vehicles may now be parked — the run's pickups then sit as a Taxi/awaiting list
+// (handled by _rzEnsureVans) until a van/driver is added back. (Previously the last active van couldn't
+// be parked.)
+window.pickupParkVehicle=function(vi,dep){S._pickupSpare=S._pickupSpare||{};S._pickupSpare[_pkKey(vi,dep)]=1;if(window.pickupSave)window.pickupSave(true);render();};
+window.pickupParkAll=function(dep){S._pickupSpare=S._pickupSpare||{};for(var vi=0;vi<_rzVehicles().length;vi++)S._pickupSpare[_pkKey(vi,dep)]=1;if(window.pickupSave)window.pickupSave(true);if(typeof toast==='function')toast('All vehicles parked — this run is now a list awaiting a van/driver.','info');render();};
+window.pickupActivateAll=function(dep){S._pickupSpare=S._pickupSpare||{};for(var vi=0;vi<_rzVehicles().length;vi++)delete S._pickupSpare[_pkKey(vi,dep)];if(window.pickupSave)window.pickupSave(true);render();};
 window.pickupDropActivateVehicle=function(e,dep){if(e&&e.preventDefault)e.preventDefault();var vi=S._pickupVehDrag;S._pickupVehDrag=null;if(vi==null||vi==='')return;window.pickupActivateVehicle(parseInt(vi,10),dep);};
 function _rzVehSeats(vi){if(_rzIsTaxiVan(vi))return 11;var v=_rzVehicles()[vi];return (v&&v.seats)||11;}
 function _rzVehColor(vi){if(_rzIsTaxiVan(vi))return '#f59e0b';var v=_rzVehicles()[vi];return (v&&v.color)||'#64748b';}

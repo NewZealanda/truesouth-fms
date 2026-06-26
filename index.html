@@ -802,11 +802,11 @@ async function sbMergeSave(key, localVal, applyFn){
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true},
-  admin:       {operations:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true},
-  cx_manager:  {operations:true,resources:true, calendar:true,charter:false,ground:true, maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
-  pilot:       {operations:true,resources:true, calendar:true,charter:false,ground:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true, rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
-  desk:        {operations:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
+  superadmin:  {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true},
+  admin:       {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true},
+  cx_manager:  {operations:true,weather_call:true,resources:true, calendar:true,charter:false,ground:true, maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
+  pilot:       {operations:true,weather_call:true,resources:true, calendar:true,charter:false,ground:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true, rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
+  desk:        {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
   maint:       {operations:false,calendar:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false,rezdy:false, pay_week:false},
   maintenance: {operations:false,calendar:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false,rezdy:false, pay_week:false},
   ground_staff:{operations:false,calendar:false,charter:false,ground:true, maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false},
@@ -940,7 +940,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.40';
+const APP_VER='v27.43';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -9416,6 +9416,7 @@ function renderAdminPerms(){
       {k:'calendar',      lbl:'Calendar',   tip:'Access the Calendar (the first tab in Operations) — needs Ops too'},
       {k:'ground',        lbl:'Ground',     tip:'Access the Ground section — Transport, Pickups & My Pickups'},
       {k:'sign_loadsheet',lbl:'Sign',       tip:'Sign off on loadsheets as PIC'},
+      {k:'weather_call',  lbl:'Weather',    tip:'Record per-departure weather calls (any pilot/ops can)'},
       {k:'resources',     lbl:'Scheduling', tip:'Access the Resource board + cost-aware aircraft/pilot allocation'}
     ]},
     {cat:'Maintenance', col:'#a78bfa', perms:[
@@ -13378,7 +13379,12 @@ function _rzActiveVanCount(dep){var n=_rzVehicles().length,c=0;for(var i=0;i<n;i
 function _rzVanDriver(vi,dep){var d=(S._pickupDrivers||{})[_pkKey(vi,dep)];d=(d==null?'':String(d)).trim();return d||null;}
 window.pickupVehParkDragStart=function(vi,e){S._pickupVehDrag=vi;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','veh:'+vi);}catch(_){}};
 window.pickupActivateVehicle=function(vi,dep){S._pickupSpare=S._pickupSpare||{};delete S._pickupSpare[_pkKey(vi,dep)];if(window.pickupSave)window.pickupSave(true);render();};
-window.pickupParkVehicle=function(vi,dep){if(_rzActiveVanCount(dep)<=1){if(typeof toast==='function')toast('Keep at least one active vehicle for this departure.','warn');return;}S._pickupSpare=S._pickupSpare||{};S._pickupSpare[_pkKey(vi,dep)]=1;if(window.pickupSave)window.pickupSave(true);render();};
+// Park a vehicle. ALL vehicles may now be parked — the run's pickups then sit as a Taxi/awaiting list
+// (handled by _rzEnsureVans) until a van/driver is added back. (Previously the last active van couldn't
+// be parked.)
+window.pickupParkVehicle=function(vi,dep){S._pickupSpare=S._pickupSpare||{};S._pickupSpare[_pkKey(vi,dep)]=1;if(window.pickupSave)window.pickupSave(true);render();};
+window.pickupParkAll=function(dep){S._pickupSpare=S._pickupSpare||{};for(var vi=0;vi<_rzVehicles().length;vi++)S._pickupSpare[_pkKey(vi,dep)]=1;if(window.pickupSave)window.pickupSave(true);if(typeof toast==='function')toast('All vehicles parked — this run is now a list awaiting a van/driver.','info');render();};
+window.pickupActivateAll=function(dep){S._pickupSpare=S._pickupSpare||{};for(var vi=0;vi<_rzVehicles().length;vi++)delete S._pickupSpare[_pkKey(vi,dep)];if(window.pickupSave)window.pickupSave(true);render();};
 window.pickupDropActivateVehicle=function(e,dep){if(e&&e.preventDefault)e.preventDefault();var vi=S._pickupVehDrag;S._pickupVehDrag=null;if(vi==null||vi==='')return;window.pickupActivateVehicle(parseInt(vi,10),dep);};
 function _rzVehSeats(vi){if(_rzIsTaxiVan(vi))return 11;var v=_rzVehicles()[vi];return (v&&v.seats)||11;}
 function _rzVehColor(vi){if(_rzIsTaxiVan(vi))return '#f59e0b';var v=_rzVehicles()[vi];return (v&&v.color)||'#64748b';}
@@ -15653,6 +15659,9 @@ function _rzRenderPickups(){
     driversBar+='<div draggable="true" ondragstart="window.pickupVehParkDragStart('+o.vi+',event)" onclick="window.pickupActivateVehicle('+o.vi+',\''+_depJs+'\')" title="Parked for this departure — tap or drag onto the run to use" style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:14px;border:2px solid '+col+';background:var(--card2);color:var(--text);cursor:grab;font-size:13px;font-weight:800;box-shadow:inset 0 0 0 1px var(--border2)"><span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:#0057B8;color:#fff;font-weight:900;font-size:15px;border-radius:5px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.35)">P</span>'+_rzEsc(o.v.name||('Van '+(o.vi+1)))+' <span style="opacity:.6;font-weight:600;color:var(--text2)">'+(o.v.seats||11)+'p</span></div>';
   });
   driversBar+='<button onclick="window.pickupVehAdd()" title="Create a new vehicle" style="padding:5px 10px;border-radius:14px;border:1px dashed var(--border2);background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">+ New</button>';
+  // Park / activate every vehicle for this departure at once (parking all leaves the run as an awaiting list).
+  if(_rzActiveVanCount(depFilter)>0)driversBar+='<button onclick="window.pickupParkAll(\''+_depJs+'\')" title="Park every vehicle for this departure — the run becomes a list awaiting a van/driver" style="padding:5px 10px;border-radius:14px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">⊘ Park all</button>';
+  if(_spareV.length)driversBar+='<button onclick="window.pickupActivateAll(\''+_depJs+'\')" title="Put every vehicle for this departure back in use" style="padding:5px 10px;border-radius:14px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">▶ Activate all</button>';
   driversBar+='</div></div>';
   driversBar+='</div>';
 
@@ -23523,7 +23532,10 @@ var _TRAIN_TIPS=[
   {icon:'👉',title:'Swipe to switch tabs (phone)',body:'On a phone, a firm sideways swipe cycles the Operations sub-tabs (Calendar, Bookings, Seatmap, Loadsheets, Saved). Swipe left for the next one, right to go back. Use the ◁ ▷ buttons to change the day.'},
   {icon:'🗓',title:'Drag calendar blocks',body:'On the Calendar, drag a flight block\'s TOP edge to set its departure, its BOTTOM edge to set the return, or grab the MIDDLE to move it — drop it on another aircraft\'s column to reassign. A single tap just opens it.'},
   {icon:'🧑‍✈',title:'Hold a pilot on the ground',body:'In Pilot movements, tap a pilot\'s ＋ to add an all-day note/meeting and the allocator will keep them off the aircraft.'},
-  {icon:'🏠',title:'Set your start page',body:'Tap your name (top-right) and choose which page the app opens to, so you always land on Bookings, the Calendar, your Flight Record — whatever you use most.'},
+  {icon:'🏠',title:'Set your start page + sound',body:'Tap your name (top-right) ▸ User settings & preferences. Pick which page the app opens to, switch light/dark, and choose your notification chime (tap ▶ to hear each) or turn notification sounds off.'},
+  {icon:'🌤️',title:'Weather calls',body:'The Weather calls page (top of the menu) lists every departure for the day. Any pilot can record a call — Called ON (green), Cancelled (red, with reason + next best day) or a Final call in the office (amber) — each with a comment. If no call is made, the PIC gets a reminder 15 min before the 1-hour-prior deadline, and the Today page shows each flight\'s status at a glance.'},
+  {icon:'🚐',title:'Park all the vans',body:'On Transport you can now park EVERY vehicle for a departure (⊘ Park all) — the run just sits as a list waiting for a van/driver. ▶ Activate all puts them back. Drag a single van on/off a run as usual.'},
+  {icon:'📋',title:'One loadsheet per flight',body:'Re-pushing the same flight (same aircraft, date and departure) to a loadsheet now overwrites its existing Active draft instead of stacking up copies. Want a separate version? Use Duplicate — and a signed loadsheet is never overwritten.'},
   {icon:'🎒',title:'Everything pilot in one place',body:'Flight Record, Logbooks and Flight & Duty all live together under Pilot Bag in the menu.'},
   {icon:'📶',title:'Logs survive no reception',body:'Logs save on your device the instant you tap Off Blocks / On Blocks — whether you start in coverage or already out of range. They upload themselves automatically once you\'re back in range.'},
   {icon:'⏭',title:'Skip the intro',body:'The mountains-and-plane loading animation has a Skip button in the corner when you\'re in a hurry.'}

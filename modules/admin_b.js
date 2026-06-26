@@ -1501,6 +1501,7 @@ function renderAdminPerms(){
       {k:'calendar',      lbl:'Calendar',   tip:'Access the Calendar (the first tab in Operations) — needs Ops too'},
       {k:'ground',        lbl:'Ground',     tip:'Access the Ground section — Transport, Pickups & My Pickups'},
       {k:'sign_loadsheet',lbl:'Sign',       tip:'Sign off on loadsheets as PIC'},
+      {k:'weather_call',  lbl:'Weather',    tip:'Record per-departure weather calls (any pilot/ops can)'},
       {k:'resources',     lbl:'Scheduling', tip:'Access the Resource board + cost-aware aircraft/pilot allocation'}
     ]},
     {cat:'Maintenance', col:'#a78bfa', perms:[
