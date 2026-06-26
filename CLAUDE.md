@@ -90,7 +90,19 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v26.99 (latest)** — **Calendar co-pilot.** A flight block can now carry a CO-PILOT in addition to
+- **v27.00 (latest)** — three fixes. (1) **Loadsheet sign-to-submit silently lost.** On a stale
+  session (esp. an idle Android phone) the REST write 401s; `sbU` only queued retries for 5xx/0, so the
+  signed loadsheet was DROPPED yet `submitLsInPlace` toasted "submitted ✓". Now `sbU` enqueues
+  ts_loadsheets/ts_flight_records writes on 401/403 too (→ `ts_sync_queue`, replayed on reconnect /
+  `_sbFetch` token-refresh / boot / `online`); `submitLsInPlace`+`handleSubmit` check the result and
+  toast a clear "signed on THIS device, NOT yet uploaded" warning on failure; both now broadcast
+  `ls_signed` (with id) so desktops live-refresh the Signed list + open tab (was `ls_saved` only, which
+  didn't update an open tab / didn't re-render off the Saved tab). (2) **Mute all sound** toggle on the
+  account/sign-out modal (`window.toggleMute`, persisted `ts_muted`; `_soundMuted()` gates `_rzChimeBeep`
+  + `_notifChime` incl. vibrate). (3) **Flyback block drag** — a FLB/CCF block rendered 20 min below its
+  stored time (`[ft+20, ft+60]`), so dragging to 15:00 snapped to 15:20; now the block STARTS at the
+  actual flyback time (`[ft, ft+40]`), matching the dropdown + the drop position.
+- **v26.99** — **Calendar co-pilot.** A flight block can now carry a CO-PILOT in addition to
   the PIC. Click a block → **Set co-pilot** picker in the detail panel (drag/Set-pilot still SWAPS the
   PIC; this ADDS a 2nd crew). Co-pilot need NOT be type-rated; the current PIC is excluded. Store:
   `S._schedCoPilots[key]` (same `ac|HH:MM|prod` key as `S._schedPilots`), persisted in the pickup blob

@@ -418,6 +418,9 @@ async function _sbFetch(url, opts){
       const h=Object.assign({}, opts.headers||{});
       h['Authorization']=SH['Authorization'];   // fresh token set by _applySession
       r=await fetch(url, Object.assign({}, opts, {headers:h}));
+      // A just-refreshed token means any writes queued while the session was stale (e.g. a pilot's
+      // signed loadsheet that 401'd) can now replay. Fire-and-forget so we don't block this request.
+      try{if(typeof _syncFlush==='function')setTimeout(function(){_syncFlush();},0);}catch(e){}
     } else {
       _sbWarnExpired();   // refresh token itself is gone — tell the user (throttled)
     }
@@ -496,7 +499,7 @@ function _seatmapSyncPool(){
     pool.push({id:p.id,name:p.name,weight:p.weight,bag:p.bag||0,group:p.group||'',infant:p.infantName||null,type:p.type||'adult',paymentReq:!!p.paymentReq});
   });
 }
-const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);if(r.status>=500||r.status===0)_syncEnqueue(t,d);return null;}_syncPurge(t,d);return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);_syncEnqueue(t,d);return null;}};
+const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);if(r.status>=500||r.status===0||r.status===401||r.status===403)_syncEnqueue(t,d);return null;}_syncPurge(t,d);return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);_syncEnqueue(t,d);return null;}};
 // ── Offline write queue ───────────────────────────────────────────────────────
 // A device in the field (e.g. a pilot mid-flight) may capture flight records or loadsheet edits with
 // no reception. Those writes already persist to localStorage immediately; here we ALSO queue the
@@ -790,6 +793,15 @@ window.toggleTheme=function(){
   }catch(e){}
   if(typeof render==='function')render();
 };
+// ── Mute all sound ── persisted in localStorage 'ts_muted'. When on, every in-app chime/beep and
+// vibration is suppressed (see _rzChimeBeep / _notifChime). Off by default.
+function _soundMuted(){try{return localStorage.getItem('ts_muted')==='1';}catch(e){return false;}}
+window._soundMuted=_soundMuted;
+window.toggleMute=function(){
+  try{localStorage.setItem('ts_muted',_soundMuted()?'0':'1');}catch(e){}
+  if(typeof toast==='function')toast(_soundMuted()?'All sound muted 🔇':'Sound on 🔔',_soundMuted()?'info':'ok');
+  if(typeof render==='function')render();
+};
 // True while the Admin > Permissions grid is actively on screen (renderAdminPerms bumps
 // S._permsPageTs on every render). While editing, background reloads must NOT overwrite
 // S.rolePerms or they wipe unsaved ticks (the 5s edit-timer alone is not enough — a
@@ -880,7 +892,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.99';
+const APP_VER='v27.00';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3701,6 +3713,7 @@ function renderAccountModal(){
       </div>
       ${changePwMsg?`<div style="padding:8px 12px;border-radius:7px;margin-bottom:12px;font-size:13px;font-weight:600;background:${changePwMsg.ok?'var(--ok-bg)':'var(--err-bg)'};color:${changePwMsg.ok?'var(--ok-text)':'var(--err-text)'};border:1px solid ${changePwMsg.ok?'var(--ok-border)':'var(--err-border)'}">${changePwMsg.text}</div>`:''}
       <button onclick="window.toggleTheme()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">${(typeof _themeIsLight==='function'&&_themeIsLight())?'\u{1F319} Switch to dark mode':'☀️ Switch to light mode'}</button>
+      <button onclick="window.toggleMute()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">${(typeof _soundMuted==='function'&&_soundMuted())?'🔔 Unmute sound':'🔇 Mute all sound'}</button>
       <button onclick="window.goToMyProfile()" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">&#x270F; Edit My Profile</button>
       <button onclick="S._homeApplied=false;logout();S.showAccount=false;" style="width:100%;padding:10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#f87171;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px">Sign Out</button>
       ${_renderHomePicker()}
@@ -7723,11 +7736,18 @@ window.submitLsInPlace=async function(){
   lsSet('ts_loadsheets_cache',S.saved);
   S.editId=id;S.formDirty=false;
   var _t=S.lsTabs.find(function(t){return t.id===id;});if(_t)delete _t.originalForm;
-  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
+  const _ok=await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
+  // Tell other devices to live-refresh: ls_signed carries the id so desktops reload AND swap the
+  // open tab's form to the signed one (shows the signature without a manual refresh). ls_saved alone
+  // didn't update an already-open tab / didn't re-render off the Saved tab.
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
-  toast('Loadsheet submitted ✓','ok');
+  // sbU returns null when the cloud write failed (e.g. an expired session 401, or offline). Don't
+  // claim "submitted ✓" in that case — it's queued (ts_sync_queue) and replays when back online /
+  // re-signed-in, but the pilot must know it isn't on the system yet.
+  if(_ok){toast('Loadsheet submitted ✓','ok');}
+  else{toast('⚠ Signed on THIS device but NOT yet uploaded (no connection or your session expired). It will upload automatically once you reconnect — sign out and back in if it persists.','warn');}
   // Keep the signed loadsheet OPEN so the pilot can read it while loading the aircraft. Mark the
   // live form + its tab complete (removes the "unsigned" banner; the chip shows ✓).
   f.status='complete';
@@ -7753,10 +7773,11 @@ window.handleSubmit=async()=>{
   var _submitTab=S.lsTabs.find(function(t){return t.id===id;});
   if(_submitTab)delete _submitTab.originalForm;
   // Google Drive upload happens via nightly scheduler only
-  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
+  const _ok2=await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
-  toast('Loadsheet submitted.','ok');
+  if(_ok2){toast('Loadsheet submitted.','ok');}
+  else{toast('⚠ Signed on THIS device but NOT yet uploaded (no connection or your session expired). It will upload automatically once you reconnect — sign out and back in if it persists.','warn');}
   // Keep the signed loadsheet OPEN so the pilot can read it while loading.
   f.status='complete';
   var _t3=S.lsTabs.find(function(t){return t.id===id;});if(_t3){_t3.form=f;_t3.status='complete';}
@@ -15670,6 +15691,7 @@ var _rzAudioCtx=null;
 function _rzEnsureAudio(){try{if(!_rzAudioCtx&&(window.AudioContext||window.webkitAudioContext))_rzAudioCtx=new (window.AudioContext||window.webkitAudioContext)();if(_rzAudioCtx&&_rzAudioCtx.state==='suspended')_rzAudioCtx.resume();}catch(e){}}
 try{['click','touchend'].forEach(function(ev){window.addEventListener(ev,_rzEnsureAudio,{passive:true});});}catch(e){}
 function _rzChimeBeep(){
+  if(typeof _soundMuted==='function'&&_soundMuted())return; // user muted all sound
   if(!_rzAudioCtx||_rzAudioCtx.state!=='running')return;
   try{
     var t=_rzAudioCtx.currentTime;
@@ -15692,6 +15714,7 @@ function _rzChimeBeep(){
 // A single, more prominent chime when a NEW notification arrives — a 3-note rising triangle tone,
 // louder than the (two-note sine) pickup-ack chime so it stands out. Shares the same audio context.
 function _notifChime(){
+  if(typeof _soundMuted==='function'&&_soundMuted())return; // user muted all sound
   try{_rzEnsureAudio();}catch(e){}
   if(!_rzAudioCtx||_rzAudioCtx.state!=='running')return;
   try{
@@ -17829,12 +17852,12 @@ function _rzRenderSchedule(){
       var _fbHeld=g.start;var _fbOv=(S._rzFlybackTime||{})[_rzFbTimeKey(g.product,_fbHeld)];
       if(_fbOv||sm===720){
         var _ft=_rzFbTime(g.product,_fbHeld);var _fm=_rzMinsFromHHMM(_ft);if(_fm==null)_fm=930;
-        // The aircraft only flies the RETURN leg (Milford→QN), ~40 min. Show the block as the LAST 40
-        // minutes of the flyback hour: a 15:30 flyback renders 15:50–16:30 (end held, start = end−40).
-        // _fbTime keeps the real fly-back time for the dropdown/logic so the block move doesn't change it.
-        g._fbHeld=_fbHeld;g._fbTime=_ft;var _fe=_fm+60;
-        g.start=_rzMinToHHMM(_fe-40);
-        g.end=String(Math.floor(_fe/60)).padStart(2,'0')+':'+String(_fe%60).padStart(2,'0');
+        // The aircraft flies the RETURN leg (Milford→QN), ~40 min. The block STARTS at the actual
+        // fly-back time (so dragging the block to 15:00 leaves it at 15:00, matching the dropdown) and
+        // runs 40 min: a 15:30 flyback renders 15:30–16:10. _fbTime keeps the real fly-back time.
+        g._fbHeld=_fbHeld;g._fbTime=_ft;
+        g.start=_rzMinToHHMM(_fm);
+        g.end=String(Math.floor((_fm+40)/60)).padStart(2,'0')+':'+String((_fm+40)%60).padStart(2,'0');
       }
     } else {
       // Any other departure: independent TOP (departure) and BOTTOM (return) overrides set by dragging

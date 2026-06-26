@@ -1785,11 +1785,18 @@ window.submitLsInPlace=async function(){
   lsSet('ts_loadsheets_cache',S.saved);
   S.editId=id;S.formDirty=false;
   var _t=S.lsTabs.find(function(t){return t.id===id;});if(_t)delete _t.originalForm;
-  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
+  const _ok=await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
+  // Tell other devices to live-refresh: ls_signed carries the id so desktops reload AND swap the
+  // open tab's form to the signed one (shows the signature without a manual refresh). ls_saved alone
+  // didn't update an already-open tab / didn't re-render off the Saved tab.
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
-  toast('Loadsheet submitted ✓','ok');
+  // sbU returns null when the cloud write failed (e.g. an expired session 401, or offline). Don't
+  // claim "submitted ✓" in that case — it's queued (ts_sync_queue) and replays when back online /
+  // re-signed-in, but the pilot must know it isn't on the system yet.
+  if(_ok){toast('Loadsheet submitted ✓','ok');}
+  else{toast('⚠ Signed on THIS device but NOT yet uploaded (no connection or your session expired). It will upload automatically once you reconnect — sign out and back in if it persists.','warn');}
   // Keep the signed loadsheet OPEN so the pilot can read it while loading the aircraft. Mark the
   // live form + its tab complete (removes the "unsigned" banner; the chip shows ✓).
   f.status='complete';
@@ -1815,10 +1822,11 @@ window.handleSubmit=async()=>{
   var _submitTab=S.lsTabs.find(function(t){return t.id===id;});
   if(_submitTab)delete _submitTab.originalForm;
   // Google Drive upload happens via nightly scheduler only
-  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
-  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
+  const _ok2=await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
+  if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
-  toast('Loadsheet submitted.','ok');
+  if(_ok2){toast('Loadsheet submitted.','ok');}
+  else{toast('⚠ Signed on THIS device but NOT yet uploaded (no connection or your session expired). It will upload automatically once you reconnect — sign out and back in if it persists.','warn');}
   // Keep the signed loadsheet OPEN so the pilot can read it while loading.
   f.status='complete';
   var _t3=S.lsTabs.find(function(t){return t.id===id;});if(_t3){_t3.form=f;_t3.status='complete';}

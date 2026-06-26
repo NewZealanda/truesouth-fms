@@ -78,6 +78,9 @@ async function _sbFetch(url, opts){
       const h=Object.assign({}, opts.headers||{});
       h['Authorization']=SH['Authorization'];   // fresh token set by _applySession
       r=await fetch(url, Object.assign({}, opts, {headers:h}));
+      // A just-refreshed token means any writes queued while the session was stale (e.g. a pilot's
+      // signed loadsheet that 401'd) can now replay. Fire-and-forget so we don't block this request.
+      try{if(typeof _syncFlush==='function')setTimeout(function(){_syncFlush();},0);}catch(e){}
     } else {
       _sbWarnExpired();   // refresh token itself is gone — tell the user (throttled)
     }
@@ -156,7 +159,7 @@ function _seatmapSyncPool(){
     pool.push({id:p.id,name:p.name,weight:p.weight,bag:p.bag||0,group:p.group||'',infant:p.infantName||null,type:p.type||'adult',paymentReq:!!p.paymentReq});
   });
 }
-const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);if(r.status>=500||r.status===0)_syncEnqueue(t,d);return null;}_syncPurge(t,d);return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);_syncEnqueue(t,d);return null;}};
+const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);if(r.status>=500||r.status===0||r.status===401||r.status===403)_syncEnqueue(t,d);return null;}_syncPurge(t,d);return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);_syncEnqueue(t,d);return null;}};
 // ── Offline write queue ───────────────────────────────────────────────────────
 // A device in the field (e.g. a pilot mid-flight) may capture flight records or loadsheet edits with
 // no reception. Those writes already persist to localStorage immediately; here we ALSO queue the
@@ -450,6 +453,15 @@ window.toggleTheme=function(){
   }catch(e){}
   if(typeof render==='function')render();
 };
+// ── Mute all sound ── persisted in localStorage 'ts_muted'. When on, every in-app chime/beep and
+// vibration is suppressed (see _rzChimeBeep / _notifChime). Off by default.
+function _soundMuted(){try{return localStorage.getItem('ts_muted')==='1';}catch(e){return false;}}
+window._soundMuted=_soundMuted;
+window.toggleMute=function(){
+  try{localStorage.setItem('ts_muted',_soundMuted()?'0':'1');}catch(e){}
+  if(typeof toast==='function')toast(_soundMuted()?'All sound muted 🔇':'Sound on 🔔',_soundMuted()?'info':'ok');
+  if(typeof render==='function')render();
+};
 // True while the Admin > Permissions grid is actively on screen (renderAdminPerms bumps
 // S._permsPageTs on every render). While editing, background reloads must NOT overwrite
 // S.rolePerms or they wipe unsaved ticks (the 5s edit-timer alone is not enough — a
@@ -540,7 +552,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.99';
+const APP_VER='v27.00';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

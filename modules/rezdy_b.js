@@ -777,6 +777,7 @@ var _rzAudioCtx=null;
 function _rzEnsureAudio(){try{if(!_rzAudioCtx&&(window.AudioContext||window.webkitAudioContext))_rzAudioCtx=new (window.AudioContext||window.webkitAudioContext)();if(_rzAudioCtx&&_rzAudioCtx.state==='suspended')_rzAudioCtx.resume();}catch(e){}}
 try{['click','touchend'].forEach(function(ev){window.addEventListener(ev,_rzEnsureAudio,{passive:true});});}catch(e){}
 function _rzChimeBeep(){
+  if(typeof _soundMuted==='function'&&_soundMuted())return; // user muted all sound
   if(!_rzAudioCtx||_rzAudioCtx.state!=='running')return;
   try{
     var t=_rzAudioCtx.currentTime;
@@ -799,6 +800,7 @@ function _rzChimeBeep(){
 // A single, more prominent chime when a NEW notification arrives — a 3-note rising triangle tone,
 // louder than the (two-note sine) pickup-ack chime so it stands out. Shares the same audio context.
 function _notifChime(){
+  if(typeof _soundMuted==='function'&&_soundMuted())return; // user muted all sound
   try{_rzEnsureAudio();}catch(e){}
   if(!_rzAudioCtx||_rzAudioCtx.state!=='running')return;
   try{

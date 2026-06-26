@@ -1083,12 +1083,12 @@ function _rzRenderSchedule(){
       var _fbHeld=g.start;var _fbOv=(S._rzFlybackTime||{})[_rzFbTimeKey(g.product,_fbHeld)];
       if(_fbOv||sm===720){
         var _ft=_rzFbTime(g.product,_fbHeld);var _fm=_rzMinsFromHHMM(_ft);if(_fm==null)_fm=930;
-        // The aircraft only flies the RETURN leg (Milford→QN), ~40 min. Show the block as the LAST 40
-        // minutes of the flyback hour: a 15:30 flyback renders 15:50–16:30 (end held, start = end−40).
-        // _fbTime keeps the real fly-back time for the dropdown/logic so the block move doesn't change it.
-        g._fbHeld=_fbHeld;g._fbTime=_ft;var _fe=_fm+60;
-        g.start=_rzMinToHHMM(_fe-40);
-        g.end=String(Math.floor(_fe/60)).padStart(2,'0')+':'+String(_fe%60).padStart(2,'0');
+        // The aircraft flies the RETURN leg (Milford→QN), ~40 min. The block STARTS at the actual
+        // fly-back time (so dragging the block to 15:00 leaves it at 15:00, matching the dropdown) and
+        // runs 40 min: a 15:30 flyback renders 15:30–16:10. _fbTime keeps the real fly-back time.
+        g._fbHeld=_fbHeld;g._fbTime=_ft;
+        g.start=_rzMinToHHMM(_fm);
+        g.end=String(Math.floor((_fm+40)/60)).padStart(2,'0')+':'+String((_fm+40)%60).padStart(2,'0');
       }
     } else {
       // Any other departure: independent TOP (departure) and BOTTOM (return) overrides set by dragging
