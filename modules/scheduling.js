@@ -1004,7 +1004,11 @@ function _schedDepCandidateSets(date,d){
     out.push({acs:acs,cost:cost,cnt:cnt});
   }
   out.sort(function(a,b){return (a.cost-b.cost)||(a.cnt-b.cnt);});
-  return out.slice(0,8).map(function(o){return o.acs;});
+  // Keep more than the cheapest few: a multi-tail "spread" set is expensive on THIS departure's static
+  // cost (so it ranks low) yet can be the cheapest WHOLE-DAY option because it frees a big tail for a
+  // later departure (no ferry). The refinement re-costs each over the full day, so we hand it a wider
+  // slate and let _schedSimulate decide. Bounded so the paired search stays cheap.
+  return out.slice(0,16).map(function(o){return o.acs;});
 }
 // Whole-day plan = the greedy forward sim, then a bounded WHOLE-DAY refinement: hill-climb by
 // reassigning ONE unlocked departure at a time to a feasible aircraft set, re-cost the ENTIRE day,
@@ -1019,23 +1023,40 @@ function _schedDayPlan(date,opts){
   var base=_schedSimulate(date,opts,{});
   if(opts.noRefine||opts.maxAircraft!=null)return base;   // cap-sweeps / explicit opt-out keep the raw greedy
   // Pre-compute the candidate sets per unlocked departure (stable across rounds — keyed by dep).
-  var candCache={};base.departures.forEach(function(d){if(!d.locked)candCache[d.key]=_schedDepCandidateSets(date,d);});
+  var unlocked=base.departures.filter(function(d){return !d.locked;});
+  var candCache={};unlocked.forEach(function(d){candCache[d.key]=_schedDepCandidateSets(date,d);});
+  var _sk=function(arr){return arr.slice().sort().join(',');};
   var best=base,forced={};
-  for(var round=0;round<6;round++){
-    var move=null;
-    best.departures.forEach(function(d){
-      if(d.locked)return;
-      var sets=candCache[d.key]||[];if(sets.length<2)return;
-      var curKey=d.aircraft.map(function(a){return a.ac;}).slice().sort().join(',');
-      for(var si=0;si<sets.length;si++){
-        var set=sets[si];if(set.slice().sort().join(',')===curKey)continue;
-        var f={};Object.keys(forced).forEach(function(k){f[k]=forced[k];});f[d.key]=set;
-        var sim=_schedSimulate(date,opts,f);
-        if(sim.paxShort<=best.paxShort&&sim.cost<best.cost-0.5&&(!move||sim.cost<move.cost))move={key:d.key,set:set,cost:sim.cost,plan:sim};
-      }
-    });
+  // Hill-climb over the WHOLE day. Each round tries every improving reassignment — SINGLE departures and
+  // PAIRS of departures together — re-costs the entire day via _schedSimulate, and keeps the cheapest
+  // verified improvement (pax-short never worse). Pairs matter because the best plan often needs TWO
+  // coordinated changes that neither half achieves alone (e.g. spread the 0930 across small tails AND
+  // move the freed caravan to the 1200 — a one-at-a-time search is stuck in a local optimum). Every kept
+  // move strictly lowers the total, so the result is never worse than the greedy. Locked deps untouched.
+  for(var round=0;round<8;round++){
+    var move=null;   // {assign:{depKey:set,...}, plan}
+    var curOf={};best.departures.forEach(function(d){if(!d.locked)curOf[d.key]=_sk(d.aircraft.map(function(a){return a.ac;}));});
+    function _consider(assign){
+      var f={};Object.keys(forced).forEach(function(k){f[k]=forced[k];});Object.keys(assign).forEach(function(k){f[k]=assign[k];});
+      var sim=_schedSimulate(date,opts,f);
+      if(sim.paxShort<=best.paxShort&&sim.cost<best.cost-0.5&&(!move||sim.cost<move.plan.cost))move={assign:assign,plan:sim};
+    }
+    // 1) single-departure moves
+    for(var ui=0;ui<unlocked.length;ui++){var d1=unlocked[ui],s1=candCache[d1.key]||[];
+      for(var i=0;i<s1.length;i++){if(_sk(s1[i])===curOf[d1.key])continue;var a1={};a1[d1.key]=s1[i];_consider(a1);}
+    }
+    // 2) paired-departure moves (skip when too many unlocked deps so the search stays bounded)
+    if(unlocked.length<=8){
+      for(var ai=0;ai<unlocked.length;ai++){for(var bi=ai+1;bi<unlocked.length;bi++){
+        var da=unlocked[ai],db=unlocked[bi],sa=candCache[da.key]||[],sb=candCache[db.key]||[];
+        for(var x=0;x<sa.length;x++){for(var y=0;y<sb.length;y++){
+          if(_sk(sa[x])===curOf[da.key]&&_sk(sb[y])===curOf[db.key])continue;   // both unchanged → skip
+          var ap={};ap[da.key]=sa[x];ap[db.key]=sb[y];_consider(ap);
+        }}
+      }}
+    }
     if(!move)break;
-    forced[move.key]=move.set;best=move.plan;
+    Object.keys(move.assign).forEach(function(k){forced[k]=move.assign[k];});best=move.plan;
   }
   return best;
 }

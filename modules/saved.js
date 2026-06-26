@@ -140,7 +140,7 @@ function renderSaved(){
     var limitWarn=isSigned&&!ok?'<span class="pill pill-warn" style="font-size:10px">⚠ check limits</span>':'';
     function _whoAt(nm,isoTs){
       if(!nm&&!isoTs)return '';
-      var ini=nm?(nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase()):'?';
+      var ini=nm?(nm.trim().split(/\s+/).map(function(w){return w[0]||''}).join('').toUpperCase()):'';   // no name → no '?' placeholder
       if(!isoTs)return ini;
       var d=new Date(isoTs);var now=new Date();
       var sameDay=d.toDateString()===now.toDateString();
@@ -148,7 +148,7 @@ function renderSaved(){
       var wasYest=d.toDateString()===yest.toDateString();
       var hm=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
       var when=sameDay?'today at '+hm:wasYest?'yesterday at '+hm:d.getDate()+' '+'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[d.getMonth()]+' at '+hm;
-      return ini+' '+when;
+      return (ini?ini+' ':'')+when;   // "JC today at 16:10" or just "today at 16:10" when no name
     }
     var _savedBy=s.form.savedBy||(s.form.createdBy||'');
     var savedStr2=_whoAt(_savedBy,s.savedAt);
