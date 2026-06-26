@@ -513,7 +513,11 @@ function _rzPickups(){
       // Flybacks (FLB/CCF) ride the RETURN leg — there's no morning pickup, they're a DROP-OFF only
       // (fly Milford→Queenstown, then drive pax to their accommodation) under the "Flybacks" run.
       if(_rzIsFlyback(_rzProduct(it.product))){
-        out.push(Object.assign({},base,{id:id,depart:RZ_FLYBACK_DEP,pickupTime:ptime,dropoff:true}));
+        // Drop-off time = when the aircraft gets back to Queenstown (flyback arrival), unless the
+        // operator set an explicit time override on the board.
+        var _arrHHMM=_rzFbArrivalHHMM(_rzProduct(it.product),_rzHHMMcolon(pdep));
+        var _fbT=(tov[id]!=null&&tov[id]!=='')?tov[id]:(_arrHHMM||ptime);
+        out.push(Object.assign({},base,{id:id,depart:RZ_FLYBACK_DEP,pickupTime:_fbT,dropoff:true}));
         return;
       }
       // Morning pickup …
@@ -1268,6 +1272,13 @@ function _rzFbDefaultTime(held){
 }
 function _rzFbHasDefault(held){return true;}   // every flyback now has a season default time
 function _rzFbTime(prod,held){var v=(S._rzFlybackTime||{})[_rzFbTimeKey(prod,held)];return (v&&/^\d{1,2}:\d{2}$/.test(v))?v:_rzFbDefaultTime(held);}
+// When the aircraft gets BACK to Queenstown on a flyback = flyback departure + the return leg (custom
+// flyback end if the block was resized, else +40 min). Returned as HHMM (e.g. "1610") for pickup times.
+function _rzFbArrivalHHMM(prod,heldColon){
+  var ft=_rzFbTime(prod,heldColon);var fm=(typeof _rzMinsFromHHMM==='function')?_rzMinsFromHHMM(ft):null;if(fm==null)return '';
+  var eo=(S._rzFlybackEnd||{})[_rzFbTimeKey(prod,heldColon)];var em=(eo!=null&&typeof _rzMinsFromHHMM==='function')?_rzMinsFromHHMM(eo):null;
+  var arr=(em!=null)?em:fm+40;return (typeof _rzMinToHHMM==='function')?_rzMinToHHMM(arr).replace(':',''):'';
+}
 window.rezdySetFlybackTime=function(prod,held,val){
   S._rzFlybackTime=S._rzFlybackTime||{};var k=_rzFbTimeKey(prod,held);
   val=String(val||'').trim();
@@ -1291,25 +1302,65 @@ window.rezdySetFlybackEnd=function(prod,held,val){
 // + reason + next-best-day) / 'final' (yellow, final call made in the office). All carry a comment.
 var _WX_REASONS=['Cloud','Rain','Wind','Snow','Visibility'];
 function _wxLeadMin(){return 60;}                       // call due this many minutes before departure
-function _wxNotifyBeforeDeadlineMin(){return 15;}       // remind the PIC this long before the deadline
+var _WX_REMIND_MINS=[10,5,1];                           // escalating reminders this many min before the deadline
 function _wxCall(depKey){return (S._rzWxCalls||{})[String(depKey)]||null;}
 function _wxStatusColor(st){return st==='on'?'#22c55e':st==='cancelled'?'#ef4444':st==='final'?'#f59e0b':'#94a3b8';}
 function _wxStatusLabel(st){return st==='on'?'Called ON':st==='cancelled'?'Cancelled':st==='final'?'Final call (office)':'No call yet';}
-// The day's weather-call subjects: unique departure TIMES among today's real (aircraft) flights, with
-// their aircraft + PIC(s). Flybacks ride their outbound's call; manual/maintenance blocks are excluded.
+// Subject label for a departure, e.g. "MF FCF" (dest + product) or "MF FLB" (flyback). Time is shown separately.
+function _wxDepLabel(dep){var d=(dep&&dep.dest)||'',p=(dep&&dep.prod)||'';if(p&&p!==d)return (d?d+' ':'')+p;return d||p||'flight';}
+// Format a call's ISO timestamp as a local clock time, e.g. "10:40am".
+function _wxCallAtLabel(iso){try{var d=new Date(iso);if(isNaN(d.getTime()))return '';var h=d.getHours(),mm=d.getMinutes();var ap=h<12?'am':'pm';var h12=((h%12)||12);return h12+':'+String(mm).padStart(2,'0')+ap;}catch(e){return '';}}
+// The day's weather-call subjects: one row per departure TIME among today's real (aircraft) flights,
+// with their aircraft + PIC(s) + subject label. Flybacks (FLB/CCF) are INCLUDED as their own rows at
+// their return time — both standalone overflow flybacks (their own flight) and ones folded into a host
+// return flight (resolved via the attach map onto the host aircraft/PIC). Manual/maintenance blocks are
+// excluded. Each row carries a unique `key` (flybacks suffixed "·FB") used for call storage so a flyback
+// never shares a call record with an outbound at the same clock time. (v27.59)
 function _wxDepartures(date){
   var flights=(typeof _schedDayFlights==='function')?(_schedDayFlights(date)||[]):[];
-  var man=S._schedPilots||{},auto=S._schedAutoPilots||{},byTime={};
+  var man=S._schedPilots||{},auto=S._schedAutoPilots||{},byKey={};
+  function _row(rowKey,t,dm,isFb,dest,prod){
+    var g=byKey[rowKey];if(!g)g=byKey[rowKey]={key:rowKey,time:t,depMin:dm,acs:[],pics:[],dest:dest||'',prod:prod||'',isFb:!!isFb,_prods:{}};
+    if(isFb)g.isFb=true;return g;
+  }
   flights.forEach(function(f){
     var parts=String(f.key||'').split('|');if(parts.length<3)return;          // skip manual blocks (key=id)
     if(!((S.aircraft||{})[parts[0]]))return;                                  // real aircraft only
-    var prod=parts[2]||'';if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;
+    var gdest=parts[2]||'';var isFb=(typeof _rzIsFlyback==='function')&&_rzIsFlyback(gdest);
     var t=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';if(!t)return;
-    var g=byTime[t]||(byTime[t]={time:t,depMin:f.depMin,acs:[],pics:[],prod:prod});
+    var g=_row(isFb?(t+'·FB'):t,t,f.depMin,isFb,isFb?'MF':gdest,isFb?gdest:'');
     if(g.acs.indexOf(parts[0])<0)g.acs.push(parts[0]);
     var pic=man[f.key]||auto[f.key];if(pic&&g.pics.indexOf(pic)<0)g.pics.push(pic);
   });
-  return Object.keys(byTime).map(function(t){return byTime[t];}).sort(function(a,b){return a.depMin-b.depMin;});
+  // Attached flybacks (folded into a host flight → not their own entry in _schedDayFlights): still get
+  // their own weather call at the return time, on the host aircraft/PIC.
+  var attach=Object.assign({},S._schedAutoAttach||{},S._rzSchedAttach||{});
+  (S._rezdyBookings||[]).forEach(function(b){
+    if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
+    var ord=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(ord))return;
+    var tgt=attach[ord];if(!tgt)return;
+    ((b.items)||[]).forEach(function(it){
+      var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';if(!_rzIsFlyback(prod))return;
+      var ot=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!ot)return;
+      var orig=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(ot):ot;
+      var eff=(typeof _rzFbTime==='function')?_rzFbTime(prod,orig):orig;var dm=_rzMinsFromHHMM(eff);if(dm==null)return;
+      var t=_rzMinToHHMM(dm);var hac=String(tgt).split('|')[0];
+      var g=_row(t+'·FB',t,dm,true,'MF',prod);
+      if(hac&&((S.aircraft||{})[hac])&&g.acs.indexOf(hac)<0)g.acs.push(hac);
+      var pic=man[tgt]||auto[tgt];if(pic&&g.pics.indexOf(pic)<0)g.pics.push(pic);
+    });
+  });
+  // Fill the actual product code(s) for non-flyback departures (matched by departure time), e.g. FCF.
+  (S._rezdyBookings||[]).forEach(function(b){
+    if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
+    ((b.items)||[]).forEach(function(it){
+      var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';if(!prod||_rzIsFlyback(prod))return;
+      var ot=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!ot)return;
+      var hhmm=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(ot):ot;
+      var g=byKey[hhmm];if(g&&!g.isFb)g._prods[prod]=true;
+    });
+  });
+  return Object.keys(byKey).map(function(k){var g=byKey[k];if(!g.isFb){var ps=Object.keys(g._prods);if(ps.length)g.prod=ps.join('/');}return g;}).sort(function(a,b){return (a.depMin-b.depMin)||((a.isFb?1:0)-(b.isFb?1:0));});
 }
 // Next-best-day chips for a cancelled call: Tomorrow + the following few days (weekday labels).
 function _wxNextDays(date){
@@ -1335,8 +1386,10 @@ window.wxSubmit=function(status){
   render();
 };
 window.wxClear=function(dep){if(S._rzWxCalls)delete S._rzWxCalls[String(dep)];S._wxOpen=null;if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();if(typeof auditLog==='function')auditLog('weather_call_clear',{dep:dep});render();};
-// Reminder check: 15 min before the deadline (deadline = depart − 1h), if no call yet, notify each PIC
-// of that departure ONCE. The "_notified" flag rides in the synced blob so other devices don't re-send.
+// Reminder check (runs each minute): for every departure with no call yet, notify each PIC at 10, 5 and
+// 1 minute before the deadline (deadline = depart − 1h, i.e. when the weather call is due). Each milestone
+// fires ONCE; the sent set rides in the synced blob (rec._remind) so other devices don't re-send. Once a
+// call is entered, no further reminders go out.
 function _wxCheckReminders(){
   try{
     if(!S.user)return;var today=(typeof _todayLocal==='function')?_todayLocal():new Date().toISOString().slice(0,10);
@@ -1344,18 +1397,20 @@ function _wxCheckReminders(){
     var now=new Date();var nowMin=now.getHours()*60+now.getMinutes();
     var deps=_wxDepartures(today);var changed=false;
     deps.forEach(function(dep){
-      var call=_wxCall(dep.time);if(call&&call.status)return;             // already called
-      var deadline=dep.depMin-_wxLeadMin();var windowStart=deadline-_wxNotifyBeforeDeadlineMin();
-      if(nowMin<windowStart||nowMin>deadline)return;                     // not in the 15-min reminder window
-      if(!(dep.pics||[]).length)return;                                  // no PIC allocated yet → don't burn the reminder flag
-      S._rzWxCalls=S._rzWxCalls||{};var rec=S._rzWxCalls[dep.time]||{};
-      if(rec._notified)return;                                          // already reminded (synced flag)
-      rec._notified=true;S._rzWxCalls[dep.time]=rec;changed=true;
-      // notify each PIC of this departure
-      var msg='A weather call is required for your '+dep.time+' '+(dep.prod||'flight')+' departing '+_rzWxAmPm(dep.time)+'.';
-      (dep.pics||[]).forEach(function(code){
-        var u=_rzWxUserForPilot(code);if(!u||!u.id)return;
-        try{sbU('ts_notifications',[{user_id:u.id,type:'weather_call',message:msg,read:false,created_at:new Date().toISOString()}]);}catch(e){}
+      var call=_wxCall(dep.key);if(call&&call.status)return;              // already called → stop reminding
+      if(!(dep.pics||[]).length)return;                                  // no PIC allocated yet → don't fire
+      var deadline=dep.depMin-_wxLeadMin();                              // weather call is due here
+      if(nowMin>=deadline)return;                                       // deadline passed → no more reminders
+      S._rzWxCalls=S._rzWxCalls||{};var rec=S._rzWxCalls[dep.key]||{};var rem=rec._remind||(rec._remind={});
+      _WX_REMIND_MINS.forEach(function(m){
+        if(nowMin<deadline-m)return;                                    // milestone time not reached yet
+        if(rem[m])return;                                              // this milestone already sent (synced)
+        rem[m]=1;rec._remind=rem;S._rzWxCalls[dep.key]=rec;changed=true;
+        var msg='A weather call is required for your '+dep.time+' '+_wxDepLabel(dep)+'.';
+        (dep.pics||[]).forEach(function(code){
+          var u=_rzWxUserForPilot(code);if(!u||!u.id)return;
+          try{sbU('ts_notifications',[{user_id:u.id,type:'weather_call',message:msg,read:false,created_at:new Date().toISOString()}]);}catch(e){}
+        });
       });
     });
     if(changed&&window.pickupSave){window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();}
@@ -1397,12 +1452,13 @@ function _rzRenderWeatherCalls(){
     var acPills=dep.acs.map(function(a){var c=(typeof _rzAcCol==='function')?_rzAcCol(a):'#888';return '<span style="display:inline-block;border:1.5px solid '+c+';color:'+c+';border-radius:8px;padding:0 7px;font-weight:800;font-size:11px;white-space:nowrap">'+_rzEsc(String(a).replace('ZK-',''))+'</span>';}).join(' ');
     var picStr=dep.pics.length?dep.pics.join(', '):'';
     var _rs=_wxCallReasons(call);
-    var open=S._wxOpen===dep.time;
+    var open=S._wxOpen===dep.key;
+    var _atL=call&&call.at?_wxCallAtLabel(call.at):'';
     h+='<div style="border:1px solid '+(st?col:'var(--border2)')+';border-left:4px solid '+col+';border-radius:10px;margin:8px 0;overflow:hidden">'+
-      '<div onclick="window.wxOpenDep(\''+dep.time+'\')" style="display:flex;align-items:center;gap:10px;padding:11px 13px;cursor:pointer">'+
-        '<div style="font-weight:800;font-size:15px;color:var(--text1);min-width:54px">'+_rzEsc(dep.time)+'</div>'+
-        '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text2);display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span>'+_rzEsc(dep.prod||'FCF')+'</span>'+acPills+(picStr?'<span style="color:var(--text3);font-weight:600">'+_rzEsc(picStr)+'</span>':'')+'</div>'+
-          (call?'<div style="font-size:11px;color:var(--text3)">'+_rzEsc(_wxStatusLabel(st))+(_rs.length?' — '+_rzEsc(_rs.join(', ')):'')+(call.nextDay?' · next: '+_rzEsc(_wxDayLabel(call.nextDay,date)):'')+(call.by?' · by '+_rzEsc(call.by):'')+(call.comment?' · “'+_rzEsc(call.comment)+'”':'')+'</div>':'')+
+      '<div onclick="window.wxOpenDep(\''+dep.key+'\')" style="display:flex;align-items:center;gap:10px;padding:11px 13px;cursor:pointer">'+
+        '<div style="font-weight:800;font-size:15px;color:var(--text1);min-width:54px">'+_rzEsc(dep.time)+(dep.isFb?'<div style="font-size:9px;font-weight:800;color:#38bdf8;line-height:1">🛬 FLYBACK</div>':'')+'</div>'+
+        '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text2);display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span>'+_rzEsc(_wxDepLabel(dep))+'</span>'+acPills+(picStr?'<span style="color:var(--text3);font-weight:600">'+_rzEsc(picStr)+'</span>':'')+'</div>'+
+          (call?'<div style="font-size:11px;color:var(--text3)">'+_rzEsc(_wxStatusLabel(st))+(_rs.length?' — '+_rzEsc(_rs.join(', ')):'')+(call.nextDay?' · next: '+_rzEsc(_wxDayLabel(call.nextDay,date)):'')+(call.by?' · by '+_rzEsc(call.by):'')+(_atL?' at '+_rzEsc(_atL):'')+(call.comment?' · “'+_rzEsc(call.comment)+'”':'')+'</div>':'')+
         '</div>'+
         '<span style="flex-shrink:0;padding:3px 10px;border-radius:14px;background:'+col+'22;border:1px solid '+col+';color:'+col+';font-size:11px;font-weight:800">'+(st==='on'?'✓ ON':st==='cancelled'?'✕ CXLD':st==='final'?'⚠ FINAL':'— set')+'</span>'+
       '</div>';
@@ -1418,7 +1474,7 @@ function _rzRenderWeatherCalls(){
           '<button onclick="window.wxSubmit(\'cancelled\')" style="flex:1;min-width:110px;padding:10px;border-radius:9px;border:none;background:#ef4444;color:#fff;font-size:13px;font-weight:800;cursor:pointer">✕ Cancelled</button>'+
           '<button onclick="window.wxSubmit(\'final\')" style="flex:1;min-width:110px;padding:10px;border-radius:9px;border:none;background:#f59e0b;color:#3a2c06;font-size:13px;font-weight:800;cursor:pointer">⚠ Final (office)</button>'+
         '</div>'+
-        (call?'<button onclick="window.wxClear(\''+dep.time+'\')" style="margin-top:8px;background:none;border:none;color:var(--text3);font-size:11px;text-decoration:underline;cursor:pointer">clear this call</button>':'')+
+        (call?'<button onclick="window.wxClear(\''+dep.key+'\')" style="margin-top:8px;background:none;border:none;color:var(--text3);font-size:11px;text-decoration:underline;cursor:pointer">clear this call</button>':'')+
       '</div>';
     }
     h+='</div>';
