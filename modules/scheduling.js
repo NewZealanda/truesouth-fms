@@ -449,15 +449,13 @@ function renderResources(){
       dp.departures.forEach(function(d){
         var acs=d.aircraft.map(function(a){var c=(typeof _rzAcCol==='function')?_rzAcCol(a.ac):'#888';
           return '<span style="font-size:11px;font-weight:800;padding:1px 7px;border-radius:5px;background:'+c+'22;border:1px solid '+c+';color:'+c+'">'+_schedEsc(_schedAcShort(a.ac))+(a.reused?' ⤳':'')+'</span>';}).join(' ');
-        var lockCtl;
-        if(d.locked&&!d.manualLock)lockCtl='<span title="Departed — auto-locked" style="font-size:10px;color:var(--text3);font-weight:700">🔒 flown</span>';
-        else lockCtl='<button onclick="window.schedToggleLock(\''+sel+'\',\''+_schedEsc(d.time)+'\')" title="'+(d.manualLock?'Departed — each booking is pinned to its aircraft (survives refresh) and the optimiser leaves it. Click to undo.':'Mark this departure DEPARTED — pins each booking to its current aircraft so it stays put on refresh and the optimiser only re-plans the rest of the day.')+'" style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;cursor:pointer;border:1px solid '+(d.manualLock?'#22c55e':'var(--border2)')+';background:'+(d.manualLock?'rgba(34,197,94,.12)':'transparent')+';color:'+(d.manualLock?'#22c55e':'var(--text3)')+'">'+(d.manualLock?'🛫 departed':'🛫 mark departed')+'</button>';
+        var lockCtl=(d.locked&&!d.manualLock)?'<span title="Departed — auto-locked" style="font-size:10px;color:var(--text3);font-weight:700">🔒 flown</span>':'';
         h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-bottom:4px;'+(d.locked?'opacity:.72;':'')+'">'+
           '<b style="color:var(--text1);min-width:46px">'+_schedEsc(d.time)+'</b>'+
           (d.dest?'<span style="font-size:10px;font-weight:800;color:var(--text3)">'+_schedEsc(d.dest)+'</span>':'')+
           '<span style="color:var(--text3)">'+d.pax+' pax →</span>'+acs+
           (d.short?'<span style="color:#ef4444;font-weight:700;font-size:11px">⚠ short '+(d.pax-d.cap)+'</span>':'')+
-          '<span style="margin-left:auto">'+lockCtl+'</span></div>';
+          (lockCtl?'<span style="margin-left:auto">'+lockCtl+'</span>':'')+'</div>';
       });
       var ferries=dp.emptyLegs/2;
       var ci=_schedCallInAnalysis(sel);
@@ -695,8 +693,11 @@ function _schedComputeBlockPilots(flights){
   var ftime={};flights.forEach(function(f){if(f&&f.key)ftime[f.key]=[f.depMin,f.endMin];});
   var conflict={};
   Object.keys(manual).forEach(function(k){
-    var p=manual[k];if(!p)return;var t=ftime[k];var clash=false;
-    if(t){for(var k2 in out){if(k2===k||out[k2]!==p)continue;var t2=ftime[k2];if(t2&&t[0]<t2[1]&&t2[0]<t[1]){clash=true;break;}}}
+    var p=manual[k];if(!p)return;var t=ftime[k];var clash=false;var _kac=String(k).split('|')[0];
+    // Overlap on the SAME aircraft is NOT a clash — it's that aircraft's reused rotation (it ferries back
+    // and flies again), and the one pilot legitimately flies both legs. Only flag the same pilot on TWO
+    // DIFFERENT aircraft at overlapping times (they can't be in two planes at once).
+    if(t){for(var k2 in out){if(k2===k||out[k2]!==p||String(k2).split('|')[0]===_kac)continue;var t2=ftime[k2];if(t2&&t[0]<t2[1]&&t2[0]<t[1]){clash=true;break;}}}
     if(clash)conflict[k]=p;else out[k]=p;   // clashing pin skipped → auto pilot stands; flag for the calendar
   });
   S._schedPilotConflict=conflict;
