@@ -90,7 +90,17 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v26.76 (latest)** — NEW **Start of Day** + **Today** screens (`modules/startday.js`): one-action
+- **v26.99 (latest)** — **Calendar co-pilot.** A flight block can now carry a CO-PILOT in addition to
+  the PIC. Click a block → **Set co-pilot** picker in the detail panel (drag/Set-pilot still SWAPS the
+  PIC; this ADDS a 2nd crew). Co-pilot need NOT be type-rated; the current PIC is excluded. Store:
+  `S._schedCoPilots[key]` (same `ac|HH:MM|prod` key as `S._schedPilots`), persisted in the pickup blob
+  (`schedCoPilots` field) + reset on date change + synced via `_rzSchedBroadcast`. Handlers
+  `rezdySchedSetCoPilot`/`rezdySchedClearCoPilot` (rezdy.js); resolver `_rzSchedCoPilotFor` (rezdy_b.js,
+  no auto fallback). Flows through: **seatmap** auto-seeds `S._rzManCoPic` (seat 1) one-time per
+  departure+ac via `S._rzManCoSeed`/`_rzManCoAuto` (manual change/clear wins); **loadsheet** already
+  reads `_rzManCoPic`→`form.coPilot`; **pilot movements** mirrors the leg into the co-pilot's lane (＋co).
+  Block shows `✈PIC+CO` on the grid + a co-pilot pill in the detail header. ⚠️ uncommitted until lock clear.
+- **v26.76** — NEW **Start of Day** + **Today** screens (`modules/startday.js`): one-action
   morning flow (pull Rezdy → declared-weight preview → allocate aircraft + pilots) + a live exceptions
   dashboard, and an at-a-glance landing dashboard (departures board, counts, owing, quick links). `today`
   is selectable as a home via the "Open the app to" picker (default landing stays Bookings/operations);

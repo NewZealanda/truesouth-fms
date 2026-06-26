@@ -1114,6 +1114,7 @@ function _rzRenderSchedule(){
     var _autoP=((S._schedAutoPilots||{})[g.key])||((typeof _schedAutoPilotFor==='function')?_schedAutoPilotFor(g.aircraft,g.start):null);
     var pilot=_manP||_autoP||null;
     g.bd=gbd;g.pilot=pilot;g.pilotAuto=(!_manP&&!!_autoP);g.pilotChanged=(!!_manP&&!!_autoP&&_manP!==_autoP);g.pilotAutoWas=_autoP;
+    g.coPilot=(S._schedCoPilots||{})[g.key]||null;
     // Aircraft forced: a booking in this group whose aircraft was manually set to something other than
     // what the cost-aware auto-allocation would choose.
     g.acForced=false;g.acAutoWas=null;
@@ -1153,6 +1154,7 @@ function _rzRenderSchedule(){
             '<span class="pill" style="background:'+_gcol+'22;border:1px solid '+_gcol+';color:'+_gcol+';font-size:12px;font-weight:800;padding:2px 10px;border-radius:12px">'+_rzEsc(_gac||'Unallocated')+'</span>'+
             '<span style="font-size:14px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(_grp.start)+' · '+_rzEsc(_rzBdCompact(_grp.bd||{a:_grp.pax,c:0,i:0}))+' '+_rzEsc(_grp.disp||_grp.product)+'<span style="color:#f59e0b">'+_rzEsc(_rzFbSummary(_grp._fb))+'</span></span>'+
             (_grp.pilot?'<span class="pill" title="'+(_grp.pilotChanged?('User change from auto allocation — auto chose '+_rzEsc(_grp.pilotAutoWas)):(_grp.pilotAuto?'Auto-allocated pilot':''))+'" style="background:rgba(96,165,250,.15);border:1px solid '+(_grp.pilotChanged?'#f59e0b':'rgba(96,165,250,.5)')+';color:'+(_grp.pilotChanged?'#f59e0b':'#60a5fa')+';font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">✈ '+_rzEsc(_grp.pilot)+(_grp.pilotChanged?' ✏':(_grp.pilotAuto?' ⚙':''))+' <span onclick="event.stopPropagation();window.rezdySchedClearPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
+            (_grp.coPilot?'<span class="pill" title="Co-pilot" style="background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.5);color:#818cf8;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">＋✈ '+_rzEsc(_grp.coPilot)+' <span onclick="event.stopPropagation();window.rezdySchedClearCoPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove co-pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
           ((_gac&&S.user&&S.user.superAdmin)?'<button class="btn btn-ghost" style="font-size:12px;color:#f59e0b;border-color:rgba(245,158,11,.45)" title="Aircraft out of service — suggest a recovery (superadmin only, work in progress)" onclick="event.stopPropagation();window.rezdyBreakdownOpen(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')">🔧 Breakdown</button>':'')+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
@@ -1185,6 +1187,17 @@ function _rzRenderSchedule(){
       _gpick.forEach(function(p){var on=_grp.pilot===p.code;var off=!p.rostered;
         detailH+='<button onclick="event.stopPropagation();window.rezdySchedSetPilot(\''+_gkey+'\',\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(off?' (not rostered on today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid #60a5fa':'1px solid rgba(96,165,250,'+(off?'.28':'.5')+')')+';background:rgba(96,165,250,'+(on?'.22':(off?'.05':'.1'))+');color:#60a5fa;font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'✈ ')+_rzEsc(p.code)+(off?' <span style="font-size:8px;font-weight:700">off</span>':'')+'</button>';});
       detailH+='</div>';
+      // Set CO-PILOT — click-to-add a second crew member (only with an aircraft allocated). Co-pilots
+      // need NOT be type-rated; any rostered pilot may sit second seat. The current PIC is excluded.
+      if(_gac){
+        var _gco=_rzAvailablePilots().filter(function(p){return p.code!==_grp.pilot;});
+        detailH+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 8px">'+
+          '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#818cf8;font-weight:700;margin-right:2px">Set co-pilot</span>';
+        if(!_gco.length){detailH+='<span style="font-size:11px;color:var(--text3)">No other pilots available</span>';}
+        _gco.forEach(function(p){var on=_grp.coPilot===p.code;var off=!p.rostered;
+          detailH+='<button onclick="event.stopPropagation();window.rezdySchedSetCoPilot(\''+_gkey+'\',\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(off?' (not rostered on today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid #818cf8':'1px solid rgba(129,140,248,'+(off?'.28':'.5')+')')+';background:rgba(129,140,248,'+(on?'.22':(off?'.05':'.1'))+');color:#818cf8;font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'＋ ')+_rzEsc(p.code)+(off?' <span style="font-size:8px;font-weight:700">off</span>':'')+'</button>';});
+        detailH+='</div>';
+      }
       // Full product title(s) at the top — the real Rezdy product name, not just the short code.
       var _allBk=_grp.bookings.concat(_grp._fb||[]);
       var _titles=[];_allBk.forEach(function(bk){var t=String((bk.it&&bk.it.product)||'').trim();if(t&&_titles.indexOf(t)<0)_titles.push(t);});
@@ -1327,7 +1340,7 @@ function _rzRenderSchedule(){
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:grab;overflow:hidden;box-sizing:border-box;line-height:1.25;touch-action:none;user-select:none'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
         (_canResize?'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:6px 6px 0 0;cursor:ns-resize"></div><div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:0 0 6px 6px;cursor:ns-resize"></div>':'')+
         '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_forcedIcon+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
-        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
+        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(isBk&&b.pilot?' · <span style="color:#60a5fa;font-weight:700">✈'+_rzEsc(b.pilot)+(b.coPilot?'<span style="color:#818cf8">+'+_rzEsc(b.coPilot)+'</span>':'')+'</span>':'')+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';
     });
     var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
@@ -1645,10 +1658,15 @@ function _rzPilotMovements(){
   var flights=(typeof _schedDayFlights==='function')?_schedDayFlights(S.rezdyDate):[];
   var fBy={};flights.forEach(function(f){fBy[f.key]=f;});
   var blocksById={};(S._schedBlocks||[]).forEach(function(b){if(b&&b.id)blocksById[b.id]=b;});
+  var cop=S._schedCoPilots||{};
   var byPilot={};function ensure(p){return byPilot[p]||(byPilot[p]=[]);}
   Object.keys(fBy).forEach(function(k){
-    var pilot=man[k]||auto[k];if(!pilot)return;var f=fBy[k];var mb=blocksById[k];
+    var pilot=man[k]||auto[k];var co=cop[k];if(!pilot&&!co)return;var f=fBy[k];var mb=blocksById[k];
     var _pForced=(!!man[k]&&!!auto[k]&&man[k]!==auto[k]),_pAutoWas=auto[k];   // manually forced off the optimiser's pick
+    // Co-pilot flies the same leg (seat 1) → mirror it into their lane. Only for flights, not
+    // maintenance/ferry blocks.
+    if(co&&co!==pilot&&!mb){var parts2=String(k).split('|'),ac2=parts2[0],prod2=parts2[2]||'';var dest2=(typeof _rzGroupDest==='function')?_rzGroupDest(prod2):'';ensure(co).push({start:_rzMinToHHMM(f.depMin),end:_rzMinToHHMM(f.endMin),label:(ac2&&ac2!=='__unalloc__'?String(ac2).replace(/^ZK-?/,''):'?')+(dest2?' '+dest2:'')+' (co)',kind:'flight',ico:'✈',ac:ac2});}
+    if(!pilot)return;
     if(mb){
       var lbl=(mb.aircraft&&mb.aircraft!=='__misc__'&&mb.aircraft!=='__pilot__'?String(mb.aircraft).replace(/^ZK-?/,'')+' ':'')+(mb.label||mb.ftype||'Block');
       ensure(pilot).push({start:mb.start,end:mb.end,label:lbl,kind:'manual',ico:'🔧',ac:mb.aircraft});

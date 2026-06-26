@@ -297,11 +297,11 @@ window.rezdySetDate=function(v){
   // clear seatmap view-state that's scoped to a specific day (stale labels would mis-target Allocate/Create)
   S._rzManDepFilter=null;S._rzManShow=null;S._rzCombA=null;S._rzCombB=null;S._rzManCombineOpen=false;S._rzManCardOpen=null;S._rzManCoPic=null;
   // reset the calendar→seatmap PIC auto-fill tracking + the pickup-blob sync flag for the new day
-  S._rzManPicSeed={};S._rzManPicAuto={};S._rzManPickupSynced=false;
+  S._rzManPicSeed={};S._rzManPicAuto={};S._rzManCoSeed={};S._rzManCoAuto={};S._rzManPickupSynced=false;
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -674,9 +674,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','depTimeOv','depEndOv','plates','transMerge'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','depTimeOv','depEndOv','plates','transMerge'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -692,6 +692,7 @@ function _pkApplyBlob(d){
   S._rzManualBk=Array.isArray(d.manualBk)?d.manualBk:[];
   S._rezdyPaxMeta=(d.paxMeta&&typeof d.paxMeta==='object')?d.paxMeta:{};
   S._schedPilots=(d.schedPilots&&typeof d.schedPilots==='object')?d.schedPilots:{};
+  S._schedCoPilots=(d.schedCoPilots&&typeof d.schedCoPilots==='object')?d.schedCoPilots:{};
   S._rzBookingAc=(d.bookingAc&&typeof d.bookingAc==='object')?d.bookingAc:{};
   S._rzBookingWx=(d.bookingWx&&typeof d.bookingWx==='object')?d.bookingWx:{};
   S._rzBookingCheckedIn=(d.bookingCheckedIn&&typeof d.bookingCheckedIn==='object')?d.bookingCheckedIn:{};
@@ -1272,6 +1273,18 @@ function _rzSchedPilotFor(acId,dep){
   if(!found&&typeof _schedAutoPilotFor==='function')found=_schedAutoPilotFor(acId,tc);   // auto allocation fallback (by ac + time)
   return found;
 }
+// Co-pilot for an aircraft+departure (set from the calendar). Mirrors _rzSchedPilotFor but reads
+// S._schedCoPilots — and has NO auto fallback (co-pilots are never auto-allocated, only user-set).
+function _rzSchedCoPilotFor(acId,dep){
+  if(!acId||acId==='__unalloc__')return null;
+  var sp=S._schedCoPilots||{};
+  var t=String(dep||'').split('·')[0].split('+')[0];
+  var tc=_rzHHMMcolon(t);
+  var prefix=acId+'|'+tc+'|',found=null;
+  Object.keys(sp).forEach(function(k){if(!found&&k.indexOf(prefix)===0&&sp[k])found=sp[k];});
+  if(!found)(S._schedBlocks||[]).forEach(function(b){if(!found&&b&&b.aircraft===acId&&String(b.start)===tc&&sp[String(b.id)])found=sp[String(b.id)];});
+  return found;
+}
 function _rzRenderManifest(){
   if(!S._rzManLoaded){if(window.rezdyLoadManifest)window.rezdyLoadManifest();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading manifest…</div>';}
   // The calendar's pilot allocations live in the pickup blob — load it once so the seatmap can
@@ -1397,6 +1410,14 @@ function _rzRenderManifest(){
       var _sp=_rzSchedPilotFor(id,selDep);if(!_sp)return;
       var _cur=(S._rzManPic||{})[id];
       if((!_cur||_cur===S._rzManPicAuto[id])&&_cur!==_sp){S._rzManPic=S._rzManPic||{};S._rzManPic[id]=_sp;S._rzManPicAuto[id]=_sp;}
+    })();
+    // Same one-time auto-fill for the CO-PILOT from the calendar (seat 1). Manual change/clear wins.
+    (function(){
+      S._rzManCoSeed=S._rzManCoSeed||{};S._rzManCoAuto=S._rzManCoAuto||{};
+      var _sk=selDep+'|'+id;if(S._rzManCoSeed[_sk])return;S._rzManCoSeed[_sk]=1;
+      var _sc=(typeof _rzSchedCoPilotFor==='function')?_rzSchedCoPilotFor(id,selDep):null;if(!_sc)return;
+      var _cur=(S._rzManCoPic||{})[id];
+      if((!_cur||_cur===S._rzManCoAuto[id])&&_cur!==_sc){S._rzManCoPic=S._rzManCoPic||{};S._rzManCoPic[id]=_sc;S._rzManCoAuto[id]=_sc;if(typeof _rzManReseatDepForAc==='function')_rzManReseatDepForAc(id);}
     })();
     var picCode=(S._rzManPic||{})[id]||'';
     var unit=(a&&a.layout==='ga8')?'L':'lbs';

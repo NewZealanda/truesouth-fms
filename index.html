@@ -880,7 +880,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v26.98';
+const APP_VER='v26.99';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -14571,6 +14571,20 @@ window.rezdySchedSetPilot=function(key,code){
   if(ac&&ac!=='__unalloc__'){if(typeof _pilotRatedForAc==='function'&&!_pilotRatedForAc(code,ac)){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}}
   S._schedPilots=S._schedPilots||{};
   if(S._schedPilots[key]===code)delete S._schedPilots[key];else S._schedPilots[key]=code;  // toggle off if re-tapped
+  if(S._schedCoPilots&&S._schedCoPilots[key]===code)delete S._schedCoPilots[key]; // can't be PIC + co at once
+  if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
+};
+// CO-PILOT on a flight block (a SECOND crew member — distinct from the PIC). Drag / "Set pilot"
+// SWAPS the PIC; this ADDS a co-pilot via the block's click-to-set picker. Co-pilot need NOT be
+// type-rated on the aircraft (only the PIC must be). Re-tapping the same code clears it. Flows
+// through to the seatmap (seat 1), loadsheet (form.coPilot) and Pilot movements.
+window.rezdySchedClearCoPilot=function(key){if(S._schedCoPilots)delete S._schedCoPilots[String(key)];if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();};
+window.rezdySchedSetCoPilot=function(key,code){
+  key=String(key);if(!key||!code)return;
+  var pic=(S._schedPilots||{})[key]||(S._schedAutoPilots||{})[key];
+  if(pic===code){if(typeof toast==='function')toast(code+' is the PIC on this flight — pick a different co-pilot.','warn');return;}
+  S._schedCoPilots=S._schedCoPilots||{};
+  if(S._schedCoPilots[key]===code)delete S._schedCoPilots[key];else S._schedCoPilots[key]=code;  // toggle off if re-tapped
   if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
 };
 // Detach a flyback booking from a flight (revert the combine).
@@ -15176,11 +15190,11 @@ window.rezdySetDate=function(v){
   // clear seatmap view-state that's scoped to a specific day (stale labels would mis-target Allocate/Create)
   S._rzManDepFilter=null;S._rzManShow=null;S._rzCombA=null;S._rzCombB=null;S._rzManCombineOpen=false;S._rzManCardOpen=null;S._rzManCoPic=null;
   // reset the calendar→seatmap PIC auto-fill tracking + the pickup-blob sync flag for the new day
-  S._rzManPicSeed={};S._rzManPicAuto={};S._rzManPickupSynced=false;
+  S._rzManPicSeed={};S._rzManPicAuto={};S._rzManCoSeed={};S._rzManCoAuto={};S._rzManPickupSynced=false;
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -15553,9 +15567,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','depTimeOv','depEndOv','plates','transMerge'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','depTimeOv','depEndOv','plates','transMerge'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -15571,6 +15585,7 @@ function _pkApplyBlob(d){
   S._rzManualBk=Array.isArray(d.manualBk)?d.manualBk:[];
   S._rezdyPaxMeta=(d.paxMeta&&typeof d.paxMeta==='object')?d.paxMeta:{};
   S._schedPilots=(d.schedPilots&&typeof d.schedPilots==='object')?d.schedPilots:{};
+  S._schedCoPilots=(d.schedCoPilots&&typeof d.schedCoPilots==='object')?d.schedCoPilots:{};
   S._rzBookingAc=(d.bookingAc&&typeof d.bookingAc==='object')?d.bookingAc:{};
   S._rzBookingWx=(d.bookingWx&&typeof d.bookingWx==='object')?d.bookingWx:{};
   S._rzBookingCheckedIn=(d.bookingCheckedIn&&typeof d.bookingCheckedIn==='object')?d.bookingCheckedIn:{};
@@ -16151,6 +16166,18 @@ function _rzSchedPilotFor(acId,dep){
   if(!found&&typeof _schedAutoPilotFor==='function')found=_schedAutoPilotFor(acId,tc);   // auto allocation fallback (by ac + time)
   return found;
 }
+// Co-pilot for an aircraft+departure (set from the calendar). Mirrors _rzSchedPilotFor but reads
+// S._schedCoPilots — and has NO auto fallback (co-pilots are never auto-allocated, only user-set).
+function _rzSchedCoPilotFor(acId,dep){
+  if(!acId||acId==='__unalloc__')return null;
+  var sp=S._schedCoPilots||{};
+  var t=String(dep||'').split('·')[0].split('+')[0];
+  var tc=_rzHHMMcolon(t);
+  var prefix=acId+'|'+tc+'|',found=null;
+  Object.keys(sp).forEach(function(k){if(!found&&k.indexOf(prefix)===0&&sp[k])found=sp[k];});
+  if(!found)(S._schedBlocks||[]).forEach(function(b){if(!found&&b&&b.aircraft===acId&&String(b.start)===tc&&sp[String(b.id)])found=sp[String(b.id)];});
+  return found;
+}
 function _rzRenderManifest(){
   if(!S._rzManLoaded){if(window.rezdyLoadManifest)window.rezdyLoadManifest();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading manifest…</div>';}
   // The calendar's pilot allocations live in the pickup blob — load it once so the seatmap can
@@ -16276,6 +16303,14 @@ function _rzRenderManifest(){
       var _sp=_rzSchedPilotFor(id,selDep);if(!_sp)return;
       var _cur=(S._rzManPic||{})[id];
       if((!_cur||_cur===S._rzManPicAuto[id])&&_cur!==_sp){S._rzManPic=S._rzManPic||{};S._rzManPic[id]=_sp;S._rzManPicAuto[id]=_sp;}
+    })();
+    // Same one-time auto-fill for the CO-PILOT from the calendar (seat 1). Manual change/clear wins.
+    (function(){
+      S._rzManCoSeed=S._rzManCoSeed||{};S._rzManCoAuto=S._rzManCoAuto||{};
+      var _sk=selDep+'|'+id;if(S._rzManCoSeed[_sk])return;S._rzManCoSeed[_sk]=1;
+      var _sc=(typeof _rzSchedCoPilotFor==='function')?_rzSchedCoPilotFor(id,selDep):null;if(!_sc)return;
+      var _cur=(S._rzManCoPic||{})[id];
+      if((!_cur||_cur===S._rzManCoAuto[id])&&_cur!==_sc){S._rzManCoPic=S._rzManCoPic||{};S._rzManCoPic[id]=_sc;S._rzManCoAuto[id]=_sc;if(typeof _rzManReseatDepForAc==='function')_rzManReseatDepForAc(id);}
     })();
     var picCode=(S._rzManPic||{})[id]||'';
     var unit=(a&&a.layout==='ga8')?'L':'lbs';
@@ -17825,6 +17860,7 @@ function _rzRenderSchedule(){
     var _autoP=((S._schedAutoPilots||{})[g.key])||((typeof _schedAutoPilotFor==='function')?_schedAutoPilotFor(g.aircraft,g.start):null);
     var pilot=_manP||_autoP||null;
     g.bd=gbd;g.pilot=pilot;g.pilotAuto=(!_manP&&!!_autoP);g.pilotChanged=(!!_manP&&!!_autoP&&_manP!==_autoP);g.pilotAutoWas=_autoP;
+    g.coPilot=(S._schedCoPilots||{})[g.key]||null;
     // Aircraft forced: a booking in this group whose aircraft was manually set to something other than
     // what the cost-aware auto-allocation would choose.
     g.acForced=false;g.acAutoWas=null;
@@ -17864,6 +17900,7 @@ function _rzRenderSchedule(){
             '<span class="pill" style="background:'+_gcol+'22;border:1px solid '+_gcol+';color:'+_gcol+';font-size:12px;font-weight:800;padding:2px 10px;border-radius:12px">'+_rzEsc(_gac||'Unallocated')+'</span>'+
             '<span style="font-size:14px;font-weight:800;color:var(--text1)">🛫 '+_rzEsc(_grp.start)+' · '+_rzEsc(_rzBdCompact(_grp.bd||{a:_grp.pax,c:0,i:0}))+' '+_rzEsc(_grp.disp||_grp.product)+'<span style="color:#f59e0b">'+_rzEsc(_rzFbSummary(_grp._fb))+'</span></span>'+
             (_grp.pilot?'<span class="pill" title="'+(_grp.pilotChanged?('User change from auto allocation — auto chose '+_rzEsc(_grp.pilotAutoWas)):(_grp.pilotAuto?'Auto-allocated pilot':''))+'" style="background:rgba(96,165,250,.15);border:1px solid '+(_grp.pilotChanged?'#f59e0b':'rgba(96,165,250,.5)')+';color:'+(_grp.pilotChanged?'#f59e0b':'#60a5fa')+';font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">✈ '+_rzEsc(_grp.pilot)+(_grp.pilotChanged?' ✏':(_grp.pilotAuto?' ⚙':''))+' <span onclick="event.stopPropagation();window.rezdySchedClearPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
+            (_grp.coPilot?'<span class="pill" title="Co-pilot" style="background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.5);color:#818cf8;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">＋✈ '+_rzEsc(_grp.coPilot)+' <span onclick="event.stopPropagation();window.rezdySchedClearCoPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove co-pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
           ((_gac&&S.user&&S.user.superAdmin)?'<button class="btn btn-ghost" style="font-size:12px;color:#f59e0b;border-color:rgba(245,158,11,.45)" title="Aircraft out of service — suggest a recovery (superadmin only, work in progress)" onclick="event.stopPropagation();window.rezdyBreakdownOpen(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')">🔧 Breakdown</button>':'')+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
@@ -17896,6 +17933,17 @@ function _rzRenderSchedule(){
       _gpick.forEach(function(p){var on=_grp.pilot===p.code;var off=!p.rostered;
         detailH+='<button onclick="event.stopPropagation();window.rezdySchedSetPilot(\''+_gkey+'\',\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(off?' (not rostered on today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid #60a5fa':'1px solid rgba(96,165,250,'+(off?'.28':'.5')+')')+';background:rgba(96,165,250,'+(on?'.22':(off?'.05':'.1'))+');color:#60a5fa;font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'✈ ')+_rzEsc(p.code)+(off?' <span style="font-size:8px;font-weight:700">off</span>':'')+'</button>';});
       detailH+='</div>';
+      // Set CO-PILOT — click-to-add a second crew member (only with an aircraft allocated). Co-pilots
+      // need NOT be type-rated; any rostered pilot may sit second seat. The current PIC is excluded.
+      if(_gac){
+        var _gco=_rzAvailablePilots().filter(function(p){return p.code!==_grp.pilot;});
+        detailH+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 8px">'+
+          '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#818cf8;font-weight:700;margin-right:2px">Set co-pilot</span>';
+        if(!_gco.length){detailH+='<span style="font-size:11px;color:var(--text3)">No other pilots available</span>';}
+        _gco.forEach(function(p){var on=_grp.coPilot===p.code;var off=!p.rostered;
+          detailH+='<button onclick="event.stopPropagation();window.rezdySchedSetCoPilot(\''+_gkey+'\',\''+_rzEsc(p.code).replace(/'/g,"\\'")+'\')" title="'+_rzEsc(p.name)+(off?' (not rostered on today)':'')+'" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:16px;border:'+(on?'2px solid #818cf8':'1px solid rgba(129,140,248,'+(off?'.28':'.5')+')')+';background:rgba(129,140,248,'+(on?'.22':(off?'.05':'.1'))+');color:#818cf8;font-size:12px;font-weight:800;cursor:pointer;opacity:'+(off?'.6':'1')+'">'+(on?'✓ ':'＋ ')+_rzEsc(p.code)+(off?' <span style="font-size:8px;font-weight:700">off</span>':'')+'</button>';});
+        detailH+='</div>';
+      }
       // Full product title(s) at the top — the real Rezdy product name, not just the short code.
       var _allBk=_grp.bookings.concat(_grp._fb||[]);
       var _titles=[];_allBk.forEach(function(bk){var t=String((bk.it&&bk.it.product)||'').trim();if(t&&_titles.indexOf(t)<0)_titles.push(t);});
@@ -18038,7 +18086,7 @@ function _rzRenderSchedule(){
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:grab;overflow:hidden;box-sizing:border-box;line-height:1.25;touch-action:none;user-select:none'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
         (_canResize?'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:6px 6px 0 0;cursor:ns-resize"></div><div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:0 0 6px 6px;cursor:ns-resize"></div>':'')+
         '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_forcedIcon+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
-        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
+        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(isBk&&b.pilot?' · <span style="color:#60a5fa;font-weight:700">✈'+_rzEsc(b.pilot)+(b.coPilot?'<span style="color:#818cf8">+'+_rzEsc(b.coPilot)+'</span>':'')+'</span>':'')+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';
     });
     var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
@@ -18356,10 +18404,15 @@ function _rzPilotMovements(){
   var flights=(typeof _schedDayFlights==='function')?_schedDayFlights(S.rezdyDate):[];
   var fBy={};flights.forEach(function(f){fBy[f.key]=f;});
   var blocksById={};(S._schedBlocks||[]).forEach(function(b){if(b&&b.id)blocksById[b.id]=b;});
+  var cop=S._schedCoPilots||{};
   var byPilot={};function ensure(p){return byPilot[p]||(byPilot[p]=[]);}
   Object.keys(fBy).forEach(function(k){
-    var pilot=man[k]||auto[k];if(!pilot)return;var f=fBy[k];var mb=blocksById[k];
+    var pilot=man[k]||auto[k];var co=cop[k];if(!pilot&&!co)return;var f=fBy[k];var mb=blocksById[k];
     var _pForced=(!!man[k]&&!!auto[k]&&man[k]!==auto[k]),_pAutoWas=auto[k];   // manually forced off the optimiser's pick
+    // Co-pilot flies the same leg (seat 1) → mirror it into their lane. Only for flights, not
+    // maintenance/ferry blocks.
+    if(co&&co!==pilot&&!mb){var parts2=String(k).split('|'),ac2=parts2[0],prod2=parts2[2]||'';var dest2=(typeof _rzGroupDest==='function')?_rzGroupDest(prod2):'';ensure(co).push({start:_rzMinToHHMM(f.depMin),end:_rzMinToHHMM(f.endMin),label:(ac2&&ac2!=='__unalloc__'?String(ac2).replace(/^ZK-?/,''):'?')+(dest2?' '+dest2:'')+' (co)',kind:'flight',ico:'✈',ac:ac2});}
+    if(!pilot)return;
     if(mb){
       var lbl=(mb.aircraft&&mb.aircraft!=='__misc__'&&mb.aircraft!=='__pilot__'?String(mb.aircraft).replace(/^ZK-?/,'')+' ':'')+(mb.label||mb.ftype||'Block');
       ensure(pilot).push({start:mb.start,end:mb.end,label:lbl,kind:'manual',ico:'🔧',ac:mb.aircraft});

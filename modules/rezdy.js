@@ -1404,6 +1404,20 @@ window.rezdySchedSetPilot=function(key,code){
   if(ac&&ac!=='__unalloc__'){if(typeof _pilotRatedForAc==='function'&&!_pilotRatedForAc(code,ac)){if(typeof toast==='function')toast(code+' is not type-rated on '+String(ac).replace('ZK-','')+'.','warn');return;}}
   S._schedPilots=S._schedPilots||{};
   if(S._schedPilots[key]===code)delete S._schedPilots[key];else S._schedPilots[key]=code;  // toggle off if re-tapped
+  if(S._schedCoPilots&&S._schedCoPilots[key]===code)delete S._schedCoPilots[key]; // can't be PIC + co at once
+  if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
+};
+// CO-PILOT on a flight block (a SECOND crew member — distinct from the PIC). Drag / "Set pilot"
+// SWAPS the PIC; this ADDS a co-pilot via the block's click-to-set picker. Co-pilot need NOT be
+// type-rated on the aircraft (only the PIC must be). Re-tapping the same code clears it. Flows
+// through to the seatmap (seat 1), loadsheet (form.coPilot) and Pilot movements.
+window.rezdySchedClearCoPilot=function(key){if(S._schedCoPilots)delete S._schedCoPilots[String(key)];if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();};
+window.rezdySchedSetCoPilot=function(key,code){
+  key=String(key);if(!key||!code)return;
+  var pic=(S._schedPilots||{})[key]||(S._schedAutoPilots||{})[key];
+  if(pic===code){if(typeof toast==='function')toast(code+' is the PIC on this flight — pick a different co-pilot.','warn');return;}
+  S._schedCoPilots=S._schedCoPilots||{};
+  if(S._schedCoPilots[key]===code)delete S._schedCoPilots[key];else S._schedCoPilots[key]=code;  // toggle off if re-tapped
   if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();render();
 };
 // Detach a flyback booking from a flight (revert the combine).
