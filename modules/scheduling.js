@@ -427,7 +427,7 @@ function renderResources(){
           return '<span style="font-size:11px;font-weight:800;padding:1px 7px;border-radius:5px;background:'+c+'22;border:1px solid '+c+';color:'+c+'">'+_schedEsc(_schedAcShort(a.ac))+(a.reused?' ⤳':'')+'</span>';}).join(' ');
         var lockCtl;
         if(d.locked&&!d.manualLock)lockCtl='<span title="Departed — auto-locked" style="font-size:10px;color:var(--text3);font-weight:700">🔒 flown</span>';
-        else lockCtl='<button onclick="window.schedToggleLock(\''+sel+'\',\''+_schedEsc(d.time)+'\')" title="'+(d.manualLock?'Locked — optimiser won\'t change it. Click to unlock.':'Lock this departure so the optimiser leaves it and only re-plans the rest of the day.')+'" style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;cursor:pointer;border:1px solid '+(d.manualLock?'#f59e0b':'var(--border2)')+';background:'+(d.manualLock?'rgba(245,158,11,.12)':'transparent')+';color:'+(d.manualLock?'#f59e0b':'var(--text3)')+'">'+(d.manualLock?'🔒 locked':'🔓 lock')+'</button>';
+        else lockCtl='<button onclick="window.schedToggleLock(\''+sel+'\',\''+_schedEsc(d.time)+'\')" title="'+(d.manualLock?'Departed — each booking is pinned to its aircraft (survives refresh) and the optimiser leaves it. Click to undo.':'Mark this departure DEPARTED — pins each booking to its current aircraft so it stays put on refresh and the optimiser only re-plans the rest of the day.')+'" style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;cursor:pointer;border:1px solid '+(d.manualLock?'#22c55e':'var(--border2)')+';background:'+(d.manualLock?'rgba(34,197,94,.12)':'transparent')+';color:'+(d.manualLock?'#22c55e':'var(--text3)')+'">'+(d.manualLock?'🛫 departed':'🛫 mark departed')+'</button>';
         h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-bottom:4px;'+(d.locked?'opacity:.72;':'')+'">'+
           '<b style="color:var(--text1);min-width:46px">'+_schedEsc(d.time)+'</b>'+
           (d.dest?'<span style="font-size:10px;font-weight:800;color:var(--text3)">'+_schedEsc(d.dest)+'</span>':'')+
@@ -833,7 +833,36 @@ function _schedDepAssignedAc(date,time,dest){
   });
   return Object.keys(seats).map(function(ac){return {ac:ac,seats:seats[ac]};});
 }
-window.schedToggleLock=function(date,time){var lm=_schedLockMap();var d=lm[date]||(lm[date]={});if(d[time])delete d[time];else d[time]=true;if(!Object.keys(d).length)delete lm[date];_schedSave();render();};
+// Pin every booking at (date,time) to its CURRENTLY-assigned aircraft, written into the persisted
+// S._rzBookingAc map. The auto-allocator can return a different aircraft (or none) for a past
+// departure on the next refresh; a concrete pin can't — so the calendar keeps showing each booking on
+// the aircraft it left on, and the seatmap push keeps the same aircraft hint. Returns {pinned,unalloc}.
+function _schedPinDeparture(date,time){
+  var bks=_schedBookingsFor(date)||[];S._rzBookingAc=S._rzBookingAc||{};var n=0,none=0;
+  bks.forEach(function(b){
+    var o=String(b.orderNumber||'');if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
+    var atTime=false;(b.items||[]).forEach(function(it){var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;if(start===time)atTime=true;});
+    if(!atTime)return;
+    var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,o):null;
+    if(ac){S._rzBookingAc[o]=ac;n++;}else{none++;}
+  });
+  if(window.pickupSave)window.pickupSave(true);
+  return {pinned:n,unalloc:none};
+}
+// Reverse a pin: drop the manual aircraft override for this departure's bookings (back to auto).
+function _schedUnpinDeparture(date,time){
+  var bks=_schedBookingsFor(date)||[];if(!S._rzBookingAc)return;
+  bks.forEach(function(b){var o=String(b.orderNumber||'');var atTime=false;(b.items||[]).forEach(function(it){var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;if(start===time)atTime=true;});if(atTime)delete S._rzBookingAc[o];});
+  if(window.pickupSave)window.pickupSave(true);
+}
+// Lock/unlock = mark departed/undo. Locking PINS the aircraft (survives refresh); unlocking unpins.
+window.schedToggleLock=function(date,time){
+  var lm=_schedLockMap();var d=lm[date]||(lm[date]={});
+  if(d[time]){delete d[time];_schedUnpinDeparture(date,time);}
+  else{d[time]=true;var r=_schedPinDeparture(date,time);if(typeof toast==='function')toast('Departed '+time+' — '+r.pinned+' booking'+(r.pinned===1?'':'s')+' locked to their aircraft'+(r.unalloc?' ('+r.unalloc+' still unallocated)':''),r.unalloc?'warn':'ok');}
+  if(!Object.keys(d).length)delete lm[date];
+  _schedSave();if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
+};
 
 function _schedDayPlan(date,opts){
   opts=opts||{};var maxAc=(opts.maxAircraft!=null)?opts.maxAircraft:Infinity;

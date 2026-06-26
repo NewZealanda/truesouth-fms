@@ -90,7 +90,19 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.04 (latest)** — **seatmap: per-departure open/close tabs (like loadsheets) + cards closed
+- **v27.05 (latest)** — **explicit "Mark departed" (lock + PIN), fixes lock-then-refresh dumping past
+  departures into Unallocated.** Root cause: `schedToggleLock` only set a lock flag; a locked departure's
+  aircraft was still resolved via `_rzBookingAc`→auto, and the auto-allocator returns a different/empty
+  result for a past departure on the next refresh, so the booking fell into the Unallocated column. Fix:
+  `schedToggleLock` now `_schedPinDeparture(date,time)` — writes each booking's current aircraft into the
+  PERSISTED `S._rzBookingAc` map (pickup blob) on lock, and `_schedUnpinDeparture` removes them on unlock.
+  Because it's a concrete pin, the calendar keeps showing each booking on the aircraft it left on, across
+  a refresh. Added a **🛫 Mark departed / ✓ Departed** button to the calendar block detail panel (calls
+  `schedToggleLock` with the block's date/time) + a small green 🛫 marker on departed grid blocks
+  (`_departedIcon`). Scheduling-view lock button relabelled "🛫 mark departed/departed". Time-based
+  auto-lock stays disabled (v26.93) — departure locking is now an explicit action, so running late or a
+  late cancel won't auto-freeze; mark it departed when it actually goes.
+- **v27.04** — **seatmap: per-departure open/close tabs (like loadsheets) + cards closed
   by default + drag-to-combine departures.** New `S._rzManOpenDeps` (null = all open default; array =
   only those dep keys open) — helpers `_rzManOpenDepsList/_rzManOpenDep/_rzManCloseDepInternal/
   _rzManOpenCard` + handlers `rezdyManCloseDep`/`rezdyManReopenDep`/`rezdyManDepDragStart`/
