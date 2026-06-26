@@ -1274,7 +1274,9 @@ function _wxDepartures(date){
 // Next-best-day chips for a cancelled call: Tomorrow + the following few days (weekday labels).
 function _wxNextDays(date){
   var base=date?new Date(String(date)+'T00:00:00'):new Date();var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];var out=[];
-  for(var i=1;i<=5;i++){var d=new Date(base);d.setDate(d.getDate()+i);out.push({val:d.toISOString().slice(0,10),label:i===1?'Tomorrow':days[d.getDay()]});}
+  // base is LOCAL midnight; toISOString().slice(0,10) would emit the day BEFORE in NZ (UTC+12/+13),
+  // so the chip's val (the next-day reschedule date) was a day early. Use the local-date helper. (v27.48)
+  for(var i=1;i<=5;i++){var d=new Date(base);d.setDate(d.getDate()+i);out.push({val:(typeof _rIso==='function')?_rIso(d):d.toISOString().slice(0,10),label:i===1?'Tomorrow':days[d.getDay()]});}
   return out;
 }
 function _wxCallReasons(c){return (c&&c.reasons&&c.reasons.length)?c.reasons:((c&&c.reason)?[c.reason]:[]);}   // back-compat with the old single-reason field

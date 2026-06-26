@@ -718,6 +718,9 @@ function renderMaintEstimator(){
   const hist=m.hist||[];
   const acs=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'];
   const now=new Date();
+  // Local-date helper: NZ is UTC+12/+13, so toISOString().slice(0,10) on a current-time instant
+  // can land on the wrong calendar day (off-by-one). Format the local date instead. (v27.48)
+  const _estDate=(dys)=>{const dd=new Date(now.getTime()+dys*24*60*60*1000);return (typeof _rIso==='function')?_rIso(dd):dd.toISOString().slice(0,10);};
 
   const rows=acs.map(function(ac){
     const latest=maintGetLatest(ac);
@@ -748,15 +751,15 @@ function renderMaintEstimator(){
 
     const hrsPerYear=dailyAvg?Math.round(dailyAvg*365):null;
     const daysToCheck=dailyAvg&&toRun?Math.round(toRun/dailyAvg):null;
-    const checkDate=daysToCheck?new Date(now.getTime()+daysToCheck*24*60*60*1000).toISOString().slice(0,10):null;
+    const checkDate=daysToCheck?_estDate(daysToCheck):null;
     const inExtension=nc&&latest!=null&&latest>nc;
 
     const etr=m.engineToRun?.[ac];
     const ptr=m.propToRun?.[ac];
     const daysToEngine=dailyAvg&&etr?Math.round(etr/dailyAvg):null;
-    const engineDate=daysToEngine?new Date(now.getTime()+daysToEngine*24*60*60*1000).toISOString().slice(0,10):null;
+    const engineDate=daysToEngine?_estDate(daysToEngine):null;
     const daysToProp=dailyAvg&&ptr?Math.round(ptr/dailyAvg):null;
-    const propDate=daysToProp?new Date(now.getTime()+daysToProp*24*60*60*1000).toISOString().slice(0,10):null;
+    const propDate=daysToProp?_estDate(daysToProp):null;
 
     function fmtEst(date,days){
       if(!date) return'<span style="color:var(--text3)">—</span>';
@@ -858,7 +861,9 @@ function renderMaintSearch(){
     const allDates=[];
     const d=new Date(rangeFrom+'T00:00:00');
     const end=new Date(rangeTo+'T00:00:00');
-    while(d<=end){const ds=d.toISOString().slice(0,10);allDates.push(ds);d.setDate(d.getDate()+1);}
+    // Use the LOCAL calendar date (NZ is UTC+12/+13): d is local midnight, so toISOString().slice(0,10)
+    // would key each row a day early and never match the stored (local-dated) oil entries. (v27.48)
+    while(d<=end){const ds=(typeof _rIso==='function')?_rIso(d):d.toISOString().slice(0,10);allDates.push(ds);d.setDate(d.getDate()+1);}
     const oilByDate={};
     data.forEach(function(e){oilByDate[e.date]=e;});
     filtered=allDates.map(function(ds){return oilByDate[ds]||{date:ds};});

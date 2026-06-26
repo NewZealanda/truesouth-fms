@@ -90,7 +90,19 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.18 (latest)** — **whole-day allocator refinement (true whole-day cost, not just greedy).**
+- **v27.48 (latest) — nightly sweep: 3 date/UTC off-by-one fixes.** `ARCHITECTURE_REVIEW_v27.48.md` is
+  the latest full sweep (first sweep doc since v26.76; covers the v26.77→v27.47 cycle). All three fixes
+  are the same root cause — a LOCAL `Date` formatted via `toISOString().slice(0,10)`, which lands on the
+  previous calendar day in NZ (UTC+12/+13): (1) `rezdy.js _wxNextDays` Weather-call reschedule chips
+  stored a date one day early; (2) `maintenance.js` oil-history grid keyed every row a day early so real
+  oil entries showed as gaps; (3) `maintenance.js renderMaintEstimator` next-check/engine/prop estimate
+  dates jittered ±1 day by load time. All now use the local-date helper `_rIso` (guarded). Verified clean
+  this run: per-seat field maps (all 7 move together in every handler), weather-calls realtime
+  broadcast/persist, XSS escaping on weather + user-prefs, maintenance NaN guards (the v26.76
+  ml_hours/ml_used backlog item is closed — `addMaintEntry` already guards `!hours`). build + `node
+  --check` (4 blocks) → 0 errors; live truesouth.netlify.app loads clean (read-only). Stale
+  `.git/index.lock` from 26 Jun present but NOT deleted (temp-index commit trick sidesteps it).
+- **v27.18** — **whole-day allocator refinement (true whole-day cost, not just greedy).**
   scheduling.js. Extracted the forward sim into `_schedSimulate(date,opts,forced)` (forced = map of
   depKey→[ac] to PIN an unlocked departure; empty forced = the exact old greedy). `_schedDayPlan` now
   runs the greedy then a bounded hill-climb: `_schedDepCandidateSets(date,d)` lists feasible covering
