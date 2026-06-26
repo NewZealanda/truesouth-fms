@@ -90,7 +90,19 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.03 (latest)** — **flyback blocks now freely draggable + resizable.** Bug: the flyback drag
+- **v27.04 (latest)** — **seatmap: per-departure open/close tabs (like loadsheets) + cards closed
+  by default + drag-to-combine departures.** New `S._rzManOpenDeps` (null = all open default; array =
+  only those dep keys open) — helpers `_rzManOpenDepsList/_rzManOpenDep/_rzManCloseDepInternal/
+  _rzManOpenCard` + handlers `rezdyManCloseDep`/`rezdyManReopenDep`/`rezdyManDepDragStart`/
+  `rezdyManDepDrop` (rezdy_b.js). The dep tab bar now shows each OPEN departure as its own tab with a ✕
+  to close + a ⤬ to split a combined one; closed-but-populated deps show as faint ＋ "reopen" chips;
+  **drag one dep tab onto another to COMBINE** (→ `rezdyManCombineDeps`, same as transport). `rezdyManPull`
+  (push) opens the pushed dep(s) + focuses; combine/split keep the result open. Open set is per-device,
+  per-day in localStorage (`ts_rzman_open_<date>`), reset on date change, restored in `rezdyLoadManifest`
+  — NOT in the cloud manifest blob. Aircraft cards now default **closed** (`open=(_ov!=null)?_ov:false`);
+  `rezdyManAllocate` opens the cards that received pax and `rezdyManDrop` opens the card it dropped into.
+  `_rzManSelDep` + the render selDep now prefer OPEN deps.
+- **v27.03** — **flyback blocks now freely draggable + resizable.** Bug: the flyback drag
   stored its override under `m.origStart`, which for a flyback was the *rendered* return time (not the
   held slot), because `g._origStart` was never set — so the drag wrote `prod|15:30` but the render read
   `prod|12:00` and ignored it (block snapped back). Fix: bkBlocks now sets `g._origStart=g._fbHeld`

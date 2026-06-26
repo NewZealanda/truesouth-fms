@@ -475,6 +475,9 @@ window.rezdyManAllocate=function(){
   });
   // 4) Seat each aircraft (groups together, pair-aligned, CoG, infant rules).
   fleet.forEach(function(id){window.rezdyManReseat(dep,id);});
+  // Open the card of every aircraft that now carries pax for this departure (others stay collapsed).
+  S._rzManCardOpen=S._rzManCardOpen||{};
+  fleet.forEach(function(id){if(pax.some(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===dep;}))S._rzManCardOpen[dep+'|'+id]=true;});
   _rzManSave();render();
   if(overflow&&typeof toast==='function')toast('Allocated '+(unalloc.length-overflow)+' — '+overflow+' couldn\'t fit, add an aircraft.','warn');
   else if(typeof toast==='function')toast('Allocated '+unalloc.length+' to aircraft','ok');

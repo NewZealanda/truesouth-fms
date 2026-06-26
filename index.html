@@ -892,7 +892,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.03';
+const APP_VER='v27.04';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -15228,7 +15228,7 @@ window.rezdySetDate=function(v){
   S._rezdyBookings=null;S._rezdyOpen={};S._pickupVans=null;S._pickupCollected=null;S._schedBlocks=null;S._schedGroupKey=null;S._schedEdit=null;S._rzManLoaded=false;S._rzManPax=null;S._rzLsTabsLoaded=false;S._rzLsTabs=null;S._rzSchedUndo=null; // undo is per-day — start fresh on a date change
   S._pickupLoading=true; // show the Transport board's spinner (NOT a transient auto layout) until rezdyLoadPickups restores the saved arrangement — otherwise the auto layout flashes and looks like the allocation "reverted"
   // clear seatmap view-state that's scoped to a specific day (stale labels would mis-target Allocate/Create)
-  S._rzManDepFilter=null;S._rzManShow=null;S._rzCombA=null;S._rzCombB=null;S._rzManCombineOpen=false;S._rzManCardOpen=null;S._rzManCoPic=null;
+  S._rzManDepFilter=null;S._rzManShow=null;S._rzCombA=null;S._rzCombB=null;S._rzManCombineOpen=false;S._rzManCardOpen=null;S._rzManOpenDeps=null;S._rzManCoPic=null;
   // reset the calendar→seatmap PIC auto-fill tracking + the pickup-blob sync flag for the new day
   S._rzManPicSeed={};S._rzManPicAuto={};S._rzManCoSeed={};S._rzManCoAuto={};S._rzManPickupSynced=false;
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
@@ -16228,7 +16228,9 @@ function _rzRenderManifest(){
   if(!S._rzManPickupSynced){S._rzManPickupSynced=true;if(window.rezdyLoadPickups)window.rezdyLoadPickups();}
   var pax=S._rzManPax||[];
   var deps=_rzManDeps();
-  var selDep=(S._rzManDepFilter&&deps.indexOf(S._rzManDepFilter)>=0)?S._rzManDepFilter:(deps[0]||'—');
+  var _openDeps=_rzManOpenDepsList(deps);                 // departures with an OPEN seatmap tab
+  var _closedDeps=deps.filter(function(d){return _openDeps.indexOf(d)<0;}); // closed (reopen chips)
+  var selDep=(S._rzManDepFilter&&_openDeps.indexOf(S._rzManDepFilter)>=0)?S._rzManDepFilter:(_openDeps[0]||'—');
   var pool=pax.filter(function(p){return !p.ac&&!p.infantOf&&_rzPaxDep(p)===selDep;});
   var hidden=S._rzManHidden||[];
   var fleetAll=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
@@ -16265,12 +16267,25 @@ function _rzRenderManifest(){
       (_combined.length?'<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="font-size:11px;color:var(--text3);font-weight:700">Combined:</span>'+_combined.map(function(l){var lE=_rzEsc(l).replace(/'/g,"\\'");return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;padding:3px 9px;border-radius:14px;background:rgba(123,158,198,.18);border:1px solid var(--border2);color:var(--text2)">'+_rzEsc(l)+'<button onclick="window.rezdyManSplitDep(\''+lE+'\')" title="Split back apart" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:0;line-height:1">✕</button></span>';}).join('')+'</div>':'')+
     '</div>';
   }
-  // Departure tabs (e.g. "0800 FCF") — one departure at a time.
-  if(deps.length>1||(deps.length===1&&deps[0]!=='—')){
+  // Per-departure seatmap tabs (like loadsheet tabs): each pushed departure has its OWN tab, with a ✕
+  // to close it when done. Drag one tab onto another to COMBINE them. Departures that still have pax but
+  // were closed show as faint ＋ "reopen" chips.
+  if(deps.length){
     h+='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center">';
-    deps.forEach(function(d){var cnt=pax.filter(function(p){return !p.infantOf&&_rzPaxDep(p)===d;}).length;h+='<button onclick="S._rzManDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" class="sub-tab '+(selDep===d?'on':'')+'" style="white-space:nowrap;flex-shrink:0">🛫 '+_rzManDepLabel(d)+' <span style="opacity:.6">('+cnt+')</span></button>';});
-    // Un-merge the selected departure if it's a combined group.
-    if(selDep&&String(selDep).indexOf('+')>=0){h+='<button onclick="window.rezdyManSplitDep(\''+_rzEsc(selDep).replace(/'/g,"\\'")+'\')" title="Split this combined departure back apart" style="flex-shrink:0;white-space:nowrap;font-size:11px;font-weight:800;padding:5px 11px;border-radius:14px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer">⤬ Unmerge</button>';}
+    _openDeps.forEach(function(d){
+      var cnt=pax.filter(function(p){return !p.infantOf&&_rzPaxDep(p)===d;}).length;
+      var dE=_rzEsc(d).replace(/'/g,"\\'");var _isComb=String(d).indexOf('+')>=0;
+      h+='<span draggable="true" ondragstart="window.rezdyManDepDragStart(\''+dE+'\',event)" ondragover="event.preventDefault()" ondrop="window.rezdyManDepDrop(\''+dE+'\',event)" title="Drag onto another departure to combine" class="sub-tab '+(selDep===d?'on':'')+'" style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;cursor:grab">'+
+        '<span onclick="S._rzManDepFilter=\''+dE+'\';render()" style="cursor:pointer">🛫 '+_rzManDepLabel(d)+' <span style="opacity:.6">('+cnt+')</span></span>'+
+        (_isComb?'<span onclick="event.stopPropagation();window.rezdyManSplitDep(\''+dE+'\')" title="Split this combined departure back apart" style="cursor:pointer;opacity:.7;font-weight:800">⤬</span>':'')+
+        '<span onclick="event.stopPropagation();window.rezdyManCloseDep(\''+dE+'\')" title="Close this departure’s seatmap" style="cursor:pointer;opacity:.55;font-weight:800;margin-left:1px">✕</span>'+
+      '</span>';
+    });
+    _closedDeps.forEach(function(d){
+      var cnt=pax.filter(function(p){return !p.infantOf&&_rzPaxDep(p)===d;}).length;
+      var dE=_rzEsc(d).replace(/'/g,"\\'");
+      h+='<button onclick="window.rezdyManReopenDep(\''+dE+'\')" title="Reopen this departure’s seatmap" class="sub-tab" style="white-space:nowrap;flex-shrink:0;opacity:.5;border-style:dashed">＋ '+_rzManDepLabel(d)+' <span style="opacity:.6">('+cnt+')</span></button>';
+    });
     h+='</div>';
   }
   h+='<div class="card" ondragover="event.preventDefault();this.style.outline=\'2px solid var(--acc)\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.rezdyManDrop(\'__pool__\',event)" style="padding:10px 12px">'+
@@ -16360,10 +16375,10 @@ function _rzRenderManifest(){
     var std=a?Math.round(fromKg(_rzManDefFuelKg(selDep,id),id)):0;
     var fuelVal=(S._rzManFuel&&S._rzManFuel[id]!=null&&S._rzManFuel[id]!=='')?S._rzManFuel[id]:std;
     var idE=id.replace(/'/g,"\\'");
-    // Collapsible: open by default only when this aircraft has pax this departure; a manual
-    // toggle (keyed by departure+aircraft) overrides the auto state.
+    // Collapsible. CLOSED by default — aircraft only open when you push/allocate to them (or click the
+    // header). A manual toggle (keyed by departure+aircraft) overrides. Allocation sets the open flag.
     var _ckey=selDep+'|'+id;var _ov=(S._rzManCardOpen||{})[_ckey];
-    var open=(_ov!=null)?_ov:(list.length>0||!!_spareOpen[id]); // spare drop-boxes open by default
+    var open=(_ov!=null)?_ov:false;
     h+='<div class="rzman-card" ondragover="event.preventDefault();this.style.outline=\'2px solid '+col+'\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.rezdyManDrop(\''+id+'\',event)" style="background:var(--card);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:12px'+(open?'':';opacity:.92')+'">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px'+(open?';margin-bottom:8px':'')+'">'+
         '<div onclick="window.rezdyManToggleCard(\''+idE+'\')" style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0">'+
@@ -16512,6 +16527,7 @@ window.rezdyLoadManifest=async function(){
     else{S._rzManPax=[];S._rzManPic={};S._rzManCoPic={};S._rzManFuel={};S._rzManHidden=[];S._rzManSeats={};S._rzManCargo={};S._rzManDepMerge={};}
     // Capture the as-loaded baseline so the first save merges (doesn't clobber a concurrent edit).
     if(typeof _sbSetBase==='function')_sbSetBase('rz_manifest_'+S.rezdyDate,{pax:S._rzManPax,pic:S._rzManPic,coPic:S._rzManCoPic,fuel:S._rzManFuel,hidden:S._rzManHidden,seats:S._rzManSeats,cargo:S._rzManCargo,depMerge:S._rzManDepMerge});
+    _rzManLoadOpenDeps(); // restore this device's open/closed departure tabs for the day
     if(typeof _rzManSetUndoBase==='function'){_rzManSetUndoBase();S._rzManUndo=[];} // fresh undo history for the day
   }catch(e){S._rzManPax=S._rzManPax||[];S._rzManPic=S._rzManPic||{};S._rzManFuel=S._rzManFuel||{};S._rzManHidden=S._rzManHidden||[];S._rzManSeats=S._rzManSeats||{};S._rzManCargo=S._rzManCargo||{};S._rzManDepMerge=S._rzManDepMerge||{};}
   S._rzManLoaded=true;render();
@@ -16530,8 +16546,7 @@ window.rezdyPushToManifest=async function(){
   if(!S._rzManLoaded&&window.rezdyLoadManifest){try{await window.rezdyLoadManifest();}catch(_){}}
   var dep=_rzCurBookingsDep();
   if(!dep){if(typeof toast==='function')toast('No departure selected to push.','info');return;} // never full-wipe the seatmap
-  window.rezdyManPull(dep);
-  S._rzManDepFilter=dep; // focus the seatmap on the pushed departure
+  window.rezdyManPull(dep); // opens the pushed departure's seatmap tab + focuses it
 };
 // Preview the seatmap with DECLARED weights — includes passengers not yet checked in. Jumps to the
 // Seatmap so the layout + weight & balance can be eyeballed before check-in.
@@ -16609,7 +16624,13 @@ window.rezdyManPull=function(depScope,preview){
     if(depScope)return String(_rzPaxDep(p)).split('·')[0]!==String(depScope).split('·')[0];
     return false;                                         // full refresh when unscoped
   });
-  S._rzManPax=keep.concat(fresh);_rzManSave();
+  S._rzManPax=keep.concat(fresh);
+  // Each pushed departure opens its own seatmap tab + focus the first one.
+  var _pushedDeps={};fresh.forEach(function(p){if(!p.infantOf)_pushedDeps[_rzPaxDep(p)]=1;});
+  var _pdk=Object.keys(_pushedDeps).sort(_rzDepCmp);
+  _pdk.forEach(function(d){_rzManOpenDep(d);});if(_pdk.length)_rzManSaveOpenDeps();
+  if(_pdk.length)S._rzManDepFilter=_pdk[0];
+  _rzManSave();
   if(preview)toast('Preview: '+fresh.length+' pax at declared weights'+(notCheckedIn?' ('+notCheckedIn+' booking'+(notCheckedIn===1?'':'s')+' not checked in)':'')+(depScope&&depScope!=='—'?' · '+depScope:''),'ok');
   else toast(fresh.length+' checked-in pax pushed to seatmap'+(depScope&&depScope!=='—'?' · '+depScope:''),'ok');
   render();
@@ -16631,6 +16652,7 @@ window.rezdyManCombineDeps=function(a,b){
   S._rzManDepMerge=S._rzManDepMerge||{};
   members.forEach(function(base){S._rzManDepMerge[base]=label;});
   _rzManReseatDep(label); // re-seat the now-combined pax under the new departure key
+  _rzManOpenDep(label);_rzManSaveOpenDeps(); // the combined departure stays open
   S._rzManDepFilter=label;S._rzManCombineOpen=false;S._rzCombA='';S._rzCombB='';
   _rzManSave();render();
   if(typeof toast==='function')toast('Combined into '+label,'ok');
@@ -16641,8 +16663,8 @@ window.rezdyManSplitDep=function(label){
   var bases=Object.keys(merge).filter(function(base){return merge[base]===label;});
   bases.forEach(function(base){delete merge[base];});
   S._rzManDepMerge=merge;if(S._rzManDepFilter===label)S._rzManDepFilter=null;
-  bases.forEach(function(base){_rzManReseatDep(base);}); // re-seat each departure on its own again
-  _rzManSave();render();
+  bases.forEach(function(base){_rzManReseatDep(base);_rzManOpenDep(base);}); // re-seat + reopen each on its own
+  _rzManSaveOpenDeps();_rzManSave();render();
 };
 // Re-seat every aircraft that carries pax for a given (possibly combined) departure.
 function _rzManReseatDep(dep){
@@ -16686,7 +16708,7 @@ window.rezdyManDrop=function(ac,e){
     var _coSeat=((S._rzManCoPic||{})[dest])?1:-1; // seat 1 is the co-pilot's, never a pax
     var paxSeats=(typeof paxSeatIdxs==='function')?paxSeatIdxs(dest,_coSeat===1):[];var freeIdx=null;
     for(var i=0;i<paxSeats.length;i++){if(!sm[paxSeats[i]]){freeIdx=paxSeats[i];break;}}
-    if(freeIdx!=null){sm[freeIdx]=p.id;S._rzManSeats[key]=sm;}
+    if(freeIdx!=null){sm[freeIdx]=p.id;S._rzManSeats[key]=sm;_rzManOpenCard(dep,dest);} // open the card we just dropped into
     else{ // cabin full — leave them in the shared unallocated pool rather than an unseated overflow
       p.ac=null;(S._rzManPax||[]).forEach(function(x){if(x.infantOf===p.id)x.ac=null;});
       if(typeof toast==='function')toast(String(dest).replace('ZK-','')+' is full — '+(p.name||'passenger')+' stays in the pool.','warn');
@@ -16777,17 +16799,34 @@ function _rzPaxDep(p){var base=_rzBaseDep(p);var m=S._rzManDepMerge||{};return m
 function _rzManBaseDeps(){var set={};(S._rzManPax||[]).forEach(function(p){if(!p.infantOf)set[_rzBaseDep(p)]=1;});return Object.keys(set).sort(_rzDepCmp);}
 // The departure currently focused on the seatmap (defaults to the first one present).
 function _rzManSelDep(){
-  var deps=_rzManDeps();var f=S._rzManDepFilter;
-  if(f&&deps.indexOf(f)>=0)return f;
-  // A bookings push focuses by TIME only ("0800"); match it to the first time+dest departure.
-  if(f){var t=String(f).split('·')[0];var hit=deps.find(function(d){return d.split('·')[0]===t;});if(hit)return hit;}
-  return deps[0]||'—';
+  var deps=_rzManDeps();var open=_rzManOpenDepsList(deps);var f=S._rzManDepFilter;
+  if(f&&open.indexOf(f)>=0)return f;
+  // A bookings push focuses by TIME only ("0800"); match it to the first OPEN time+dest departure.
+  if(f){var t=String(f).split('·')[0];var hit=open.find(function(d){return d.split('·')[0]===t;});if(hit)return hit;}
+  return open[0]||'—';
 }
 // Distinct departures present in the manifest, sorted.
 function _rzManDeps(){
   var set={};(S._rzManPax||[]).forEach(function(p){if(!p.infantOf)set[_rzPaxDep(p)]=1;});
   return Object.keys(set).sort(_rzDepCmp);
 }
+// ── Per-departure seatmaps (like loadsheet tabs) ──────────────────────────────
+// Each departure/flight time has its OWN seatmap that opens when you push to it, and can be CLOSED
+// when you're done. S._rzManOpenDeps: null = every departure open (default); an array = only those
+// keys are open (everything else is a closed "reopen" chip). Closing one removes it; reopening adds it.
+function _rzManDepClosed(d){return Array.isArray(S._rzManOpenDeps)&&S._rzManOpenDeps.indexOf(d)<0;}
+function _rzManOpenDepsList(deps){deps=deps||_rzManDeps();return Array.isArray(S._rzManOpenDeps)?deps.filter(function(d){return S._rzManOpenDeps.indexOf(d)>=0;}):deps.slice();}
+function _rzManOpenDep(d){if(!d)return;if(Array.isArray(S._rzManOpenDeps)){if(S._rzManOpenDeps.indexOf(d)<0)S._rzManOpenDeps.push(d);}} // null = already all-open
+function _rzManCloseDepInternal(d){if(!Array.isArray(S._rzManOpenDeps))S._rzManOpenDeps=_rzManDeps().slice();S._rzManOpenDeps=S._rzManOpenDeps.filter(function(x){return x!==d;});}
+function _rzManOpenCard(dep,id){if(!dep||!id)return;S._rzManCardOpen=S._rzManCardOpen||{};S._rzManCardOpen[dep+'|'+id]=true;}
+window.rezdyManCloseDep=function(d){_rzManCloseDepInternal(d);if(S._rzManDepFilter===d)S._rzManDepFilter=null;_rzManSaveOpenDeps();render();};
+window.rezdyManReopenDep=function(d){_rzManOpenDep(d);S._rzManDepFilter=d;_rzManSaveOpenDeps();render();};
+// The open-departure set is a per-device, per-day view preference (persisted in localStorage so a
+// refresh keeps your open tabs, but NOT shared across devices via the manifest blob).
+function _rzManSaveOpenDeps(){try{var k='ts_rzman_open_'+S.rezdyDate;if(Array.isArray(S._rzManOpenDeps))localStorage.setItem(k,JSON.stringify(S._rzManOpenDeps));else localStorage.removeItem(k);}catch(e){}}
+function _rzManLoadOpenDeps(){try{var v=localStorage.getItem('ts_rzman_open_'+S.rezdyDate);S._rzManOpenDeps=v?JSON.parse(v):null;}catch(e){S._rzManOpenDeps=null;}}
+window.rezdyManDepDragStart=function(d,e){S._rzManDepDrag=d;try{if(e&&e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',d);}}catch(_){}};
+window.rezdyManDepDrop=function(target,e){if(e&&e.preventDefault)e.preventDefault();var src=S._rzManDepDrag;S._rzManDepDrag=null;if(!src||src===target)return;if(typeof window.rezdyManCombineDeps==='function')window.rezdyManCombineDeps(src,target);};
 function _rzManDepLabel(dep){
   // "0800 FCF" — show the time(s) (strip the ·DEST grouping suffix) + the product flown.
   var disp=String(dep||'').split('+').map(function(s){return s.split('·')[0];}).join('+');
@@ -17264,6 +17303,9 @@ window.rezdyManAllocate=function(){
   });
   // 4) Seat each aircraft (groups together, pair-aligned, CoG, infant rules).
   fleet.forEach(function(id){window.rezdyManReseat(dep,id);});
+  // Open the card of every aircraft that now carries pax for this departure (others stay collapsed).
+  S._rzManCardOpen=S._rzManCardOpen||{};
+  fleet.forEach(function(id){if(pax.some(function(p){return p.ac===id&&!p.infantOf&&_rzPaxDep(p)===dep;}))S._rzManCardOpen[dep+'|'+id]=true;});
   _rzManSave();render();
   if(overflow&&typeof toast==='function')toast('Allocated '+(unalloc.length-overflow)+' — '+overflow+' couldn\'t fit, add an aircraft.','warn');
   else if(typeof toast==='function')toast('Allocated '+unalloc.length+' to aircraft','ok');
