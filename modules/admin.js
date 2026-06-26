@@ -1800,7 +1800,7 @@ window.submitLsInPlace=async function(){
   // claim "submitted ✓" in that case — it's queued (ts_sync_queue) and replays when back online /
   // re-signed-in, but the pilot must know it isn't on the system yet.
   if(_ok){toast('Loadsheet submitted ✓','ok');}
-  else{toast('⚠ Signed on THIS device but NOT yet uploaded (no connection or your session expired). It will upload automatically once you reconnect — sign out and back in if it persists.','warn');}
+  else{toast((typeof _lsUploadFailMsg==='function')?_lsUploadFailMsg():'⚠ Signed on THIS device but NOT yet uploaded. It will upload automatically once you reconnect.','warn');}
   // Keep the signed loadsheet OPEN so the pilot can read it while loading the aircraft. Mark the
   // live form + its tab complete (removes the "unsigned" banner; the chip shows ✓).
   f.status='complete';
@@ -1831,7 +1831,7 @@ window.handleSubmit=async()=>{
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
   if(_ok2){toast('Loadsheet submitted.','ok');}
-  else{toast('⚠ Signed on THIS device but NOT yet uploaded (no connection or your session expired). It will upload automatically once you reconnect — sign out and back in if it persists.','warn');}
+  else{toast((typeof _lsUploadFailMsg==='function')?_lsUploadFailMsg():'⚠ Signed on THIS device but NOT yet uploaded. It will upload automatically once you reconnect.','warn');}
   // Keep the signed loadsheet OPEN so the pilot can read it while loading.
   f.status='complete';
   var _t3=S.lsTabs.find(function(t){return t.id===id;});if(_t3){_t3.form=f;_t3.status='complete';}

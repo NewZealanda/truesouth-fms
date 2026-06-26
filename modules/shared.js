@@ -159,7 +159,15 @@ function _seatmapSyncPool(){
     pool.push({id:p.id,name:p.name,weight:p.weight,bag:p.bag||0,group:p.group||'',infant:p.infantName||null,type:p.type||'adult',paymentReq:!!p.paymentReq});
   });
 }
-const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);if(r.status>=500||r.status===0||r.status===401||r.status===403)_syncEnqueue(t,d);return null;}_syncPurge(t,d);return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);_syncEnqueue(t,d);return null;}};
+const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);try{window._lastSbErr={table:t,status:r.status,online:(typeof navigator!=='undefined'?navigator.onLine:true),sessionDead:!!(S&&S._sessionExpired),body:String(err).slice(0,160),ts:Date.now()};}catch(_e){}if(r.status>=500||r.status===0||r.status===401||r.status===403)_syncEnqueue(t,d);return null;}_syncPurge(t,d);return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);try{window._lastSbErr={table:t,status:0,online:(typeof navigator!=='undefined'?navigator.onLine:true),sessionDead:!!(S&&S._sessionExpired),body:String((e&&e.message)||e).slice(0,160),ts:Date.now()};}catch(_e){}_syncEnqueue(t,d);return null;}};
+// Turn the last sbU failure into a specific, actionable loadsheet message (offline vs session vs server).
+function _lsUploadFailMsg(){var e=(typeof window!=='undefined'&&window._lastSbErr)||{};
+  if(e.online===false)return '📶 No internet — the loadsheet is SIGNED and saved on this device. It uploads automatically when you reconnect.';
+  if(e.sessionDead||e.status===401)return '🔒 Your sign-in has ended. Open the menu ▸ sign out, then sign back in — the signed loadsheet uploads automatically once you do.';
+  if(e.status===403)return '⛔ Server rejected the upload (HTTP 403 / permissions). It is saved on this device — please screenshot this and send it to Andrew.';
+  if(e.status)return '⚠ Upload failed (HTTP '+e.status+'). Saved on this device and will retry automatically. Tell Andrew if it keeps happening.';
+  return '⚠ Signed on this device but not yet uploaded. It will upload automatically once you reconnect.';}
+try{window._lsUploadFailMsg=_lsUploadFailMsg;}catch(_e){}
 // ── Offline write queue ───────────────────────────────────────────────────────
 // A device in the field (e.g. a pilot mid-flight) may capture flight records or loadsheet edits with
 // no reception. Those writes already persist to localStorage immediately; here we ALSO queue the
@@ -314,10 +322,26 @@ function _sbRefresh(){
   if(_sbRefreshing)return _sbRefreshing; // a refresh is already in flight — reuse it
   _sbRefreshing=(async function(){
     if(!_sbSession||!_sbSession.refresh_token)return false;
+    // POST a refresh token; resolves to the new session JSON, or null on a 4xx (token rejected).
+    async function _try(rt){
+      try{
+        var r=await fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({refresh_token:rt})});
+        if(!r.ok)return null;
+        return await r.json();
+      }catch(e){return undefined;}   // undefined = network error (vs null = rejected); don't treat as dead
+    }
     try{
-      var r=await fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({refresh_token:_sbSession.refresh_token})});
-      if(!r.ok){return false;}
-      var j=await r.json();
+      var j=await _try(_sbSession.refresh_token);
+      // Supabase ROTATES the refresh token on every use. The home-screen app and a Safari/Chrome tab on
+      // the same origin SHARE localStorage, so another open instance may have just refreshed and rotated
+      // the token — leaving the one in OUR memory stale (a 4xx, j===null). Before declaring the session
+      // dead, re-read the freshest stored token and retry once with it. This recovers the multi-instance
+      // collision that made a signed loadsheet 401 into the queue on a phone with the app open twice.
+      if(j===null){
+        var stored=null;try{stored=JSON.parse(localStorage.getItem('ts_sb_session')||'null');}catch(e){}
+        if(stored&&stored.refresh_token&&stored.refresh_token!==_sbSession.refresh_token){j=await _try(stored.refresh_token);}
+      }
+      if(!j||!j.access_token)return false;
       var sess={access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+(j.expires_in||3600)*1000};
       try{localStorage.setItem('ts_sb_session',JSON.stringify(sess));}catch(e){}
       _applySession(sess);
@@ -555,7 +579,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.23';
+const APP_VER='v27.24';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
