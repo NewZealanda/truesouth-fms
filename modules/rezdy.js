@@ -805,7 +805,9 @@ window.rezdyNewBookingSave=function(){
     _manual:true,_tourDate:S.rezdyDate};
   S._rzManualBk=S._rzManualBk||[];S._rzManualBk.push(booking);
   S._rezdyBookings=S._rezdyBookings||[];S._rezdyBookings.push(booking);
-  if(d.ac){S._rzBookingAc=S._rzBookingAc||{};S._rzBookingAc[order]=d.ac;}
+  // Default a new booking to UNALLOCATED (Misc) unless an aircraft was chosen — so it sits in the pool
+  // for the operator to allocate, and the auto-allocator leaves the existing bookings' aircraft alone.
+  S._rzBookingAc=S._rzBookingAc||{};S._rzBookingAc[order]=d.ac?d.ac:'__none__';
   S._bkDepFilter=_rzBookingDep(booking);S._bkSearch='';S._rzNewBkDraft=null;
   if(window.pickupSave)window.pickupSave(true);
   if(typeof toast==='function')toast('Booking added','ok');render();

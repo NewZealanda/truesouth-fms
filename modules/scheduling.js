@@ -730,6 +730,7 @@ function _schedEnsureAuto(){
     bks.forEach(function(b){
       if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
       var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
+      if((S._rzBookingAc||{})[o]==='__none__')return;   // Misc/unallocated — leave it out of the auto pack
       try{var _e=(typeof _rzEffBreakdown==='function')?_rzEffBreakdown(b):null;if(_e&&(_e.i||0)>0)_infO[o]=1;}catch(_){}
       (b.items||[]).forEach(function(it){
         var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
@@ -860,6 +861,7 @@ function _schedDayDepartures(date){
   bks.forEach(function(b){
     if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
     var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
+    if((S._rzBookingAc||{})[o]==='__none__')return;   // operator parked it in Misc/unallocated → not part of the auto demand (so it doesn't reshuffle the rest)
     (b.items||[]).forEach(function(it){
       var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
       var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;
