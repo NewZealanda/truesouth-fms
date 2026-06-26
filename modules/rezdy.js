@@ -1203,6 +1203,14 @@ window.rezdySetFlybackTime=function(prod,held,val){
   if(/^\d{1,2}:\d{2}$/.test(val))S._rzFlybackTime[k]=val; else delete S._rzFlybackTime[k];
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
 };
+// Optional fly-back END time (block duration) — set by dragging the block's bottom edge. Cleared when
+// empty; default end is start+40 (the return leg). Keyed per held slot like the start time.
+window.rezdySetFlybackEnd=function(prod,held,val){
+  S._rzFlybackEnd=S._rzFlybackEnd||{};var k=_rzFbTimeKey(prod,held);
+  val=String(val||'').trim();
+  if(/^\d{1,2}:\d{2}$/.test(val))S._rzFlybackEnd[k]=val; else delete S._rzFlybackEnd[k];
+  if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
+};
 // Reassign every booking in a calendar block to an aircraft — exactly like the user picking the
 // aircraft pill on each booking (sets S._rzBookingAc, which overrides the comments). Returns count.
 function _rzReassignBlockToAc(src,ac){
@@ -1327,7 +1335,10 @@ function _rzCalUp(e){
   var v=st._val;if(v==null){render();return;}var hhmm=_rzMinToHHMM(v);
   if(m.isManual){var _mac=_rzColAcAt(e.clientX,e.clientY)||m.ac;window.rezdySchedMoveBlock(m.id,hhmm,_mac);render();return;} // render() guarantees the live preview styles are cleared even on a no-op move
   if(m.isFb){
-    // Dropped onto another flight? → fold this flyback into it (combine), like the old drag did.
+    // Resize: drag the TOP edge to set the return (fly-back) time, the BOTTOM edge to set the end.
+    if(st.zone==='top'){window.rezdySetFlybackTime(m.prod,m.origStart,hhmm);return;}
+    if(st.zone==='bot'){window.rezdySetFlybackEnd(m.prod,m.origStart,hhmm);return;}
+    // Move: dropped onto another flight? → fold this flyback into it (combine), like the old drag did.
     var tgt=_rzBlockKeyAt(e.clientX,e.clientY,m.key);var tgtAc=tgt?String(tgt).split('|')[0]:null;
     if(tgt&&tgtAc&&tgtAc!=='__unalloc__'&&!_rzIsFlyback(String(tgt).split('|')[2]||'')&&typeof _rzOrdersForBlockKey==='function'){
       var ords=_rzOrdersForBlockKey(m.key);S._rzSchedAttach=S._rzSchedAttach||{};S._rzBookingAc=S._rzBookingAc||{};
@@ -1336,12 +1347,15 @@ function _rzCalUp(e){
       if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();return;
     }
     // Dropped on an aircraft COLUMN → assign the flyback to that aircraft (its own block), plus set its
-    // fly-back time from the drop height. The flyback-time key is aircraft-independent so it persists.
+    // fly-back time from the drop height. Keyed by the HELD slot (m.origStart) so it round-trips. If a
+    // custom end was set, shift it with the move so the duration is preserved.
     var fcol=_rzColAcAt(e.clientX,e.clientY);if(fcol==='__unalloc__')fcol='__none__';if(fcol==='__misc__')fcol=null;
     var _fCur=(m.ac==='__unalloc__')?'__none__':m.ac;
-    var fChg=false;
-    if(fcol&&fcol!==m.ac&&fcol!==_fCur&&typeof _rzReassignBlockToAc==='function'){if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();_rzReassignBlockToAc(m.key,fcol);fChg=true;}
-    S._rzFlybackTime=S._rzFlybackTime||{};S._rzFlybackTime[_rzFbTimeKey(m.prod,m.origStart)]=hhmm;
+    if(fcol&&fcol!==m.ac&&fcol!==_fCur&&typeof _rzReassignBlockToAc==='function'){if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();_rzReassignBlockToAc(m.key,fcol);}
+    var _fk=_rzFbTimeKey(m.prod,m.origStart);
+    S._rzFlybackTime=S._rzFlybackTime||{};
+    if(S._rzFlybackEnd&&S._rzFlybackEnd[_fk]!=null){var _fdur=m.endMin-m.startMin;S._rzFlybackEnd[_fk]=_rzMinToHHMM(_rzMinsFromHHMM(hhmm)+_fdur);}
+    S._rzFlybackTime[_fk]=hhmm;
     if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();return;
   }
   if(st.zone==='top'){window.rezdySchedSetEdge(m.prod,m.origStart,'top',hhmm);return;}

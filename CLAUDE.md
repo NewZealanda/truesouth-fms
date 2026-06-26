@@ -90,7 +90,17 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.02 (latest)** — **per-held-slot flyback default return times.** `_RZ_FB_DEFAULTS`
+- **v27.03 (latest)** — **flyback blocks now freely draggable + resizable.** Bug: the flyback drag
+  stored its override under `m.origStart`, which for a flyback was the *rendered* return time (not the
+  held slot), because `g._origStart` was never set — so the drag wrote `prod|15:30` but the render read
+  `prod|12:00` and ignored it (block snapped back). Fix: bkBlocks now sets `g._origStart=g._fbHeld`
+  (the held slot) for every flyback, so the drag/edge override round-trips. Flybacks are also resizable
+  now (`_canResize` no longer excludes them): drag the TOP edge → return (fly-back) time
+  (`_rzFlybackTime`), drag the BOTTOM edge → end/duration (new `_rzFlybackEnd` store +
+  `rezdySetFlybackEnd`, default end = start+40). Moving the block shifts a custom end with it. New
+  `flybackEnd` field persisted in the pickup blob (+reset on date change). Held-slot seat-block + the
+  per-slot defaults (v27.02) unchanged.
+- **v27.02** — **per-held-slot flyback default return times.** `_RZ_FB_DEFAULTS`
   (rezdy.js) maps the HELD outbound slot → default return: `10:30→14:00`, `12:00→15:30`, `13:00→16:15`.
   `_rzFbTime` falls back to `_rzFbDefaultTime(held)` (was hardcoded 15:30); the calendar flyback render
   gate is now `_fbOv||_rzFbHasDefault(_fbHeld)` (was `sm===720`), so 10:30/12:00/13:00-held flybacks all

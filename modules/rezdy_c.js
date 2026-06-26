@@ -1085,12 +1085,18 @@ function _rzRenderSchedule(){
       // show the block at the actual fly-back RETURN time, keyed per held slot (so summer flybacks held
       // in other slots keep their own return time). 1200-held (or overridden) → default 15:30. The block
       // STARTS at the fly-back time and runs ~40 min: a 15:30 flyback renders 15:30–16:10.
-      var _fbHeld=g.start;var _fbOv=(S._rzFlybackTime||{})[_rzFbTimeKey(g.product,_fbHeld)];
+      // Key drags/edges by the HELD slot (not the rendered return time) so the override round-trips and
+      // the block is freely draggable + resizable, exactly like a normal block.
+      var _fbHeld=g.start;g._fbHeld=_fbHeld;g._origStart=_fbHeld;
+      var _fbK=_rzFbTimeKey(g.product,_fbHeld);var _fbOv=(S._rzFlybackTime||{})[_fbK];
       if(_fbOv||(typeof _rzFbHasDefault==='function'&&_rzFbHasDefault(_fbHeld))){
         var _ft=_rzFbTime(g.product,_fbHeld);var _fm=_rzMinsFromHHMM(_ft);if(_fm==null)_fm=930;
-        g._fbHeld=_fbHeld;g._fbTime=_ft;
+        // End defaults to start+40 (return leg) but the operator can drag the bottom edge to re-time it.
+        var _feOv=(S._rzFlybackEnd||{})[_fbK];var _fem=(_feOv!=null&&_rzMinsFromHHMM(_feOv)!=null)?_rzMinsFromHHMM(_feOv):(_fm+40);
+        if(_fem<=_fm)_fem=_fm+15;
+        g._fbTime=_ft;
         g.start=_rzMinToHHMM(_fm);
-        g.end=String(Math.floor((_fm+40)/60)).padStart(2,'0')+':'+String((_fm+40)%60).padStart(2,'0');
+        g.end=_rzMinToHHMM(_fem);
       }
     } else {
       // Any other departure: independent TOP (departure) and BOTTOM (return) overrides set by dragging
@@ -1330,7 +1336,7 @@ function _rzRenderSchedule(){
       // Any booking block can be dragged to another aircraft column (reassigns its bookings) or
       // onto a flight to combine a flyback/CCF.
       const _dragKey=isBk?String(b.order):('BLK|'+String(b.id));
-      var _canResize=isBk&&!_rzIsFlyback(b.product)&&!!b._origStart;
+      var _canResize=isBk&&!!b._origStart;   // flybacks too — they now carry _origStart (the held slot)
       // Register this block for the pointer move/resize handlers.
       S._rzBlockMeta[_dragKey]={prod:b.product,origStart:b._origStart||b.start,ac:b.aircraft,isFb:isBk&&_rzIsFlyback(b.product),isManual:!isBk,id:b.id,order:b.order,key:_dragKey,startMin:_rzMinsFromHHMM(b.start),endMin:_rzMinsFromHHMM(b.end),canResize:_canResize};
       var _pdown=' onpointerdown="window.rzCalDown(event,\''+_rzEsc(_dragKey).replace(/'/g,"\\'")+'\')"';
