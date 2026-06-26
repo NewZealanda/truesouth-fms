@@ -162,10 +162,11 @@ function _seatmapSyncPool(){
 const sbU=async(t,d)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}`,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(d)});if(!r.ok){const err=await r.text();console.error('[sbU]',t,'status:',r.status,err);try{window._lastSbErr={table:t,status:r.status,online:(typeof navigator!=='undefined'?navigator.onLine:true),sessionDead:!!(S&&S._sessionExpired),body:String(err).slice(0,160),ts:Date.now()};}catch(_e){}if(r.status>=500||r.status===0||r.status===401||r.status===403)_syncEnqueue(t,d);return null;}_syncPurge(t,d);return r.json();}catch(e){console.error('[sbU]',t,'exception:',e);try{window._lastSbErr={table:t,status:0,online:(typeof navigator!=='undefined'?navigator.onLine:true),sessionDead:!!(S&&S._sessionExpired),body:String((e&&e.message)||e).slice(0,160),ts:Date.now()};}catch(_e){}_syncEnqueue(t,d);return null;}};
 // Turn the last sbU failure into a specific, actionable loadsheet message (offline vs session vs server).
 function _lsUploadFailMsg(){var e=(typeof window!=='undefined'&&window._lastSbErr)||{};
+  var body=e.body?(' — server said: '+e.body):'';
   if(e.online===false)return '📶 No internet — the loadsheet is SIGNED and saved on this device. It uploads automatically when you reconnect.';
   if(e.sessionDead||e.status===401)return '🔒 Your sign-in has ended. Open the menu ▸ sign out, then sign back in — the signed loadsheet uploads automatically once you do.';
-  if(e.status===403)return '⛔ Server rejected the upload (HTTP 403 / permissions). It is saved on this device — please screenshot this and send it to Andrew.';
-  if(e.status)return '⚠ Upload failed (HTTP '+e.status+'). Saved on this device and will retry automatically. Tell Andrew if it keeps happening.';
+  if(e.status===403)return '⛔ Server rejected the upload (HTTP 403 / permissions). Saved on this device — please screenshot this for Andrew.'+body;
+  if(e.status)return '⚠ Upload rejected (HTTP '+e.status+'). Saved on this device. Please SCREENSHOT this for Andrew'+body;
   return '⚠ Signed on this device but not yet uploaded. It will upload automatically once you reconnect.';}
 try{window._lsUploadFailMsg=_lsUploadFailMsg;}catch(_e){}
 // ── Offline write queue ───────────────────────────────────────────────────────
@@ -579,7 +580,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.24';
+const APP_VER='v27.25';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
