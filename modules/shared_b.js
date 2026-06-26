@@ -95,7 +95,7 @@ async function loadAll(){
       // from-bin updates the cache to a non-deleted status, so it's never stuck deleted. uploadedBy/At are
       // local-only (not in DB) so carry them too.
       var _luCache=lsGet('ts_loadsheets_cache')||[];var _luPrev={};_luCache.forEach(function(s){if(s&&s.id)_luPrev[s.id]=s;});
-      S.saved=ls.map(function(r){var _p=_luPrev[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
+      S.saved=ls.map(function(r){var _p=_luPrev[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!(r.form&&r.form._driveUploaded)||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
       lsSet('ts_loadsheets_cache',S.saved);
     } else {
       const cached=lsGet('ts_loadsheets_cache');
@@ -599,7 +599,7 @@ async function reloadTable(table){
       // 'deleted' status and driveUploaded over the DB value. We consult BOTH the persistent cache and
       // in-memory S.saved (in-memory wins) so an earlier reload that reset S.saved can't lose the flag.
       var _prevLs={};(lsGet('ts_loadsheets_cache')||[]).forEach(function(s){if(s&&s.id)_prevLs[s.id]=s;});(S.saved||[]).forEach(function(s){if(s&&s.id)_prevLs[s.id]=s;});
-      var _fresh=ls.map(function(r){var _p=_prevLs[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
+      var _fresh=ls.map(function(r){var _p=_prevLs[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!(r.form&&r.form._driveUploaded)||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
       // Preserve any currently-open loadsheet tabs whose saved row falls outside the
       // fetch window, so a realtime refresh can't drop a tab the user still has open.
       var _freshIds={};_fresh.forEach(function(s){_freshIds[s.id]=1;});
@@ -887,7 +887,7 @@ async function saveLsToDb(id,form){
   const status=form.status||'unsigned';
   // Preserve the Drive-archive flag so an archived loadsheet isn't reverted to "Signed" on a re-save.
   const _du=!!((S.saved||[]).find(function(s){return s.id===id;})||{}).driveUploaded;
-  await sbU('ts_loadsheets',[{id:id,form:form,saved_at:new Date().toISOString(),status:status,drive_uploaded:_du}]);
+  await sbU('ts_loadsheets',[_lsWritePayload(id,form,new Date().toISOString(),status,_du)]);
   S.saved=(S.saved||[]).map(function(s){return s.id===id?Object.assign({},s,{form:form,savedAt:new Date().toISOString(),status:status}):s;});
   lsSet('ts_loadsheets_cache',S.saved);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{id:id,by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}

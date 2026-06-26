@@ -368,10 +368,10 @@ window.openSelectedSaved=function(){
   window.scrollTo(0,0);render();
   toast('Opened '+(nLs+nMf)+' item'+((nLs+nMf)!==1?'s':''),'ok');
 };
-window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';if(window._lsStickyMark)window._lsStickyMark(id,'deleted',true);lsSet('ts_loadsheets_cache',S.saved);render();auditLog('loadsheet_bin',{id:s.id,ac:(s.form&&s.form.ac)||'',date:(s.form&&s.form.date)||''});await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]);};
+window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';if(window._lsStickyMark)window._lsStickyMark(id,'deleted',true);lsSet('ts_loadsheets_cache',S.saved);render();auditLog('loadsheet_bin',{id:s.id,ac:(s.form&&s.form.ac)||'',date:(s.form&&s.form.date)||''});await sbU('ts_loadsheets',[_lsWritePayload(s.id,s.form,s.savedAt,'deleted',!!s.driveUploaded)]);};
 window.restoreFromBin=async function(id){
   var s=S.saved.find(function(x){return x.id===id;});
-  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;if(window._lsStickyMark)window._lsStickyMark(id,'deleted',false);lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status,drive_uploaded:!!s.driveUploaded}]);return;}
+  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;if(window._lsStickyMark)window._lsStickyMark(id,'deleted',false);lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[_lsWritePayload(s.id,s.form,s.savedAt,s.status,!!s.driveUploaded)]);return;}
   var m=S.manifests.find(function(x){return x.id===id;});
   if(m){if(m.data)delete m.data._deleted;m._deleted=false;lsSet('ts_manifests_cache',S.manifests);render();await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);}
 };
@@ -655,7 +655,7 @@ window.uploadToDrive=async function(sheet,preToken){
       var _sh=S.saved.find(function(s){return s.id===sheet.id;});
       if(_sh){_sh.driveUploaded=true;_sh.uploadedBy=(S.user&&S.user.name)||'';_sh.uploadedAt=new Date().toISOString();lsSet('ts_loadsheets_cache',S.saved);}
       var _ar=_sh||sheet;
-      await sbU('ts_loadsheets',[{id:sheet.id,form:_ar.form,saved_at:_ar.savedAt||new Date().toISOString(),status:_ar.status||'complete',drive_uploaded:true}]);
+      await sbU('ts_loadsheets',[_lsWritePayload(sheet.id,_ar.form,_ar.savedAt||new Date().toISOString(),_ar.status||'complete',true)]);
     }
     render();
     // No popup - status banner handles it

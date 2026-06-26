@@ -1337,7 +1337,7 @@ window.bulkDeleteSaved=async function(){
   lsSet('ts_manifests_cache',S.manifests);
   auditLog('loadsheet_bin_bulk',{loadsheets:lsIds.length,manifests:mIds.length});
   S.savedSel={};render();
-  for(var i=0;i<lsIds.length;i++){var s2=S.saved.find(function(x){return x.id===lsIds[i];});if(s2)await sbU('ts_loadsheets',[{id:s2.id,form:s2.form,saved_at:s2.savedAt,status:'deleted',drive_uploaded:!!s2.driveUploaded}]).catch(function(){});}
+  for(var i=0;i<lsIds.length;i++){var s2=S.saved.find(function(x){return x.id===lsIds[i];});if(s2)await sbU('ts_loadsheets',[_lsWritePayload(s2.id,s2.form,s2.savedAt,'deleted',!!s2.driveUploaded)]).catch(function(){});}
   for(var j=0;j<mIds.length;j++){var m2=S.manifests.find(function(x){return x.id===mIds[j];});if(m2)await sbU('ts_manifests',[{id:m2.id,name:m2.name,data:m2.data,saved_at:m2.savedAt}]).catch(function(){});}
 };
 window.bulkUploadSaved=async function(){
@@ -1748,7 +1748,7 @@ window.saveUnsigned=async()=>{
   var _savingTab=S.lsTabs.find(function(t){return t.id===id;});
   if(_savingTab)delete _savingTab.originalForm;
   lsSet('ts_loadsheets_cache',S.saved);
-  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned',drive_uploaded:_du}]);
+  await sbU('ts_loadsheets',[_lsWritePayload(sheet.id,sheet.form,sheet.savedAt,'unsigned',_du)]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog(isEdit?'loadsheet_edit':'loadsheet_save',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
@@ -1789,7 +1789,7 @@ window.submitLsInPlace=async function(){
   // because the access token lapsed while the pilot was filling it in (idle phone). If the refresh
   // token is still good this uploads first time; only a truly dead session falls through to the queue.
   try{if(typeof AUTH_PHASE_C!=='undefined'&&AUTH_PHASE_C&&typeof _sbSession!=='undefined'&&_sbSession&&_sbSession.expires_at&&(_sbSession.expires_at-Date.now())<300000&&typeof _sbRefresh==='function')await _sbRefresh();}catch(e){}
-  const _ok=await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
+  const _ok=await sbU('ts_loadsheets',[_lsWritePayload(sheet.id,sheet.form,sheet.savedAt,'complete',_du)]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   // Tell other devices to live-refresh: ls_signed carries the id so desktops reload AND swap the
   // open tab's form to the signed one (shows the signature without a manual refresh). ls_saved alone
@@ -1827,7 +1827,7 @@ window.handleSubmit=async()=>{
   var _submitTab=S.lsTabs.find(function(t){return t.id===id;});
   if(_submitTab)delete _submitTab.originalForm;
   // Google Drive upload happens via nightly scheduler only
-  const _ok2=await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
+  const _ok2=await sbU('ts_loadsheets',[_lsWritePayload(sheet.id,sheet.form,sheet.savedAt,'complete',_du)]);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
   if(_ok2){toast('Loadsheet submitted.','ok');}

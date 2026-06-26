@@ -545,7 +545,7 @@ async function _syncFlush(){
     for(var i=0;i<q.length;i++){var e=q[i],ok=false,_row=e.row;
       // Replay the CURRENT local truth, not the stale captured payload — so a queued 'unsigned' save
       // can never resurrect a sheet that's since been binned (status reconciled from live S.saved).
-      if(e.table==='ts_loadsheets'&&_row&&_row.id!=null){var _lv=(S.saved||[]).find(function(s){return s.id===_row.id;});if(_lv)_row=Object.assign({},_row,{status:_lv.status||_row.status,drive_uploaded:!!_lv.driveUploaded});}
+      if(e.table==='ts_loadsheets'&&_row&&_row.id!=null){var _lv=(S.saved||[]).find(function(s){return s.id===_row.id;});if(_lv)_row=Object.assign({},_row,{status:_lv.status||_row.status,form:Object.assign({},_row.form||{},{_driveUploaded:!!_lv.driveUploaded})});if(_row&&'drive_uploaded' in _row)delete _row.drive_uploaded;}
       try{var r=await _sbFetch(SB+'/rest/v1/'+e.table,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify([_row])});ok=!!(r&&r.ok);}catch(_e){ok=false;}
       if(ok)done++;else remaining.push(e);
     }
@@ -579,6 +579,16 @@ window._lsStickyMark=_lsStickyMark;
 // Apply the sticky facts onto a freshly-loaded saved-sheet object (mutates + returns it).
 function _lsApplySticky(s){if(!s||!s.id)return s;var st=(_lsStickyGet())[s.id];if(!st)return s;if(st.deleted)s.status='deleted';if(st.uploaded)s.driveUploaded=true;return s;}
 window._lsApplySticky=_lsApplySticky;
+// The live ts_loadsheets table has NO drive_uploaded column — sending it as a top-level field 400s the
+// WHOLE write (PostgREST PGRST204), which silently broke every signed sign-off. Carry the Drive-upload
+// flag INSIDE the form jsonb (a real, synced column) instead, so it survives refresh + cross-device and
+// signing can never fail on a missing column. Reads derive driveUploaded from form._driveUploaded.
+function _lsWritePayload(id,form,savedAt,status,du){
+  var fm=(form&&typeof form==='object')?Object.assign({},form):{};
+  if(du!=null)fm._driveUploaded=!!du;
+  return {id:id,form:fm,saved_at:savedAt,status:status};
+}
+window._lsWritePayload=_lsWritePayload;
 
 // ── Phase A auth cutover (DEFAULT OFF) ──────────────────────────────────────
 // Flip ON only AFTER (1) deploying the verify-login / set-password / confirm-reset
@@ -921,7 +931,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.25';
+const APP_VER='v27.26';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1941,7 +1951,7 @@ async function loadAll(){
       // from-bin updates the cache to a non-deleted status, so it's never stuck deleted. uploadedBy/At are
       // local-only (not in DB) so carry them too.
       var _luCache=lsGet('ts_loadsheets_cache')||[];var _luPrev={};_luCache.forEach(function(s){if(s&&s.id)_luPrev[s.id]=s;});
-      S.saved=ls.map(function(r){var _p=_luPrev[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
+      S.saved=ls.map(function(r){var _p=_luPrev[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!(r.form&&r.form._driveUploaded)||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
       lsSet('ts_loadsheets_cache',S.saved);
     } else {
       const cached=lsGet('ts_loadsheets_cache');
@@ -2445,7 +2455,7 @@ async function reloadTable(table){
       // 'deleted' status and driveUploaded over the DB value. We consult BOTH the persistent cache and
       // in-memory S.saved (in-memory wins) so an earlier reload that reset S.saved can't lose the flag.
       var _prevLs={};(lsGet('ts_loadsheets_cache')||[]).forEach(function(s){if(s&&s.id)_prevLs[s.id]=s;});(S.saved||[]).forEach(function(s){if(s&&s.id)_prevLs[s.id]=s;});
-      var _fresh=ls.map(function(r){var _p=_prevLs[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
+      var _fresh=ls.map(function(r){var _p=_prevLs[r.id]||{};return _lsApplySticky({id:r.id,savedAt:r.saved_at,form:r.form,status:(_p.status==='deleted'?'deleted':(r.status||'complete')),driveUploaded:!!r.drive_uploaded||!!(r.form&&r.form._driveUploaded)||!!_p.driveUploaded,uploadedBy:_p.uploadedBy||'',uploadedAt:_p.uploadedAt||''});});
       // Preserve any currently-open loadsheet tabs whose saved row falls outside the
       // fetch window, so a realtime refresh can't drop a tab the user still has open.
       var _freshIds={};_fresh.forEach(function(s){_freshIds[s.id]=1;});
@@ -2733,7 +2743,7 @@ async function saveLsToDb(id,form){
   const status=form.status||'unsigned';
   // Preserve the Drive-archive flag so an archived loadsheet isn't reverted to "Signed" on a re-save.
   const _du=!!((S.saved||[]).find(function(s){return s.id===id;})||{}).driveUploaded;
-  await sbU('ts_loadsheets',[{id:id,form:form,saved_at:new Date().toISOString(),status:status,drive_uploaded:_du}]);
+  await sbU('ts_loadsheets',[_lsWritePayload(id,form,new Date().toISOString(),status,_du)]);
   S.saved=(S.saved||[]).map(function(s){return s.id===id?Object.assign({},s,{form:form,savedAt:new Date().toISOString(),status:status}):s;});
   lsSet('ts_loadsheets_cache',S.saved);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{id:id,by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
@@ -7318,7 +7328,7 @@ window.bulkDeleteSaved=async function(){
   lsSet('ts_manifests_cache',S.manifests);
   auditLog('loadsheet_bin_bulk',{loadsheets:lsIds.length,manifests:mIds.length});
   S.savedSel={};render();
-  for(var i=0;i<lsIds.length;i++){var s2=S.saved.find(function(x){return x.id===lsIds[i];});if(s2)await sbU('ts_loadsheets',[{id:s2.id,form:s2.form,saved_at:s2.savedAt,status:'deleted',drive_uploaded:!!s2.driveUploaded}]).catch(function(){});}
+  for(var i=0;i<lsIds.length;i++){var s2=S.saved.find(function(x){return x.id===lsIds[i];});if(s2)await sbU('ts_loadsheets',[_lsWritePayload(s2.id,s2.form,s2.savedAt,'deleted',!!s2.driveUploaded)]).catch(function(){});}
   for(var j=0;j<mIds.length;j++){var m2=S.manifests.find(function(x){return x.id===mIds[j];});if(m2)await sbU('ts_manifests',[{id:m2.id,name:m2.name,data:m2.data,saved_at:m2.savedAt}]).catch(function(){});}
 };
 window.bulkUploadSaved=async function(){
@@ -7729,7 +7739,7 @@ window.saveUnsigned=async()=>{
   var _savingTab=S.lsTabs.find(function(t){return t.id===id;});
   if(_savingTab)delete _savingTab.originalForm;
   lsSet('ts_loadsheets_cache',S.saved);
-  await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'unsigned',drive_uploaded:_du}]);
+  await sbU('ts_loadsheets',[_lsWritePayload(sheet.id,sheet.form,sheet.savedAt,'unsigned',_du)]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog(isEdit?'loadsheet_edit':'loadsheet_save',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic});
@@ -7770,7 +7780,7 @@ window.submitLsInPlace=async function(){
   // because the access token lapsed while the pilot was filling it in (idle phone). If the refresh
   // token is still good this uploads first time; only a truly dead session falls through to the queue.
   try{if(typeof AUTH_PHASE_C!=='undefined'&&AUTH_PHASE_C&&typeof _sbSession!=='undefined'&&_sbSession&&_sbSession.expires_at&&(_sbSession.expires_at-Date.now())<300000&&typeof _sbRefresh==='function')await _sbRefresh();}catch(e){}
-  const _ok=await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
+  const _ok=await sbU('ts_loadsheets',[_lsWritePayload(sheet.id,sheet.form,sheet.savedAt,'complete',_du)]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   // Tell other devices to live-refresh: ls_signed carries the id so desktops reload AND swap the
   // open tab's form to the signed one (shows the signature without a manual refresh). ls_saved alone
@@ -7808,7 +7818,7 @@ window.handleSubmit=async()=>{
   var _submitTab=S.lsTabs.find(function(t){return t.id===id;});
   if(_submitTab)delete _submitTab.originalForm;
   // Google Drive upload happens via nightly scheduler only
-  const _ok2=await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
+  const _ok2=await sbU('ts_loadsheets',[_lsWritePayload(sheet.id,sheet.form,sheet.savedAt,'complete',_du)]);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_signed',payload:{id:id,acCode:(f.ac||'').replace('ZK-',''),by:(S.user&&S.user.name)||'',sessionId:_sessionId}},ref:String(_rtRef)}));_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_saved',payload:{by:S.user?.id,sessionId:_sessionId}},ref:String(_rtRef)}));}
   auditLog('loadsheet_submit',{id,ac:f.ac,dep:f.dep,dest:f.dest,date:f.date,pic:f.pic,tow:r.rampW?.toFixed(0)});
   if(_ok2){toast('Loadsheet submitted.','ok');}
@@ -8207,10 +8217,10 @@ window.openSelectedSaved=function(){
   window.scrollTo(0,0);render();
   toast('Opened '+(nLs+nMf)+' item'+((nLs+nMf)!==1?'s':''),'ok');
 };
-window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';if(window._lsStickyMark)window._lsStickyMark(id,'deleted',true);lsSet('ts_loadsheets_cache',S.saved);render();auditLog('loadsheet_bin',{id:s.id,ac:(s.form&&s.form.ac)||'',date:(s.form&&s.form.date)||''});await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:'deleted',drive_uploaded:!!s.driveUploaded}]);};
+window.delSaved=async function(id){if(!confirm('Move this loadsheet to Bin?'))return;var s=S.saved.find(function(x){return x.id===id;});if(!s)return;s.form._prevStatus=s.status;s.status='deleted';if(window._lsStickyMark)window._lsStickyMark(id,'deleted',true);lsSet('ts_loadsheets_cache',S.saved);render();auditLog('loadsheet_bin',{id:s.id,ac:(s.form&&s.form.ac)||'',date:(s.form&&s.form.date)||''});await sbU('ts_loadsheets',[_lsWritePayload(s.id,s.form,s.savedAt,'deleted',!!s.driveUploaded)]);};
 window.restoreFromBin=async function(id){
   var s=S.saved.find(function(x){return x.id===id;});
-  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;if(window._lsStickyMark)window._lsStickyMark(id,'deleted',false);lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[{id:s.id,form:s.form,saved_at:s.savedAt,status:s.status,drive_uploaded:!!s.driveUploaded}]);return;}
+  if(s){var ps=s.form._prevStatus||'unsigned';delete s.form._prevStatus;s.status=ps;if(window._lsStickyMark)window._lsStickyMark(id,'deleted',false);lsSet('ts_loadsheets_cache',S.saved);render();await sbU('ts_loadsheets',[_lsWritePayload(s.id,s.form,s.savedAt,s.status,!!s.driveUploaded)]);return;}
   var m=S.manifests.find(function(x){return x.id===id;});
   if(m){if(m.data)delete m.data._deleted;m._deleted=false;lsSet('ts_manifests_cache',S.manifests);render();await sbU('ts_manifests',[{id:m.id,name:m.name,data:m.data,saved_at:m.savedAt}]);}
 };
@@ -8494,7 +8504,7 @@ window.uploadToDrive=async function(sheet,preToken){
       var _sh=S.saved.find(function(s){return s.id===sheet.id;});
       if(_sh){_sh.driveUploaded=true;_sh.uploadedBy=(S.user&&S.user.name)||'';_sh.uploadedAt=new Date().toISOString();lsSet('ts_loadsheets_cache',S.saved);}
       var _ar=_sh||sheet;
-      await sbU('ts_loadsheets',[{id:sheet.id,form:_ar.form,saved_at:_ar.savedAt||new Date().toISOString(),status:_ar.status||'complete',drive_uploaded:true}]);
+      await sbU('ts_loadsheets',[_lsWritePayload(sheet.id,_ar.form,_ar.savedAt||new Date().toISOString(),_ar.status||'complete',true)]);
     }
     render();
     // No popup - status banner handles it

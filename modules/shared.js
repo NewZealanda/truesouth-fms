@@ -204,7 +204,7 @@ async function _syncFlush(){
     for(var i=0;i<q.length;i++){var e=q[i],ok=false,_row=e.row;
       // Replay the CURRENT local truth, not the stale captured payload — so a queued 'unsigned' save
       // can never resurrect a sheet that's since been binned (status reconciled from live S.saved).
-      if(e.table==='ts_loadsheets'&&_row&&_row.id!=null){var _lv=(S.saved||[]).find(function(s){return s.id===_row.id;});if(_lv)_row=Object.assign({},_row,{status:_lv.status||_row.status,drive_uploaded:!!_lv.driveUploaded});}
+      if(e.table==='ts_loadsheets'&&_row&&_row.id!=null){var _lv=(S.saved||[]).find(function(s){return s.id===_row.id;});if(_lv)_row=Object.assign({},_row,{status:_lv.status||_row.status,form:Object.assign({},_row.form||{},{_driveUploaded:!!_lv.driveUploaded})});if(_row&&'drive_uploaded' in _row)delete _row.drive_uploaded;}
       try{var r=await _sbFetch(SB+'/rest/v1/'+e.table,{method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify([_row])});ok=!!(r&&r.ok);}catch(_e){ok=false;}
       if(ok)done++;else remaining.push(e);
     }
@@ -238,6 +238,16 @@ window._lsStickyMark=_lsStickyMark;
 // Apply the sticky facts onto a freshly-loaded saved-sheet object (mutates + returns it).
 function _lsApplySticky(s){if(!s||!s.id)return s;var st=(_lsStickyGet())[s.id];if(!st)return s;if(st.deleted)s.status='deleted';if(st.uploaded)s.driveUploaded=true;return s;}
 window._lsApplySticky=_lsApplySticky;
+// The live ts_loadsheets table has NO drive_uploaded column — sending it as a top-level field 400s the
+// WHOLE write (PostgREST PGRST204), which silently broke every signed sign-off. Carry the Drive-upload
+// flag INSIDE the form jsonb (a real, synced column) instead, so it survives refresh + cross-device and
+// signing can never fail on a missing column. Reads derive driveUploaded from form._driveUploaded.
+function _lsWritePayload(id,form,savedAt,status,du){
+  var fm=(form&&typeof form==='object')?Object.assign({},form):{};
+  if(du!=null)fm._driveUploaded=!!du;
+  return {id:id,form:fm,saved_at:savedAt,status:status};
+}
+window._lsWritePayload=_lsWritePayload;
 
 // ── Phase A auth cutover (DEFAULT OFF) ──────────────────────────────────────
 // Flip ON only AFTER (1) deploying the verify-login / set-password / confirm-reset
@@ -580,7 +590,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.25';
+const APP_VER='v27.26';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
