@@ -210,6 +210,9 @@ if(typeof window!=='undefined'){
   if(!window._syncHooked){window._syncHooked=true;
     try{window.addEventListener('online',function(){_syncFlush();});}catch(e){}
     setTimeout(function(){try{_syncFlush();}catch(e){}},5000);   // boot attempt (covers an already-online start)
+    // Periodic retry: a queued signed loadsheet (401'd on an idle phone) uploads as soon as the session
+    // recovers, without needing a foreground/online event. _syncFlush no-ops when the queue is empty.
+    setInterval(function(){try{if(_syncQGet().length)_syncFlush();}catch(e){}},45000);
   }
 }
 const sbDel=async(t,id)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:{...SH}});return r.ok;}catch{return false;}};
@@ -552,7 +555,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.21';
+const APP_VER='v27.22';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

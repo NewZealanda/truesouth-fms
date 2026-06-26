@@ -1785,6 +1785,10 @@ window.submitLsInPlace=async function(){
   lsSet('ts_loadsheets_cache',S.saved);
   S.editId=id;S.formDirty=false;
   var _t=S.lsTabs.find(function(t){return t.id===id;});if(_t)delete _t.originalForm;
+  // Refresh a near/already-expired session BEFORE the signed write so it doesn't 401 (and queue) just
+  // because the access token lapsed while the pilot was filling it in (idle phone). If the refresh
+  // token is still good this uploads first time; only a truly dead session falls through to the queue.
+  try{if(typeof AUTH_PHASE_C!=='undefined'&&AUTH_PHASE_C&&typeof _sbSession!=='undefined'&&_sbSession&&_sbSession.expires_at&&(_sbSession.expires_at-Date.now())<300000&&typeof _sbRefresh==='function')await _sbRefresh();}catch(e){}
   const _ok=await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   // Tell other devices to live-refresh: ls_signed carries the id so desktops reload AND swap the
@@ -1819,6 +1823,7 @@ window.handleSubmit=async()=>{
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'complete'};
   var _du=_lsCarryArchive(id,sheet);
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);lsSet('ts_loadsheets_cache',S.saved);
+  try{if(typeof AUTH_PHASE_C!=='undefined'&&AUTH_PHASE_C&&typeof _sbSession!=='undefined'&&_sbSession&&_sbSession.expires_at&&(_sbSession.expires_at-Date.now())<300000&&typeof _sbRefresh==='function')await _sbRefresh();}catch(e){} // fresh token before the signed write
   var _submitTab=S.lsTabs.find(function(t){return t.id===id;});
   if(_submitTab)delete _submitTab.originalForm;
   // Google Drive upload happens via nightly scheduler only

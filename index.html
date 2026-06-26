@@ -551,6 +551,9 @@ if(typeof window!=='undefined'){
   if(!window._syncHooked){window._syncHooked=true;
     try{window.addEventListener('online',function(){_syncFlush();});}catch(e){}
     setTimeout(function(){try{_syncFlush();}catch(e){}},5000);   // boot attempt (covers an already-online start)
+    // Periodic retry: a queued signed loadsheet (401'd on an idle phone) uploads as soon as the session
+    // recovers, without needing a foreground/online event. _syncFlush no-ops when the queue is empty.
+    setInterval(function(){try{if(_syncQGet().length)_syncFlush();}catch(e){}},45000);
   }
 }
 const sbDel=async(t,id)=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?id=eq.${id}`,{method:'DELETE',headers:{...SH}});return r.ok;}catch{return false;}};
@@ -893,7 +896,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.21';
+const APP_VER='v27.22';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -7738,6 +7741,10 @@ window.submitLsInPlace=async function(){
   lsSet('ts_loadsheets_cache',S.saved);
   S.editId=id;S.formDirty=false;
   var _t=S.lsTabs.find(function(t){return t.id===id;});if(_t)delete _t.originalForm;
+  // Refresh a near/already-expired session BEFORE the signed write so it doesn't 401 (and queue) just
+  // because the access token lapsed while the pilot was filling it in (idle phone). If the refresh
+  // token is still good this uploads first time; only a truly dead session falls through to the queue.
+  try{if(typeof AUTH_PHASE_C!=='undefined'&&AUTH_PHASE_C&&typeof _sbSession!=='undefined'&&_sbSession&&_sbSession.expires_at&&(_sbSession.expires_at-Date.now())<300000&&typeof _sbRefresh==='function')await _sbRefresh();}catch(e){}
   const _ok=await sbU('ts_loadsheets',[{id:sheet.id,form:sheet.form,saved_at:sheet.savedAt,status:'complete',drive_uploaded:_du}]);
   window._notifyPicLoadsheet&&window._notifyPicLoadsheet(f,sheet.id);
   // Tell other devices to live-refresh: ls_signed carries the id so desktops reload AND swap the
@@ -7772,6 +7779,7 @@ window.handleSubmit=async()=>{
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'complete'};
   var _du=_lsCarryArchive(id,sheet);
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);lsSet('ts_loadsheets_cache',S.saved);
+  try{if(typeof AUTH_PHASE_C!=='undefined'&&AUTH_PHASE_C&&typeof _sbSession!=='undefined'&&_sbSession&&_sbSession.expires_at&&(_sbSession.expires_at-Date.now())<300000&&typeof _sbRefresh==='function')await _sbRefresh();}catch(e){} // fresh token before the signed write
   var _submitTab=S.lsTabs.find(function(t){return t.id===id;});
   if(_submitTab)delete _submitTab.originalForm;
   // Google Drive upload happens via nightly scheduler only
