@@ -218,6 +218,11 @@ async function loadAll(){
           S.user=_userFromClaims(_jwtClaims(_sbSession.access_token));
           auditLog('session_restore',{via:'supabase',user:S.user.email});
           await _reloadCoreTables();
+          // Re-resolve the user NOW that S.users is loaded: the first pass ran before the user list was
+          // fetched, so rec was empty and name fell back to the email claim (or '' if absent) — which is
+          // why signed/saved loadsheets showed a blank name. With S.users present, name = the real name.
+          var _u2=_userFromClaims(_jwtClaims(_sbSession.access_token));
+          if(_u2&&(_u2.name||_u2.email)){_u2.superAdmin=S.user.superAdmin||_u2.superAdmin;S.user=_u2;}
           _loadAuditLog(); // S.user now set → load the audit history on refresh too
           // Keep the intro on screen for its full one-time play before revealing the app (Skip cuts it).
           S._authRestoring=false;S._appLoading=true;initRealtime();render();setTimeout(function(){restoreWorkspace();},400);

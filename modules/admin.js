@@ -1489,7 +1489,7 @@ function generateLoadsheet(acId){
   if(setup?.coPilot){const cp=anyCrewList().find(c=>c.n===setup.coPilot);if(cp&&cp.w){form.seats[1]=String(cp.w);form.names[1]=setup.coPilot;}}
   else{const sm=d.seatMap[acId]||{};const p=sm[1]?paxById(sm[1]):null;if(p){form.seats[1]=p.weight||'';form.bags[1]=p.bag||'';form.names[1]=p.name||'';if(p.type==='child')form.paxType[1]='C';form.paxGroups[1]=p.group||'';if(p.paymentReq)form.paxPaymentReq[1]=true;}}
   form.fuel=String(fuelKgForSetup(acId));
-  form.createdBy=(S.user&&S.user.name)||'';
+  form.createdBy=(S.user&&(S.user.name||S.user.email))||'';
   form.createdAt=new Date().toISOString();
   const sm=d.seatMap[acId]||{};
   const seatIdxs=paxSeatIdxs(acId)||[];seatIdxs.forEach(function(i){if(i<=1)return;const p=sm[i]?paxById(sm[i]):null;if(p){form.seats[i]=p.weight||'';form.bags[i]=p.bag||'';form.names[i]=p.name||'';if(p.infantName)form.infantNames[i]=p.infantName;if(p.type==='child')form.paxType[i]='C';form.paxGroups[i]=p.group||'';if(p.paymentReq)form.paxPaymentReq[i]=true;}});
@@ -1739,7 +1739,7 @@ window.saveUnsigned=async()=>{
   const f=S.form;if(!f.ac){toast('Select an aircraft first.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
   const isEdit=!!S.editId;
-  f.savedBy=(S.user&&S.user.name)||'';
+  f.savedBy=(S.user&&(S.user.name||S.user.email))||'';
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'unsigned'};
   var _du=_lsCarryArchive(id,sheet);
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);
@@ -1777,8 +1777,8 @@ window.submitLsInPlace=async function(){
   const r=calcFormWB(f);if(!r||!r.towOk||!r.lwOk||!r.cogOk){toast('Fix weight and balance limits before submitting.','warn');return;}
   if(r.reserveOk===false){toast('Fuel at destination is below the 30-minute final reserve — add fuel or reduce the trip before signing.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
-  f.sigBy=(S.user&&S.user.name)||'';f.sigTs=f.sigTs||new Date().toISOString();
-  f.savedBy=(S.user&&S.user.name)||'';
+  f.sigBy=(S.user&&(S.user.name||S.user.email))||'';f.sigTs=f.sigTs||new Date().toISOString();
+  f.savedBy=(S.user&&(S.user.name||S.user.email))||'';
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'complete'};
   var _du=_lsCarryArchive(id,sheet);
   S.saved=S.saved.filter(function(s){return s.id!==id;});S.saved.unshift(sheet);
@@ -1818,8 +1818,8 @@ window.handleSubmit=async()=>{
   const r=calcFormWB(f);if(!r||!r.towOk||!r.lwOk||!r.cogOk){toast('Fix weight and balance limits before submitting.','warn');return;}
   if(r.reserveOk===false){toast('Fuel at destination is below the 30-minute final reserve — add fuel or reduce the trip before signing.','warn');return;}
   const id=S.editId||('ls_'+Date.now());
-  f.sigBy=(S.user&&S.user.name)||'';f.sigTs=new Date().toISOString();
-  f.savedBy=(S.user&&S.user.name)||'';
+  f.sigBy=(S.user&&(S.user.name||S.user.email))||'';f.sigTs=new Date().toISOString();
+  f.savedBy=(S.user&&(S.user.name||S.user.email))||'';
   const sheet={id,savedAt:new Date().toISOString(),form:dc(f),status:'complete'};
   var _du=_lsCarryArchive(id,sheet);
   S.saved=S.saved.filter(s=>s.id!==id);S.saved.unshift(sheet);lsSet('ts_loadsheets_cache',S.saved);
