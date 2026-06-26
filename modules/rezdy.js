@@ -1329,11 +1329,24 @@ function _rzWxUserForPilot(code){
 try{setInterval(function(){try{_wxCheckReminders();}catch(e){}},60000);}catch(_e){}
 function _wxDayLabel(iso,baseDate){var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];try{var d=new Date(iso+'T00:00:00');var b=baseDate?new Date(baseDate+'T00:00:00'):new Date();var diff=Math.round((d-b)/86400000);if(diff===1)return 'Tomorrow';return days[d.getDay()]+' '+d.getDate();}catch(e){return iso;}}
 function _rzRenderWeatherCalls(){
-  if(!S._schedBlocks){if(window.rezdyLoadSchedule)window.rezdyLoadSchedule();}
-  var date=S.rezdyDate;var deps=_wxDepartures(date);
-  var h=((typeof _rzDateRow==='function')?_rzDateRow('weather'):'')+   // date-navigable like the rest of Operations (◁ ▷ Today)
-    '<div class="card"><div class="st">Weather calls</div>'+
+  var date=S.rezdyDate;
+  // Make sure this day's data is loaded (bookings drive the departures; schedule adds manual blocks).
+  if(S._rezdyBookings==null&&!S._rezdyLoading&&window.rezdyLoadBookings)window.rezdyLoadBookings();
+  if(!S._schedBlocks&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
+  var loading=(S._rezdyLoading||S._rezdyBookings==null);
+  var _today=(typeof _rzToday==='function')?_rzToday():date;
+  // Lightweight, NON-sticky date nav (the operations date row's sticky header + Rezdy-refresh button
+  // glitched here). Just ◁ / date / ▷ / Today — each shift loads the new day's data.
+  var nav='<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1" title="Previous day" onclick="window.rezdyShiftDate(-1)">◁</button>'+
+    '<span style="flex:1;text-align:center;font-size:14px;font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📅 '+_rzEsc(_rzDowLabel(date))+'</span>'+
+    '<button class="btn btn-ghost" style="font-size:15px;padding:5px 11px;line-height:1" title="Next day" onclick="window.rezdyShiftDate(1)">▷</button>'+
+    '<button class="btn btn-ghost" style="font-size:12px;padding:6px 12px'+(date===_today?';opacity:.45':'')+'" title="Jump to today" onclick="window.rezdySetDate(\''+_today+'\')">Today</button>'+
+  '</div>';
+  var deps=loading?[]:_wxDepartures(date);
+  var h=nav+'<div class="card"><div class="st">Weather calls</div>'+
     '<p style="font-size:12px;color:var(--text3);margin:0 0 8px">'+_rzEsc(_rzDowLabel(date))+' · a weather call is needed ~1h before each departure (an 0800 flight by 0700). Any pilot can record one.</p>';
+  if(loading){h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Loading…</div></div>';return h;}
   if(!deps.length){h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No departures scheduled for this day.</div></div>';return h;}
   var nd=_wxNextDays(date);var draft=S._wxDraft||{};
   deps.forEach(function(dep){
