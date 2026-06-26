@@ -931,7 +931,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.37';
+const APP_VER='v27.38';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -7477,6 +7477,12 @@ window.closeManifestTab=function(id){
 
 // ── Generate loadsheet from manifest ──
 window.openAcLoadsheet=function(acId){generateLoadsheet(acId);};
+// Identify "the same flight" for active-draft de-duplication: aircraft + date + departure time (ETD).
+// Used so re-pushing a flight to a loadsheet overwrites its one ACTIVE draft instead of piling up a new
+// copy each time. Signed/complete sheets are never matched here (they keep every copy).
+function _lsFlightKey(form){if(!form)return '';return String(form.ac||'')+'|'+String(form.date||'')+'|'+String(form.etd||form.dep||'');}
+function _lsFindActiveDraft(form){var fk=_lsFlightKey(form);if(!fk||fk==='||')return null;
+  return (S.saved||[]).find(function(s){return s&&s.status!=='complete'&&s.status!=='deleted'&&s.form&&_lsFlightKey(s.form)===fk;})||null;}
 function generateLoadsheet(acId){
   // acId may be a duplicate-instance seat key (e.g. "ZK-SLA_2"); resolve specs/physical.
   const d=curDisp();const a=_acSpec(acId);if(!a)return;
@@ -7496,7 +7502,11 @@ function generateLoadsheet(acId){
   // seat 1 infant (non-copilot)
   {const p=sm[1]?paxById(sm[1]):null;if(p&&p.infantName)form.infantNames[1]=p.infantName;}
   const _lsAcCode=phys.replace('ZK-','');
-  const _newTabId='ls_'+_lsAcCode+'_'+Date.now();
+  // Re-use the existing ACTIVE draft for this same flight (ac+date+ETD) instead of piling up a new copy
+  // every push. A signed/complete sheet for the flight is left alone (a fresh draft is made). Explicit
+  // Duplicate still mints a new id (it doesn't go through here).
+  var _existDraft=_lsFindActiveDraft(form);
+  const _newTabId=_existDraft?_existDraft.id:('ls_'+_lsAcCode+'_'+Date.now());
   S.lsForms[_lsAcCode]=form;S.lsAc=_lsAcCode;S.form=form;S.editId=_newTabId;S.formDirty=false;
   // Populate _unallocated: pax pinned to this aircraft but not given a seat
   {const _spIds=new Set(Object.values(sm));const _unass=(d.pax||[]).filter(function(p){return p.pinAc===phys&&!_spIds.has(p.id)&&!p.infant&&p.name;});var _pool=_uaPool();_unass.forEach(function(p){if(!_pool.some(function(x){return x.name===p.name&&String(x.weight)===String(p.weight);}))_pool.push({name:p.name,weight:p.weight,bag:p.bag||0,infant:p.infantName||null,group:p.group||'',type:p.type||'adult',paymentReq:!!p.paymentReq});});form._unallocated=_pool;}
@@ -7504,12 +7514,14 @@ function generateLoadsheet(acId){
   if(a.layout==='ga8'&&(!form.burnOff||parseFloat(form.burnOff)<30)){form.burnOff='35';}
   if(a.layout==='c208'){form.fuel=String(Math.round(800*0.453592));}
   var _savedAt=new Date().toISOString();
-  S.lsTabs.push({id:_newTabId,acId:phys,form:form,status:'draft',savedAt:_savedAt,isNew:true});
+  var _exTab=S.lsTabs.find(function(t){return t.id===_newTabId;});
+  if(_exTab){_exTab.acId=phys;_exTab.form=form;_exTab.status='draft';_exTab.savedAt=_savedAt;delete _exTab.originalForm;}
+  else S.lsTabs.push({id:_newTabId,acId:phys,form:form,status:'draft',savedAt:_savedAt,isNew:true});
   S.activeTabId=_newTabId;S._newLsTab=false;S.tab='loadsheet';
   // Save as draft — use clone so S.saved entry is not aliased to live edit buffer
   var _formSnap=dc(form);
-  sbU('ts_loadsheets',[{id:_newTabId,form:_formSnap,saved_at:_savedAt,status:'draft'}]).catch(function(){});
-  S.saved=S.saved||[];S.saved.unshift({id:_newTabId,form:_formSnap,status:'draft',savedAt:_savedAt});lsSet('ts_loadsheets_cache',S.saved);
+  sbU('ts_loadsheets',[_lsWritePayload(_newTabId,_formSnap,_savedAt,'draft')]).catch(function(){});
+  S.saved=(S.saved||[]).filter(function(s){return s.id!==_newTabId;});S.saved.unshift({id:_newTabId,form:_formSnap,status:'draft',savedAt:_savedAt});lsSet('ts_loadsheets_cache',S.saved);
   if(_rtWs&&_rtWs.readyState===1){_rtRef++;_rtWs.send(JSON.stringify({topic:'realtime:ts-fms',event:'broadcast',payload:{type:'broadcast',event:'ls_tab_open',payload:{id:_newTabId,acId:acId,form:_formSnap,savedAt:_savedAt,status:'draft',isNew:true,by:(S.user&&S.user.name)||''}},ref:String(_rtRef)}));}
   window.saveWorkspace&&window.saveWorkspace();
   render();
