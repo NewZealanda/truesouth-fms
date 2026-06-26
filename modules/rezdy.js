@@ -930,17 +930,22 @@ window.rezdyCheckinOpen=function(order){
   rows.forEach(function(r){if(r.type==='infant'&&(r.attach==null||!rows[r.attach]||rows[r.attach].type==='infant'))r.attach=firstNon;});
   S._rzCheckinDraft={order:order,rows:rows,plate:((S._rzPlates||{})[order]||{}).plate||''};render();
 };
+// Undo stack for the check-in form — snapshots the passenger ROWS before each structural edit (type
+// toggle / add / remove / infant host) so an accidental change can be reverted. Capped; plate is left
+// alone (independent). Name/weight typing isn't snapshotted (just re-type it).
+function _rzCiSnap(){var d=S._rzCheckinDraft;if(!d)return;d._hist=d._hist||[];d._hist.push(JSON.stringify(d.rows));if(d._hist.length>40)d._hist.shift();}
+window.rezdyCheckinUndo=function(){var d=S._rzCheckinDraft;if(!d||!d._hist||!d._hist.length)return;try{d.rows=JSON.parse(d._hist.pop());}catch(e){}render();};
 window.rezdyCheckinField=function(i,field,val){var d=S._rzCheckinDraft;if(!d||!d.rows[i])return;d.rows[i][field]=val;}; // no render (keep input focus)
-window.rezdyCheckinAttach=function(i,val){var d=S._rzCheckinDraft;if(!d||!d.rows[i])return;d.rows[i].attach=(val===''?null:parseInt(val,10));};
+window.rezdyCheckinAttach=function(i,val){var d=S._rzCheckinDraft;if(!d||!d.rows[i])return;_rzCiSnap();d.rows[i].attach=(val===''?null:parseInt(val,10));render();};
 window.rezdyCheckinType=function(i){
-  var d=S._rzCheckinDraft;if(!d||!d.rows[i])return;
+  var d=S._rzCheckinDraft;if(!d||!d.rows[i])return;_rzCiSnap();
   var cur=d.rows[i].type;d.rows[i].type=(cur==='adult')?'child':(cur==='child')?'infant':'adult';
   if(d.rows[i].type==='infant'){var fn=null;for(var k=0;k<d.rows.length;k++){if(k!==i&&d.rows[k].type!=='infant'){fn=k;break;}}d.rows[i].attach=fn;}
   else d.rows[i].attach=null;
   render();
 };
-window.rezdyCheckinAddRow=function(){var d=S._rzCheckinDraft;if(!d)return;d.rows.push({name:'',actual:'',type:'adult',attach:null});render();};
-window.rezdyCheckinRemoveRow=function(i){var d=S._rzCheckinDraft;if(!d||d.rows.length<=1)return;d.rows.splice(i,1);render();};
+window.rezdyCheckinAddRow=function(){var d=S._rzCheckinDraft;if(!d)return;_rzCiSnap();d.rows.push({name:'',actual:'',type:'adult',attach:null});render();};
+window.rezdyCheckinRemoveRow=function(i){var d=S._rzCheckinDraft;if(!d||d.rows.length<=1)return;_rzCiSnap();d.rows.splice(i,1);render();};
 window.rezdyCheckinCancel=function(){S._rzCheckinDraft=null;render();};
 window.rezdyCheckinSave=function(){
   var d=S._rzCheckinDraft;if(!d)return;
@@ -999,10 +1004,17 @@ function _rzCheckinModal(){
   var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===d.order;});
   var cust=b?(b.customerName||d.order):d.order;
   var already=!!((S._rzBookingCheckedIn||{})[d.order]);
-  var h='<div onclick="window.rezdyCheckinCancel()" class="rzci-overlay">'+
-    '<div onclick="event.stopPropagation()" class="rzci-dialog">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px"><div class="st" style="margin-bottom:0">'+(already?'Edit check-in':'Check in')+' — '+_rzEsc(cust)+'</div><button onclick="window.rezdyCheckinCancel()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:0 0 12px">Enter every passenger’s name. <b>Actual weight</b> is optional — leave it blank to fall back to the declared weight (shown red with a “(d)”). The toggle cycles <b>A</b>dult → <b>C</b>hild → <b>i</b>nfant; an infant is a lap pax and you pick who they sit with.</p>';
+  var canUndo=!!(d._hist&&d._hist.length);
+  // Fixed-size box so the check-in looks the SAME regardless of lunches / plate / pax count — uses the
+  // desktop real estate; the passenger list scrolls inside for big groups. Still an overlaid modal.
+  var _dlg='background:var(--card);border:1px solid var(--border2);border-radius:16px;box-shadow:0 16px 50px rgba(0,0,0,.5);width:560px;max-width:calc(100vw - 24px);height:min(740px,calc(100dvh - 64px));display:flex;flex-direction:column;overflow:hidden';
+  var h='<div onclick="window.rezdyCheckinCancel()" class="rzci-overlay" style="align-items:center">'+
+    '<div onclick="event.stopPropagation()" style="'+_dlg+'">'+
+    '<div style="flex-shrink:0;padding:16px 18px 12px;border-bottom:1px solid var(--border2)">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><div class="st" style="margin-bottom:0">'+(already?'Edit check-in':'Check in')+' — '+_rzEsc(cust)+'</div><button onclick="window.rezdyCheckinCancel()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>'+
+      '<p style="font-size:12px;color:var(--text3);margin:8px 0 0">Enter every passenger’s name. <b>Actual weight</b> is optional — blank falls back to the declared weight (red “(d)”). The toggle cycles <b>A</b>→<b>C</b>→<b>i</b>; an infant is a lap pax.</p>'+
+    '</div>'+
+    '<div style="flex:1 1 auto;overflow:auto;padding:14px 18px">';
   var _ciBal=b?parseFloat(b.balanceDue):0;
   if(isFinite(_ciBal)&&_ciBal>0){
     h+='<div style="display:flex;align-items:center;gap:8px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.5);border-radius:9px;padding:9px 12px;margin:0 0 12px"><span style="font-size:16px">💲</span><span style="font-size:12px;font-weight:700;color:#f87171">Outstanding balance of '+_rzEsc(_rzMoney(_ciBal,b.currency))+' — collect payment before checking in.</span></div>';
@@ -1038,11 +1050,15 @@ function _rzCheckinModal(){
     '</div>';
   });
   h+='<button onclick="window.rezdyCheckinAddRow()" style="font-size:12px;font-weight:700;padding:5px 12px;border-radius:8px;border:1px dashed var(--border2);background:transparent;color:var(--text2);cursor:pointer;margin-bottom:14px">+ Add passenger</button>';
-  h+='<div style="display:flex;gap:8px;justify-content:flex-end;align-items:center">'+
-    (already?'<button class="btn btn-ghost" style="font-size:13px;color:#f87171;border-color:rgba(239,68,68,.4);margin-right:auto" onclick="window.rezdyCheckinUncheck()">⊘ Un-check</button>':'')+
-    '<button class="btn btn-ghost" style="font-size:13px" onclick="window.rezdyCheckinCancel()">Cancel</button>'+
-    '<button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="window.rezdyCheckinSave()">✓ '+(already?'Save changes':'Confirm check-in')+'</button>'+
-  '</div></div></div>';
+  h+='</div>'+   // end scrolling body
+    '<div style="flex-shrink:0;padding:12px 18px;border-top:1px solid var(--border2);display:flex;gap:8px;align-items:center">'+
+      '<div style="margin-right:auto;display:flex;gap:8px">'+
+        (canUndo?'<button class="btn btn-ghost" style="font-size:13px" onclick="window.rezdyCheckinUndo()">↩ Undo</button>':'')+
+        (already?'<button class="btn btn-ghost" style="font-size:13px;color:#f87171;border-color:rgba(239,68,68,.4)" onclick="window.rezdyCheckinUncheck()">⊘ Un-check</button>':'')+
+      '</div>'+
+      '<button class="btn btn-ghost" style="font-size:13px" onclick="window.rezdyCheckinCancel()">Cancel</button>'+
+      '<button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="window.rezdyCheckinSave()">✓ '+(already?'Save changes':'Confirm check-in')+'</button>'+
+    '</div></div></div>';
   return h;
 }
 // Authoritative A/C/i counts from Rezdy's price-option quantities (Adult / Child / Infant …).
