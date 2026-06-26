@@ -1083,6 +1083,10 @@ function _rzEffBreakdown(b){
     parts.forEach(function(p,idx){if(infantOf[idx]!=null){i++;}else{var t=types[idx]||_rzAgeType(p);if(t==='child')c++;else if(t==='infant')i++;else a++;}});
     return {a:a,c:c,i:i};
   }
+  // Charter (CHT): the price quantity is the charter UNIT (1), not the head-count — so count the named
+  // participants instead, otherwise the title/breakdown shows "1A" for a multi-pax charter.
+  var isCharter=((b&&b.items)||[]).some(function(it){return (typeof _rzProduct==='function')&&_rzProduct(it.product)==='CHT';});
+  if(isCharter&&parts.length){var ca=0,cc=0,ci=0;parts.forEach(function(p){var t=_rzAgeType(p);if(t==='child')cc++;else if(t==='infant')ci++;else ca++;});return {a:ca,c:cc,i:ci};}
   var rb=_rzBreakdown(b);if(rb)return rb;
   var a2=0,c2=0,i2=0;parts.forEach(function(p){var t=_rzAgeType(p);if(t==='child')c2++;else if(t==='infant')i2++;else a2++;});
   return {a:a2,c:c2,i:i2};
