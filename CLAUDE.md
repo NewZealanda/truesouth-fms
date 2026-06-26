@@ -90,7 +90,15 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.00 (latest)** — three fixes. (1) **Loadsheet sign-to-submit silently lost.** On a stale
+- **v27.01 (latest)** — calendar block polish. (1) Co-pilot now shows in the block TITLE as
+  `JC+MS/SLQ 3A FLB` (label at bkBlocks `g.label`, adds `+coPilot` after the PIC); the small `✈JC+MS`
+  second-line text was removed. (2) A small green ⚙ (`_autoIcon`) shows on a block when the pilot was
+  auto-allocated (`b.pilotAuto`), beside the amber ✋ forced icon. (3) Flyback held-slot behaviour
+  RESTORED (kept the `_fbOv||sm===720` gate): FLB/CCF seats stay held in their 1200 Rezdy slot to block
+  1200 seats (anti-overbook); the calendar shows 1200-held/overridden flybacks at the return time
+  (default 15:30, block 15:30–16:10) keyed per held slot, so summer flybacks in other slots keep their
+  own return time. (v27.00's "block starts AT the flyback time" fix stands.)
+- **v27.00** — three fixes. (1) **Loadsheet sign-to-submit silently lost.** On a stale
   session (esp. an idle Android phone) the REST write 401s; `sbU` only queued retries for 5xx/0, so the
   signed loadsheet was DROPPED yet `submitLsInPlace` toasted "submitted ✓". Now `sbU` enqueues
   ts_loadsheets/ts_flight_records writes on 401/403 too (→ `ts_sync_queue`, replayed on reconnect /

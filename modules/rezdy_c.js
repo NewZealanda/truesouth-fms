@@ -1080,12 +1080,14 @@ function _rzRenderSchedule(){
     // actually flies BACK later — default 15:30, or whatever the operator set in the calendar. Render
     // a 1-hour block at that time. (g.start here is still the held outbound time → use it as the key.)
     if(_rzIsFlyback(g.product)){
+      // FLB/CCF seats are HELD in their outbound Rezdy slot (typically 1200) on purpose — that blocks
+      // seats on that departure so we don't overbook. We keep that grouping/key, but on the calendar we
+      // show the block at the actual fly-back RETURN time, keyed per held slot (so summer flybacks held
+      // in other slots keep their own return time). 1200-held (or overridden) → default 15:30. The block
+      // STARTS at the fly-back time and runs ~40 min: a 15:30 flyback renders 15:30–16:10.
       var _fbHeld=g.start;var _fbOv=(S._rzFlybackTime||{})[_rzFbTimeKey(g.product,_fbHeld)];
       if(_fbOv||sm===720){
         var _ft=_rzFbTime(g.product,_fbHeld);var _fm=_rzMinsFromHHMM(_ft);if(_fm==null)_fm=930;
-        // The aircraft flies the RETURN leg (Milford→QN), ~40 min. The block STARTS at the actual
-        // fly-back time (so dragging the block to 15:00 leaves it at 15:00, matching the dropdown) and
-        // runs 40 min: a 15:30 flyback renders 15:30–16:10. _fbTime keeps the real fly-back time.
         g._fbHeld=_fbHeld;g._fbTime=_ft;
         g.start=_rzMinToHHMM(_fm);
         g.end=String(Math.floor((_fm+40)/60)).padStart(2,'0')+':'+String((_fm+40)%60).padStart(2,'0');
@@ -1120,7 +1122,7 @@ function _rzRenderSchedule(){
     g.acForced=false;g.acAutoWas=null;
     g.bookings.forEach(function(bk){var ord=String(bk.b.orderNumber||'');var man=(S._rzBookingAc||{})[ord];if(man&&man!=='__none__'){var au=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(ord):null;if(au&&man!==au){g.acForced=true;g.acAutoWas=au;}}});
     var fbStr=_rzFbSummary(g._fb);   // aggregated, e.g. " + 3A FLB"
-    g.label=(pilot?pilot+'/':'')+acLbl+' '+_rzBdCompact(gbd)+' '+(g.disp||g.product)+fbStr;g.order=g.key;g._owing=g.owing;
+    g.label=(pilot?pilot+(g.coPilot?'+'+g.coPilot:'')+'/':'')+acLbl+' '+_rzBdCompact(gbd)+' '+(g.disp||g.product)+fbStr;g.order=g.key;g._owing=g.owing;
     return g;
   });
   const _totBk=bkBlocks.reduce(function(s,g){return s+g.bookings.length;},0);
@@ -1336,11 +1338,13 @@ function _rzRenderSchedule(){
       if(b.pilotChanged)_fc.push('Pilot forced by user'+(b.pilotAutoWas?' — optimal '+String(b.pilotAutoWas):''));
       if(b.acForced)_fc.push('Aircraft forced by user'+(b.acAutoWas?' — optimal '+String(b.acAutoWas).replace('ZK-',''):''));
       var _forcedIcon=_fc.length?'<span title="'+_rzEsc(_fc.join(' · '))+'" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#f59e0b" onpointerdown="event.stopPropagation()">✋</span>':'';
+      // Pilot auto-allocated (not user-forced) → a small green ⚙ on the block.
+      var _autoIcon=(isBk&&b.pilotAuto)?'<span title="Pilot auto-allocated" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#22c55e" onpointerdown="event.stopPropagation()">⚙</span>':'';
       blocksH+='<div'+_pdown+(isBk?' data-bkkey="'+_rzEsc(String(b.order))+'"':'')+(_mlvl?' title="'+_rzEsc(_mtip)+'"':' title="Drag to move · drag the top/bottom edge to set departure/return · tap to open"')+' ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:grab;overflow:hidden;box-sizing:border-box;line-height:1.25;touch-action:none;user-select:none'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
         (_canResize?'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:6px 6px 0 0;cursor:ns-resize"></div><div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:0 0 6px 6px;cursor:ns-resize"></div>':'')+
-        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_forcedIcon+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
-        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(isBk&&b.pilot?' · <span style="color:#60a5fa;font-weight:700">✈'+_rzEsc(b.pilot)+(b.coPilot?'<span style="color:#818cf8">+'+_rzEsc(b.coPilot)+'</span>':'')+'</span>':'')+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
+        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_forcedIcon+_autoIcon+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
+        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         '</div>';
     });
     var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
