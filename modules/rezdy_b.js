@@ -950,6 +950,19 @@ window.pickupSave=async function(silent){
         merged[f]= changedLocally ? local[f] : (cloud[f]!==undefined ? cloud[f] : local[f]);
       });
       didMerge=true;
+    } else if(cloud){
+      // No local baseline yet (this device's pickup blob hadn't finished loading — e.g. a booking was
+      // added moments after the day loaded). Do NOT clobber the saved arrangement: merge non-destructively
+      // — union manualBk by id, union object maps (drivers / vans-spare / aircraft etc., local key wins),
+      // and keep cloud for any array still empty locally. This is the fix for "adding a booking wiped my
+      // saved pickup/dropoff allocations".
+      merged={};
+      _PK_FIELDS.forEach(function(f){var lv=local[f],cv=cloud[f];
+        if(f==='manualBk'){var by={};(Array.isArray(cv)?cv:[]).forEach(function(x){by[String((x&&(x.orderNumber||x.id))||'')]=x;});(Array.isArray(lv)?lv:[]).forEach(function(x){by[String((x&&(x.orderNumber||x.id))||'')]=x;});merged[f]=Object.keys(by).map(function(k){return by[k];});}
+        else if(lv&&typeof lv==='object'&&!Array.isArray(lv)){merged[f]=Object.assign({},(cv&&typeof cv==='object'&&!Array.isArray(cv))?cv:{},lv);}
+        else{var empty=(lv==null)||(Array.isArray(lv)&&!lv.length);merged[f]=(empty&&cv!==undefined)?cv:lv;}
+      });
+      didMerge=true;
     }
   }catch(e){ merged=local; } // offline / fetch failed → write local (same as before)
   var r=await sbU('ts_pickup_lists',[{id:'pl_'+S.rezdyDate,list_date:S.rezdyDate,data:merged}]);
