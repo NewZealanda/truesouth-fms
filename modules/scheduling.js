@@ -212,7 +212,7 @@ function renderSchedulingSettings(){
   // choice (Change aircraft / a pinned or departed tail) always wins.
   var _aoRules=[
     ['Seat capacity','HARD — never exceeded. Each booking group must also fit WHOLE in one aircraft (a 14 = 8+6 needs a 13-seat caravan, not two 7-seat airvans).','#ef4444'],
-    ['Lowest total day cost','The whole day is planned as one before it starts — every UNLOCKED departure together — for the cheapest mix (route + empty-ferry + SDB/call-in costs), using only aircraft serviceable & available at each time.','#22c55e'],
+    ['Lowest total day cost','The whole day is planned as one before it starts — every UNLOCKED departure together — for the cheapest mix of route + empty-ferry costs (SDB counts as its own dearer route), using only aircraft that are serviceable, within maintenance hours, and free at that time.','#22c55e'],
     ['Aircraft priority ★','Among equally-cheap plans it prefers your ★ priority tails (SDB kept for last). This is the FIRST rule broken — it will reach past your priority order if that makes the day cheaper. Set the ★ order in Maintenance.','#f59e0b'],
     ['Your manual choices','Always win — a "Change aircraft" pick, a pinned tail, or a departure you marked Departed is left exactly as-is; the optimiser only plans around it.','#60a5fa']
   ];
@@ -225,7 +225,9 @@ function renderSchedulingSettings(){
       '<div style="font-size:11.5px;color:var(--text3);margin-top:1px;line-height:1.45">'+_schedEsc(r[1])+'</div></div>'+
     '</div>';
   });
-  h+='</div>';
+  h+='<div style="margin-top:10px;padding:8px 10px;border-radius:9px;background:rgba(96,165,250,.10);border:1px solid rgba(96,165,250,.4);font-size:11.5px;color:var(--text2);line-height:1.45">'+
+    '<b style="color:#60a5fa">Pilots don\'t restrict aircraft.</b> Aircraft are chosen on the rules above alone — pilots are matched on AFTER. A type-rated pilot stays with their aircraft for the whole day\'s rotation (only swapping once back in QN), earlier ★ pilots first. If no rated pilot is free for a flight it\'s flagged <b>no pilot</b> + a call-in decision is shown — it never changes the aircraft plan. (Only SDB needs its own endorsement to be crewed.)</div>'+
+  '</div>';
 
   // Route costs — ONE live price list that is exactly what the allocator uses. Run/hr & landings come
   // from Business Plan ▸ Running costs (computed from each destination's real fees); type an Override to
