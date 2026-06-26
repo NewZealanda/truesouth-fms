@@ -546,13 +546,21 @@ function _schedPickFleet(pax,fleet){
 }
 // Pack whole booking groups into the chosen aircraft (best-fit, priority aircraft fill first).
 function _schedPack(groups,chosen){
-  var bins=chosen.map(function(a){return {ac:a.ac,rem:a.cap,priority:a.priority?1:0};});
+  var bins=chosen.map(function(a){return {ac:a.ac,rem:a.cap,priority:a.priority?1:0,airvan:(typeof _schedIsAirvan==='function')&&_schedIsAirvan(a.ac)};});
   bins.sort(function(x,y){return (y.priority-x.priority)||(y.rem-x.rem);});
   var gs=groups.slice().sort(function(a,b){return b.size-a.size;});
   var map={};
   gs.forEach(function(g){
     var pick=null;
-    bins.forEach(function(bn){if(bn.rem>=g.size){if(!pick||bn.priority>pick.priority||(bn.priority===pick.priority&&bn.rem<pick.rem))pick=bn;}});
+    bins.forEach(function(bn){
+      if(bn.rem<g.size)return;
+      if(!pick){pick=bn;return;}
+      // A group carrying an infant prefers a CARAVAN (SDB is a caravan too) over an airvan — when both
+      // fit, the caravan wins regardless of priority/fit. This only re-homes WITHIN the already-chosen
+      // aircraft, so it's cost-neutral.
+      if(g.inf){var bc=!bn.airvan,pc=!pick.airvan;if(bc!==pc){if(bc)pick=bn;return;}}
+      if(bn.priority>pick.priority||(bn.priority===pick.priority&&bn.rem<pick.rem))pick=bn;
+    });
     if(!pick)bins.forEach(function(bn){if(!pick||bn.rem>pick.rem)pick=bn;});   // group too big → most room
     if(pick){map[g.order]=pick.ac;pick.rem-=g.size;}
   });
@@ -705,10 +713,11 @@ function _schedEnsureAuto(){
   S._schedAutoBusy=true;
   try{
     // bookings per (departure time, destination) → seats, matching the plan's per-(time,dest) flights.
-    var byKey={};
+    var byKey={},_infO={};   // _infO[order] = booking carries an infant (prefers a caravan)
     bks.forEach(function(b){
       if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
       var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
+      try{var _e=(typeof _rzEffBreakdown==='function')?_rzEffBreakdown(b):null;if(_e&&(_e.i||0)>0)_infO[o]=1;}catch(_){}
       (b.items||[]).forEach(function(it){
         var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
         var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;
@@ -724,7 +733,7 @@ function _schedEnsureAuto(){
     dp.departures.forEach(function(d){
       if(d.locked)return;                            // committed — keep current assignment
       var orders=byKey[d.key]||{};
-      var groupsArr=Object.keys(orders).map(function(o){return {order:o,size:orders[o]};});
+      var groupsArr=Object.keys(orders).map(function(o){return {order:o,size:orders[o],inf:!!_infO[o]};});
       if(!groupsArr.length||!d.aircraft.length)return;
       var chosen=d.aircraft.map(function(a){return {ac:a.ac,cap:a.cap,priority:_schedIsPriority(a.ac)};});
       var packed=_schedPack(groupsArr,chosen);
