@@ -444,9 +444,9 @@ function renderLoginInner(){
         <div id="login-err" style="display:${S.loginErr?'block':'none'};background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#fca5a5">${S.loginErr||''}</div>
         <form id="login-form" action="javascript:void(0)" onsubmit="window.tryLogin();return false" autocomplete="on"><div style="margin-bottom:16px">
           <label style="display:block;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase">Email</label>
-          <div style="display:flex;align-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;overflow:hidden">
-            <input id="li_e" type="text" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
-              style="flex:0 0 auto;padding:11px 2px 11px 14px;background:transparent;border:none;color:#fff;font-size:16px;outline:none;min-width:60px;width:120px;box-sizing:border-box"
+          <div onclick="var i=document.getElementById('li_e');if(i)i.focus()" style="display:flex;align-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;overflow:hidden;cursor:text;touch-action:manipulation">
+            <input id="li_e" type="text" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
+              style="flex:0 0 auto;padding:11px 2px 11px 14px;background:transparent;border:none;color:#fff;font-size:16px;outline:none;min-width:60px;width:120px;box-sizing:border-box;touch-action:manipulation"
               oninput="window.updateLoginSuffix()" onfocus="window.updateLoginSuffix()" onblur="if(!this.value)document.getElementById('li_e_sfx').style.display='none';" onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
             <span id="li_e_sfx" style="display:none;flex:0 1 auto;padding:0 12px 0 0;color:rgba(255,255,255,.5);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:center">@truesouthflights.co.nz</span>
           </div>
@@ -457,7 +457,7 @@ function renderLoginInner(){
             <span style="font-size:11px;color:rgba(255,255,255,.25)">Contact your administrator to reset</span>
           </div>
           <input id="li_p" type="password" autocomplete="current-password" placeholder="••••••••••••"
-            style="width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:16px;outline:none;box-sizing:border-box"
+            style="width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:16px;outline:none;box-sizing:border-box;touch-action:manipulation"
             onfocus="this.setAttribute('placeholder','')" onblur="if(!this.value)this.setAttribute('placeholder','••••••••••••')"
             onkeydown="if(event.key==='Enter')window.tryLogin();else if(event.key==='Backspace'&&S.loginErr&&this.value){this.value='';event.preventDefault();}">
         </div>

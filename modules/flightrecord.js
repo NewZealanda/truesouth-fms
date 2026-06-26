@@ -8,13 +8,13 @@
 //  NOTE: persistence needs the ts_flight_records table — see flight_record.sql.
 // ─────────────────────────────────────────────────────────────────────────────
 
-var FR_PRODUCTS_DEFAULT=['FCF','MFOH','THH','FJHH','MCHS','STT','Ferry','Maintenance','Training','Private Hire'];
+var FR_PRODUCTS_DEFAULT=['FCF','FLB','MFOH','THH','FJHH','MCHS','STT','Ferry','Maintenance','Training','Private Hire'];
 var FR_LOCS_DEFAULT=['QN','MF','MC','FJ','WF'];
 
 function _frToday(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function _frNowHM(){var d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
 function _frMins(t){var m=/(\d{1,2}):(\d{2})/.exec(String(t||''));return m?(+m[1])*60+(+m[2]):null;}
-function _frProducts(){var o=S._frSettings&&Array.isArray(S._frSettings.products)?S._frSettings.products:null;return (o&&o.length)?o:FR_PRODUCTS_DEFAULT;}
+function _frProducts(){var o=S._frSettings&&Array.isArray(S._frSettings.products)?S._frSettings.products:null;var list=(o&&o.length)?o:FR_PRODUCTS_DEFAULT;if(list.indexOf('FLB')<0){list=list.slice();list.splice(Math.min(1,list.length),0,'FLB');}return list;}
 function _frAdj(){var a=S._frSettings&&S._frSettings.adj!=null?(+S._frSettings.adj):1;return isNaN(a)?1:Math.max(0,a);} // taxi adjustment, in tenths (default 0.1)
 function _frAcShort(ac){return String(ac||'').replace(/^ZK-?/,'');}
 function _frAcList(){return Object.keys((S&&S.aircraft)||{});}
