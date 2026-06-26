@@ -468,6 +468,7 @@ function _notifNavigate(n){
     if(t==='leave_submitted'){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='approvals';render();return;}
     if(t.indexOf('leave_')===0){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='my';render();return;}
     if(t==='scheduling'){S.section='calendar';S.rezdyTab='schedule';render();return;}
+    if(t==='weather_call'){S.section='weather';render();return;}
   }catch(e){}
   render();
 }

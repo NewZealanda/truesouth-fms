@@ -159,6 +159,7 @@ function _sectionAllowed(sec){
     case 'flightrecord':return (hasRolePerm('flightrecord'))||!!(S.user&&S.user.superAdmin);
     case 'resources':   return hasRolePerm('resources'); // gated further by the feature toggle in nav
     case 'training':    return !!S.user; // training is available to every signed-in user
+    case 'weather':     return hasRolePerm('weather_call')||hasRolePerm('operations')||!!(S.user&&S.user.superAdmin); // any pilot/ops can record a weather call
     case 'sms':         return hasRolePerm('sms')||!!(S.user&&S.user.superAdmin);           // placeholders — visible to superadmin for now; perms later
     case 'ground':      return hasRolePerm('ground')||!!(S.user&&S.user.superAdmin); // tier-2 tabs incl. Vehicle Prestart
     case 'trainingmod': return hasRolePerm('training_mod')||!!(S.user&&S.user.superAdmin);
@@ -232,6 +233,34 @@ function _renderHomePicker(){
   opts.forEach(function(o){var on=o.id===cur;h+='<button onclick="window.homeSet(\''+o.id+'\')" style="text-align:left;padding:8px 11px;border-radius:8px;border:1px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.12)':'transparent')+';color:var(--text2);font-size:13px;font-weight:'+(on?'800':'600')+';cursor:pointer">'+(on?'✓ ':'')+o.label+'</button>';});
   if(!opts.length)h+='<div style="font-size:12px;color:var(--text3);padding:6px">No pages match.</div>';
   h+='</div>';
+  return h;
+}
+// User Preferences page — per-device personal settings: landing page, theme, and sound (master mute,
+// notification-sound toggle, selectable chime with previews). Reachable from the account modal.
+window.goUserPrefs=function(){S.section='userprefs';S.showAccount=false;if(typeof render==='function')render();};
+function _renderUserPrefs(){
+  var muted=(typeof _soundMuted==='function')&&_soundMuted();
+  var notifOn=(typeof _notifSoundOn==='function')?_notifSoundOn():true;
+  var curChime=(typeof _chimeGet==='function')?_chimeGet():'classic';
+  var chimes=(typeof _rzChimeList==='function')?_rzChimeList():[{id:'classic',name:'Classic'}];
+  var h='<div class="card"><div class="st">User preferences</div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:0 0 14px">These settings are saved on this device.</p>'+
+    _renderHomePicker()+
+    '<div style="height:1px;background:var(--border2);margin:6px 0 16px"></div>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Appearance</div>'+
+    '<button onclick="window.toggleTheme()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:18px">'+((typeof _themeIsLight==='function'&&_themeIsLight())?'\u{1F319} Switch to dark mode':'☀️ Switch to light mode')+'</button>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Sound</div>'+
+    '<button onclick="window.toggleMute()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">'+(muted?'🔔 Unmute all sound':'🔇 Mute all sound')+'</button>'+
+    '<button onclick="window.toggleNotifSound()" '+(muted?'disabled':'')+' style="width:100%;padding:10px;background:var(--card2);border:1px solid '+(notifOn&&!muted?'var(--accent)':'var(--border2)')+';border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:'+(muted?'not-allowed':'pointer')+';opacity:'+(muted?'.5':'1')+';margin-bottom:14px">'+(notifOn?'🔔 Play a sound for notifications: ON':'🔕 Play a sound for notifications: OFF')+'</button>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">Notification chime <span style="font-weight:400;color:var(--text3)">— tap to choose, ▶ to hear it</span></div>'+
+    '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">';
+  chimes.forEach(function(c){var on=c.id===curChime;
+    h+='<div style="display:flex;align-items:center;gap:8px">'+
+      '<button onclick="window.setChime(\''+c.id+'\')" style="flex:1;text-align:left;padding:9px 12px;border-radius:8px;border:1px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.12)':'transparent')+';color:var(--text2);font-size:13px;font-weight:'+(on?'800':'600')+';cursor:pointer">'+(on?'✓ ':'')+c.name+'</button>'+
+      '<button onclick="window.previewChime(\''+c.id+'\')" title="Preview" style="flex-shrink:0;width:42px;padding:9px 0;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>'+
+    '</div>';
+  });
+  h+='</div>'+(muted?'<div style="font-size:11px;color:#f59e0b;margin-top:4px">All sound is muted — unmute above to hear chimes.</div>':'')+'</div>';
   return h;
 }
 function render(){
@@ -488,9 +517,9 @@ function renderAccountModal(){
       ${changePwMsg?`<div style="padding:8px 12px;border-radius:7px;margin-bottom:12px;font-size:13px;font-weight:600;background:${changePwMsg.ok?'var(--ok-bg)':'var(--err-bg)'};color:${changePwMsg.ok?'var(--ok-text)':'var(--err-text)'};border:1px solid ${changePwMsg.ok?'var(--ok-border)':'var(--err-border)'}">${changePwMsg.text}</div>`:''}
       <button onclick="window.toggleTheme()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">${(typeof _themeIsLight==='function'&&_themeIsLight())?'\u{1F319} Switch to dark mode':'☀️ Switch to light mode'}</button>
       <button onclick="window.toggleMute()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">${(typeof _soundMuted==='function'&&_soundMuted())?'🔔 Unmute sound':'🔇 Mute all sound'}</button>
+      <button onclick="window.goUserPrefs()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">&#x2699;&#xFE0F; User settings &amp; preferences</button>
       <button onclick="window.goToMyProfile()" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">&#x270F; Edit My Profile</button>
       <button onclick="S._homeApplied=false;logout();S.showAccount=false;" style="width:100%;padding:10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#f87171;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px">Sign Out</button>
-      ${_renderHomePicker()}
       <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Change Password</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         <input id="acc_cur" type="password" placeholder="Current password" autocomplete="current-password"
@@ -624,6 +653,11 @@ function renderDrawer(){
   if(hasRolePerm('operations')){
     var _tdyOn=sec==='today';
     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'today\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_tdyOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_tdyOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_tdyOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🏠</span><span style="flex:1">Today</span></button>';
+  }
+  // Weather calls — pinned under Today (any pilot/ops can record a per-departure call).
+  if(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin)){
+    var _wxOn=sec==='weather';
+    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'weather\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_wxOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_wxOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_wxOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🌤️</span><span style="flex:1">Weather calls</span></button>';
   }
   if(_canOps){
     h+=_secBtn('Operations','operations','✈️');
@@ -897,6 +931,8 @@ function renderApp(){
           if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-training">'+renderTraining()+'</div>';
         }
+        if(_sec==='userprefs')return '<div id="flash-userprefs">'+_renderUserPrefs()+'</div>';
+        if(_sec==='weather'){if(!(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return '<div id="flash-weather">'+((typeof _rzRenderWeatherCalls==='function')?_rzRenderWeatherCalls():'')+'</div>';}
         if(_sec==='sms'){if(!hasRolePerm('sms')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('SMS','Safety Management System');}
         if(_sec==='ground'){
           if(!hasRolePerm('ground')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';

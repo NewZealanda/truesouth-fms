@@ -841,6 +841,15 @@ window.toggleMute=function(){
   if(typeof toast==='function')toast(_soundMuted()?'All sound muted 🔇':'Sound on 🔔',_soundMuted()?'info':'ok');
   if(typeof render==='function')render();
 };
+// ── Per-device sound preferences (User Preferences page) ──
+// Which chime to play (id into _RZ_CHIMES, see rezdy_b.js); default 'classic'. And whether NEW
+// notifications play a sound at all (separate from the master mute). Both per-device in localStorage.
+function _chimeGet(){try{return localStorage.getItem('ts_chime')||'classic';}catch(e){return 'classic';}}
+function _chimeSet(id){try{localStorage.setItem('ts_chime',String(id||'classic'));}catch(e){}}
+function _notifSoundOn(){try{return localStorage.getItem('ts_notif_sound')!=='0';}catch(e){return true;}}   // default ON
+window._chimeGet=_chimeGet;window._chimeSet=_chimeSet;window._notifSoundOn=_notifSoundOn;
+window.setChime=function(id){_chimeSet(id);if(typeof window.previewChime==='function')window.previewChime(id);if(typeof toast==='function')toast('Notification chime set','ok');if(typeof render==='function')render();};
+window.toggleNotifSound=function(){try{localStorage.setItem('ts_notif_sound',_notifSoundOn()?'0':'1');}catch(e){}if(typeof toast==='function')toast(_notifSoundOn()?'Notification sounds on 🔔':'Notification sounds off 🔕',_notifSoundOn()?'ok':'info');if(typeof render==='function')render();};
 // True while the Admin > Permissions grid is actively on screen (renderAdminPerms bumps
 // S._permsPageTs on every render). While editing, background reloads must NOT overwrite
 // S.rolePerms or they wipe unsaved ticks (the 5s edit-timer alone is not enough — a
@@ -931,7 +940,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.38';
+const APP_VER='v27.40';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3439,6 +3448,7 @@ function _sectionAllowed(sec){
     case 'flightrecord':return (hasRolePerm('flightrecord'))||!!(S.user&&S.user.superAdmin);
     case 'resources':   return hasRolePerm('resources'); // gated further by the feature toggle in nav
     case 'training':    return !!S.user; // training is available to every signed-in user
+    case 'weather':     return hasRolePerm('weather_call')||hasRolePerm('operations')||!!(S.user&&S.user.superAdmin); // any pilot/ops can record a weather call
     case 'sms':         return hasRolePerm('sms')||!!(S.user&&S.user.superAdmin);           // placeholders — visible to superadmin for now; perms later
     case 'ground':      return hasRolePerm('ground')||!!(S.user&&S.user.superAdmin); // tier-2 tabs incl. Vehicle Prestart
     case 'trainingmod': return hasRolePerm('training_mod')||!!(S.user&&S.user.superAdmin);
@@ -3512,6 +3522,34 @@ function _renderHomePicker(){
   opts.forEach(function(o){var on=o.id===cur;h+='<button onclick="window.homeSet(\''+o.id+'\')" style="text-align:left;padding:8px 11px;border-radius:8px;border:1px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.12)':'transparent')+';color:var(--text2);font-size:13px;font-weight:'+(on?'800':'600')+';cursor:pointer">'+(on?'✓ ':'')+o.label+'</button>';});
   if(!opts.length)h+='<div style="font-size:12px;color:var(--text3);padding:6px">No pages match.</div>';
   h+='</div>';
+  return h;
+}
+// User Preferences page — per-device personal settings: landing page, theme, and sound (master mute,
+// notification-sound toggle, selectable chime with previews). Reachable from the account modal.
+window.goUserPrefs=function(){S.section='userprefs';S.showAccount=false;if(typeof render==='function')render();};
+function _renderUserPrefs(){
+  var muted=(typeof _soundMuted==='function')&&_soundMuted();
+  var notifOn=(typeof _notifSoundOn==='function')?_notifSoundOn():true;
+  var curChime=(typeof _chimeGet==='function')?_chimeGet():'classic';
+  var chimes=(typeof _rzChimeList==='function')?_rzChimeList():[{id:'classic',name:'Classic'}];
+  var h='<div class="card"><div class="st">User preferences</div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:0 0 14px">These settings are saved on this device.</p>'+
+    _renderHomePicker()+
+    '<div style="height:1px;background:var(--border2);margin:6px 0 16px"></div>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Appearance</div>'+
+    '<button onclick="window.toggleTheme()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:18px">'+((typeof _themeIsLight==='function'&&_themeIsLight())?'\u{1F319} Switch to dark mode':'☀️ Switch to light mode')+'</button>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Sound</div>'+
+    '<button onclick="window.toggleMute()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">'+(muted?'🔔 Unmute all sound':'🔇 Mute all sound')+'</button>'+
+    '<button onclick="window.toggleNotifSound()" '+(muted?'disabled':'')+' style="width:100%;padding:10px;background:var(--card2);border:1px solid '+(notifOn&&!muted?'var(--accent)':'var(--border2)')+';border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:'+(muted?'not-allowed':'pointer')+';opacity:'+(muted?'.5':'1')+';margin-bottom:14px">'+(notifOn?'🔔 Play a sound for notifications: ON':'🔕 Play a sound for notifications: OFF')+'</button>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">Notification chime <span style="font-weight:400;color:var(--text3)">— tap to choose, ▶ to hear it</span></div>'+
+    '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">';
+  chimes.forEach(function(c){var on=c.id===curChime;
+    h+='<div style="display:flex;align-items:center;gap:8px">'+
+      '<button onclick="window.setChime(\''+c.id+'\')" style="flex:1;text-align:left;padding:9px 12px;border-radius:8px;border:1px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.12)':'transparent')+';color:var(--text2);font-size:13px;font-weight:'+(on?'800':'600')+';cursor:pointer">'+(on?'✓ ':'')+c.name+'</button>'+
+      '<button onclick="window.previewChime(\''+c.id+'\')" title="Preview" style="flex-shrink:0;width:42px;padding:9px 0;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>'+
+    '</div>';
+  });
+  h+='</div>'+(muted?'<div style="font-size:11px;color:#f59e0b;margin-top:4px">All sound is muted — unmute above to hear chimes.</div>':'')+'</div>';
   return h;
 }
 function render(){
@@ -3768,9 +3806,9 @@ function renderAccountModal(){
       ${changePwMsg?`<div style="padding:8px 12px;border-radius:7px;margin-bottom:12px;font-size:13px;font-weight:600;background:${changePwMsg.ok?'var(--ok-bg)':'var(--err-bg)'};color:${changePwMsg.ok?'var(--ok-text)':'var(--err-text)'};border:1px solid ${changePwMsg.ok?'var(--ok-border)':'var(--err-border)'}">${changePwMsg.text}</div>`:''}
       <button onclick="window.toggleTheme()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">${(typeof _themeIsLight==='function'&&_themeIsLight())?'\u{1F319} Switch to dark mode':'☀️ Switch to light mode'}</button>
       <button onclick="window.toggleMute()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">${(typeof _soundMuted==='function'&&_soundMuted())?'🔔 Unmute sound':'🔇 Mute all sound'}</button>
+      <button onclick="window.goUserPrefs()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">&#x2699;&#xFE0F; User settings &amp; preferences</button>
       <button onclick="window.goToMyProfile()" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">&#x270F; Edit My Profile</button>
       <button onclick="S._homeApplied=false;logout();S.showAccount=false;" style="width:100%;padding:10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#f87171;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px">Sign Out</button>
-      ${_renderHomePicker()}
       <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Change Password</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         <input id="acc_cur" type="password" placeholder="Current password" autocomplete="current-password"
@@ -3904,6 +3942,11 @@ function renderDrawer(){
   if(hasRolePerm('operations')){
     var _tdyOn=sec==='today';
     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'today\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_tdyOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_tdyOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_tdyOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🏠</span><span style="flex:1">Today</span></button>';
+  }
+  // Weather calls — pinned under Today (any pilot/ops can record a per-departure call).
+  if(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin)){
+    var _wxOn=sec==='weather';
+    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'weather\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_wxOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_wxOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_wxOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🌤️</span><span style="flex:1">Weather calls</span></button>';
   }
   if(_canOps){
     h+=_secBtn('Operations','operations','✈️');
@@ -4177,6 +4220,8 @@ function renderApp(){
           if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-training">'+renderTraining()+'</div>';
         }
+        if(_sec==='userprefs')return '<div id="flash-userprefs">'+_renderUserPrefs()+'</div>';
+        if(_sec==='weather'){if(!(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return '<div id="flash-weather">'+((typeof _rzRenderWeatherCalls==='function')?_rzRenderWeatherCalls():'')+'</div>';}
         if(_sec==='sms'){if(!hasRolePerm('sms')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('SMS','Safety Management System');}
         if(_sec==='ground'){
           if(!hasRolePerm('ground')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
@@ -12813,6 +12858,7 @@ function _notifNavigate(n){
     if(t==='leave_submitted'){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='approvals';render();return;}
     if(t.indexOf('leave_')===0){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='my';render();return;}
     if(t==='scheduling'){S.section='calendar';S.rezdyTab='schedule';render();return;}
+    if(t==='weather_call'){S.section='weather';render();return;}
   }catch(e){}
   render();
 }
@@ -14493,6 +14539,129 @@ window.rezdySetFlybackEnd=function(prod,held,val){
   if(/^\d{1,2}:\d{2}$/.test(val))S._rzFlybackEnd[k]=val; else delete S._rzFlybackEnd[k];
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
 };
+// ── Weather calls ───────────────────────────────────────────────────────────────
+// Every flight is weather-dependent and needs a pilot's weather call ~1h before departure (an 0800
+// flight is called by 0700 latest). Any pilot can record a call per departure. Stored per-date in the
+// pickup blob (S._rzWxCalls, keyed by departure time "HH:MM"). Status: 'on' (green) / 'cancelled' (red,
+// + reason + next-best-day) / 'final' (yellow, final call made in the office). All carry a comment.
+var _WX_REASONS=['Cloud','Rain','Wind','Snow','Visibility'];
+function _wxLeadMin(){return 60;}                       // call due this many minutes before departure
+function _wxNotifyBeforeDeadlineMin(){return 15;}       // remind the PIC this long before the deadline
+function _wxCall(depKey){return (S._rzWxCalls||{})[String(depKey)]||null;}
+function _wxStatusColor(st){return st==='on'?'#22c55e':st==='cancelled'?'#ef4444':st==='final'?'#f59e0b':'#94a3b8';}
+function _wxStatusLabel(st){return st==='on'?'Called ON':st==='cancelled'?'Cancelled':st==='final'?'Final call (office)':'No call yet';}
+// The day's weather-call subjects: unique departure TIMES among today's real (aircraft) flights, with
+// their aircraft + PIC(s). Flybacks ride their outbound's call; manual/maintenance blocks are excluded.
+function _wxDepartures(date){
+  var flights=(typeof _schedDayFlights==='function')?(_schedDayFlights(date)||[]):[];
+  var man=S._schedPilots||{},auto=S._schedAutoPilots||{},byTime={};
+  flights.forEach(function(f){
+    var parts=String(f.key||'').split('|');if(parts.length<3)return;          // skip manual blocks (key=id)
+    if(!((S.aircraft||{})[parts[0]]))return;                                  // real aircraft only
+    var prod=parts[2]||'';if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;
+    var t=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';if(!t)return;
+    var g=byTime[t]||(byTime[t]={time:t,depMin:f.depMin,acs:[],pics:[],prod:prod});
+    if(g.acs.indexOf(parts[0])<0)g.acs.push(parts[0]);
+    var pic=man[f.key]||auto[f.key];if(pic&&g.pics.indexOf(pic)<0)g.pics.push(pic);
+  });
+  return Object.keys(byTime).map(function(t){return byTime[t];}).sort(function(a,b){return a.depMin-b.depMin;});
+}
+// Next-best-day chips for a cancelled call: Tomorrow + the following few days (weekday labels).
+function _wxNextDays(date){
+  var base=date?new Date(String(date)+'T00:00:00'):new Date();var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];var out=[];
+  for(var i=1;i<=5;i++){var d=new Date(base);d.setDate(d.getDate()+i);out.push({val:d.toISOString().slice(0,10),label:i===1?'Tomorrow':days[d.getDay()]});}
+  return out;
+}
+window.wxOpenDep=function(dep){if(S._wxOpen===dep){S._wxOpen=null;}else{S._wxOpen=dep;var c=_wxCall(dep)||{};S._wxDraft={dep:dep,reason:c.reason||'',nextDay:c.nextDay||'',comment:c.comment||''};}render();};
+window.wxDraftSet=function(field,val){S._wxDraft=S._wxDraft||{};S._wxDraft[field]=val;if(field!=='comment')render();};   // comment via oninput → no render (keep focus)
+window.wxSubmit=function(status){
+  var d=S._wxDraft||{};var dep=d.dep;if(!dep)return;
+  if((status==='cancelled'||status==='final')&&!d.reason){if(typeof toast==='function')toast('Pick a reason (cloud/rain/wind/snow/visibility) first.','warn');return;}
+  S._rzWxCalls=S._rzWxCalls||{};
+  S._rzWxCalls[String(dep)]={status:status,reason:(status==='on'?'':(d.reason||'')),nextDay:(status==='cancelled'?(d.nextDay||''):''),comment:d.comment||'',by:(S.user&&(S.user.name||S.user.email))||'',at:new Date().toISOString()};
+  S._wxOpen=null;S._wxDraft=null;
+  if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();
+  if(typeof auditLog==='function')auditLog('weather_call',{dep:dep,status:status,reason:(d.reason||'')});
+  if(typeof toast==='function')toast('Weather call recorded: '+_wxStatusLabel(status),status==='cancelled'?'warn':'ok');
+  render();
+};
+window.wxClear=function(dep){if(S._rzWxCalls)delete S._rzWxCalls[String(dep)];S._wxOpen=null;if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();render();};
+// Reminder check: 15 min before the deadline (deadline = depart − 1h), if no call yet, notify each PIC
+// of that departure ONCE. The "_notified" flag rides in the synced blob so other devices don't re-send.
+function _wxCheckReminders(){
+  try{
+    if(!S.user)return;var today=(typeof _todayLocal==='function')?_todayLocal():new Date().toISOString().slice(0,10);
+    if(S.rezdyDate!==today)return;                       // only the live day
+    var now=new Date();var nowMin=now.getHours()*60+now.getMinutes();
+    var deps=_wxDepartures(today);var changed=false;
+    deps.forEach(function(dep){
+      var call=_wxCall(dep.time);if(call&&call.status)return;             // already called
+      var deadline=dep.depMin-_wxLeadMin();var windowStart=deadline-_wxNotifyBeforeDeadlineMin();
+      if(nowMin<windowStart||nowMin>deadline)return;                     // not in the 15-min reminder window
+      S._rzWxCalls=S._rzWxCalls||{};var rec=S._rzWxCalls[dep.time]||{};
+      if(rec._notified)return;                                          // already reminded (synced flag)
+      rec._notified=true;S._rzWxCalls[dep.time]=rec;changed=true;
+      // notify each PIC of this departure
+      var msg='A weather call is required for your '+dep.time+' '+(dep.prod||'flight')+' departing '+_rzWxAmPm(dep.time)+'.';
+      (dep.pics||[]).forEach(function(code){
+        var u=_rzWxUserForPilot(code);if(!u||!u.id)return;
+        try{sbU('ts_notifications',[{user_id:u.id,type:'weather_call',message:msg,read:false,created_at:new Date().toISOString()}]);}catch(e){}
+      });
+    });
+    if(changed&&window.pickupSave){window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();}
+  }catch(e){}
+}
+function _rzWxAmPm(t){var m=/^(\d{1,2}):(\d{2})$/.exec(String(t||''));if(!m)return t;var h=+m[1],mm=m[2];var ap=h<12?'am':'pm';var h12=((h%12)||12);return h12+(mm==='00'?'':':'+mm)+ap;}
+// Resolve a pilot code (e.g. 'TP') to a user record (for notifications) via the crew → user link.
+function _rzWxUserForPilot(code){
+  if(!code)return null;code=String(code).trim();
+  var crew=(S.crew||[]).find(function(c){return (c.code||'').toUpperCase()===code.toUpperCase();});
+  var nm=(crew&&crew.n)||'';
+  return (S.users||[]).find(function(u){return (u.linkedCrew&&crew&&u.linkedCrew===crew.n)||(nm&&u.name===nm)||(u.name||'').toUpperCase()===code.toUpperCase();})||null;
+}
+try{setInterval(function(){try{_wxCheckReminders();}catch(e){}},60000);}catch(_e){}
+function _wxDayLabel(iso,baseDate){var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];try{var d=new Date(iso+'T00:00:00');var b=baseDate?new Date(baseDate+'T00:00:00'):new Date();var diff=Math.round((d-b)/86400000);if(diff===1)return 'Tomorrow';return days[d.getDay()]+' '+d.getDate();}catch(e){return iso;}}
+function _rzRenderWeatherCalls(){
+  if(!S._schedBlocks){if(window.rezdyLoadSchedule)window.rezdyLoadSchedule();}
+  var date=S.rezdyDate;var deps=_wxDepartures(date);
+  var h='<div class="card"><div class="st">Weather calls</div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:0 0 8px">'+_rzEsc(_rzDowLabel(date))+' · a weather call is needed ~1h before each departure (an 0800 flight by 0700). Any pilot can record one.</p>';
+  if(!deps.length){h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No departures scheduled for this day.</div></div>';return h;}
+  var nd=_wxNextDays(date);var draft=S._wxDraft||{};
+  deps.forEach(function(dep){
+    var call=_wxCall(dep.time);var st=call&&call.status;var col=_wxStatusColor(st);
+    var acStr=dep.acs.map(function(a){return String(a).replace('ZK-','');}).join(', ');
+    var picStr=dep.pics.length?(' · '+dep.pics.join(', ')):'';
+    var open=S._wxOpen===dep.time;
+    h+='<div style="border:1px solid '+(st?col:'var(--border2)')+';border-left:4px solid '+col+';border-radius:10px;margin:8px 0;overflow:hidden">'+
+      '<div onclick="window.wxOpenDep(\''+dep.time+'\')" style="display:flex;align-items:center;gap:10px;padding:11px 13px;cursor:pointer">'+
+        '<div style="font-weight:800;font-size:15px;color:var(--text1);min-width:54px">'+_rzEsc(dep.time)+'</div>'+
+        '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text2)">'+_rzEsc(dep.prod||'FCF')+' · '+_rzEsc(acStr)+_rzEsc(picStr)+'</div>'+
+          (call?'<div style="font-size:11px;color:var(--text3)">'+_rzEsc(_wxStatusLabel(st))+(call.reason?' — '+_rzEsc(call.reason):'')+(call.nextDay?' · next: '+_rzEsc(_wxDayLabel(call.nextDay,date)):'')+(call.by?' · by '+_rzEsc(call.by):'')+(call.comment?' · “'+_rzEsc(call.comment)+'”':'')+'</div>':'')+
+        '</div>'+
+        '<span style="flex-shrink:0;padding:3px 10px;border-radius:14px;background:'+col+'22;border:1px solid '+col+';color:'+col+';font-size:11px;font-weight:800">'+(st==='on'?'✓ ON':st==='cancelled'?'✕ CXLD':st==='final'?'⚠ FINAL':'— set')+'</span>'+
+      '</div>';
+    if(open){
+      h+='<div style="padding:0 13px 13px;border-top:1px solid var(--border2)">'+
+        '<div style="font-size:11px;color:var(--text3);margin:10px 0 6px">Reason (for cancelled / final):</div>'+
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">'+_WX_REASONS.map(function(r){var on=draft.reason===r;return '<button onclick="window.wxDraftSet(\'reason\',\''+r+'\')" style="padding:5px 11px;border-radius:14px;border:1px solid '+(on?'#ef4444':'var(--border2)')+';background:'+(on?'rgba(239,68,68,.15)':'transparent')+';color:'+(on?'#f87171':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer">'+r+'</button>';}).join('')+'</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin:0 0 6px">Next best day (if cancelled):</div>'+
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">'+nd.map(function(d){var on=draft.nextDay===d.val;return '<button onclick="window.wxDraftSet(\'nextDay\',\''+d.val+'\')" style="padding:5px 11px;border-radius:14px;border:1px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.12)':'transparent')+';color:var(--text2);font-size:12px;font-weight:700;cursor:pointer">'+d.label+'</button>';}).join('')+'</div>'+
+        '<textarea oninput="window.wxDraftSet(\'comment\',this.value)" placeholder="Comment (optional)" style="width:100%;box-sizing:border-box;min-height:54px;font-size:14px;padding:9px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px">'+_rzEsc(draft.comment||'')+'</textarea>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+          '<button onclick="window.wxSubmit(\'on\')" style="flex:1;min-width:110px;padding:10px;border-radius:9px;border:none;background:#22c55e;color:#fff;font-size:13px;font-weight:800;cursor:pointer">✓ Called ON</button>'+
+          '<button onclick="window.wxSubmit(\'cancelled\')" style="flex:1;min-width:110px;padding:10px;border-radius:9px;border:none;background:#ef4444;color:#fff;font-size:13px;font-weight:800;cursor:pointer">✕ Cancelled</button>'+
+          '<button onclick="window.wxSubmit(\'final\')" style="flex:1;min-width:110px;padding:10px;border-radius:9px;border:none;background:#f59e0b;color:#3a2c06;font-size:13px;font-weight:800;cursor:pointer">⚠ Final (office)</button>'+
+        '</div>'+
+        (call?'<button onclick="window.wxClear(\''+dep.time+'\')" style="margin-top:8px;background:none;border:none;color:var(--text3);font-size:11px;text-decoration:underline;cursor:pointer">clear this call</button>':'')+
+      '</div>';
+    }
+    h+='</div>';
+  });
+  h+='</div>';
+  return h;
+}
+window._rzRenderWeatherCalls=_rzRenderWeatherCalls;
 // Reassign every booking in a calendar block to an aircraft — exactly like the user picking the
 // aircraft pill on each booking (sets S._rzBookingAc, which overrides the comments). Returns count.
 function _rzReassignBlockToAc(src,ac){
@@ -15342,7 +15511,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -15715,9 +15884,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge','wxCalls'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{},wxCalls:S._rzWxCalls||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -15751,6 +15920,7 @@ function _pkApplyBlob(d){
   S._rzDepOrder=Array.isArray(d.depOrder)?d.depOrder:[];
   S._rzPlates=(d.plates&&typeof d.plates==='object')?d.plates:{};
   S._rzTransMerge=(d.transMerge&&typeof d.transMerge==='object')?d.transMerge:{};
+  S._rzWxCalls=(d.wxCalls&&typeof d.wxCalls==='object')?d.wxCalls:{};
 }
 function _pkSnapshot(d){try{return JSON.parse(JSON.stringify(d));}catch(e){return null;}}
 function _pkEq(a,b){try{return JSON.stringify(a===undefined?null:a)===JSON.stringify(b===undefined?null:b);}catch(e){return false;}}
@@ -15841,19 +16011,32 @@ function _rzChimeBeep(){
 }
 // A single, more prominent chime when a NEW notification arrives — a 3-note rising triangle tone,
 // louder than the (two-note sine) pickup-ack chime so it stands out. Shares the same audio context.
-function _notifChime(){
-  if(typeof _soundMuted==='function'&&_soundMuted())return; // user muted all sound
+// Selectable notification chimes (User Preferences). Each = a list of note freqs played in sequence.
+var _RZ_CHIMES={
+  classic:{name:'Classic',notes:[659.25,880,1318.5],type:'triangle',gap:0.14,d:0.45,peak:0.55},
+  ping:   {name:'Ping',   notes:[1318.5],           type:'sine',    gap:0.0, d:0.5, peak:0.5},
+  bell:   {name:'Bell',   notes:[987.77,1318.5],    type:'sine',    gap:0.18,d:0.7, peak:0.5},
+  marimba:{name:'Marimba',notes:[523.25,659.25,783.99],type:'triangle',gap:0.12,d:0.3,peak:0.5},
+  alert:  {name:'Alert',  notes:[880,1175,880,1175],type:'square',  gap:0.16,d:0.3,peak:0.4},
+  ascend: {name:'Ascend', notes:[523.25,659.25,783.99,1046.5],type:'sine',gap:0.11,d:0.35,peak:0.5}
+};
+function _rzChimeList(){return Object.keys(_RZ_CHIMES).map(function(id){return {id:id,name:_RZ_CHIMES[id].name};});}
+function _rzPlayChime(id){
   try{_rzEnsureAudio();}catch(e){}
   if(!_rzAudioCtx||_rzAudioCtx.state!=='running')return;
-  try{
-    var t=_rzAudioCtx.currentTime;
-    [659.25,880,1318.5].forEach(function(freq,i){ // E5 → A5 → E6
-      var o=_rzAudioCtx.createOscillator(),g=_rzAudioCtx.createGain(),s=t+i*0.14;
-      o.type='triangle';o.frequency.value=freq;o.connect(g);g.connect(_rzAudioCtx.destination);
-      g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.55,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.45);
-      o.start(s);o.stop(s+0.47);
-    });
-  }catch(e){}
+  var c=_RZ_CHIMES[id]||_RZ_CHIMES.classic,t=_rzAudioCtx.currentTime;
+  try{c.notes.forEach(function(f,i){var s=t+i*c.gap;var o=_rzAudioCtx.createOscillator(),g=_rzAudioCtx.createGain();
+    o.type=c.type;o.frequency.value=f;o.connect(g);g.connect(_rzAudioCtx.destination);
+    g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(c.peak,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+c.d);
+    o.start(s);o.stop(s+c.d+0.02);});}catch(e){}
+}
+// Preview: play the chime on demand (button gesture resumes audio) — ignores the notif-sound toggle so
+// the operator can hear each option, but still honours the master mute.
+window.previewChime=function(id){if(typeof _soundMuted==='function'&&_soundMuted()){if(typeof toast==='function')toast('Unmute all sound first to preview','info');return;}_rzPlayChime(id);};
+function _notifChime(){
+  if(typeof _soundMuted==='function'&&_soundMuted())return;                 // master mute
+  if(typeof _notifSoundOn==='function'&&!_notifSoundOn())return;            // notification-sound toggle off
+  _rzPlayChime((typeof _chimeGet==='function')?_chimeGet():'classic');
 }
 function _rzDriverHasUnacked(){
   var me=((S.user&&S.user.name)||'').trim();if(!me)return false;
@@ -23228,6 +23411,7 @@ function renderHomeToday(){
         +'<div style="width:46px;font-weight:800;font-size:14px;color:var(--text1)">'+_sodEsc(f.hhmm)+'</div>'
         +'<span style="display:inline-block;border:1.5px solid '+acCol(f.ac)+';color:'+acCol(f.ac)+';border-radius:9px;padding:1px 7px;font-weight:bold;font-size:10.5px;white-space:nowrap">'+_sodEsc(_sodSh(f.ac))+'</span>'
         +'<span style="flex:1;font-size:12.5px;color:var(--text2)">'+_sodEsc(f.dest||'')+' · <b style="color:var(--text1);font-weight:700">'+_sodEsc(paxH)+'</b></span>'
+        +(function(){if(typeof _wxCall!=='function')return '';var c=_wxCall(f.hhmm);if(!c||!c.status)return '<span title="No weather call yet" style="font-size:11px;color:var(--text3);font-weight:700">⛅</span>';var col=(typeof _wxStatusColor==='function')?_wxStatusColor(c.status):'#94a3b8';var ic=c.status==='on'?'✓ Wx':c.status==='cancelled'?'✕ Wx':'⚠ Wx';return '<span title="'+_sodEsc((typeof _wxStatusLabel==='function'?_wxStatusLabel(c.status):c.status)+(c.reason?' — '+c.reason:''))+'" style="font-size:11px;font-weight:800;color:'+col+';white-space:nowrap">'+ic+'</span>';})()
         +'<span style="font-size:12px">'+pilotH+'</span>'
         +'</div>';
     });

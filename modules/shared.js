@@ -500,6 +500,15 @@ window.toggleMute=function(){
   if(typeof toast==='function')toast(_soundMuted()?'All sound muted 🔇':'Sound on 🔔',_soundMuted()?'info':'ok');
   if(typeof render==='function')render();
 };
+// ── Per-device sound preferences (User Preferences page) ──
+// Which chime to play (id into _RZ_CHIMES, see rezdy_b.js); default 'classic'. And whether NEW
+// notifications play a sound at all (separate from the master mute). Both per-device in localStorage.
+function _chimeGet(){try{return localStorage.getItem('ts_chime')||'classic';}catch(e){return 'classic';}}
+function _chimeSet(id){try{localStorage.setItem('ts_chime',String(id||'classic'));}catch(e){}}
+function _notifSoundOn(){try{return localStorage.getItem('ts_notif_sound')!=='0';}catch(e){return true;}}   // default ON
+window._chimeGet=_chimeGet;window._chimeSet=_chimeSet;window._notifSoundOn=_notifSoundOn;
+window.setChime=function(id){_chimeSet(id);if(typeof window.previewChime==='function')window.previewChime(id);if(typeof toast==='function')toast('Notification chime set','ok');if(typeof render==='function')render();};
+window.toggleNotifSound=function(){try{localStorage.setItem('ts_notif_sound',_notifSoundOn()?'0':'1');}catch(e){}if(typeof toast==='function')toast(_notifSoundOn()?'Notification sounds on 🔔':'Notification sounds off 🔕',_notifSoundOn()?'ok':'info');if(typeof render==='function')render();};
 // True while the Admin > Permissions grid is actively on screen (renderAdminPerms bumps
 // S._permsPageTs on every render). While editing, background reloads must NOT overwrite
 // S.rolePerms or they wipe unsaved ticks (the 5s edit-timer alone is not enough — a
@@ -590,7 +599,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.38';
+const APP_VER='v27.40';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

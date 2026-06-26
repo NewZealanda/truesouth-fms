@@ -301,7 +301,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -674,9 +674,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge','wxCalls'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{},wxCalls:S._rzWxCalls||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -710,6 +710,7 @@ function _pkApplyBlob(d){
   S._rzDepOrder=Array.isArray(d.depOrder)?d.depOrder:[];
   S._rzPlates=(d.plates&&typeof d.plates==='object')?d.plates:{};
   S._rzTransMerge=(d.transMerge&&typeof d.transMerge==='object')?d.transMerge:{};
+  S._rzWxCalls=(d.wxCalls&&typeof d.wxCalls==='object')?d.wxCalls:{};
 }
 function _pkSnapshot(d){try{return JSON.parse(JSON.stringify(d));}catch(e){return null;}}
 function _pkEq(a,b){try{return JSON.stringify(a===undefined?null:a)===JSON.stringify(b===undefined?null:b);}catch(e){return false;}}
@@ -800,19 +801,32 @@ function _rzChimeBeep(){
 }
 // A single, more prominent chime when a NEW notification arrives — a 3-note rising triangle tone,
 // louder than the (two-note sine) pickup-ack chime so it stands out. Shares the same audio context.
-function _notifChime(){
-  if(typeof _soundMuted==='function'&&_soundMuted())return; // user muted all sound
+// Selectable notification chimes (User Preferences). Each = a list of note freqs played in sequence.
+var _RZ_CHIMES={
+  classic:{name:'Classic',notes:[659.25,880,1318.5],type:'triangle',gap:0.14,d:0.45,peak:0.55},
+  ping:   {name:'Ping',   notes:[1318.5],           type:'sine',    gap:0.0, d:0.5, peak:0.5},
+  bell:   {name:'Bell',   notes:[987.77,1318.5],    type:'sine',    gap:0.18,d:0.7, peak:0.5},
+  marimba:{name:'Marimba',notes:[523.25,659.25,783.99],type:'triangle',gap:0.12,d:0.3,peak:0.5},
+  alert:  {name:'Alert',  notes:[880,1175,880,1175],type:'square',  gap:0.16,d:0.3,peak:0.4},
+  ascend: {name:'Ascend', notes:[523.25,659.25,783.99,1046.5],type:'sine',gap:0.11,d:0.35,peak:0.5}
+};
+function _rzChimeList(){return Object.keys(_RZ_CHIMES).map(function(id){return {id:id,name:_RZ_CHIMES[id].name};});}
+function _rzPlayChime(id){
   try{_rzEnsureAudio();}catch(e){}
   if(!_rzAudioCtx||_rzAudioCtx.state!=='running')return;
-  try{
-    var t=_rzAudioCtx.currentTime;
-    [659.25,880,1318.5].forEach(function(freq,i){ // E5 → A5 → E6
-      var o=_rzAudioCtx.createOscillator(),g=_rzAudioCtx.createGain(),s=t+i*0.14;
-      o.type='triangle';o.frequency.value=freq;o.connect(g);g.connect(_rzAudioCtx.destination);
-      g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.55,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.45);
-      o.start(s);o.stop(s+0.47);
-    });
-  }catch(e){}
+  var c=_RZ_CHIMES[id]||_RZ_CHIMES.classic,t=_rzAudioCtx.currentTime;
+  try{c.notes.forEach(function(f,i){var s=t+i*c.gap;var o=_rzAudioCtx.createOscillator(),g=_rzAudioCtx.createGain();
+    o.type=c.type;o.frequency.value=f;o.connect(g);g.connect(_rzAudioCtx.destination);
+    g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(c.peak,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+c.d);
+    o.start(s);o.stop(s+c.d+0.02);});}catch(e){}
+}
+// Preview: play the chime on demand (button gesture resumes audio) — ignores the notif-sound toggle so
+// the operator can hear each option, but still honours the master mute.
+window.previewChime=function(id){if(typeof _soundMuted==='function'&&_soundMuted()){if(typeof toast==='function')toast('Unmute all sound first to preview','info');return;}_rzPlayChime(id);};
+function _notifChime(){
+  if(typeof _soundMuted==='function'&&_soundMuted())return;                 // master mute
+  if(typeof _notifSoundOn==='function'&&!_notifSoundOn())return;            // notification-sound toggle off
+  _rzPlayChime((typeof _chimeGet==='function')?_chimeGet():'classic');
 }
 function _rzDriverHasUnacked(){
   var me=((S.user&&S.user.name)||'').trim();if(!me)return false;
