@@ -1387,6 +1387,21 @@ function _rzRenderWeatherCalls(){
   return h;
 }
 window._rzRenderWeatherCalls=_rzRenderWeatherCalls;
+// Reset the day to the pure optimiser: clear every USER-forced aircraft + pilot/co-pilot pick and
+// flyback combine for the current date, so the calendar shows the auto-allocation only. Times,
+// check-ins, pickups, weather calls are left untouched. Undoable.
+window.rezdyResetDayAuto=function(){
+  var lbl=(typeof _rzDowLabel==='function')?_rzDowLabel(S.rezdyDate):S.rezdyDate;
+  if(!confirm('Reset '+lbl+' to the optimiser?\n\nThis clears every aircraft and pilot you’ve set by hand for this day and shows the auto-allocation. Times, check-ins, pickups and weather calls are not touched. (Undoable.)'))return;
+  if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();
+  S._rzBookingAc={};S._schedPilots={};S._schedCoPilots={};S._rzSchedAttach={};
+  if(window.pickupSave)window.pickupSave(true);
+  if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
+  if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();
+  if(typeof auditLog==='function')auditLog('sched_reset_auto',{date:S.rezdyDate});
+  if(typeof toast==='function')toast('Reset to the optimiser — showing the auto allocation','ok');
+  render();
+};
 // Reassign every booking in a calendar block to an aircraft — exactly like the user picking the
 // aircraft pill on each booking (sets S._rzBookingAc, which overrides the comments). Returns count.
 function _rzReassignBlockToAc(src,ac){

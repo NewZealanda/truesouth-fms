@@ -1417,7 +1417,9 @@ function _rzRenderSchedule(){
     '</div></div>';
   // Available pilots — drag a code bubble onto a flight block to allocate.
   var _pilots=_rzAvailablePilots();
-  var pilotsBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:8px">Pilots <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(drag onto a flight, or tap a flight and pick a pilot)</span></div>';
+  var pilotsBar='<div class="card" style="padding:10px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700">Pilots <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(drag onto a flight, or tap a flight and pick a pilot)</span></div>'+
+    '<button onclick="window.rezdyResetDayAuto()" title="Clear every aircraft + pilot you set by hand for this day and show the optimiser\'s allocation only" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:9px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;white-space:nowrap;flex-shrink:0">↺ Reset to auto</button>'+
+  '</div>';
   if(!_pilots.length){pilotsBar+='<div style="font-size:12px;color:var(--text3)">No aircraft-approved pilots found.</div>';}
   else{
     pilotsBar+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
