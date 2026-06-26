@@ -1207,9 +1207,21 @@ function _rzTimeOpts(sel,from,to){
 function _rzFbTimeKey(prod,held){return String(prod||'')+'|'+String(held||'');}
 // Default fly-back RETURN time per HELD outbound slot (the seats are held there to block that
 // departure; the plane actually flies back later). Operator can drag/override per slot.
-var _RZ_FB_DEFAULTS={'10:30':'14:00','12:00':'15:30','13:00':'16:15'};
-function _rzFbDefaultTime(held){return _RZ_FB_DEFAULTS[String(held||'')]||'15:30';}
-function _rzFbHasDefault(held){return !!_RZ_FB_DEFAULTS[String(held||'')];}
+var _RZ_FB_DEFAULTS={'10:30':'14:00','12:00':'15:30','13:00':'16:15'};   // legacy per-slot (fallback only)
+// Season by date — same rule as the ETD options: Oct–Apr = summer, May–Sep = winter.
+function _rzSeason(date){var d=date?new Date(String(date)+'T00:00:00'):new Date();var m=d.getMonth()+1;return (m>=10||m<=4)?'summer':'winter';}
+var _RZ_FB_SUMMER_EARLY_BEFORE=720;   // held slot before this (12:00) → the early 13:45 run, else 16:15. Adjust if the cruise→slot cutoff differs.
+// Standard fly-back RETURN time. WINTER: one 15:15 run. SUMMER: an early 13:45 run (morning cruises)
+// and a late 16:15 run (midday+), chosen by the booking's held/cruise slot. Operator can still override
+// any flyback's time via the calendar dropdown.
+function _rzFbDefaultTime(held){
+  var season=_rzSeason(S&&S.rezdyDate);
+  if(season==='winter')return '15:15';
+  var hm=(typeof _rzMinsFromHHMM==='function')?_rzMinsFromHHMM(held):null;
+  if(hm!=null)return (hm<_RZ_FB_SUMMER_EARLY_BEFORE)?'13:45':'16:15';
+  return _RZ_FB_DEFAULTS[String(held||'')]||'16:15';
+}
+function _rzFbHasDefault(held){return true;}   // every flyback now has a season default time
 function _rzFbTime(prod,held){var v=(S._rzFlybackTime||{})[_rzFbTimeKey(prod,held)];return (v&&/^\d{1,2}:\d{2}$/.test(v))?v:_rzFbDefaultTime(held);}
 window.rezdySetFlybackTime=function(prod,held,val){
   S._rzFlybackTime=S._rzFlybackTime||{};var k=_rzFbTimeKey(prod,held);

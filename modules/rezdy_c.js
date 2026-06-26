@@ -1515,16 +1515,23 @@ function _rzAcMovements(){
       var isRet=(lg.kind==='return'||lg.kind==='flyback');
       if(pos!==lg.from){                                  // not where this leg departs → ferry empty
         var fdur=_rzLegMins(pos,lg.from);
-        var fetch=(pos==='QN'&&isRet);                    // end-of-day reposition to collect a return
+        var fetch=(pos==='QN'&&isRet);                    // reposition empty out to collect the leg
         var ldur=_rzLegMins(lg.from,lg.to);
-        var fstart=fetch?Math.max(_rzMinsFromHHMM('14:30'),avail):Math.max(lg.t-fdur-10,avail);
-        var fend=fstart+fdur;
+        var fstart,fend;
+        if(lg.kind==='flyback'&&fetch){
+          // Empty ferry IN positioned at flyback−45 (a 30-min leg), leaving a 15-min gap before the
+          // flyback departs Milford at its season time (winter 14:30→15:15, summer 15:30→16:15 / 13:00→13:45).
+          // Skipped automatically when the aircraft is already at MF (an FCF already took it in).
+          fdur=30;fstart=Math.max(lg.t-45,avail);fend=fstart+fdur;
+        } else {
+          fstart=fetch?Math.max(_rzMinsFromHHMM('14:30'),avail):Math.max(lg.t-fdur-10,avail);fend=fstart+fdur;
+        }
         out.push({ac:ac,t:fstart,start:_rzMinToHHMM(fstart),end:_rzMinToHHMM(fend),from:pos,to:lg.from,kind:'ferry',pob:0,prod:'Ferry',
-          hint:fetch?'reposition empty to collect the return':'reposition empty for the next load'});
+          hint:fetch?(lg.kind==='flyback'?'reposition empty to collect the flyback':'reposition empty to collect the return'):'reposition empty for the next load'});
         pos=lg.from;avail=fend;
-        lg.t=fetch?Math.max(_rzMinsFromHHMM('15:40')-ldur,fend):Math.max(lg.t,fend); // home ~15:40 if fetched
+        lg.t=(lg.kind==='flyback')?Math.max(lg.t,fend+15):(fetch?Math.max(_rzMinsFromHHMM('15:40')-ldur,fend):Math.max(lg.t,fend));
       }
-      var d=_rzLegMins(lg.from,lg.to);var st=Math.max(lg.t,avail);
+      var d=(lg.kind==='flyback')?60:_rzLegMins(lg.from,lg.to);var st=Math.max(lg.t,avail);   // flyback shown as the 60-min operational block
       lg.dur=d;lg.start=_rzMinToHHMM(st);lg.end=_rzMinToHHMM(st+d);avail=st+d;out.push(lg);pos=lg.to;
     });
   });
@@ -1697,6 +1704,11 @@ function _rzPilotMovements(){
   var fBy={};flights.forEach(function(f){fBy[f.key]=f;});
   var blocksById={};(S._schedBlocks||[]).forEach(function(b){if(b&&b.id)blocksById[b.id]=b;});
   var cop=S._schedCoPilots||{};
+  // Empty ferry-in legs (from the aircraft-movements builder) that reposition a tail to Milford for a
+  // flyback are flown by the SAME pilot → pull them in so the pilot is blocked across the whole movement
+  // (ferry-in + flyback). None exists when the aircraft is already at Milford, so nothing is added then.
+  var _ferries=[];try{(typeof _rzAcMovements==='function'?_rzAcMovements():[]).forEach(function(l){if(l&&l.kind==='ferry'&&l.to==='MF')_ferries.push(l);});}catch(_fe){}
+  function _ferryInFor(ac,fbStartMin){var hit=null;_ferries.forEach(function(fr){if(fr.ac!==ac)return;var fe=_rzMinsFromHHMM(fr.end);if(fe!=null&&fe<=fbStartMin&&fe>=fbStartMin-30)hit=fr;});return hit;}
   var byPilot={};function ensure(p){return byPilot[p]||(byPilot[p]=[]);}
   Object.keys(fBy).forEach(function(k){
     var pilot=man[k]||auto[k];var co=cop[k];if(!pilot&&!co)return;var f=fBy[k];var mb=blocksById[k];
@@ -1715,6 +1727,9 @@ function _rzPilotMovements(){
     } else {
       var parts=String(k).split('|'),ac=parts[0],prod=parts[2]||'';
       var dest=(typeof _rzGroupDest==='function')?_rzGroupDest(prod):'';
+      // Flyback: also block the pilot for the empty ferry-in that repositions the aircraft to Milford.
+      if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod)){var _fr=_ferryInFor(ac,f.depMin);
+        if(_fr)ensure(pilot).push({start:_fr.start,end:_fr.end,label:(ac&&ac!=='__unalloc__'?String(ac).replace(/^ZK-?/,''):'?')+' ferry in',kind:'ferry',ico:'⤳',ac:ac});}
       ensure(pilot).push({start:_rzMinToHHMM(f.depMin),end:_rzMinToHHMM(f.endMin),label:(ac&&ac!=='__unalloc__'?String(ac).replace(/^ZK-?/,''):'?')+(dest?' '+dest:''),kind:'flight',ico:'✈',ac:ac,forced:_pForced,autoWas:_pAutoWas});
     }
   });
