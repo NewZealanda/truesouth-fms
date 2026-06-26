@@ -1216,8 +1216,10 @@ function _rzRenderSchedule(){
       var _titles=[];_allBk.forEach(function(bk){var t=String((bk.it&&bk.it.product)||'').trim();if(t&&_titles.indexOf(t)<0)_titles.push(t);});
       if(_titles.length)detailH+='<div style="font-size:12px;color:var(--text2);font-weight:600;margin:-2px 0 2px;line-height:1.45">'+_titles.map(function(t){return '<div>'+_rzEsc(t)+'</div>';}).join('')+'</div>';
       // Each booking (including folded flybacks) shows pax + product code, e.g. "2A FCF" / "2A FLB".
+      var _fleetPick=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
       _allBk.forEach(function(bk){
-        var b=bk.b;var ord=String(b.orderNumber||'');var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
+        var b=bk.b;var ord=String(b.orderNumber||'');var ordE=_rzEsc(ord).replace(/'/g,"\\'");var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
+        var _curAc=(typeof _rzBookingAc==='function')?_rzBookingAc(b,ord):null;
         var _e=_rzEffBreakdown(b);var _code=_rzProduct((bk.it&&bk.it.product)||'');var _isFb=_rzIsFlyback(_code);
         var _bc=_isFb?'#f59e0b':'#60a5fa';
         detailH+='<div style="border-top:1px solid var(--border2);padding-top:8px;margin-top:8px">'+
@@ -1227,11 +1229,16 @@ function _rzRenderSchedule(){
               '<span style="font-size:11px;font-weight:800;padding:1px 8px;border-radius:10px;background:'+_bc+'22;border:1px solid '+_bc+'66;color:'+_bc+'">'+_rzBdCompact(_e)+' '+_rzEsc(_code)+'</span>'+
               (owing?'<span style="color:#ef4444;font-weight:800;font-size:11px">$ TO PAY</span>':'')+
             '</div>'+
-            '<div style="display:flex;gap:6px;flex-shrink:0">'+
-              (_isFb?'<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.rezdySchedDetach(\''+_rzEsc(ord).replace(/'/g,"\\'")+'\')" title="Un-combine this flyback">↩ Detach</button>':'')+
-              '<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px" onclick="window.rezdyGotoBooking(\''+_rzEsc(ord).replace(/'/g,"\\'")+'\')">View booking →</button>'+
+            '<div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">'+
+              (_isFb?'<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.rezdySchedDetach(\''+ordE+'\')" title="Un-combine this flyback">↩ Detach</button>':'')+
+              '<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px'+(S._rzAcPickFor===ord?';border-color:var(--accent);color:var(--accent)':'')+'" onclick="event.stopPropagation();window.rezdySchedAcPickToggle(\''+ordE+'\')" title="Move this booking to another aircraft">✈ Change aircraft</button>'+
+              '<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px" onclick="window.rezdyGotoBooking(\''+ordE+'\')">View booking →</button>'+
             '</div>'+
           '</div>'+
+          (S._rzAcPickFor===ord?'<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">'+
+            _fleetPick.map(function(id){var _on=_curAc===id;var c=_rzAcCol(id);return '<button onclick="event.stopPropagation();window.rezdySchedSetBookingAc(\''+ordE+'\',\''+id+'\')" style="font-size:11px;font-weight:800;padding:4px 11px;border-radius:14px;border:'+(_on?'2px solid '+c:'1px solid '+c+'66')+';background:'+c+(_on?'33':'14')+';color:'+c+';cursor:pointer">'+(_on?'✓ ':'')+id.replace('ZK-','')+'</button>';}).join('')+
+            '<button onclick="event.stopPropagation();window.rezdySchedSetBookingAc(\''+ordE+'\',\'__none__\')" style="font-size:11px;font-weight:800;padding:4px 11px;border-radius:14px;border:'+(_curAc?'1px solid var(--border2)':'2px solid var(--text3)')+';background:transparent;color:var(--text3);cursor:pointer">Unallocated</button>'+
+          '</div>':'')+
           _rzPaxBubbles(b,{drag:true})+
         '</div>';
       });

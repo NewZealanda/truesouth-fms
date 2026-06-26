@@ -1221,6 +1221,20 @@ function _rzReassignBlockToAc(src,ac){
   return orders.length;
 }
 function _rzReassignToast(n,ac){if(typeof toast==='function')toast(n+' booking'+(n===1?'':'s')+' → '+(ac==='__unalloc__'?'Unallocated':String(ac).replace('ZK-',''))+' ✓','ok');}
+// Click-to-change a single booking's aircraft from the calendar block detail (the calendar is the
+// source of truth — this user override persists in S._rzBookingAc and flows to the seatmap/loadsheet
+// via _rzBookingAc → acHint). Toggling the picker open/closed is per-order.
+window.rezdySchedAcPickToggle=function(order){order=String(order);S._rzAcPickFor=(S._rzAcPickFor===order)?null:order;render();};
+window.rezdySchedSetBookingAc=function(order,ac){
+  order=String(order);if(!order)return;
+  if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();
+  S._rzBookingAc=S._rzBookingAc||{};
+  S._rzBookingAc[order]=(ac==='__unalloc__'||ac==='__none__')?'__none__':ac;
+  if(S._rzSchedAttach&&S._rzSchedAttach[order])delete S._rzSchedAttach[order]; // a manual move breaks a flyback combine
+  S._rzAcPickFor=null;
+  if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
+  if(typeof toast==='function')toast('Booking → '+(ac==='__unalloc__'||ac==='__none__'?'Unallocated':String(ac).replace('ZK-',''))+' ✓','ok');
+};
 // Drop a dragged block anywhere in an aircraft COLUMN → move its whole booking set to that aircraft.
 // Drop a dragged booking block in a column: sets its TIME from the drop height (snapped to 15 min) and,
 // if dropped in a different aircraft column, reassigns it. A flyback's time updates its fly-back time;

@@ -90,7 +90,17 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.06 (latest)** — **flight cards chain start TTIS from the last shutdown.** New
+- **v27.07 (latest)** — **calendar = source of truth: per-booking "Change aircraft" button in the
+  block detail.** Next to each booking's "View booking →" there's now a **✈ Change aircraft** button
+  (`rezdySchedAcPickToggle`) that reveals an inline aircraft picker; clicking a tail calls
+  `rezdySchedSetBookingAc(order,ac)` → writes `S._rzBookingAc[order]` (persisted pickup blob, breaks any
+  flyback combine, pushes undo, broadcasts). This is the calendar override that flows to the seatmap
+  (`acHint=_rzBookingAc`) on push/allocate and into the loadsheet. PIC + co-pilot already auto-seed onto
+  the seatmap from the calendar (`_rzSchedPilotFor`/`_rzSchedCoPilotFor` → `S._rzManPic`/`S._rzManCoPic`,
+  one-time per dep+ac) and ETD flows from the seatmap dep into `form.etd` (rezdyManCreateLoadsheet). NOTE:
+  changing the calendar aircraft updates future pushes; already-seated seatmap pax move on the next
+  push/allocate (not live).
+- **v27.06** — **flight cards chain start TTIS from the last shutdown.** New
   `_frNextStartHours(ac,date)` (flightrecord.js) returns the highest `endHours` already recorded for that
   aircraft on the date, falling back to `_frAcHours`=`maintGetLatest` (the maintenance/airswitch number)
   for the day's FIRST flight. Used by `frUseFlight` (draft), `frAddManual`, the auto-pick draft, and the
