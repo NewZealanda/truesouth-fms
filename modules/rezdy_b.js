@@ -590,7 +590,29 @@ function _rzRenderPickups(){
     });
     sdH+='</div></div>';
   }
-  return hdr+driversBar+timeBar+vansH+sdH;
+  // Needs attention — pickups not yet in any van (new since the transport was set up). Drag onto a van
+  // or tap to assign. (Before any driver is set, new pickups still auto-place, so this stays empty.)
+  var _inVan={};(S._pickupVans||[]).forEach(function(v){(v||[]).forEach(function(id){_inVan[id]=1;});});
+  var needsP=vanPickups.filter(function(p){return !_inVan[p.id]&&(!depFilter||(p.depart||'—')===depFilter);});
+  var needsH='';
+  if(needsP.length){
+    needsH='<div class="card" style="border-left:3px solid #f59e0b"><div style="font-weight:800;font-size:13px;color:#f59e0b;margin-bottom:2px">⚠ Needs attention ('+needsP.length+')</div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">New pickup'+(needsP.length>1?'s':'')+' not yet assigned — drag onto a van, or tap “Assign to a van”.</div>'+
+      '<div style="display:flex;flex-direction:column;gap:6px">';
+    needsP.forEach(function(p){var idE=_rzEsc(p.id).replace(/'/g,"\\'");
+      needsH+='<div draggable="true" ondragstart="window.pickupDragStart(\''+idE+'\',event)" style="background:var(--card2);border:1px solid rgba(245,158,11,.45);border-radius:8px;padding:9px 11px;cursor:grab">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+          '<div><span style="font-weight:700;font-size:13px;color:var(--text)">'+_rzEsc(p.customer||p.order)+'</span>'+(p.depart?'<span style="font-size:11px;color:var(--text3);margin-left:8px">🛫 '+_rzEsc(p.depart)+'</span>':'')+'</div>'+
+          '<span style="font-size:11px;font-weight:700;color:#f59e0b">'+p.pax+' pax</span>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:5px;margin-top:6px"><span style="font-size:12px">'+(p.dropoff?'📦':'📍')+'</span>'+_rzLocSelect(p.id,p.location)+'</div>'+
+        '<button onclick="window.pickupMovePickOpen(\''+idE+'\')" style="margin-top:6px;width:100%;padding:7px;border-radius:7px;border:1px dashed var(--border2);background:transparent;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer">⇄ Assign to a van</button>'+
+        (S._pickupMovePick===p.id?(function(){var rows='';(S._pickupVans||[]).forEach(function(vv,vj){if(_rzVanParked(vj,depFilter))return;rows+='<div onclick="window.pickupMoveToVan(\''+idE+'\','+vj+')" style="padding:9px 10px;cursor:pointer;font-size:12.5px;font-weight:700;border-bottom:1px solid var(--border2);min-height:40px;display:flex;align-items:center;gap:7px;color:'+_rzVehColor(vj)+'">🚐 '+_rzEsc(_rzVehName(vj))+'</div>';});return rows?'<div style="margin-top:4px;border:1px solid var(--border2);border-radius:8px;overflow:hidden">'+rows+'</div>':'<div style="margin-top:4px;font-size:11px;color:var(--text3)">No active van — activate one from Spare vehicles first.</div>';})():'')+
+      '</div>';
+    });
+    needsH+='</div></div>';
+  }
+  return hdr+driversBar+timeBar+needsH+vansH+sdH;
 }
 
 // Editable pickup-location dropdown for a pickup card (options = distinct locations seen).

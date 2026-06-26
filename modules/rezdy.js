@@ -76,8 +76,11 @@ function _rzIsTaxiVan(vi){return vi>=_rzVehicles().length;}
 function _rzVanParked(vi,dep){if(_rzIsTaxiVan(vi))return false;return !!(S._pickupSpare||{})[_pkKey(vi,dep)];}
 function _rzActiveVanCount(dep){var n=_rzVehicles().length,c=0;for(var i=0;i<n;i++)if(!_rzVanParked(i,dep))c++;return c;}
 function _rzVanDriver(vi,dep){var d=(S._pickupDrivers||{})[_pkKey(vi,dep)];d=(d==null?'':String(d)).trim();return d||null;}
+// Has the operator set up ANY driver for the day? (transport considered "set up" → new pickups wait in
+// the Needs-attention list rather than auto-dropping into a van).
+function _rzAnyDriver(){var d=S._pickupDrivers||{};for(var k in d){if(d[k]&&String(d[k]).trim())return true;}return false;}
 window.pickupVehParkDragStart=function(vi,e){S._pickupVehDrag=vi;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','veh:'+vi);}catch(_){}};
-window.pickupActivateVehicle=function(vi,dep){S._pickupSpare=S._pickupSpare||{};delete S._pickupSpare[_pkKey(vi,dep)];if(window.pickupSave)window.pickupSave(true);render();};
+window.pickupActivateVehicle=function(vi,dep){S._pickupSpare=S._pickupSpare||{};delete S._pickupSpare[_pkKey(vi,dep)];if(S._pickupDrivers)delete S._pickupDrivers[_pkKey(vi,dep)];if(window.pickupSave)window.pickupSave(true);render();}; // activate driverless — operator picks the driver from the list
 // Park a vehicle. ALL vehicles may now be parked — the run's pickups then sit as a Taxi/awaiting list
 // (handled by _rzEnsureVans) until a van/driver is added back. (Previously the last active van couldn't
 // be parked.)
@@ -619,7 +622,18 @@ function _rzEnsureVans(){
     const sd={};pickups.forEach(function(p){if(p.selfDrive)sd[p.id]=1;});
     const placed={};
     S._pickupVans=vans.map(function(v){return v.filter(function(id){if(placed[id]||sd[id]||ids.indexOf(id)<0)return false;placed[id]=1;return true;});});
-    ids.forEach(function(id){if(!placed[id]&&!sd[id]){var dep=depOf[id]||'—';var fa=_firstActiveVan(dep);if(fa<0)_rzPushTaxi(S._pickupVans,pickups,id,dep);else S._pickupVans[fa].push(id);}});
+    // Once a driver/van has been set up for the day, a NEW pickup is NOT auto-dropped into a van — it's
+    // left UNPLACED so it surfaces in the "Needs attention" list for the operator to drag onto a van.
+    // Before any driver is set, keep auto-placing (first active van / taxi) as before.
+    // "Set up" = the operator has assigned any driver OR activated any van for a pickup departure.
+    var _setup=(typeof _rzAnyDriver==='function')&&_rzAnyDriver();
+    if(!_setup){var _dps={};pickups.forEach(function(p){if(!p.selfDrive)_dps[p.depart||'—']=1;});Object.keys(_dps).forEach(function(dp){for(var _vi=0;_vi<_rzVehicles().length;_vi++){if(!_rzVanParked(_vi,dp)){_setup=true;break;}}});}
+    ids.forEach(function(id){if(!placed[id]&&!sd[id]){
+      var dep=depOf[id]||'—';
+      var _wasSaved=vans.some(function(v){return Array.isArray(v)&&v.indexOf(id)>=0;});
+      if(_setup&&!_wasSaved)return;   // new since setup → needs attention (unplaced)
+      var fa=_firstActiveVan(dep);if(fa<0)_rzPushTaxi(S._pickupVans,pickups,id,dep);else S._pickupVans[fa].push(id);
+    }});
   }
   // Move any pickup whose van is parked FOR ITS departure into that departure's first active van.
   S._pickupVans.forEach(function(vanIds,vi){
