@@ -752,6 +752,51 @@ function _schedEnsureAuto(){
       var packed=_schedPack(groupsArr,chosen);
       Object.keys(packed).forEach(function(o){map[o]=packed[o];});
     });
+    // ── Flybacks (FLB/CCF return legs) ──────────────────────────────────────────
+    // They're skipped above (held in their outbound slot), so they land unallocated. Allocate each by
+    // the operator rule: fill spare seats on aircraft returning from Milford near the flyback time, then
+    // a single overflow tail for the rest (see _schedFlybackAssign). Auto-only: a manual aircraft pill or
+    // a manual combine still wins (skipped here). Ride results also set _schedAutoAttach so the calendar
+    // folds the flyback into the return flight's spare seats.
+    var autoAttach={};
+    try{
+      var manAc=S._rzBookingAc||{},manAtt=S._rzSchedAttach||{};
+      var fbByTime={};   // "HH:MM" return time → {min, list:[{order,size}]}
+      bks.forEach(function(b){
+        if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
+        var o=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(o))return;
+        if(manAc[o]||manAtt[o])return;                 // operator already placed this flyback
+        (b.items||[]).forEach(function(it){
+          var t=(typeof _rzDepTime==='function')?_rzDepTime(it.startTimeLocal||''):'';if(!t)return;
+          var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;
+          var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';
+          if(!((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod)))return;
+          var retS=(typeof _rzFbTime==='function')?_rzFbTime(prod,start):start;var rm=_rzMinsFromHHMM(retS);if(rm==null)return;
+          var sz=parseInt(it.quantity,10)||0;if(sz<=0)return;
+          var c=fbByTime[retS]||(fbByTime[retS]={min:rm,list:[]});c.list.push({order:o,size:sz});
+        });
+      });
+      Object.keys(fbByTime).forEach(function(retS){
+        var cl=fbByTime[retS],rm=cl.min,FB_DEST='MF';   // FLB/CCF are Milford→QN
+        // Returning Milford flights within ±2h with spare seats (cap − pax assigned to that tail).
+        var returns=[],busy={};
+        dp.departures.forEach(function(d){
+          var depM=_schedMinOf(d.time)||0,retM=depM+(_schedDepDurMin(d)||270);
+          d.aircraft.forEach(function(a){if(depM<=rm&&rm<retM)busy[a.ac]=1;});   // tied up at the flyback time
+          if(d.dest!==FB_DEST||Math.abs(retM-rm)>120)return;
+          var orders=byKey[d.key]||{};
+          d.aircraft.forEach(function(a){var pax=0;Object.keys(orders).forEach(function(o){if(map[o]===a.ac)pax+=orders[o];});
+            // ride target must be the CALENDAR group key (ac|start|dest) so the attach folds correctly.
+            var spare=(a.cap||0)-pax;if(spare>0)returns.push({key:a.ac+'|'+d.time+'|'+d.dest,ac:a.ac,spare:spare});});
+        });
+        // Aircraft FREE at the flyback time (serviceable + priced + not already airborne then), cheapest first.
+        var fleet=((typeof _schedFleetFor==='function')?_schedFleetFor(date,retS):[]).filter(function(f){return !busy[f.ac];})
+          .map(function(f){return {ac:f.ac,cap:f.cap,cost:f.cost};});
+        var asg=_schedFlybackAssign(cl.list,returns,fleet);
+        Object.keys(asg).forEach(function(o){var a=asg[o];if(a.ride){map[o]=a.ac;autoAttach[o]=a.ride;}else if(a.overflow){map[o]=a.overflow;}});
+      });
+    }catch(_fbE){}
+    S._schedAutoAttach=autoAttach;
     S._schedAutoAc=map;S._schedAutoKey=sig;
     // Pilots: ONE flight-keyed, time-aware allocation over the day's actual flights (bookings + manual/
     // maintenance blocks), shared with the calendar render via _schedDayFlights. This is the single
@@ -1070,6 +1115,50 @@ function _schedDayPlan(date,opts){
     Object.keys(move.assign).forEach(function(k){forced[k]=move.assign[k];});best=move.plan;
   }
   return best;
+}
+
+// ── Flyback (FLB/CCF return-leg) allocation ────────────────────────────────────
+// Flybacks are passengers flying BACK to QN (e.g. Milford→QN) at a return time; their seats are held
+// in the outbound Rezdy slot, and the return leg otherwise lands unallocated in Misc. Operator rule:
+//   1. fill SPARE seats on aircraft already coming back from that destination near the same time;
+//   2. if they don't all fit, prefer ONE aircraft that can take the WHOLE group (keep it together);
+//   3. only split (spare seats + a separate overflow tail) as a last resort.
+// Booking groups are kept whole. Pure/testable: returns { order: {ride:flightKey,ac} | {overflow:ac} }.
+//   flybacks: [{order,size}]            one return-time cluster
+//   returns:  [{key,ac,spare}]          aircraft returning near that time + their spare seats
+//   fleet:    [{ac,cap,cost}]           aircraft FREE at the return time (overflow candidates)
+function _schedFlybackAssign(flybacks,returns,fleet){
+  var out={};if(!flybacks||!flybacks.length)return out;
+  flybacks=flybacks.filter(function(f){return f&&f.size>0;});if(!flybacks.length)return out;
+  returns=returns||[];fleet=(fleet||[]).slice().sort(function(a,b){return (a.cost||0)-(b.cost||0);});
+  var total=flybacks.reduce(function(s,f){return s+f.size;},0);
+  var spareTotal=returns.reduce(function(s,r){return s+(r.spare||0);},0);
+  // Pack whole groups into bins by capacity (largest group first, best-fit bin). null if any can't fit.
+  function packWhole(groups,bins){
+    var rem=bins.map(function(b){return {cap:b.cap,ref:b};}),asg={},ok=true;
+    groups.slice().sort(function(a,b){return b.size-a.size;}).forEach(function(g){
+      var pick=null;rem.forEach(function(bn){if(bn.cap>=g.size&&(!pick||bn.cap<pick.cap))pick=bn;});
+      if(!pick){ok=false;return;}pick.cap-=g.size;asg[g.order]=pick.ref;
+    });
+    return ok?asg:null;
+  }
+  // 1) Everyone fits in returning spare seats → ride along (free seats, no extra aircraft).
+  if(spareTotal>=total&&returns.length){
+    var ride=packWhole(flybacks,returns.map(function(r){return {cap:r.spare,_r:r};}));
+    if(ride){flybacks.forEach(function(f){var r=ride[f.order]._r;out[f.order]={ride:r.key,ac:r.ac};});return out;}
+  }
+  // 2) Overflow needed — prefer the cheapest SINGLE aircraft that fits ALL the flyback pax.
+  var one=fleet.filter(function(f){return f.cap>=total;})[0];
+  if(one){flybacks.forEach(function(f){out[f.order]={overflow:one.ac};});return out;}
+  // 3) Last resort — fill spare seats with whole groups, overflow the rest into the cheapest tails.
+  var bins=returns.map(function(r){return {cap:r.spare,key:r.key,ac:r.ac,kind:'ride'};})
+    .concat(fleet.map(function(f){return {cap:f.cap,ac:f.ac,kind:'overflow'};}));
+  flybacks.slice().sort(function(a,b){return b.size-a.size;}).forEach(function(g){
+    var pick=null;bins.forEach(function(bn){if(bn.cap>=g.size&&(!pick||bn.cap<pick.cap))pick=bn;});
+    if(!pick)pick=bins.filter(function(b){return b.kind==='overflow';})[0]||bins[0];if(!pick)return;
+    pick.cap-=g.size;out[g.order]=(pick.kind==='ride')?{ride:pick.key,ac:pick.ac}:{overflow:pick.ac};
+  });
+  return out;
 }
 
 // ── Pilots (roster + manual call-in/override extras) ───────────────────────────

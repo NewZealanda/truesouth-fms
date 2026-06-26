@@ -1005,7 +1005,7 @@ function _rzSchHeight(start,end){const a=_rzMinsFromHHMM(start),b=_rzMinsFromHHM
 // _schedEnsureAuto (so the calendar and the seatmap PIC agree). Only meaningful for the current date.
 function _schedDayFlights(date){
   var flights=[];if(date!==S.rezdyDate)return flights;
-  var bks=S._rezdyBookings||[],attach=S._rzSchedAttach||{},groups={};
+  var bks=S._rezdyBookings||[],attach=Object.assign({},S._schedAutoAttach||{},S._rzSchedAttach||{}),groups={};
   bks.forEach(function(b){
     if((typeof _rzIsCancelled==='function')&&_rzIsCancelled(b))return;
     var ord=String(b.orderNumber||'');if((typeof _rzIsNoShow==='function')&&_rzIsNoShow(ord))return;
@@ -1068,10 +1068,10 @@ function _rzRenderSchedule(){
     });
   });
   // Fold attached flyback/CCF bookings (dragged onto a flight) into their target block.
-  var _attach=S._rzSchedAttach||{};
+  var _attach=S._rzSchedAttach||{},_autoAttach=S._schedAutoAttach||{};
   Object.keys(bkGroups).forEach(function(k){var g=bkGroups[k];
     for(var i=g.bookings.length-1;i>=0;i--){
-      var bk=g.bookings[i];var ord=String(bk.b.orderNumber||'');var tgt=_attach[ord];
+      var bk=g.bookings[i];var ord=String(bk.b.orderNumber||'');var tgt=_attach[ord]||_autoAttach[ord];   // manual combine wins, else auto ride-along into a return flight's spare seats
       if(tgt&&tgt!==k&&bkGroups[tgt]){bkGroups[tgt]._fb.push(bk);g.bookings.splice(i,1);g.pax-=parseInt(bk.it.quantity,10)||0;if(bk.b._owing){}}
     }
   });
