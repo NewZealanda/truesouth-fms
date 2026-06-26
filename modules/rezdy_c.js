@@ -422,6 +422,15 @@ window.rezdyManReseat=function(dep,acId){
   S._rzManSeats=S._rzManSeats||{};S._rzManSeats[_rzSeatKey(dep,acId)]=sm;
   return sm;
 };
+// One-tap "tidy seats": re-run the group-together seater for this aircraft (best CoG within limits),
+// undoing a scattered/manually-dragged arrangement. Saved + undoable.
+window.rezdyManTidySeats=function(acId){
+  var dep=(typeof _rzManSelDep==='function')?_rzManSelDep():null;if(!dep||dep==='—')return;
+  if(typeof window.rezdyManReseat==='function')window.rezdyManReseat(dep,acId);
+  if(typeof _rzManSave==='function')_rzManSave();
+  if(typeof toast==='function')toast('Re-seated '+String(acId).replace('ZK-','')+' by group','ok');
+  render();
+};
 // When a co-pilot occupies seat 1, move any passenger the solver put there to the next free
 // passenger seat (pushing pax back); if the cabin is full they fall to the overflow list.
 function _rzReserveCoSeat(sm,acId){

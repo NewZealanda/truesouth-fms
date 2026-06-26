@@ -893,7 +893,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.20';
+const APP_VER='v27.21';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16407,6 +16407,7 @@ function _rzRenderManifest(){
           (list.length?'':'<span style="font-size:10px;color:var(--text3);font-weight:600">idle</span>')+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span>'+
+        (list.length?'<button onclick="event.stopPropagation();window.rezdyManTidySeats(\''+idE+'\')" title="Re-seat keeping booking groups together (best CoG within limits)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 2px">⇄</button>':'')+
         '<button onclick="window.rezdyManDeleteAc(\''+idE+'\')" title="Remove this aircraft (returns its pax to the pool)" style="background:none;border:none;color:#ef444488;cursor:pointer;font-size:13px;padding:0 2px">🗑</button></div></div>';
     if(open){
     // PIC slot (drop a pilot here)
@@ -17265,6 +17266,15 @@ window.rezdyManReseat=function(dep,acId){
   if(_bumped&&typeof toast==='function')toast(_bumped+' passenger'+(_bumped>1?'s':'')+' bumped to the pool (cabin full).','warn');
   S._rzManSeats=S._rzManSeats||{};S._rzManSeats[_rzSeatKey(dep,acId)]=sm;
   return sm;
+};
+// One-tap "tidy seats": re-run the group-together seater for this aircraft (best CoG within limits),
+// undoing a scattered/manually-dragged arrangement. Saved + undoable.
+window.rezdyManTidySeats=function(acId){
+  var dep=(typeof _rzManSelDep==='function')?_rzManSelDep():null;if(!dep||dep==='—')return;
+  if(typeof window.rezdyManReseat==='function')window.rezdyManReseat(dep,acId);
+  if(typeof _rzManSave==='function')_rzManSave();
+  if(typeof toast==='function')toast('Re-seated '+String(acId).replace('ZK-','')+' by group','ok');
+  render();
 };
 // When a co-pilot occupies seat 1, move any passenger the solver put there to the next free
 // passenger seat (pushing pax back); if the cabin is full they fall to the overflow list.

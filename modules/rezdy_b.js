@@ -1458,6 +1458,7 @@ function _rzRenderManifest(){
           (list.length?'':'<span style="font-size:10px;color:var(--text3);font-weight:600">idle</span>')+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--text2)">'+(nA+'A'+(nC?nC+'C':'')+(nI?nI+'i':''))+'</span>'+
+        (list.length?'<button onclick="event.stopPropagation();window.rezdyManTidySeats(\''+idE+'\')" title="Re-seat keeping booking groups together (best CoG within limits)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 2px">⇄</button>':'')+
         '<button onclick="window.rezdyManDeleteAc(\''+idE+'\')" title="Remove this aircraft (returns its pax to the pool)" style="background:none;border:none;color:#ef444488;cursor:pointer;font-size:13px;padding:0 2px">🗑</button></div></div>';
     if(open){
     // PIC slot (drop a pilot here)
