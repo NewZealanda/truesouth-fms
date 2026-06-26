@@ -238,7 +238,6 @@ function renderHomeToday(){
   var who=(S.user&&(S.user.name||S.user.firstName))?(', '+String(S.user.name||S.user.firstName).split(' ')[0]):'';
   var canShift=(typeof window.rezdyShiftDate==='function');
   var acCol=(typeof _rzAcCol==='function')?_rzAcCol:function(){return 'var(--text2)';};
-  var sodOK=!!(S.user&&S.user.superAdmin); // Start-of-Day is superadmin-only for now
   var h='<div class="page">';
 
   // Header
@@ -249,15 +248,24 @@ function renderHomeToday(){
     +'<button class="btn btn-ghost" style="font-size:13px;padding:5px 11px" onclick="window.rezdyShiftDate(1)">›</button></div>';
   h+='</div>';
 
-  // Attention banner (links into Start of Day only for superadmin while it's gated)
-  var sodClick=sodOK?'onclick="S.section=\'startday\';render()" style="cursor:pointer;':'style="';
+  // Attention banner — tap to expand the live exceptions list inline (deep-links to the fix page).
   if(!scan.loaded){
-    h+='<div '+sodClick+'background:var(--card);border:1px solid var(--border2);border-left:4px solid #60a5fa;border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;color:var(--text1)">Bookings not loaded yet'+(sodOK?' — open <b>Start of Day</b> to pull today.':'.')+'</span>'+(sodOK?'<span style="color:var(--text3)">›</span>':'')+'</div>';
+    h+='<div style="background:var(--card);border:1px solid var(--border2);border-left:4px solid #60a5fa;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--text1)">Bookings not loaded yet for today — open Bookings to pull them.</div>';
   }else if(scan.ex.length){
     var reds=scan.ex.filter(function(e){return e.sev==='red';}).length;
-    var col=reds?'#ef4444':'#f59e0b';
-    h+='<div '+sodClick+'background:var(--card);border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">'
-      +'<span style="font-size:13px;color:var(--text1)"><b>'+scan.ex.length+'</b> item'+(scan.ex.length===1?'':'s')+' need attention'+(reds?' · <span style="color:#ef4444;font-weight:700">'+reds+' critical</span>':'')+'</span>'+(sodOK?'<span style="color:var(--text3)">Open Start of Day ›</span>':'')+'</div>';
+    var col=reds?'#ef4444':'#f59e0b';var _exOpen=!!S._todayExOpen;
+    h+='<div onclick="S._todayExOpen=!S._todayExOpen;render()" style="cursor:pointer;background:var(--card);border:1px solid var(--border2);border-left:4px solid '+col+';border-radius:10px;padding:12px 14px;margin-bottom:'+(_exOpen?'7px':'12px')+';display:flex;align-items:center;justify-content:space-between">'
+      +'<span style="font-size:13px;color:var(--text1)"><b>'+scan.ex.length+'</b> item'+(scan.ex.length===1?'':'s')+' need attention'+(reds?' · <span style="color:#ef4444;font-weight:700">'+reds+' critical</span>':'')+'</span><span style="color:var(--text3);font-size:12px">'+(_exOpen?'Hide ▲':'Show ▼')+'</span></div>';
+    if(_exOpen){
+      h+='<div style="margin-bottom:12px">';
+      scan.ex.forEach(function(e){
+        var ec=e.sev==='red'?'#ef4444':'#f59e0b';
+        h+='<div onclick="window.sodJump(\''+e.jump+'\''+(e.order?(',\''+_sodEsc(String(e.order)).replace(/'/g,"\\'")+'\''):'')+')" style="cursor:pointer;display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border2);border-left:4px solid '+ec+';border-radius:10px;padding:9px 12px;margin-bottom:6px">'
+          +'<span style="flex-shrink:0;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:'+ec+';background:'+(e.sev==='red'?'rgba(239,68,68,.12)':'rgba(245,158,11,.12)')+';padding:3px 8px;border-radius:999px;white-space:nowrap">'+_sodEsc(e.cat)+'</span>'
+          +'<span style="flex:1;font-size:13px;color:var(--text1)">'+_sodEsc(e.msg)+'</span><span style="flex-shrink:0;color:var(--text3);font-size:13px">›</span></div>';
+      });
+      h+='</div>';
+    }
   }else{
     h+='<div style="background:var(--card);border:1px solid var(--border2);border-left:4px solid #22c55e;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--text1)">✅ All set for today — nothing flagged.</div>';
   }
@@ -265,7 +273,8 @@ function renderHomeToday(){
   // Headline counts
   var st=scan.stats;var paxTot=st.pax.a+st.pax.c+st.pax.i;
   function chip(lbl,val){return '<div style="flex:1;min-width:74px;text-align:center;background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:9px 6px"><div style="font-size:19px;font-weight:800;color:var(--text1)">'+val+'</div><div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em">'+lbl+'</div></div>';}
-  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+chip('Flights',flights.length)+chip('Pax',paxTot+(st.pax.i?(' +'+st.pax.i+'i'):''))+chip('Aircraft',st.aircraft)+chip('Bookings',st.bookings)+'</div>';
+  var paxSplit=st.pax.a+'A'+(st.pax.c?' '+st.pax.c+'C':'')+(st.pax.i?' '+st.pax.i+'i':'');
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+chip('Flights',flights.length)+chip('Pax','<span style="font-size:15px">'+_sodEsc(paxSplit)+'</span>')+chip('Aircraft',st.aircraft)+chip('Bookings',st.bookings)+'</div>';
 
   // Departures board
   h+='<div class="card" style="margin-bottom:12px"><div class="st" style="margin-bottom:8px">Departures</div>';
@@ -273,29 +282,41 @@ function renderHomeToday(){
     h+='<div style="font-size:13px;color:var(--text3);text-align:center;padding:16px 0">No flights scheduled'+(scan.loaded?'':' — load bookings in Start of Day')+'.</div>';
   }else{
     flights.forEach(function(f){
-      var pilotH=f.pilot?('<span style="font-weight:700;color:var(--text1)">'+_sodEsc(f.pilot)+'</span>'):'<span style="color:#f59e0b">no pilot</span>';
-      var paxH=f.a+(f.c?('+'+f.c+'c'):'')+(f.i?('+'+f.i+'i'):'');
+      var coPilot=(typeof _rzSchedCoPilotFor==='function')?_rzSchedCoPilotFor(f.ac,f.hhmm):null;
+      var pilotH=f.pilot?('<span style="font-weight:700;color:var(--text1)">'+_sodEsc(f.pilot)+(coPilot?'<span style="color:#818cf8;font-weight:700">+'+_sodEsc(coPilot)+'</span>':'')+'</span>'):'<span style="color:#f59e0b">no pilot</span>';
+      // Pax split by type, the same A/C/i breakdown shown on the aircraft/seatmap (e.g. "5A 2C 1i").
+      var paxH=(typeof _rzBdCompact==='function')?_rzBdCompact({a:f.a,c:f.c,i:f.i}).replace(/([A-Za-z])(\d)/g,'$1 $2'):(f.a+'A'+(f.c?' '+f.c+'C':'')+(f.i?' '+f.i+'i':''));
       h+='<div onclick="window.todayNav(\'calendar\')" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border2)">'
         +'<div style="width:46px;font-weight:800;font-size:14px;color:var(--text1)">'+_sodEsc(f.hhmm)+'</div>'
         +'<span style="display:inline-block;border:1.5px solid '+acCol(f.ac)+';color:'+acCol(f.ac)+';border-radius:9px;padding:1px 7px;font-weight:bold;font-size:10.5px;white-space:nowrap">'+_sodEsc(_sodSh(f.ac))+'</span>'
-        +'<span style="flex:1;font-size:12.5px;color:var(--text2)">'+_sodEsc(f.dest||'')+' · '+paxH+'p</span>'
+        +'<span style="flex:1;font-size:12.5px;color:var(--text2)">'+_sodEsc(f.dest||'')+' · <b style="color:var(--text1);font-weight:700">'+_sodEsc(paxH)+'</b></span>'
         +'<span style="font-size:12px">'+pilotH+'</span>'
         +'</div>';
     });
   }
   h+='</div>';
 
-  // Transport + money summary
-  var owe=0,oweN=0;(S._rezdyBookings||[]).forEach(function(b){if(typeof _rzIsCancelled==='function'&&_rzIsCancelled(b))return;var bal=parseFloat(b.balanceDue);if(isFinite(bal)&&bal>0){owe+=bal;oweN++;}});
-  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
-  h+='<div onclick="window.todayNav(\'ground\')" style="flex:1;min-width:150px;cursor:pointer;background:var(--card);border:1px solid var(--border2);border-radius:10px;padding:11px 13px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em">Transport</div><div style="font-size:14px;font-weight:700;color:var(--text1);margin-top:2px">Pickups & vans ›</div></div>';
-  if(oweN)h+='<div onclick="window.todayNav(\'operations\',\'bookings\')" style="flex:1;min-width:150px;cursor:pointer;background:var(--card);border:1px solid var(--border2);border-left:4px solid #f59e0b;border-radius:10px;padding:11px 13px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em">Owing</div><div style="font-size:14px;font-weight:700;color:var(--text1);margin-top:2px">'+_sodEsc((typeof _rzMoney==='function')?_rzMoney(owe,'NZD'):('$'+Math.round(owe)))+' · '+oweN+' booking'+(oweN===1?'':'s')+' ›</div></div>';
+  // Transport — quick rundown of who's driving which vehicle (drivers stored per vi|dep).
+  var _drvBy={};var _pd=S._pickupDrivers||{};
+  Object.keys(_pd).forEach(function(k){var d=(_pd[k]==null?'':String(_pd[k])).trim();if(!d)return;var vi=parseInt(String(k).split('|')[0],10);if(isNaN(vi))return;var nm=(typeof _rzVehName==='function')?_rzVehName(vi):('Van '+(vi+1));(_drvBy[nm]=_drvBy[nm]||{})[d]=1;});
+  var _vehNames=Object.keys(_drvBy).sort();
+  h+='<div onclick="window.todayNav(\'ground\')" style="cursor:pointer;background:var(--card);border:1px solid var(--border2);border-radius:10px;padding:11px 13px;margin-bottom:12px">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em">Transport · drivers</div><span style="color:var(--text3);font-size:12px">Pickups & vans ›</span></div>';
+  if(_vehNames.length){
+    h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
+    _vehNames.forEach(function(nm){var ds=Object.keys(_drvBy[nm]).join(', ');h+='<span style="font-size:12px;font-weight:700;color:var(--text1);background:var(--card2);border:1px solid var(--border2);border-radius:999px;padding:3px 11px">🚐 '+_sodEsc(nm)+' · <span style="color:var(--text2);font-weight:600">'+_sodEsc(ds)+'</span></span>';});
+    h+='</div>';
+  }else{
+    h+='<div style="font-size:12.5px;color:var(--text3);margin-top:6px">No drivers assigned yet — tap to set up transport.</div>';
+  }
   h+='</div>';
+  // Money summary (balances owing).
+  var owe=0,oweN=0;(S._rezdyBookings||[]).forEach(function(b){if(typeof _rzIsCancelled==='function'&&_rzIsCancelled(b))return;var bal=parseFloat(b.balanceDue);if(isFinite(bal)&&bal>0){owe+=bal;oweN++;}});
+  if(oweN)h+='<div onclick="window.todayNav(\'operations\',\'bookings\')" style="cursor:pointer;background:var(--card);border:1px solid var(--border2);border-left:4px solid #f59e0b;border-radius:10px;padding:11px 13px;margin-bottom:12px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em">Owing</div><div style="font-size:14px;font-weight:700;color:var(--text1);margin-top:2px">'+_sodEsc((typeof _rzMoney==='function')?_rzMoney(owe,'NZD'):('$'+Math.round(owe)))+' · '+oweN+' booking'+(oweN===1?'':'s')+' ›</div></div>';
 
   // Quick links
   h+='<div class="st" style="margin-bottom:8px">Jump to</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
   function ql(lbl,icon,onclick){return '<button onclick="'+onclick+'" class="btn btn-ghost" style="flex:1;min-width:104px;padding:11px 8px;font-size:13px;display:flex;flex-direction:column;align-items:center;gap:4px"><span style="font-size:18px">'+icon+'</span>'+lbl+'</button>';}
-  if(sodOK)h+=ql('Start of Day','🌅',"S.section='startday';render()");
   h+=ql('Bookings','📋',"window.todayNav('operations','bookings')");
   h+=ql('Seatmap','💺',"window.todayNav('operations','rseatmap')");
   h+=ql('Calendar','📅',"window.todayNav('calendar')");

@@ -152,7 +152,7 @@ function _sectionAllowed(sec){
     case 'calendar':    return hasRolePerm('calendar');
     case 'settings':    return hasRolePerm('admin_users')||hasRolePerm('admin_crew');
     case 'operations':  return hasRolePerm('operations');
-    case 'startday':    return !!(S.user&&S.user.superAdmin); // Start-of-day gated to superadmin for now
+    case 'startday':    return hasRolePerm('operations'); // Start of Day retired → render dispatch redirects to Today
     case 'today':       return hasRolePerm('operations'); // Today-at-a-glance home rides the operations perm
     case 'flightduty':  return (hasRolePerm('flightduty'))||!!(S.user&&S.user.superAdmin);
     case 'businessplan':return (hasRolePerm('businessplan'))||!!(S.user&&S.user.superAdmin);
@@ -199,7 +199,6 @@ function _defaultTabFor(sec){
 // ── "Open the app to" preference (per device, in localStorage 'ts_home') ────────
 var HOME_OPTIONS=[
   {id:'today',label:'Today (home)',section:'today'},
-  {id:'startday',label:'Start of Day',section:'startday'},
   {id:'bookings',label:'Bookings',section:'operations',tab:'bookings'},
   {id:'rseatmap',label:'Seatmap',section:'operations',tab:'rseatmap'},
   {id:'rloadsheets',label:'Loadsheets',section:'operations',tab:'rloadsheets'},
@@ -624,11 +623,6 @@ function renderDrawer(){
     var _tdyOn=sec==='today';
     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'today\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_tdyOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_tdyOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_tdyOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🏠</span><span style="flex:1">Today</span></button>';
   }
-  // Start of Day — one-action morning flow + exceptions. Superadmin-only for now. Pinned to the very TOP.
-  if(S.user&&S.user.superAdmin){
-    var _sodOn=sec==='startday';
-    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'startday\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_sodOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_sodOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_sodOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🌅</span><span style="flex:1">Start of Day</span></button>';
-  }
   if(_canOps){
     h+=_secBtn('Operations','operations','✈️');
     if(_isExp('operations')){
@@ -864,7 +858,7 @@ function renderApp(){
       ${(function(){try{
         const _sec=S.section||'operations';
         if(_sec==='today')return'<div id="flash-today">'+renderHomeToday()+'</div>';
-        if(_sec==='startday'){if(!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return'<div id="flash-startday">'+renderStartDay()+'</div>';}
+        if(_sec==='startday'){S.section='today';return'<div id="flash-today">'+renderHomeToday()+'</div>';} // Start of Day retired → Today
         if(_sec==='maintenance')return'<div id="flash-maintenance">'+renderMaintenance()+'</div>';
         if(_sec==='settings')return'<div id="flash-admin">'+renderAdmin()+'</div>';
         if(_sec==='roster'){

@@ -90,7 +90,17 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.07 (latest)** — **calendar = source of truth: per-booking "Change aircraft" button in the
+- **v27.08 (latest)** — **Today page improvements + Start of Day retired.** Today (`renderHomeToday`,
+  startday.js) now: (1) shows pax SPLIT by type (A/C/i, e.g. "5A 2C 1i") on the headline chip + each
+  departure row via `_rzBdCompact`; (2) shows co-pilot beside the PIC on each departure row
+  (`_rzSchedCoPilotFor`); (3) has a **Transport · drivers** card listing each vehicle + its driver(s),
+  read from `S._pickupDrivers` (keyed `vi|dep`) via `_rzVehName`; (4) folds the live exceptions list
+  (`_sodScan`) inline — the attention banner expands/collapses it (`S._todayExOpen`) with each row deep-
+  linking via `sodJump`. **Start of Day page removed**: HOME_OPTIONS entry, drawer button, and the Today
+  quick-link/banner-link all gone; the render dispatch for `S.section==='startday'` now redirects to
+  Today. `renderStartDay`/`sodRun` remain as unreferenced dead code in startday.js; `_sodScan` is KEPT
+  (Today uses it). The calendar is the source of truth throughout (`_schedDayFlights`/`_rzSchedPilotFor`).
+- **v27.07** — **calendar = source of truth: per-booking "Change aircraft" button in the
   block detail.** Next to each booking's "View booking →" there's now a **✈ Change aircraft** button
   (`rezdySchedAcPickToggle`) that reveals an inline aircraft picker; clicking a tail calls
   `rezdySchedSetBookingAc(order,ac)` → writes `S._rzBookingAc[order]` (persisted pickup blob, breaks any
