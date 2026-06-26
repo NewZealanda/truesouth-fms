@@ -1800,9 +1800,22 @@ window.rezdyPaxCycleType=function(order,idx,cur){
   cur=cur||'adult';
   var next=(cur==='adult')?'child':(cur==='child')?'infant':'adult';
   if(m.infantOf[idx]!=null)delete m.infantOf[idx]; // move from legacy fold to type-based
-  if(next==='adult')delete m.types[idx];else m.types[idx]=next;
+  // Always store an EXPLICIT type (incl. 'adult'). Previously 'adult' DELETED the tag, which let the
+  // count fall back to Rezdy's price-option label — so a child-fare booked for an actual adult kept
+  // showing as 1C and couldn't be corrected. An explicit adult tag now overrides the fare label.
+  m.types[idx]=next;
   _rzSavePaxMeta();render();
 };
+// "Called — no answer" flag per booking: tap the phone number to mark it (amber + a C), tap again to
+// clear. Persisted per-date in the pickup blob (bkCalled) so all staff see it.
+window.rezdyToggleCalled=function(order){order=String(order);S._rzBkCalled=S._rzBkCalled||{};if(S._rzBkCalled[order])delete S._rzBkCalled[order];else S._rzBkCalled[order]=1;if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();render();};
+// Edit a MANUAL booking's balance owing / source (persisted in the pickup blob via manualBk).
+window.rezdyManualSetBalance=function(order,val){order=String(order);var n=parseFloat(val);n=isFinite(n)&&n>0?n:0;
+  [S._rzManualBk,S._rezdyBookings].forEach(function(arr){(arr||[]).forEach(function(x){if(x&&x._manual&&String(x.orderNumber||x.id)===order)x.balanceDue=n;});});
+  if(window.pickupSave)window.pickupSave(true);render();};
+window.rezdyManualSetSource=function(order,val){order=String(order);var s=String(val||'').trim()||'Manual';
+  [S._rzManualBk,S._rezdyBookings].forEach(function(arr){(arr||[]).forEach(function(x){if(x&&x._manual&&String(x.orderNumber||x.id)===order)x.source=s;});});
+  if(window.pickupSave)window.pickupSave(true);render();};
 // Toggle a CHECKED-IN passenger between adult and child (infants are set at check-in via the
 // lap-attach flow, so they're left alone here). Keeps the bubble + expanded list in sync.
 window.rezdyCheckinCycleType=function(order,n){
@@ -1902,7 +1915,11 @@ function _rzBookingCard(b){
          (function(){var _pl=_rzPlate(ono);if(!_pl||!_pl.plate)return '';var _pt='Numberplate '+_pl.plate+(_pl.done?' (entered into system)':' (enter into the separate system)');return '<span title="'+_rzEsc(_pt)+'" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:'+(_pl.done?'#22c55e':'#3b82f6')+';color:#fff;font-weight:900;font-size:11px;border-radius:4px;flex-shrink:0;line-height:1">P</span>';})()+
          '<span style="font-size:11px;color:var(--text3)">#'+_rzEsc(ono)+'</span>'+
        '</div>'+
-       '<div style="font-size:11px;color:var(--text3);margin-top:3px">'+_rzBdCompact(bd)+(prod?' '+_rzEsc(prod):'')+'</div>'+
+       '<div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+         '<span>'+_rzBdCompact(bd)+(prod?' '+_rzEsc(prod):'')+'</span>'+
+         (function(){var locs=[],ov=S._pickupLocOverride||{};(b.items||[]).forEach(function(it,ii){if(!it.pickup)return;var pid=ono+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;var l=(ov[pid]!=null&&ov[pid]!=='')?ov[pid]:it.pickup;l=String(l||'').trim();if(l&&locs.indexOf(l)<0)locs.push(l);});return locs.length?'<span title="Pickup">📍 '+_rzEsc(locs.join(', '))+'</span>':'';})()+
+         (function(){var ph=String(b.phone||'').trim();if(!ph)return '';var called=!!(S._rzBkCalled||{})[ono];return '<span onclick="event.stopPropagation();window.rezdyToggleCalled(\''+oE+'\')" title="'+(called?'Marked: called — no answer (tap to clear)':'Tap if you called and got no answer')+'" style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;color:'+(called?'#f59e0b':'var(--text3)')+';font-weight:'+(called?'700':'400')+'">📞 '+_rzEsc(ph)+(called?' <span style="display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;padding:0 2px;background:#f59e0b;color:#3a2c06;font-weight:900;font-size:9px;border-radius:3px;line-height:1">C</span>':'')+'</span>';})()+
+       '</div>'+
      '</div>';
   h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">';
   if(!cancelled){

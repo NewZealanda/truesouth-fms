@@ -13,7 +13,7 @@ function _rzRenderBookings(){
   // Auto-shown on days that have ONLY cancelled bookings (no active departures) so they're still visible.
   const _showCancelled=!searching&&cancelledRows.length>0&&(S._bkDepFilter==='__cancelled__'||deps.length===0);
   // One departure at a time — default to the first departure when none is chosen. (No "All".)
-  const depFilter=(searching||_showCancelled)?null:((S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:(deps[0]||null));
+  const depFilter=(searching||_showCancelled)?null:((S._bkDepFilter&&deps.indexOf(S._bkDepFilter)>=0)?S._bkDepFilter:(_rzDefaultDep(deps)||null));
   if(depFilter)S._bkDepFilter=depFilter; // persist the resolved departure so Push knows which one
   // Checked-in count for the SELECTED departure (push is departure-scoped).
   var _ciCount=active.filter(function(b){return _rzBookingDep(b)===depFilter&&(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')];}).length;
@@ -251,12 +251,23 @@ function _rzBookingDetail(b){
   // Balance.
   const bal=parseFloat(b.balanceDue);
   const owing=isFinite(bal)&&bal>0;
-  let balH='<div style="'+_pan+'"><div style="'+sec+'">Balance</div>';
-  balH+='<div style="font-size:14px;font-weight:800;color:'+(owing?'#f59e0b':'#4ade80')+'">'+(owing?'⚠ '+_rzEsc(_rzMoney(bal,b.currency))+' owing':'Paid in full')+'</div>';
-  balH+='<div style="font-size:11px;color:var(--text3);margin-top:2px">Total '+_rzEsc(_rzMoney(b.totalAmount,b.currency)||'—')+' · Paid '+_rzEsc(_rzMoney(b.totalPaid,b.currency)||'—')+'</div>';
-  balH+='</div>';
-  // Booking source / marketplace — always shown (e.g. Viator, GYG, Direct).
-  var srcH='<div style="'+_pan+'"><div style="'+sec+'">Source</div><span class="pill" style="background:var(--card);border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px">'+_rzEsc(_rzSourceLabel(b))+'</span></div>';
+  let balH,srcH;
+  if(b._manual){
+    // Manual (app-created) bookings: balance + source are editable (no Rezdy record behind them).
+    balH='<div style="'+_pan+'"><div style="'+sec+'">Balance owing</div>'+
+      '<div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px;font-weight:800;color:var(--text3)">$</span>'+
+      '<input type="number" inputmode="decimal" min="0" step="0.01" value="'+_rzEsc(isFinite(bal)?String(bal):'')+'" onchange="window.rezdyManualSetBalance(\''+_bdOE+'\',this.value)" placeholder="0.00" style="flex:1;min-width:0;font-size:15px;font-weight:700;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px"></div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-top:4px">0 = paid in full.</div></div>';
+    srcH='<div style="'+_pan+'"><div style="'+sec+'">Source</div>'+
+      '<input type="text" value="'+_rzEsc(b.source==='Manual'?'':(b.source||''))+'" onchange="window.rezdyManualSetSource(\''+_bdOE+'\',this.value)" placeholder="e.g. Direct, Phone, or an agent name" style="width:100%;box-sizing:border-box;font-size:15px;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px"></div>';
+  } else {
+    balH='<div style="'+_pan+'"><div style="'+sec+'">Balance</div>';
+    balH+='<div style="font-size:14px;font-weight:800;color:'+(owing?'#f59e0b':'#4ade80')+'">'+(owing?'⚠ '+_rzEsc(_rzMoney(bal,b.currency))+' owing':'Paid in full')+'</div>';
+    balH+='<div style="font-size:11px;color:var(--text3);margin-top:2px">Total '+_rzEsc(_rzMoney(b.totalAmount,b.currency)||'—')+' · Paid '+_rzEsc(_rzMoney(b.totalPaid,b.currency)||'—')+'</div>';
+    balH+='</div>';
+    // Booking source / marketplace — always shown (e.g. Viator, GYG, Direct).
+    srcH='<div style="'+_pan+'"><div style="'+sec+'">Source</div><span class="pill" style="background:var(--card);border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px">'+_rzEsc(_rzSourceLabel(b))+'</span></div>';
+  }
   // Self-drive numberplate(s) captured at check-in + a "done" tick once entered into the external system.
   var _plObj=(typeof _rzPlate==='function')?_rzPlate(_bdOrder):null;
   var _plVal=(_plObj&&_plObj.plate)||'';
@@ -301,7 +312,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};S._rzBkCalled={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -399,10 +410,7 @@ function _rzRenderPickups(){
   // Default order = pickups (by time) → drop-offs → flybacks; then apply the operator's manual order.
   const times=Object.keys(byTime).sort(function(a,b){return _rzTransDepSort(a)-_rzTransDepSort(b);});
   (function(){var ord=S._rzDepOrder||[];if(ord.length)times.sort(function(a,b){var ia=ord.indexOf(a),ib=ord.indexOf(b);if(ia<0&&ib<0)return _rzTransDepSort(a)-_rzTransDepSort(b);if(ia<0)return 1;if(ib<0)return -1;return ia-ib;});})();
-  if((!depFilter||times.indexOf(depFilter)<0)&&times.length){
-    if(S.rezdyDate===_rzToday()){var _now=new Date(),_nm=_now.getHours()*60+_now.getMinutes();depFilter=null;for(var _ti=0;_ti<times.length;_ti++){if(_rzDepMin(times[_ti])>=_nm){depFilter=times[_ti];break;}}if(!depFilter)depFilter=times[times.length-1];}
-    else depFilter=times[0];
-  }
+  if((!depFilter||times.indexOf(depFilter)<0)&&times.length){depFilter=_rzDefaultDep(times);}   // first of day, +15-min grace on today
   const _depJs=_rzEsc(depFilter||'').replace(/'/g,"\\'");
   let driversBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:8px">Drivers <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(drag onto a van)</span></div>';
   driversBar+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
@@ -699,9 +707,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge','wxCalls'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge','wxCalls','bkCalled'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{},wxCalls:S._rzWxCalls||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{},wxCalls:S._rzWxCalls||{},bkCalled:S._rzBkCalled||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -736,6 +744,7 @@ function _pkApplyBlob(d){
   S._rzPlates=(d.plates&&typeof d.plates==='object')?d.plates:{};
   S._rzTransMerge=(d.transMerge&&typeof d.transMerge==='object')?d.transMerge:{};
   S._rzWxCalls=(d.wxCalls&&typeof d.wxCalls==='object')?d.wxCalls:{};
+  S._rzBkCalled=(d.bkCalled&&typeof d.bkCalled==='object')?d.bkCalled:{};
 }
 function _pkSnapshot(d){try{return JSON.parse(JSON.stringify(d));}catch(e){return null;}}
 function _pkEq(a,b){try{return JSON.stringify(a===undefined?null:a)===JSON.stringify(b===undefined?null:b);}catch(e){return false;}}
@@ -748,6 +757,15 @@ function _pkSetBaseline(){S._pickupBaseline=_pkSnapshot(_pkBlobFromState());} //
 // get a banner + the changes highlighted, and dispatch sees "awaiting ack".
 // All departures that have any pickup loaded.
 function _rzAllDeps(){var o={};(_rzPickups()||[]).forEach(function(p){if(p.depart)o[p.depart]=1;});return Object.keys(o);}
+// Default departure to OPEN: the first of the day, but on TODAY skip any departure whose time is more
+// than 15 min past (0800 stays default until 0815, then 0930 until 0945, …). deps = ordered labels.
+function _rzDefaultDep(deps){
+  deps=(deps||[]).filter(function(d){return d!=null&&d!=='';});if(!deps.length)return null;
+  if(typeof _rzToday==='function'&&S.rezdyDate!==_rzToday())return deps[0];
+  var now=new Date(),nm=now.getHours()*60+now.getMinutes();
+  for(var i=0;i<deps.length;i++){var dm=(typeof _rzDepMin==='function')?_rzDepMin(deps[i]):null;if(dm==null||dm+15>=nm)return deps[i];}
+  return deps[deps.length-1];
+}
 // A van's pickup ids FOR ONE departure (the unit a driver acknowledges).
 function _rzVanDepIds(vi,dep){var pickups=_rzPickups();return ((S._pickupVans||[])[vi]||[]).filter(function(id){var p=_rzPickupById(pickups,id);return p&&(p.depart||'—')===dep;});}
 function _rzVanSig(vi,dep){
@@ -1349,7 +1367,7 @@ function _rzRenderManifest(){
   var deps=_rzManDeps();
   var _openDeps=_rzManOpenDepsList(deps);                 // departures with an OPEN seatmap tab
   var _closedDeps=deps.filter(function(d){return _openDeps.indexOf(d)<0;}); // closed (reopen chips)
-  var selDep=(S._rzManDepFilter&&_openDeps.indexOf(S._rzManDepFilter)>=0)?S._rzManDepFilter:(_openDeps[0]||'—');
+  var selDep=(S._rzManDepFilter&&_openDeps.indexOf(S._rzManDepFilter)>=0)?S._rzManDepFilter:(_rzDefaultDep(_openDeps)||'—');
   var pool=pax.filter(function(p){return !p.ac&&!p.infantOf&&_rzPaxDep(p)===selDep;});
   var hidden=S._rzManHidden||[];
   var fleetAll=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
