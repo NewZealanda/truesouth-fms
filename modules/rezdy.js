@@ -1904,6 +1904,15 @@ function _rzBookingCard(b){
   var prod=_rzProduct((((b.items||[])[0]||{}).product)||'');
   var stCol=cancelled?'#ef4444':(/confirm/i.test(b.status||'')?'#86efac':'var(--text2)');
   var wx=!!(S._rzBookingWx||{})[ono],ci=!!(S._rzBookingCheckedIn||{})[ono];
+  // Pickup location + phone (with tap-to-mark-called) — shown right-aligned under the Wx/Checked-in row.
+  var _pkPhoneH=(function(){
+    var locs=[],ov=S._pickupLocOverride||{};(b.items||[]).forEach(function(it,ii){if(!it.pickup)return;var pid=ono+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;var l=(ov[pid]!=null&&ov[pid]!=='')?ov[pid]:it.pickup;l=String(l||'').trim();if(l&&locs.indexOf(l)<0)locs.push(l);});
+    var locH=locs.length?'<span title="Pickup">📍 '+_rzEsc(locs.join(', '))+'</span>':'';
+    var ph=String(b.phone||'').trim();var called=!!(S._rzBkCalled||{})[ono];
+    var phH=ph?'<span onclick="event.stopPropagation();window.rezdyToggleCalled(\''+oE+'\')" title="'+(called?'Marked: called — no answer (tap to clear)':'Tap if you called and got no answer')+'" style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;color:'+(called?'#f59e0b':'var(--text3)')+';font-weight:'+(called?'700':'400')+'">📞 '+_rzEsc(ph)+(called?' <span style="display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;padding:0 2px;background:#f59e0b;color:#3a2c06;font-weight:900;font-size:9px;border-radius:3px;line-height:1">C</span>':'')+'</span>':'';
+    if(!locH&&!phH)return '';
+    return '<div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">'+locH+phH+'</div>';
+  })();
   var h='<div class="card" style="padding:12px 14px;margin-bottom:12px'+(cancelled?';opacity:.6':(noShow?';border:1px solid #ef4444;background:rgba(239,68,68,.10)':(ci?';border:1px solid #15803d;background:rgba(34,197,94,.08)':'')))+'">';
   // header
   h+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">';
@@ -1915,13 +1924,10 @@ function _rzBookingCard(b){
          (function(){var _pl=_rzPlate(ono);if(!_pl||!_pl.plate)return '';var _pt='Numberplate '+_pl.plate+(_pl.done?' (entered into system)':' (enter into the separate system)');return '<span title="'+_rzEsc(_pt)+'" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:'+(_pl.done?'#22c55e':'#3b82f6')+';color:#fff;font-weight:900;font-size:11px;border-radius:4px;flex-shrink:0;line-height:1">P</span>';})()+
          '<span style="font-size:11px;color:var(--text3)">#'+_rzEsc(ono)+'</span>'+
        '</div>'+
-       '<div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
-         '<span>'+_rzBdCompact(bd)+(prod?' '+_rzEsc(prod):'')+'</span>'+
-         (function(){var locs=[],ov=S._pickupLocOverride||{};(b.items||[]).forEach(function(it,ii){if(!it.pickup)return;var pid=ono+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;var l=(ov[pid]!=null&&ov[pid]!=='')?ov[pid]:it.pickup;l=String(l||'').trim();if(l&&locs.indexOf(l)<0)locs.push(l);});return locs.length?'<span title="Pickup">📍 '+_rzEsc(locs.join(', '))+'</span>':'';})()+
-         (function(){var ph=String(b.phone||'').trim();if(!ph)return '';var called=!!(S._rzBkCalled||{})[ono];return '<span onclick="event.stopPropagation();window.rezdyToggleCalled(\''+oE+'\')" title="'+(called?'Marked: called — no answer (tap to clear)':'Tap if you called and got no answer')+'" style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;color:'+(called?'#f59e0b':'var(--text3)')+';font-weight:'+(called?'700':'400')+'">📞 '+_rzEsc(ph)+(called?' <span style="display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;padding:0 2px;background:#f59e0b;color:#3a2c06;font-weight:900;font-size:9px;border-radius:3px;line-height:1">C</span>':'')+'</span>';})()+
-       '</div>'+
+       '<div style="font-size:11px;color:var(--text3);margin-top:3px">'+_rzBdCompact(bd)+(prod?' '+_rzEsc(prod):'')+'</div>'+
      '</div>';
-  h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">';
+  h+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'+   // right column: buttons row, then pickup/phone under them
+     '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">';
   if(!cancelled){
     h+=_rzCheckBtn('Wx',wx,'window.rezdyBookingToggleWx(\''+oE+'\')','Weather check called by passenger');
     h+=_rzCheckBtn('Checked in',ci,'window.rezdyCheckinClick(\''+oE+'\')','Check in: enter names + actual weights');
@@ -1935,7 +1941,7 @@ function _rzBookingCard(b){
     h+='<span style="font-size:11px;font-weight:700;color:'+stCol+'">'+_rzEsc(b.status)+'</span>';
   }
   h+=owing?'<span class="pill pill-warn" style="font-size:10px">⚠ '+_rzEsc(_rzMoney(bal,b.currency))+'</span>':'<span style="font-size:11px;color:#4ade80;font-weight:700">Paid</span>';
-  h+='</div></div>';
+  h+='</div>'+_pkPhoneH+'</div></div>';   // close buttons row, pickup/phone under it, close right column + header
   if(localCancel)h+='<div style="font-size:11px;color:#f87171;margin-top:4px">Cancelled'+(localCancel.by?' by '+_rzEsc(localCancel.by):'')+(localCancel.reason?' — '+_rzEsc(localCancel.reason):'')+'</div>';
   if(noShow&&!cancelled)h+='<div style="font-size:11px;color:#f87171;font-weight:700;margin-top:4px">NO-SHOW — excluded from the seatmap push</div>';
   // Aircraft — collapsed shows only the selected one; the full pill selector moves into the dropdown.
