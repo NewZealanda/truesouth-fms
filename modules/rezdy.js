@@ -40,7 +40,15 @@ function _rzVehSave(){
 function _rzVehLoad(){
   try{fetch(SB+'/rest/v1/ts_settings?key=eq.rz_vehicles&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(rows){
     var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}
-    if(Array.isArray(v)&&v.length){S._rzVehicles=v;try{lsSet('ts_rz_vehicles',v);}catch(e){}if(typeof _sbSetBase==='function')_sbSetBase('rz_vehicles',v);S._pickupVans=null;render();}
+    if(Array.isArray(v)&&v.length){
+      // Only DISCARD the saved van layout if the vehicle COUNT changed (that's what invalidates the van
+      // indices). Nulling it on every load raced the saved-layout restore and silently rebuilt the auto
+      // layout — collapsing a hand-split 2-van run back onto one van. A rename/colour change keeps indices.
+      var _vehCountChanged=!Array.isArray(S._rzVehicles)||S._rzVehicles.length!==v.length;
+      S._rzVehicles=v;try{lsSet('ts_rz_vehicles',v);}catch(e){}if(typeof _sbSetBase==='function')_sbSetBase('rz_vehicles',v);
+      if(_vehCountChanged)S._pickupVans=null;
+      render();
+    }
   }).catch(function(){});}catch(e){}
 }
 // ── Vehicle management panel (Pickups ⚙) ──
