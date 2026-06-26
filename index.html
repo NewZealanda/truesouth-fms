@@ -896,7 +896,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.22';
+const APP_VER='v27.23';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16227,9 +16227,9 @@ function _rzSchedPilotFor(acId,dep){
   var sp=S._schedPilots||{};
   var t=String(dep||'').split('·')[0].split('+')[0]; // first-leg time token, e.g. "0930"
   var tc=_rzHHMMcolon(t);                              // "09:30" to match the calendar group key
-  var prefix=acId+'|'+tc+'|',found=null;
-  Object.keys(sp).forEach(function(k){if(!found&&k.indexOf(prefix)===0&&sp[k])found=sp[k];});
-  if(!found)(S._schedBlocks||[]).forEach(function(b){if(!found&&b&&b.aircraft===acId&&String(b.start)===tc&&sp[String(b.id)])found=sp[String(b.id)];});
+  var prefix=acId+'|'+tc+'|',found=null,conf=S._schedPilotConflict||{};   // skip a clashing (double-booked) pin
+  Object.keys(sp).forEach(function(k){if(!found&&k.indexOf(prefix)===0&&sp[k]&&!conf[k])found=sp[k];});
+  if(!found)(S._schedBlocks||[]).forEach(function(b){if(!found&&b&&b.aircraft===acId&&String(b.start)===tc&&sp[String(b.id)]&&!conf[String(b.id)])found=sp[String(b.id)];});
   if(!found&&typeof _schedAutoPilotFor==='function')found=_schedAutoPilotFor(acId,tc);   // auto allocation fallback (by ac + time)
   return found;
 }
@@ -17983,7 +17983,10 @@ function _rzRenderSchedule(){
     var _sp=(g.aircraft!=='__unalloc__'&&g.aircraft!=='__misc__'&&typeof _acSpec==='function')?_acSpec(g.aircraft):null;
     g.cap=_sp?((_sp.seats||[]).length-1-(((_sp.removedSeats)||[]).length)):null;   // seats minus PIC + removed
     g.over=(g.cap!=null)&&((gbd.a+gbd.c)>g.cap);
-    var _manP=(S._schedPilots||{})[g.key]||null;
+    // A manual pin that DOUBLE-BOOKS the pilot (flagged in _schedPilotConflict) is impossible, so we
+    // ignore it here and fall through to the conflict-free auto pilot the allocator picked.
+    var _pinConf=(S._schedPilotConflict||{})[g.key];
+    var _manP=_pinConf?null:((S._schedPilots||{})[g.key]||null);
     var _autoP=((S._schedAutoPilots||{})[g.key])||((typeof _schedAutoPilotFor==='function')?_schedAutoPilotFor(g.aircraft,g.start):null);
     var pilot=_manP||_autoP||null;
     g.bd=gbd;g.pilot=pilot;g.pilotAuto=(!_manP&&!!_autoP);g.pilotChanged=(!!_manP&&!!_autoP&&_manP!==_autoP);g.pilotAutoWas=_autoP;
@@ -18220,9 +18223,10 @@ function _rzRenderSchedule(){
       var _forcedIcon=_fc.length?'<span title="'+_rzEsc(_fc.join(' · '))+'" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#f59e0b" onpointerdown="event.stopPropagation()">✋</span>':'';
       // Pilot auto-allocated (not user-forced) → a small green ⚙ on the block.
       var _autoIcon=(isBk&&b.pilotAuto)?'<span title="Pilot auto-allocated" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#22c55e" onpointerdown="event.stopPropagation()">⚙</span>':'';
-      // Pilot DOUBLE-BOOKED — the same pilot is on another flight that overlaps this one in time.
+      // Pilot pin overridden — the pinned pilot was already on an overlapping departure, so the
+      // allocator auto-assigned a free rated pilot here instead. Amber info (already resolved), not red.
       var _pcfl=isBk&&(S._schedPilotConflict||{})[b.order];
-      var _conflictIcon=_pcfl?'<span title="⚠ '+_rzEsc(_pcfl)+' is double-booked — also flying an overlapping departure. Reassign a pilot on one of them." style="pointer-events:auto;cursor:help;font-size:11px;margin-right:3px;color:#ef4444;font-weight:900" onpointerdown="event.stopPropagation()">⚠</span>':'';
+      var _conflictIcon=_pcfl?'<span title="'+_rzEsc(_pcfl)+' was already flying an overlapping departure, so this flight was auto-assigned a free pilot ('+_rzEsc(b.pilot||'—')+'). Drag a pilot on to change it." style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#f59e0b;font-weight:800" onpointerdown="event.stopPropagation()">⚠</span>':'';
       // Departed (locked) → a small 🛫 marker; the aircraft is pinned for this flight.
       var _departedIcon=(isBk&&typeof _schedDepManualLock==='function'&&_schedDepManualLock(S.rezdyDate,String(b.order||'').split('|')[1]))?'<span title="Departed — aircraft locked" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#22c55e" onpointerdown="event.stopPropagation()">🛫</span>':'';
       blocksH+='<div'+_pdown+(isBk?' data-bkkey="'+_rzEsc(String(b.order))+'"':'')+(_mlvl?' title="'+_rzEsc(_mtip)+'"':' title="Drag to move · drag the top/bottom edge to set departure/return · tap to open"')+' ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
@@ -22191,20 +22195,22 @@ function _schedComputeBlockPilots(flights){
     for(var si=0;si<sdbPilots.length;si++){var ex={};ex[sdbPilots[si].code]=1;if(runAssign(ex)<=baseStranded){reserved=true;break;}}
     if(!reserved)runAssign({});                       // no one sparable → revert to the full assignment
   }
-  // Every flight on an aircraft gets that aircraft's pilot; a per-flight manual pick still wins.
+  // Every flight on an aircraft gets that aircraft's pilot; a per-flight manual pick still wins — UNLESS
+  // honouring it would DOUBLE-BOOK the pilot (they're already on a TIME-OVERLAPPING flight in `out`). A
+  // clashing manual pin is physically impossible (one plane at a time), so it is NOT applied: the
+  // conflict-free auto pick from runAssign stands instead, and the clashing key is flagged in
+  // S._schedPilotConflict so the calendar shows the auto pilot + a "reassigned" note rather than an
+  // unflyable double-booking. (e.g. a stale TP pin on the noon SLA while TP is already out on the 0930
+  // SDB → noon SLA keeps the auto pilot, AA, who is free and rated.)
   var out={};
   rots.forEach(function(r){if(r.assigned)r.keys.forEach(function(k){out[k]=r.assigned;});});
-  Object.keys(manual).forEach(function(k){if(manual[k])out[k]=manual[k];});
-  // Detect pilot DOUBLE-BOOKINGS for a calendar warning: the EFFECTIVE pilot the calendar shows is the
-  // manual pin (if any) else the auto pick. If the same pilot lands on two TIME-OVERLAPPING rotations
-  // (e.g. a stale manual pin ignoring that they're already airborne), they can't be in two places —
-  // flag every flight key on both so the block can warn the operator to reassign one.
-  var _eff=rots.map(function(r){var mp=null;r.keys.forEach(function(k){if(!mp&&manual[k])mp=manual[k];});return {r:r,p:mp||r.assigned||null};});
+  var ftime={};flights.forEach(function(f){if(f&&f.key)ftime[f.key]=[f.depMin,f.endMin];});
   var conflict={};
-  for(var ci=0;ci<_eff.length;ci++){for(var cj=ci+1;cj<_eff.length;cj++){
-    var ea=_eff[ci],eb=_eff[cj];if(!ea.p||ea.p!==eb.p)continue;
-    if(ea.r.start<eb.r.end&&eb.r.start<ea.r.end){ea.r.keys.forEach(function(k){conflict[k]=ea.p;});eb.r.keys.forEach(function(k){conflict[k]=eb.p;});}
-  }}
+  Object.keys(manual).forEach(function(k){
+    var p=manual[k];if(!p)return;var t=ftime[k];var clash=false;
+    if(t){for(var k2 in out){if(k2===k||out[k2]!==p)continue;var t2=ftime[k2];if(t2&&t[0]<t2[1]&&t2[0]<t[1]){clash=true;break;}}}
+    if(clash)conflict[k]=p;else out[k]=p;   // clashing pin skipped → auto pilot stands; flag for the calendar
+  });
   S._schedPilotConflict=conflict;
   return out;
 }

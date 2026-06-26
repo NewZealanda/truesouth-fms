@@ -1270,9 +1270,9 @@ function _rzSchedPilotFor(acId,dep){
   var sp=S._schedPilots||{};
   var t=String(dep||'').split('·')[0].split('+')[0]; // first-leg time token, e.g. "0930"
   var tc=_rzHHMMcolon(t);                              // "09:30" to match the calendar group key
-  var prefix=acId+'|'+tc+'|',found=null;
-  Object.keys(sp).forEach(function(k){if(!found&&k.indexOf(prefix)===0&&sp[k])found=sp[k];});
-  if(!found)(S._schedBlocks||[]).forEach(function(b){if(!found&&b&&b.aircraft===acId&&String(b.start)===tc&&sp[String(b.id)])found=sp[String(b.id)];});
+  var prefix=acId+'|'+tc+'|',found=null,conf=S._schedPilotConflict||{};   // skip a clashing (double-booked) pin
+  Object.keys(sp).forEach(function(k){if(!found&&k.indexOf(prefix)===0&&sp[k]&&!conf[k])found=sp[k];});
+  if(!found)(S._schedBlocks||[]).forEach(function(b){if(!found&&b&&b.aircraft===acId&&String(b.start)===tc&&sp[String(b.id)]&&!conf[String(b.id)])found=sp[String(b.id)];});
   if(!found&&typeof _schedAutoPilotFor==='function')found=_schedAutoPilotFor(acId,tc);   // auto allocation fallback (by ac + time)
   return found;
 }

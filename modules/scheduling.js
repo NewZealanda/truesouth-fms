@@ -673,20 +673,22 @@ function _schedComputeBlockPilots(flights){
     for(var si=0;si<sdbPilots.length;si++){var ex={};ex[sdbPilots[si].code]=1;if(runAssign(ex)<=baseStranded){reserved=true;break;}}
     if(!reserved)runAssign({});                       // no one sparable → revert to the full assignment
   }
-  // Every flight on an aircraft gets that aircraft's pilot; a per-flight manual pick still wins.
+  // Every flight on an aircraft gets that aircraft's pilot; a per-flight manual pick still wins — UNLESS
+  // honouring it would DOUBLE-BOOK the pilot (they're already on a TIME-OVERLAPPING flight in `out`). A
+  // clashing manual pin is physically impossible (one plane at a time), so it is NOT applied: the
+  // conflict-free auto pick from runAssign stands instead, and the clashing key is flagged in
+  // S._schedPilotConflict so the calendar shows the auto pilot + a "reassigned" note rather than an
+  // unflyable double-booking. (e.g. a stale TP pin on the noon SLA while TP is already out on the 0930
+  // SDB → noon SLA keeps the auto pilot, AA, who is free and rated.)
   var out={};
   rots.forEach(function(r){if(r.assigned)r.keys.forEach(function(k){out[k]=r.assigned;});});
-  Object.keys(manual).forEach(function(k){if(manual[k])out[k]=manual[k];});
-  // Detect pilot DOUBLE-BOOKINGS for a calendar warning: the EFFECTIVE pilot the calendar shows is the
-  // manual pin (if any) else the auto pick. If the same pilot lands on two TIME-OVERLAPPING rotations
-  // (e.g. a stale manual pin ignoring that they're already airborne), they can't be in two places —
-  // flag every flight key on both so the block can warn the operator to reassign one.
-  var _eff=rots.map(function(r){var mp=null;r.keys.forEach(function(k){if(!mp&&manual[k])mp=manual[k];});return {r:r,p:mp||r.assigned||null};});
+  var ftime={};flights.forEach(function(f){if(f&&f.key)ftime[f.key]=[f.depMin,f.endMin];});
   var conflict={};
-  for(var ci=0;ci<_eff.length;ci++){for(var cj=ci+1;cj<_eff.length;cj++){
-    var ea=_eff[ci],eb=_eff[cj];if(!ea.p||ea.p!==eb.p)continue;
-    if(ea.r.start<eb.r.end&&eb.r.start<ea.r.end){ea.r.keys.forEach(function(k){conflict[k]=ea.p;});eb.r.keys.forEach(function(k){conflict[k]=eb.p;});}
-  }}
+  Object.keys(manual).forEach(function(k){
+    var p=manual[k];if(!p)return;var t=ftime[k];var clash=false;
+    if(t){for(var k2 in out){if(k2===k||out[k2]!==p)continue;var t2=ftime[k2];if(t2&&t[0]<t2[1]&&t2[0]<t[1]){clash=true;break;}}}
+    if(clash)conflict[k]=p;else out[k]=p;   // clashing pin skipped → auto pilot stands; flag for the calendar
+  });
   S._schedPilotConflict=conflict;
   return out;
 }

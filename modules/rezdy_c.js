@@ -1130,7 +1130,10 @@ function _rzRenderSchedule(){
     var _sp=(g.aircraft!=='__unalloc__'&&g.aircraft!=='__misc__'&&typeof _acSpec==='function')?_acSpec(g.aircraft):null;
     g.cap=_sp?((_sp.seats||[]).length-1-(((_sp.removedSeats)||[]).length)):null;   // seats minus PIC + removed
     g.over=(g.cap!=null)&&((gbd.a+gbd.c)>g.cap);
-    var _manP=(S._schedPilots||{})[g.key]||null;
+    // A manual pin that DOUBLE-BOOKS the pilot (flagged in _schedPilotConflict) is impossible, so we
+    // ignore it here and fall through to the conflict-free auto pilot the allocator picked.
+    var _pinConf=(S._schedPilotConflict||{})[g.key];
+    var _manP=_pinConf?null:((S._schedPilots||{})[g.key]||null);
     var _autoP=((S._schedAutoPilots||{})[g.key])||((typeof _schedAutoPilotFor==='function')?_schedAutoPilotFor(g.aircraft,g.start):null);
     var pilot=_manP||_autoP||null;
     g.bd=gbd;g.pilot=pilot;g.pilotAuto=(!_manP&&!!_autoP);g.pilotChanged=(!!_manP&&!!_autoP&&_manP!==_autoP);g.pilotAutoWas=_autoP;
@@ -1367,9 +1370,10 @@ function _rzRenderSchedule(){
       var _forcedIcon=_fc.length?'<span title="'+_rzEsc(_fc.join(' · '))+'" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#f59e0b" onpointerdown="event.stopPropagation()">✋</span>':'';
       // Pilot auto-allocated (not user-forced) → a small green ⚙ on the block.
       var _autoIcon=(isBk&&b.pilotAuto)?'<span title="Pilot auto-allocated" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#22c55e" onpointerdown="event.stopPropagation()">⚙</span>':'';
-      // Pilot DOUBLE-BOOKED — the same pilot is on another flight that overlaps this one in time.
+      // Pilot pin overridden — the pinned pilot was already on an overlapping departure, so the
+      // allocator auto-assigned a free rated pilot here instead. Amber info (already resolved), not red.
       var _pcfl=isBk&&(S._schedPilotConflict||{})[b.order];
-      var _conflictIcon=_pcfl?'<span title="⚠ '+_rzEsc(_pcfl)+' is double-booked — also flying an overlapping departure. Reassign a pilot on one of them." style="pointer-events:auto;cursor:help;font-size:11px;margin-right:3px;color:#ef4444;font-weight:900" onpointerdown="event.stopPropagation()">⚠</span>':'';
+      var _conflictIcon=_pcfl?'<span title="'+_rzEsc(_pcfl)+' was already flying an overlapping departure, so this flight was auto-assigned a free pilot ('+_rzEsc(b.pilot||'—')+'). Drag a pilot on to change it." style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#f59e0b;font-weight:800" onpointerdown="event.stopPropagation()">⚠</span>':'';
       // Departed (locked) → a small 🛫 marker; the aircraft is pinned for this flight.
       var _departedIcon=(isBk&&typeof _schedDepManualLock==='function'&&_schedDepManualLock(S.rezdyDate,String(b.order||'').split('|')[1]))?'<span title="Departed — aircraft locked" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#22c55e" onpointerdown="event.stopPropagation()">🛫</span>':'';
       blocksH+='<div'+_pdown+(isBk?' data-bkkey="'+_rzEsc(String(b.order))+'"':'')+(_mlvl?' title="'+_rzEsc(_mtip)+'"':' title="Drag to move · drag the top/bottom edge to set departure/return · tap to open"')+' ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
