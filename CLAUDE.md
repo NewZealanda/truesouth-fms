@@ -90,7 +90,23 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.11 (latest)** — **Logbook: co-pilot auto-from-calendar + flight-card notes surfaced.**
+- **v27.18 (latest)** — **whole-day allocator refinement (true whole-day cost, not just greedy).**
+  scheduling.js. Extracted the forward sim into `_schedSimulate(date,opts,forced)` (forced = map of
+  depKey→[ac] to PIN an unlocked departure; empty forced = the exact old greedy). `_schedDayPlan` now
+  runs the greedy then a bounded hill-climb: `_schedDepCandidateSets(date,d)` lists feasible covering
+  aircraft sets (seats≥pax + group-pack, cnt≤3, top 8 cheapest), and each round it tries reassigning ONE
+  unlocked departure, re-costs the ENTIRE day via `_schedSimulate`, and keeps a move only if the verified
+  day TOTAL is strictly cheaper (>$0.5) and paxShort no worse — so it can NEVER be worse than the greedy,
+  it just catches greedy's myopic calls (cheap tail at 0930 that forces a pricey ferry at 1200). Locked/
+  departed deps untouched. Skipped for `opts.maxAircraft` sweeps / `opts.noRefine`. Recursion safe via the
+  existing `_schedAutoBusy` guard. NOTE: it optimises pure $ — if a day still ferries it's because that IS
+  the cheapest by the Route costs; a flexibility/"keep-a-spare" preference would be a separate lever.
+- **v27.17** — session refresh + sync-queue flush on app foreground (mobile sleep pauses the JWT-refresh
+  timer, so an idle phone woke with an expired token and signed loadsheets 401'd into the queue).
+- **v27.16/15/14/13** — iPhone login fixes: removed nested overflow scroll container (standalone tap
+  swallow), full-width email input (programmatic focus suppressed the keyboard), removed card
+  backdrop-filter (iOS touch swallow), FLB flight type added. v27.12 = FLB.
+- **v27.11** — **Logbook: co-pilot auto-from-calendar + flight-card notes surfaced.**
   flightrecord.js. Field is `copilot` (lowercase, existing DB column) — a personal Logbook (`_lbRender`)
   already had a Co-Pilot column but nothing populated it. New `_frCoPilotForAc(ac)` reads the calendar
   co-pilot (`_rzSchedCoPilotFor` over `_schedDayFlights` for that tail) and auto-fills it on the OFF-BLOCKS

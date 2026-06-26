@@ -892,7 +892,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.17';
+const APP_VER='v27.18';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -22393,8 +22393,13 @@ window.schedToggleLock=function(date,time){
   _schedSave();if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
 };
 
-function _schedDayPlan(date,opts){
-  opts=opts||{};var maxAc=(opts.maxAircraft!=null)?opts.maxAircraft:Infinity;
+// The forward, resource-aware simulation for one day. `forced` (optional) maps a departure KEY → an
+// array of aircraft ids to USE for that UNLOCKED departure instead of the cost-greedy pick. With no
+// forced map this is EXACTLY the original greedy. The whole-day refinement (in _schedDayPlan) feeds
+// candidate assignments through here and re-costs the entire day, so the day total it returns already
+// includes every loaded leg + every empty ferry the assignment implies.
+function _schedSimulate(date,opts,forced){
+  opts=opts||{};forced=forced||{};var maxAc=(opts.maxAircraft!=null)?opts.maxAircraft:Infinity;
   var deps=_schedDayDepartures(date);
   var freeAt={},everUsed={},plan=[],cost=0,loadedLegs=0,emptyLegs=0,paxShort=0,usedAtTime={};
   // Projected hours-to-the-next-check per aircraft, decremented as the day's flights are assigned.
@@ -22429,7 +22434,17 @@ function _schedDayPlan(date,opts){
       var out=(freeAt[f.ac]!=null&&freeAt[f.ac]>dm);
       return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,isNew:!everUsed[f.ac],ll:ll,el:el,inc:2*ll+(out?2*el:0)};})
       .filter(function(c){return !(c.reused&&_schedNoFerry(c.ac));});   // no-ferry aircraft can't be repositioned (empty leg)
-    var chosen=_schedPlanPick(d.pax,cand,maxNew,d.groups);
+    var chosen;var fset=forced[d.key];
+    if(fset&&fset.length){
+      // Forced assignment from the refinement — use only the forced tails still VALID this departure
+      // (serviceable, free at this time, within maintenance hours). Any that aren't drop out, which
+      // lowers capacity → paxShort rises → the refinement rejects the move. Same cand objects, so the
+      // reuse/ferry cost is computed identically to the greedy.
+      var _byAc={};cand.forEach(function(c){_byAc[c.ac]=c;});
+      chosen=fset.map(function(ac){return _byAc[ac];}).filter(Boolean);
+    } else {
+      chosen=_schedPlanPick(d.pax,cand,maxNew,d.groups);
+    }
     var depAc=[];var depCap=0;
     chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+_schedDepDurMin(d);_ut[c.ac]=1;_mxUse(c.ac,_schedDepFltHrs(d.dests,c.airvan));depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
       loadedLegs+=2;cost+=2*c.ll;if(c.reused){emptyLegs+=2;cost+=2*c.el;}});
@@ -22438,6 +22453,57 @@ function _schedDayPlan(date,opts){
   });
   var acUsed=Object.keys(everUsed);
   return {date:date,departures:plan,cost:Math.round(cost),loadedLegs:loadedLegs,emptyLegs:emptyLegs,paxShort:paxShort,aircraftUsed:acUsed,pilotsNeeded:acUsed.length};
+}
+// Feasible aircraft SETS that could cover one departure (seats ≥ pax AND every booking group packs
+// whole), cheapest static route cost first. The refinement re-costs each through _schedSimulate so the
+// real winner accounts for ferries too. Capped so it's cheap; only single-time aircraft are eligible.
+function _schedDepCandidateSets(date,d){
+  var fleet=_schedFleetFor(date,d.time);var n=fleet.length;if(!n)return [];
+  if(n>14){fleet=fleet.slice(0,14);n=14;}
+  var groups=d.groups||[];var out=[];
+  for(var mask=1;mask<(1<<n);mask++){
+    var caps=[],acs=[],cap=0,cost=0,cnt=0;
+    for(var i=0;i<n;i++)if(mask&(1<<i)){var f=fleet[i];acs.push(f.ac);caps.push(f.cap);cap+=f.cap;cost+=f.cost;cnt++;}
+    if(cnt>3)continue;                         // a single departure realistically never needs >3 tails
+    if(cap<d.pax)continue;
+    if(typeof _schedCanPack==='function'&&!_schedCanPack(caps,groups))continue;
+    out.push({acs:acs,cost:cost,cnt:cnt});
+  }
+  out.sort(function(a,b){return (a.cost-b.cost)||(a.cnt-b.cnt);});
+  return out.slice(0,8).map(function(o){return o.acs;});
+}
+// Whole-day plan = the greedy forward sim, then a bounded WHOLE-DAY refinement: hill-climb by
+// reassigning ONE unlocked departure at a time to a feasible aircraft set, re-cost the ENTIRE day,
+// and keep a move only if the verified day TOTAL is strictly cheaper (and pax-short no worse). Because
+// every kept move lowers the total, the result is never worse than the greedy — it just catches cases
+// the greedy misses, e.g. committing a cheap Airvan at 0930 that then forces a pricey empty ferry at
+// 1200 when SDB-at-0930 + a caravan-at-1200 is cheaper overall. Locked/departed departures are never
+// touched (their aircraft stay exactly as flown). To skip refinement pass opts.maxAircraft (the cap
+// sweep) or opts.noRefine.
+function _schedDayPlan(date,opts){
+  opts=opts||{};
+  var base=_schedSimulate(date,opts,{});
+  if(opts.noRefine||opts.maxAircraft!=null)return base;   // cap-sweeps / explicit opt-out keep the raw greedy
+  // Pre-compute the candidate sets per unlocked departure (stable across rounds — keyed by dep).
+  var candCache={};base.departures.forEach(function(d){if(!d.locked)candCache[d.key]=_schedDepCandidateSets(date,d);});
+  var best=base,forced={};
+  for(var round=0;round<6;round++){
+    var move=null;
+    best.departures.forEach(function(d){
+      if(d.locked)return;
+      var sets=candCache[d.key]||[];if(sets.length<2)return;
+      var curKey=d.aircraft.map(function(a){return a.ac;}).slice().sort().join(',');
+      for(var si=0;si<sets.length;si++){
+        var set=sets[si];if(set.slice().sort().join(',')===curKey)continue;
+        var f={};Object.keys(forced).forEach(function(k){f[k]=forced[k];});f[d.key]=set;
+        var sim=_schedSimulate(date,opts,f);
+        if(sim.paxShort<=best.paxShort&&sim.cost<best.cost-0.5&&(!move||sim.cost<move.cost))move={key:d.key,set:set,cost:sim.cost,plan:sim};
+      }
+    });
+    if(!move)break;
+    forced[move.key]=move.set;best=move.plan;
+  }
+  return best;
 }
 
 // ── Pilots (roster + manual call-in/override extras) ───────────────────────────
