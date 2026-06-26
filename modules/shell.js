@@ -307,7 +307,10 @@ function render(){
   const _aeField=_ae?.dataset?.field;
   const _aeSS=_ae?.selectionStart??null;
   const _aeSE=_ae?.selectionEnd??null;
-  if(!S.user){
+  // Keep the loading overlay up for the WHOLE session-restore — even after S.user is set but before
+  // _appLoading is flipped on (the window during _reloadCoreTables). Without the _authRestoring clause
+  // a render in that gap fell through and briefly flashed the app, then the mountains came back.
+  if(!S.user||S._authRestoring){
     // Show login overlay, hide app
     let lo=document.getElementById('login-overlay');
     if(!lo){

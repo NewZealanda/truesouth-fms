@@ -940,7 +940,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.45';
+const APP_VER='v27.46';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3596,7 +3596,10 @@ function render(){
   const _aeField=_ae?.dataset?.field;
   const _aeSS=_ae?.selectionStart??null;
   const _aeSE=_ae?.selectionEnd??null;
-  if(!S.user){
+  // Keep the loading overlay up for the WHOLE session-restore — even after S.user is set but before
+  // _appLoading is flipped on (the window during _reloadCoreTables). Without the _authRestoring clause
+  // a render in that gap fell through and briefly flashed the app, then the mountains came back.
+  if(!S.user||S._authRestoring){
     // Show login overlay, hide app
     let lo=document.getElementById('login-overlay');
     if(!lo){
