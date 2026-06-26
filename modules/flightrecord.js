@@ -37,6 +37,17 @@ function _frAeroCode(icao){icao=String(icao||'').trim().toUpperCase();return /^N
 // too short alone.
 function _frFmtTime(v){v=String(v==null?'':v).trim();if(/^\d{1,2}:\d{2}$/.test(v))return v;var d=v.replace(/\D/g,'');if(d.length===4)return d.slice(0,2)+':'+d.slice(2);if(d.length===3)return '0'+d.slice(0,1)+':'+d.slice(1);return v;}
 function _frAcHours(ac){try{return (typeof maintGetLatest==='function')?maintGetLatest(ac):null;}catch(e){return null;}}
+// Start TTIS for the NEXT flight card on an aircraft = the latest SHUTDOWN (endHours) already recorded
+// for that aircraft on the date, so successive flights through the day chain on from each other (the
+// maintenance number is only updated at end of day). Falls back to the maintenance latest (airswitch)
+// for the day's FIRST flight, when no flight has shut down yet.
+function _frNextStartHours(ac,date){
+  if(!ac)return _frAcHours(ac);
+  date=date||_frToday();
+  var last=null;
+  Object.keys(S._frData||{}).forEach(function(id){var r=(S._frData||{})[id];if(!r||r.aircraft!==ac||r.fr_date!==date)return;if(r.endHours==null||r.endHours==='')return;var e=+r.endHours;if(isFinite(e)&&(last==null||e>last))last=e;});
+  return (last!=null)?last:_frAcHours(ac);
+}
 function _frEsc(s){if(typeof _rzEscSafe==='function')return _rzEscSafe(s);if(typeof esc==='function')return esc(s);return String(s==null?'':s);}
 // Escape a value to sit safely inside a single-quoted JS string literal within a double-quoted onclick attribute.
 function _frJs(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');}
@@ -152,9 +163,10 @@ function _frNewId(){return 'fr_'+Date.now()+'_'+Math.floor(Math.random()*1e4);}
 window.frTab=function(t){S._frTab=t;render();};
 window.frUseFlight=function(ac,prod,from,to,pob,manual){
   var prev=S._frDraft||{};
-  // Keep an already-entered start TTIS when re-selecting the SAME aircraft; only pull the
-  // maintenance latest when the aircraft actually changes (different airframe).
-  var hrs=(prev.ac===ac&&prev.startHours!=null&&prev.startHours!=='')?prev.startHours:_frAcHours(ac);
+  // Keep an already-entered start TTIS when re-selecting the SAME aircraft; otherwise chain from the
+  // aircraft's last shutdown today (so flight 2+ start where flight 1 finished), falling back to the
+  // maintenance latest for the day's first flight.
+  var hrs=(prev.ac===ac&&prev.startHours!=null&&prev.startHours!=='')?prev.startHours:_frNextStartHours(ac);
   S._frDraft={ac:ac||'',product:prod||'',from:from||'',to:to||'',pob:(pob!=null?+pob:1),startHours:(hrs!=null?hrs:''),manual:!!manual};
   render();
 };
@@ -215,7 +227,7 @@ window.frToggleSettings=function(){S._frSettingsOpen=!S._frSettingsOpen;render()
 window.frAddManual=function(){
   var date=S._frRecDate||_frToday();
   var ac=S._frRecAc||_frAcList()[0]||'';
-  var hrs=_frAcHours(ac);
+  var hrs=_frNextStartHours(ac,date);
   var rec={id:_frNewId(),user_id:(S.user&&S.user.id)||'',fr_date:date,aircraft:ac,type:_frAcType(ac),product:'',from:'QN',to:'',pob:1,off:'',on:'',startHours:(hrs!=null?hrs:''),endHours:null,flightTime:null,tacho:null,landings:1,starts:1,manual:true,note:'',done:true,submitted:false,at:new Date().toISOString()};
   _frSave(rec);S._frEditId=rec.id;S._frDelConfirm=null;S._frPage='record';
   if(typeof toast==='function')toast('New manual flight — fill in PIC, times & TTIS, then Save','ok');
@@ -512,7 +524,7 @@ function _frRenderStart(uid){
   var tab=S._frTab||(flights.length?'auto':'manual');
   if(tab==='auto'&&!flights.length)tab='manual';
   // No draft yet on the auto tab → preload it from the auto-picked flight so OFF BLOCKS is one tap.
-  if(!S._frDraft&&tab==='auto'&&flights.length){var f=_frAutoPick(flights);if(f)S._frDraft={ac:f.ac,product:f.prod,from:f.from,to:f.to,pob:f.pob,startHours:(_frAcHours(f.ac)!=null?_frAcHours(f.ac):''),manual:false};}
+  if(!S._frDraft&&tab==='auto'&&flights.length){var f=_frAutoPick(flights);if(f){var _ns=_frNextStartHours(f.ac);S._frDraft={ac:f.ac,product:f.prod,from:f.from,to:f.to,pob:f.pob,startHours:(_ns!=null?_ns:''),manual:false};}}
   var d=S._frDraft||{};
   var h='<div class="card"><div class="st">Start a flight <span style="font-weight:400;font-size:11px;color:var(--text3)">— '+_frEsc(new Date().toLocaleDateString('en-NZ',{weekday:'long',day:'numeric',month:'short'}))+'</span></div>';
   var tabs=[{id:'auto',lbl:'This flight'},{id:'today',lbl:'Today’s flights'},{id:'manual',lbl:'Manual'}];
@@ -549,7 +561,7 @@ function _frRenderDraftForm(d,manual){
   // Aircraft (big tap grid)
   h+='<div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:6px 0 6px">Aircraft</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-bottom:14px">';
-  _frAcList().forEach(function(ac){h+=_frBigBtn(_frAcShort(ac),d.ac===ac,"window.frUseFlight('"+_frJs(ac)+"','"+_frJs(d.product||'')+"','"+_frJs(d.from||'')+"','"+_frJs(d.to||'')+"',"+(+d.pob||1)+","+(manual?'true':'false')+")",_frAcHours(ac)!=null?(+_frAcHours(ac)).toFixed(1)+'h':'',_frAcCol(ac));});
+  _frAcList().forEach(function(ac){var _ns=_frNextStartHours(ac);h+=_frBigBtn(_frAcShort(ac),d.ac===ac,"window.frUseFlight('"+_frJs(ac)+"','"+_frJs(d.product||'')+"','"+_frJs(d.from||'')+"','"+_frJs(d.to||'')+"',"+(+d.pob||1)+","+(manual?'true':'false')+")",_ns!=null?(+_ns).toFixed(1)+'h':'',_frAcCol(ac));});
   h+='</div>';
   // Product
   h+='<div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:6px 0 6px">Flight type</div>';

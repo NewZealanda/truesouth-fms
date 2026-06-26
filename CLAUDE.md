@@ -90,7 +90,13 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.05 (latest)** — **explicit "Mark departed" (lock + PIN), fixes lock-then-refresh dumping past
+- **v27.06 (latest)** — **flight cards chain start TTIS from the last shutdown.** New
+  `_frNextStartHours(ac,date)` (flightrecord.js) returns the highest `endHours` already recorded for that
+  aircraft on the date, falling back to `_frAcHours`=`maintGetLatest` (the maintenance/airswitch number)
+  for the day's FIRST flight. Used by `frUseFlight` (draft), `frAddManual`, the auto-pick draft, and the
+  aircraft-button hours hint — so flight 2+ start where flight 1 finished instead of resetting to the
+  maintenance number each time. (Maintenance number still only advances at end-of-day submit.)
+- **v27.05** — **explicit "Mark departed" (lock + PIN), fixes lock-then-refresh dumping past
   departures into Unallocated.** Root cause: `schedToggleLock` only set a lock flag; a locked departure's
   aircraft was still resolved via `_rzBookingAc`→auto, and the auto-allocator returns a different/empty
   result for a past departure on the next refresh, so the booking fell into the Unallocated column. Fix:
