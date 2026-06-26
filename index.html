@@ -931,7 +931,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.28';
+const APP_VER='v27.29';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -22023,11 +22023,21 @@ function renderResources(){
       });
       var ferries=dp.emptyLegs/2;
       var ci=_schedCallInAnalysis(sel);
+      // When the chosen plan ferries a tail, cost the alternative that uses only FRESH aircraft (the
+      // "spread") so the operator can SEE why ferrying won — ferry $X vs spread $Y on the live costs.
+      var _nf=(dp.emptyLegs>0)?_schedSimulate(sel,{noReuse:true}):null;
       h+='<div style="font-size:12px;color:var(--text2);margin-top:6px;display:flex;gap:14px;flex-wrap:wrap">'+
         '<span>Est. cost <b style="color:var(--text1)">'+_schedMoney(dp.cost)+'</b> ex GST</span>'+
         '<span>Aircraft <b style="color:var(--text1)">'+dp.aircraftUsed.length+'</b></span>'+
         '<span>Pilots need <b style="color:'+(ci.callIn?'#ef4444':'var(--text1)')+'">'+dp.pilotsNeeded+'</b> · have <b style="color:var(--text1)">'+ci.pilotsAvail+'</b></span>'+
         (dp.emptyLegs?('<span style="color:#f59e0b">'+ferries+' reposition leg'+(ferries===1?'':'s')+'</span>'):'<span style="color:#22c55e">no ferries</span>')+'</div>';
+      if(_nf){
+        h+='<div style="font-size:11px;color:var(--text3);margin-top:4px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">'+
+          (_nf.paxShort<=dp.paxShort
+            ? 'Chosen <b style="color:#22c55e">'+_schedMoney(dp.cost)+'</b> (with ferry) vs spread/no-ferry <b style="color:var(--text2)">'+_schedMoney(_nf.cost)+'</b> · ferrying '+(_nf.cost>dp.cost?'saves <b style="color:#22c55e">'+_schedMoney(_nf.cost-dp.cost)+'</b>':'costs <b style="color:#ef4444">'+_schedMoney(dp.cost-_nf.cost)+'</b> more')
+            : 'A no-ferry "spread" can\'t carry everyone today (would leave <b style="color:#ef4444">'+(_nf.paxShort-dp.paxShort)+'</b> short), so ferrying is required.')+
+          '</div>';
+      }
       if(ci.callIn){
         var savTxt=(ci.saving>0)?('Calling in saves ~<b>'+_schedMoney(ci.saving)+'</b> vs running short.'):((ci.cappedPaxShort>0)?('Without it you can\'t carry <b>'+ci.cappedPaxShort+'</b> pax.'):'Weigh it against running short.');
         h+='<div style="margin-top:8px;padding:9px 11px;border-radius:9px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;font-size:12px;color:var(--text1)">'+
@@ -22529,7 +22539,7 @@ function _schedSimulate(date,opts,forced){
     var cand=fleet.map(function(f){var ll=_schedLoadedLeg(f.ac,d.dest),el=_schedEmptyLeg(f.ac,d.dest);
       var out=(freeAt[f.ac]!=null&&freeAt[f.ac]>dm);
       return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,isNew:!everUsed[f.ac],ll:ll,el:el,inc:2*ll+(out?2*el:0)};})
-      .filter(function(c){return !(c.reused&&_schedNoFerry(c.ac));});   // no-ferry aircraft can't be repositioned (empty leg)
+      .filter(function(c){return !(c.reused&&(_schedNoFerry(c.ac)||opts.noReuse));});   // no-ferry aircraft can't reposition; opts.noReuse = a fresh-tails-only "spread" comparison plan
     var chosen;var fset=forced[d.key];
     if(fset&&fset.length){
       // Forced assignment from the refinement — use only the forced tails still VALID this departure
