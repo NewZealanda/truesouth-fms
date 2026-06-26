@@ -940,7 +940,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.46';
+const APP_VER='v27.47';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -14581,16 +14581,18 @@ function _wxNextDays(date){
   for(var i=1;i<=5;i++){var d=new Date(base);d.setDate(d.getDate()+i);out.push({val:d.toISOString().slice(0,10),label:i===1?'Tomorrow':days[d.getDay()]});}
   return out;
 }
-window.wxOpenDep=function(dep){if(S._wxOpen===dep){S._wxOpen=null;}else{S._wxOpen=dep;var c=_wxCall(dep)||{};S._wxDraft={dep:dep,reason:c.reason||'',nextDay:c.nextDay||'',comment:c.comment||''};}render();};
+function _wxCallReasons(c){return (c&&c.reasons&&c.reasons.length)?c.reasons:((c&&c.reason)?[c.reason]:[]);}   // back-compat with the old single-reason field
+window.wxOpenDep=function(dep){if(S._wxOpen===dep){S._wxOpen=null;}else{S._wxOpen=dep;var c=_wxCall(dep)||{};S._wxDraft={dep:dep,reasons:_wxCallReasons(c).slice(),nextDay:c.nextDay||'',comment:c.comment||''};}render();};
+window.wxToggleReason=function(r){S._wxDraft=S._wxDraft||{};var a=S._wxDraft.reasons||(S._wxDraft.reasons=[]);var i=a.indexOf(r);if(i>=0)a.splice(i,1);else a.push(r);render();};   // multi-select, toggleable
 window.wxDraftSet=function(field,val){S._wxDraft=S._wxDraft||{};S._wxDraft[field]=val;if(field!=='comment')render();};   // comment via oninput → no render (keep focus)
 window.wxSubmit=function(status){
-  var d=S._wxDraft||{};var dep=d.dep;if(!dep)return;
-  if((status==='cancelled'||status==='final')&&!d.reason){if(typeof toast==='function')toast('Pick a reason (cloud/rain/wind/snow/visibility) first.','warn');return;}
+  var d=S._wxDraft||{};var dep=d.dep;if(!dep)return;var reasons=(d.reasons||[]).slice();
+  if((status==='cancelled'||status==='final')&&!reasons.length){if(typeof toast==='function')toast('Pick at least one reason (cloud/rain/wind/snow/visibility) first.','warn');return;}
   S._rzWxCalls=S._rzWxCalls||{};
-  S._rzWxCalls[String(dep)]={status:status,reason:(status==='on'?'':(d.reason||'')),nextDay:(status==='cancelled'?(d.nextDay||''):''),comment:d.comment||'',by:(S.user&&(S.user.name||S.user.email))||'',at:new Date().toISOString()};
+  S._rzWxCalls[String(dep)]={status:status,reasons:(status==='on'?[]:reasons),nextDay:(status==='cancelled'?(d.nextDay||''):''),comment:d.comment||'',by:(S.user&&(S.user.name||S.user.email))||'',at:new Date().toISOString()};
   S._wxOpen=null;S._wxDraft=null;
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();
-  if(typeof auditLog==='function')auditLog('weather_call',{dep:dep,status:status,reason:(d.reason||'')});
+  if(typeof auditLog==='function')auditLog('weather_call',{dep:dep,status:status,reasons:reasons.join(',')});
   if(typeof toast==='function')toast('Weather call recorded: '+_wxStatusLabel(status),status==='cancelled'?'warn':'ok');
   render();
 };
@@ -14648,28 +14650,28 @@ function _rzRenderWeatherCalls(){
     '<button class="btn btn-ghost" style="font-size:12px;padding:6px 12px'+(date===_today?';opacity:.45':'')+'" title="Jump to today" onclick="window.rezdySetDate(\''+_today+'\')">Today</button>'+
   '</div>';
   var deps=loading?[]:_wxDepartures(date);
-  var h=nav+'<div class="card"><div class="st">Weather calls</div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:0 0 8px">'+_rzEsc(_rzDowLabel(date))+' · a weather call is needed ~1h before each departure (an 0800 flight by 0700). Any pilot can record one.</p>';
+  var h=nav+'<div class="card"><div class="st" style="margin-bottom:8px">Weather calls</div>';
   if(loading){h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Loading…</div></div>';return h;}
   if(!deps.length){h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No departures scheduled for this day.</div></div>';return h;}
   var nd=_wxNextDays(date);var draft=S._wxDraft||{};
   deps.forEach(function(dep){
     var call=_wxCall(dep.time);var st=call&&call.status;var col=_wxStatusColor(st);
-    var acStr=dep.acs.map(function(a){return String(a).replace('ZK-','');}).join(', ');
-    var picStr=dep.pics.length?(' · '+dep.pics.join(', ')):'';
+    var acPills=dep.acs.map(function(a){var c=(typeof _rzAcCol==='function')?_rzAcCol(a):'#888';return '<span style="display:inline-block;border:1.5px solid '+c+';color:'+c+';border-radius:8px;padding:0 7px;font-weight:800;font-size:11px;white-space:nowrap">'+_rzEsc(String(a).replace('ZK-',''))+'</span>';}).join(' ');
+    var picStr=dep.pics.length?dep.pics.join(', '):'';
+    var _rs=_wxCallReasons(call);
     var open=S._wxOpen===dep.time;
     h+='<div style="border:1px solid '+(st?col:'var(--border2)')+';border-left:4px solid '+col+';border-radius:10px;margin:8px 0;overflow:hidden">'+
       '<div onclick="window.wxOpenDep(\''+dep.time+'\')" style="display:flex;align-items:center;gap:10px;padding:11px 13px;cursor:pointer">'+
         '<div style="font-weight:800;font-size:15px;color:var(--text1);min-width:54px">'+_rzEsc(dep.time)+'</div>'+
-        '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text2)">'+_rzEsc(dep.prod||'FCF')+' · '+_rzEsc(acStr)+_rzEsc(picStr)+'</div>'+
-          (call?'<div style="font-size:11px;color:var(--text3)">'+_rzEsc(_wxStatusLabel(st))+(call.reason?' — '+_rzEsc(call.reason):'')+(call.nextDay?' · next: '+_rzEsc(_wxDayLabel(call.nextDay,date)):'')+(call.by?' · by '+_rzEsc(call.by):'')+(call.comment?' · “'+_rzEsc(call.comment)+'”':'')+'</div>':'')+
+        '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text2);display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span>'+_rzEsc(dep.prod||'FCF')+'</span>'+acPills+(picStr?'<span style="color:var(--text3);font-weight:600">'+_rzEsc(picStr)+'</span>':'')+'</div>'+
+          (call?'<div style="font-size:11px;color:var(--text3)">'+_rzEsc(_wxStatusLabel(st))+(_rs.length?' — '+_rzEsc(_rs.join(', ')):'')+(call.nextDay?' · next: '+_rzEsc(_wxDayLabel(call.nextDay,date)):'')+(call.by?' · by '+_rzEsc(call.by):'')+(call.comment?' · “'+_rzEsc(call.comment)+'”':'')+'</div>':'')+
         '</div>'+
         '<span style="flex-shrink:0;padding:3px 10px;border-radius:14px;background:'+col+'22;border:1px solid '+col+';color:'+col+';font-size:11px;font-weight:800">'+(st==='on'?'✓ ON':st==='cancelled'?'✕ CXLD':st==='final'?'⚠ FINAL':'— set')+'</span>'+
       '</div>';
     if(open){
       h+='<div style="padding:0 13px 13px;border-top:1px solid var(--border2)">'+
-        '<div style="font-size:11px;color:var(--text3);margin:10px 0 6px">Reason (for cancelled / final):</div>'+
-        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">'+_WX_REASONS.map(function(r){var on=draft.reason===r;return '<button onclick="window.wxDraftSet(\'reason\',\''+r+'\')" style="padding:5px 11px;border-radius:14px;border:1px solid '+(on?'#ef4444':'var(--border2)')+';background:'+(on?'rgba(239,68,68,.15)':'transparent')+';color:'+(on?'#f87171':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer">'+r+'</button>';}).join('')+'</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin:10px 0 6px">Reason (for cancelled / final — tap any that apply):</div>'+
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">'+_WX_REASONS.map(function(r){var on=(draft.reasons||[]).indexOf(r)>=0;return '<button onclick="window.wxToggleReason(\''+r+'\')" style="padding:5px 11px;border-radius:14px;border:1px solid '+(on?'#ef4444':'var(--border2)')+';background:'+(on?'rgba(239,68,68,.15)':'transparent')+';color:'+(on?'#f87171':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer">'+(on?'✓ ':'')+r+'</button>';}).join('')+'</div>'+
         '<div style="font-size:11px;color:var(--text3);margin:0 0 6px">Next best day (if cancelled):</div>'+
         '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">'+nd.map(function(d){var on=draft.nextDay===d.val;return '<button onclick="window.wxDraftSet(\'nextDay\',\''+d.val+'\')" style="padding:5px 11px;border-radius:14px;border:1px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.12)':'transparent')+';color:var(--text2);font-size:12px;font-weight:700;cursor:pointer">'+d.label+'</button>';}).join('')+'</div>'+
         '<textarea oninput="window.wxDraftSet(\'comment\',this.value)" placeholder="Comment (optional)" style="width:100%;box-sizing:border-box;min-height:54px;font-size:14px;padding:9px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px">'+_rzEsc(draft.comment||'')+'</textarea>'+
@@ -23439,7 +23441,7 @@ function renderHomeToday(){
         +'<div style="width:46px;font-weight:800;font-size:14px;color:var(--text1)">'+_sodEsc(f.hhmm)+'</div>'
         +'<span style="display:inline-block;border:1.5px solid '+acCol(f.ac)+';color:'+acCol(f.ac)+';border-radius:9px;padding:1px 7px;font-weight:bold;font-size:10.5px;white-space:nowrap">'+_sodEsc(_sodSh(f.ac))+'</span>'
         +'<span style="flex:1;font-size:12.5px;color:var(--text2)">'+_sodEsc(f.dest||'')+' · <b style="color:var(--text1);font-weight:700">'+_sodEsc(paxH)+'</b></span>'
-        +(function(){if(typeof _wxCall!=='function')return '';var c=_wxCall(f.hhmm);if(!c||!c.status)return '<span title="No weather call yet" style="font-size:11px;color:var(--text3);font-weight:700">⛅</span>';var col=(typeof _wxStatusColor==='function')?_wxStatusColor(c.status):'#94a3b8';var ic=c.status==='on'?'✓ Wx':c.status==='cancelled'?'✕ Wx':'⚠ Wx';return '<span title="'+_sodEsc((typeof _wxStatusLabel==='function'?_wxStatusLabel(c.status):c.status)+(c.reason?' — '+c.reason:''))+'" style="font-size:11px;font-weight:800;color:'+col+';white-space:nowrap">'+ic+'</span>';})()
+        +(function(){if(typeof _wxCall!=='function')return '';var c=_wxCall(f.hhmm);if(!c||!c.status)return '<span title="No weather call yet" style="font-size:11px;color:var(--text3);font-weight:700">⛅</span>';var col=(typeof _wxStatusColor==='function')?_wxStatusColor(c.status):'#94a3b8';var ic=c.status==='on'?'✓ Wx':c.status==='cancelled'?'✕ Wx':'⚠ Wx';var _wr=(typeof _wxCallReasons==='function')?_wxCallReasons(c):(c.reason?[c.reason]:[]);return '<span title="'+_sodEsc((typeof _wxStatusLabel==='function'?_wxStatusLabel(c.status):c.status)+(_wr.length?' — '+_wr.join(', '):''))+'" style="font-size:11px;font-weight:800;color:'+col+';white-space:nowrap">'+ic+'</span>';})()
         +'<span style="font-size:12px">'+pilotH+'</span>'
         +'</div>';
     });
