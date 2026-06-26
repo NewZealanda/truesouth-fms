@@ -90,7 +90,19 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.08 (latest)** — **Today page improvements + Start of Day retired.** Today (`renderHomeToday`,
+- **v27.09 (latest)** — **allocator constraint ranking made explicit + visible.** The cost-aware
+  aircraft/passenger allocator already enforced the hierarchy Andrew wants (confirmed in code, no
+  behaviour change): (1) HARD seat capacity — a subset only qualifies if seats ≥ pax AND every booking
+  group packs whole (`_schedCanPack`); (2) lowest TOTAL DAY cost — `_schedDayPlan` plans every UNLOCKED
+  departure together (route + empty-ferry + SDB/call-in costs), the covering score in `_schedPlanPick`
+  is `[inc, fer, cnt, -pri, cap]` (cost first); (3) aircraft priority ★ (`_schedIsPriority` from
+  `S.maintenance.priority`) is only the `-pri` tiebreak, so it's the FIRST soft rule broken when a
+  cheaper plan needs it; manual pins (`_rzBookingAc`) win above all, locked/departed deps are skipped.
+  Added a visible **"Allocation order"** card in Scheduling settings (4 ranked rules) + a CONSTRAINT
+  RANKING doc comment above `_schedPlanPick`. NOTE: the day plan is a forward resource-aware GREEDY, not
+  a proven global optimum — if specific days allocate sub-optimally, capture them and we can add a
+  bounded whole-day local-search refinement on top.
+- **v27.08** — **Today page improvements + Start of Day retired.** Today (`renderHomeToday`,
   startday.js) now: (1) shows pax SPLIT by type (A/C/i, e.g. "5A 2C 1i") on the headline chip + each
   departure row via `_rzBdCompact`; (2) shows co-pilot beside the PIC on each departure row
   (`_rzSchedCoPilotFor`); (3) has a **Transport · drivers** card listing each vehicle + its driver(s),
