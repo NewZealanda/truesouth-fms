@@ -940,7 +940,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.62';
+const APP_VER='v27.63';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -14295,8 +14295,9 @@ window.rezdyCheckinOpen=function(order){
     var m=(S._rezdyPaxMeta||{})[order]||{};var types=m.types||{};var infantOf=m.infantOf||{};
     var bd=_rzBreakdown(b)||_rzEffBreakdown(b)||{a:0,c:0,i:0};
     var total=Math.max((bd.a||0)+(bd.c||0)+(bd.i||0),parts.length,1);
+    var _def=_rzDefaultTypes(b);
     rows=[];
-    for(var i=0;i<total;i++){var p=parts[i];var t=p?((infantOf[i]!=null)?'infant':(types[i]||_rzAgeType(p))):'adult';rows.push({name:p&&p.name?String(p.name).trim():'',actual:'',type:(t==='infant'?'infant':t==='child'?'child':'adult'),attach:(infantOf[i]!=null&&infantOf[i]<total?infantOf[i]:null),declared:(p?_rzDeclared(p.weight):null)});}
+    for(var i=0;i<total;i++){var p=parts[i];var t=p?((infantOf[i]!=null)?'infant':(types[i]||_def[i]||_rzAgeType(p))):'adult';rows.push({name:p&&p.name?String(p.name).trim():'',actual:'',type:(t==='infant'?'infant':t==='child'?'child':'adult'),attach:(infantOf[i]!=null&&infantOf[i]<total?infantOf[i]:null),declared:(p?_rzDeclared(p.weight):null)});}
   }
   // Every infant needs a host (default to the first non-infant passenger).
   var firstNon=null;for(var k=0;k<rows.length;k++){if(rows[k].type!=='infant'){firstNon=k;break;}}
@@ -14438,6 +14439,22 @@ function _rzCheckinModal(){
 function _rzBreakdown(b){var a=0,c=0,i=0,has=false;((b&&b.items)||[]).forEach(function(it){((it&&it.quantities)||[]).forEach(function(q){has=true;var l=String((q&&q.label)||'').toLowerCase();var v=parseInt(q&&q.value,10)||0;if(/infant/.test(l))i+=v;else if(/child/.test(l))c+=v;else a+=v;});});return has?{a:a,c:c,i:i}:null;}
 // Per-participant type from Rezdy's captured age field (when present).
 function _rzAgeType(p){var a=String((p&&p.age)||'').toLowerCase();if(/infant/.test(a))return 'infant';if(/child/.test(a))return 'child';var n=parseInt(a,10);if(!isNaN(n)){if(n<=2)return 'infant';if(n<13)return 'child';}return 'adult';}
+// Default passenger types for a booking — weight-aware but CONSTRAINED by the booking's declared A/C/i
+// composition (Rezdy quantities). Sort participants heaviest→lightest and fill the ADULT slots first,
+// then CHILD, then INFANT. So a light pax only becomes a child/infant if the booking actually has one
+// (e.g. a 19kg in a 2A2C is a child, not an infant); and the heaviest become adults even if under 50kg
+// when there aren't enough heavier ones (2A2C @ 74/49/23/28 → 74,49 adults · 28,23 children). Falls
+// back to the per-pax age field when the composition is unknown or any participant has no weight.
+function _rzPaxWeightNum(p){var w=parseFloat(String((p&&p.weight)!=null?p.weight:'').replace(/\s*kg$/i,''));return isNaN(w)?null:w;}
+function _rzDefaultTypes(b){
+  var parts=[];((b&&b.items)||[]).forEach(function(it){((it&&it.participants)||[]).forEach(function(p){parts.push(p);});});
+  var out={};var bd=(typeof _rzBreakdown==='function')?_rzBreakdown(b):null;
+  var allW=parts.length>0&&parts.every(function(p){return _rzPaxWeightNum(p)!=null;});
+  if(!bd||(bd.a+bd.c+bd.i)!==parts.length||!allW){parts.forEach(function(p,i){out[i]=_rzAgeType(p);});return out;}
+  var ranked=parts.map(function(p,i){return {i:i,w:_rzPaxWeightNum(p)};}).sort(function(x,y){return y.w-x.w;});  // heaviest first
+  ranked.forEach(function(o,rank){out[o.i]=(rank<bd.a)?'adult':(rank<bd.a+bd.c)?'child':'infant';});
+  return out;
+}
 // Effective A/C/i for a booking: Rezdy's counts by default, but once the operator has manually
 // tagged children/infants in the bookings tab, switch to the per-participant tally so the
 // calendar block and bubble strip both reflect those edits.
@@ -15258,10 +15275,11 @@ function _rzPaxRows(b){
   }
   var parts=[];(b.items||[]).forEach(function(it){(it.participants||[]).forEach(function(p){parts.push(p);});});
   var m=(S._rezdyPaxMeta||{})[order]||{};var infantOf=m.infantOf||{};var types=m.types||{};
+  var _def=_rzDefaultTypes(b);
   var rows=[];
   parts.forEach(function(p,idx){
     if(infantOf[idx]!=null)return; // legacy-folded infant — shown on its host
-    var t=types[idx]||_rzAgeType(p);
+    var t=types[idx]||_def[idx]||_rzAgeType(p);
     var declared=(t==='infant')?null:_rzDeclared(p&&p.weight);
     var infName=null;
     Object.keys(infantOf).forEach(function(ii){if(String(infantOf[ii])===String(idx)){var ip=parts[ii];if(ip&&ip.name)infName=String(ip.name).trim().split(/\s+/)[0];}});
@@ -17255,8 +17273,9 @@ function _rzDeclaredRows(b,order){
   var m=(S._rezdyPaxMeta||{})[order]||{};var types=m.types||{};var infantOf=m.infantOf||{};
   var bd=_rzBreakdown(b)||_rzEffBreakdown(b)||{a:0,c:0,i:0};
   var total=Math.max((bd.a||0)+(bd.c||0)+(bd.i||0),parts.length,1);
+  var _def=(typeof _rzDefaultTypes==='function')?_rzDefaultTypes(b):{};
   var rows=[];
-  for(var i=0;i<total;i++){var p=parts[i];var t=p?((infantOf[i]!=null)?'infant':(types[i]||_rzAgeType(p))):'adult';
+  for(var i=0;i<total;i++){var p=parts[i];var t=p?((infantOf[i]!=null)?'infant':(types[i]||_def[i]||_rzAgeType(p))):'adult';
     rows.push({name:p&&p.name?String(p.name).trim():'',type:(t==='infant'?'infant':t==='child'?'child':'adult'),attach:(infantOf[i]!=null&&infantOf[i]<total?infantOf[i]:null),declared:(p?_rzDeclared(p.weight):null),actual:null});}
   var firstNon=null;for(var k=0;k<rows.length;k++){if(rows[k].type!=='infant'){firstNon=k;break;}}
   rows.forEach(function(r){if(r.type==='infant'&&(r.attach==null||!rows[r.attach]||rows[r.attach].type==='infant'))r.attach=firstNon;});
@@ -19855,7 +19874,15 @@ function _fdActiveUid(){
 }
 
 // ── persistence ──
-window.fdSaveRow=function(uid,ds,patch){
+// Re-render but KEEP the record table's horizontal scroll (the month grid is wider than the screen;
+// a plain render() reset scrollLeft to 0 — "pinging you back to the left" while entering figures).
+function _fdSafeRender(){
+  var el=document.getElementById('fdRecScroll');var sl=el?el.scrollLeft:0;
+  if(typeof safeRender==='function')safeRender();else if(typeof render==='function')render();
+  if(sl)try{requestAnimationFrame(function(){var e2=document.getElementById('fdRecScroll');if(e2)e2.scrollLeft=sl;});}catch(_){}
+}
+window.fdSaveRow=function(uid,ds,patch,opts){
+  opts=opts||{};
   S._fdData=S._fdData||{};var k=_fdKey(uid,ds);
   var cur=S._fdData[k]||{};
   var row=Object.assign({},cur,patch,{by:(S.user&&S.user.name)||'',at:new Date().toISOString()});
@@ -19866,18 +19893,21 @@ window.fdSaveRow=function(uid,ds,patch){
     delete S._fdData[k];
     try{lsSet&&lsSet('ts_flightduty_cache',S._fdData);}catch(e){}
     try{if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flightduty?id=eq.'+encodeURIComponent(k),{method:'DELETE',headers:SH}).catch(function(){});}catch(e){}
-    if(typeof safeRender==='function')safeRender();return;
+    if(!opts.noRender)_fdSafeRender();return;
   }
   S._fdData[k]=row;
   try{lsSet&&lsSet('ts_flightduty_cache',S._fdData);}catch(e){}
   if(typeof sbU==='function')sbU('ts_flightduty',[{id:k,user_id:uid,fd_date:ds,duty_start:row.ds||null,duty_end:row.de||null,flight_time:+row.ft||0,ldg_c208:+row.lc||0,ldg_ga8:+row.lg||0,extended:!!row.ext,override:!!row.ov,override_reason:row.ovr||null,note:row.note||null,updated_at:row.at,updated_by:row.by}]).catch(function(){});
-  if(typeof safeRender==='function')safeRender();
+  if(!opts.noRender)_fdSafeRender();
 };
 window.fdEditField=function(uid,ds,field,value){
   if(value===''||value==null){/* keep blank */}
   else if(field==='lc'||field==='lg')value=Math.max(0,Math.round(+value)||0);   // landings = non-negative integer
   else if(field==='ft')value=Math.max(0,+value||0);                            // flight hours = non-negative
-  var p={};p[field]=value;window.fdSaveRow(uid,ds,p);
+  // Typed number fields (flight hrs / landings) save WITHOUT a re-render so focus + scroll stay put
+  // while you tab between them; the figures still persist and refresh when the row is closed (✓ Done).
+  var noR=(field==='ft'||field==='lc'||field==='lg');
+  var p={};p[field]=value;window.fdSaveRow(uid,ds,p,{noRender:noR});
 };
 // Duty start/end are locked to 15-minute blocks — round the entered time to the nearest quarter hour.
 function _fdHM(t){t=Math.round(t/15)*15;if(t<0)t=0;if(t>=1440)t=1425;return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');}
@@ -19973,8 +20003,8 @@ window.fdShiftMonth=function(dir){
 window.fdSetPilot=function(uid){S._fdPilot=uid;render();};
 window.fdSetTab=function(t){S._fdTab=t;render();};
 window.fdToggleLA=function(){S._fdLA=!S._fdLA;render();};          // look-ahead collapse toggle
-window.fdEditRow=function(ds){S._fdEditRow=ds;render();};          // open a day's row for editing
-window.fdEditDone=function(){S._fdEditRow=null;render();};         // close the editing row
+window.fdEditRow=function(ds){S._fdEditRow=ds;_fdSafeRender();};   // open a day's row for editing
+window.fdEditDone=function(){S._fdEditRow=null;_fdSafeRender();};  // close the editing row (refresh totals)
 
 // Prefill landings for a day from the calendar PIC allocation (best-effort, only for the loaded date).
 window.fdPrefillLandings=function(uid,ds){
@@ -20154,7 +20184,7 @@ function _fdRenderRecord(canManage){
     '<button class="btn btn-ghost" style="font-size:14px;padding:5px 14px" onclick="window.fdShiftMonth(1)">▶</button>'+
     '</div>';
   h+='<div style="font-size:11px;color:var(--text3);padding:0 2px 6px">Tap a day to enter or edit its times, flight hours and landings.</div>';
-  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:'+(516+(showC?58:0)+(showG?58:0))+'px;table-layout:fixed">';
+  h+='<div id="fdRecScroll" class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:'+(516+(showC?58:0)+(showG?58:0))+'px;table-layout:fixed">';
   h+='<colgroup><col style="width:90px"><col style="width:92px"><col style="width:112px"><col style="width:52px"><col style="width:62px"><col style="width:60px">'+(showC?'<col style="width:58px">':'')+(showG?'<col style="width:58px">':'')+'<col style="width:40px"></colgroup>';
   h+='<thead><tr style="background:var(--card2)">'+
     '<th style="text-align:left;padding:7px 8px;font-size:10px;color:var(--text3);font-weight:700">Date</th>'+
@@ -22816,6 +22846,7 @@ function _schedSig(date,bks){
   try{var c=_schedCfg();parts.push('T:'+JSON.stringify(c.pilotOrder||{})+JSON.stringify(c.pilotTie||{}));}catch(e){}
   try{parts.push('MP:'+JSON.stringify(S._schedPilots||{}));}catch(e){}   // manual pilot picks
   try{parts.push('BA:'+JSON.stringify(S._rzBookingAc||{}));}catch(e){}   // manual aircraft moves (so pilots re-allocate)
+  try{parts.push('TW:'+JSON.stringify(S._rzTravelWith||{}));}catch(e){}  // travelling-with links (re-pack linked bookings together)
   return parts.join('|');
 }
 // The pilot a user has MANUALLY picked for an aircraft on the calendar (any of its blocks), or null.
@@ -22958,11 +22989,13 @@ function _schedEnsureAuto(){
     dp.departures.forEach(function(d){
       if(d.locked)return;                            // committed — keep current assignment
       var orders=byKey[d.key]||{};
-      var groupsArr=Object.keys(orders).map(function(o){return {order:o,size:orders[o],inf:!!_infO[o]};});
+      // Travelling-with: merge linked orders into ONE pack group so they share a tail; expand after.
+      var _cls=_schedTwClusters(orders);
+      var groupsArr=_cls.map(function(cl){var size=0,inf=false;cl.forEach(function(o){size+=orders[o]||0;if(_infO[o])inf=true;});return {order:cl[0],size:size,inf:inf,_members:cl};});
       if(!groupsArr.length||!d.aircraft.length)return;
       var chosen=d.aircraft.map(function(a){return {ac:a.ac,cap:a.cap,priority:_schedIsPriority(a.ac)};});
       var packed=_schedPack(groupsArr,chosen);
-      Object.keys(packed).forEach(function(o){map[o]=packed[o];});
+      groupsArr.forEach(function(grp){var ac=packed[grp.order];if(ac==null)return;(grp._members||[grp.order]).forEach(function(o){map[o]=ac;});});
     });
     // ── Flybacks (FLB/CCF return legs) ──────────────────────────────────────────
     // They're skipped above (held in their outbound slot), so they land unallocated. Allocate each by
@@ -23066,6 +23099,17 @@ function _schedEmptyLeg(ac,dest){var f=_schedFerryCost(ac,dest);if(f!=null)retur
 // One departure per (TIME, DESTINATION): a Milford and a Mt Cook at the same time are SEPARATE flights
 // needing separate aircraft — they must never be merged onto one plane. Key = "HH:MM|DEST".
 function _schedDepKeyTD(time,dest){return time+'|'+dest;}
+// "Travelling with" links bookings that must ride the SAME aircraft. Cluster the orders in a departure
+// so linked ones pack as one indivisible group (and end up on one tail). Returns an array of arrays of
+// order ids; an unlinked order is its own singleton cluster.
+function _schedTwClusters(ordersObj){
+  var ords=Object.keys(ordersObj||{});var seen={},out=[];
+  ords.forEach(function(o){if(seen[o])return;var cl=[o];seen[o]=1;var stack=[o];
+    while(stack.length){var cur=stack.pop();var tw=(typeof _rzTwList==='function')?_rzTwList(cur):[];
+      tw.forEach(function(p){p=String(p);if(ordersObj[p]!=null&&!seen[p]){seen[p]=1;cl.push(p);stack.push(p);}});}
+    out.push(cl);});
+  return out;
+}
 function _schedDayDepartures(date){
   var bks=_schedBookingsFor(date);if(!bks)return [];   // not loaded yet (fetch triggered on day-pick)
   var g={};
@@ -23086,7 +23130,7 @@ function _schedDayDepartures(date){
       e.orders[o]=(e.orders[o]||0)+_q;   // per booking group (a group can't be split across aircraft)
     });
   });
-  return Object.keys(g).map(function(k){var e=g[k];e.groups=Object.keys(e.orders).map(function(o){return e.orders[o];});return e;}).sort(function(a,b){var d=(_schedMinOf(a.time)||0)-(_schedMinOf(b.time)||0);return d!==0?d:String(a.dest).localeCompare(String(b.dest));});
+  return Object.keys(g).map(function(k){var e=g[k];e.groups=_schedTwClusters(e.orders).map(function(cl){var s=0;cl.forEach(function(o){s+=e.orders[o]||0;});return s;});return e;}).sort(function(a,b){var d=(_schedMinOf(a.time)||0)-(_schedMinOf(b.time)||0);return d!==0?d:String(a.dest).localeCompare(String(b.dest));});
 }
 // Flight hours for a return to a destination, by type. Milford 1.2/1.1; Mt Cook 2.1/1.8; Franz 2.2/1.9.
 var SCHED_DEST_HRS={MF:{airvan:1.2,caravan:1.1,sdb:1.1},MC:{airvan:2.1,caravan:1.8,sdb:1.8},FJ:{airvan:2.4,caravan:2.0,sdb:2.0},BRA:{airvan:0.5,caravan:0.5,sdb:0.5}};

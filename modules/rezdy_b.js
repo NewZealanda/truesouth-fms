@@ -1716,8 +1716,9 @@ function _rzDeclaredRows(b,order){
   var m=(S._rezdyPaxMeta||{})[order]||{};var types=m.types||{};var infantOf=m.infantOf||{};
   var bd=_rzBreakdown(b)||_rzEffBreakdown(b)||{a:0,c:0,i:0};
   var total=Math.max((bd.a||0)+(bd.c||0)+(bd.i||0),parts.length,1);
+  var _def=(typeof _rzDefaultTypes==='function')?_rzDefaultTypes(b):{};
   var rows=[];
-  for(var i=0;i<total;i++){var p=parts[i];var t=p?((infantOf[i]!=null)?'infant':(types[i]||_rzAgeType(p))):'adult';
+  for(var i=0;i<total;i++){var p=parts[i];var t=p?((infantOf[i]!=null)?'infant':(types[i]||_def[i]||_rzAgeType(p))):'adult';
     rows.push({name:p&&p.name?String(p.name).trim():'',type:(t==='infant'?'infant':t==='child'?'child':'adult'),attach:(infantOf[i]!=null&&infantOf[i]<total?infantOf[i]:null),declared:(p?_rzDeclared(p.weight):null),actual:null});}
   var firstNon=null;for(var k=0;k<rows.length;k++){if(rows[k].type!=='infant'){firstNon=k;break;}}
   rows.forEach(function(r){if(r.type==='infant'&&(r.attach==null||!rows[r.attach]||rows[r.attach].type==='infant'))r.attach=firstNon;});

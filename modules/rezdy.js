@@ -986,8 +986,9 @@ window.rezdyCheckinOpen=function(order){
     var m=(S._rezdyPaxMeta||{})[order]||{};var types=m.types||{};var infantOf=m.infantOf||{};
     var bd=_rzBreakdown(b)||_rzEffBreakdown(b)||{a:0,c:0,i:0};
     var total=Math.max((bd.a||0)+(bd.c||0)+(bd.i||0),parts.length,1);
+    var _def=_rzDefaultTypes(b);
     rows=[];
-    for(var i=0;i<total;i++){var p=parts[i];var t=p?((infantOf[i]!=null)?'infant':(types[i]||_rzAgeType(p))):'adult';rows.push({name:p&&p.name?String(p.name).trim():'',actual:'',type:(t==='infant'?'infant':t==='child'?'child':'adult'),attach:(infantOf[i]!=null&&infantOf[i]<total?infantOf[i]:null),declared:(p?_rzDeclared(p.weight):null)});}
+    for(var i=0;i<total;i++){var p=parts[i];var t=p?((infantOf[i]!=null)?'infant':(types[i]||_def[i]||_rzAgeType(p))):'adult';rows.push({name:p&&p.name?String(p.name).trim():'',actual:'',type:(t==='infant'?'infant':t==='child'?'child':'adult'),attach:(infantOf[i]!=null&&infantOf[i]<total?infantOf[i]:null),declared:(p?_rzDeclared(p.weight):null)});}
   }
   // Every infant needs a host (default to the first non-infant passenger).
   var firstNon=null;for(var k=0;k<rows.length;k++){if(rows[k].type!=='infant'){firstNon=k;break;}}
@@ -1129,6 +1130,22 @@ function _rzCheckinModal(){
 function _rzBreakdown(b){var a=0,c=0,i=0,has=false;((b&&b.items)||[]).forEach(function(it){((it&&it.quantities)||[]).forEach(function(q){has=true;var l=String((q&&q.label)||'').toLowerCase();var v=parseInt(q&&q.value,10)||0;if(/infant/.test(l))i+=v;else if(/child/.test(l))c+=v;else a+=v;});});return has?{a:a,c:c,i:i}:null;}
 // Per-participant type from Rezdy's captured age field (when present).
 function _rzAgeType(p){var a=String((p&&p.age)||'').toLowerCase();if(/infant/.test(a))return 'infant';if(/child/.test(a))return 'child';var n=parseInt(a,10);if(!isNaN(n)){if(n<=2)return 'infant';if(n<13)return 'child';}return 'adult';}
+// Default passenger types for a booking — weight-aware but CONSTRAINED by the booking's declared A/C/i
+// composition (Rezdy quantities). Sort participants heaviest→lightest and fill the ADULT slots first,
+// then CHILD, then INFANT. So a light pax only becomes a child/infant if the booking actually has one
+// (e.g. a 19kg in a 2A2C is a child, not an infant); and the heaviest become adults even if under 50kg
+// when there aren't enough heavier ones (2A2C @ 74/49/23/28 → 74,49 adults · 28,23 children). Falls
+// back to the per-pax age field when the composition is unknown or any participant has no weight.
+function _rzPaxWeightNum(p){var w=parseFloat(String((p&&p.weight)!=null?p.weight:'').replace(/\s*kg$/i,''));return isNaN(w)?null:w;}
+function _rzDefaultTypes(b){
+  var parts=[];((b&&b.items)||[]).forEach(function(it){((it&&it.participants)||[]).forEach(function(p){parts.push(p);});});
+  var out={};var bd=(typeof _rzBreakdown==='function')?_rzBreakdown(b):null;
+  var allW=parts.length>0&&parts.every(function(p){return _rzPaxWeightNum(p)!=null;});
+  if(!bd||(bd.a+bd.c+bd.i)!==parts.length||!allW){parts.forEach(function(p,i){out[i]=_rzAgeType(p);});return out;}
+  var ranked=parts.map(function(p,i){return {i:i,w:_rzPaxWeightNum(p)};}).sort(function(x,y){return y.w-x.w;});  // heaviest first
+  ranked.forEach(function(o,rank){out[o.i]=(rank<bd.a)?'adult':(rank<bd.a+bd.c)?'child':'infant';});
+  return out;
+}
 // Effective A/C/i for a booking: Rezdy's counts by default, but once the operator has manually
 // tagged children/infants in the bookings tab, switch to the per-participant tally so the
 // calendar block and bubble strip both reflect those edits.
@@ -1949,10 +1966,11 @@ function _rzPaxRows(b){
   }
   var parts=[];(b.items||[]).forEach(function(it){(it.participants||[]).forEach(function(p){parts.push(p);});});
   var m=(S._rezdyPaxMeta||{})[order]||{};var infantOf=m.infantOf||{};var types=m.types||{};
+  var _def=_rzDefaultTypes(b);
   var rows=[];
   parts.forEach(function(p,idx){
     if(infantOf[idx]!=null)return; // legacy-folded infant — shown on its host
-    var t=types[idx]||_rzAgeType(p);
+    var t=types[idx]||_def[idx]||_rzAgeType(p);
     var declared=(t==='infant')?null:_rzDeclared(p&&p.weight);
     var infName=null;
     Object.keys(infantOf).forEach(function(ii){if(String(infantOf[ii])===String(idx)){var ip=parts[ii];if(ip&&ip.name)infName=String(ip.name).trim().split(/\s+/)[0];}});

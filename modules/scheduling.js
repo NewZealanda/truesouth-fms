@@ -605,6 +605,7 @@ function _schedSig(date,bks){
   try{var c=_schedCfg();parts.push('T:'+JSON.stringify(c.pilotOrder||{})+JSON.stringify(c.pilotTie||{}));}catch(e){}
   try{parts.push('MP:'+JSON.stringify(S._schedPilots||{}));}catch(e){}   // manual pilot picks
   try{parts.push('BA:'+JSON.stringify(S._rzBookingAc||{}));}catch(e){}   // manual aircraft moves (so pilots re-allocate)
+  try{parts.push('TW:'+JSON.stringify(S._rzTravelWith||{}));}catch(e){}  // travelling-with links (re-pack linked bookings together)
   return parts.join('|');
 }
 // The pilot a user has MANUALLY picked for an aircraft on the calendar (any of its blocks), or null.
@@ -747,11 +748,13 @@ function _schedEnsureAuto(){
     dp.departures.forEach(function(d){
       if(d.locked)return;                            // committed — keep current assignment
       var orders=byKey[d.key]||{};
-      var groupsArr=Object.keys(orders).map(function(o){return {order:o,size:orders[o],inf:!!_infO[o]};});
+      // Travelling-with: merge linked orders into ONE pack group so they share a tail; expand after.
+      var _cls=_schedTwClusters(orders);
+      var groupsArr=_cls.map(function(cl){var size=0,inf=false;cl.forEach(function(o){size+=orders[o]||0;if(_infO[o])inf=true;});return {order:cl[0],size:size,inf:inf,_members:cl};});
       if(!groupsArr.length||!d.aircraft.length)return;
       var chosen=d.aircraft.map(function(a){return {ac:a.ac,cap:a.cap,priority:_schedIsPriority(a.ac)};});
       var packed=_schedPack(groupsArr,chosen);
-      Object.keys(packed).forEach(function(o){map[o]=packed[o];});
+      groupsArr.forEach(function(grp){var ac=packed[grp.order];if(ac==null)return;(grp._members||[grp.order]).forEach(function(o){map[o]=ac;});});
     });
     // ── Flybacks (FLB/CCF return legs) ──────────────────────────────────────────
     // They're skipped above (held in their outbound slot), so they land unallocated. Allocate each by
@@ -855,6 +858,17 @@ function _schedEmptyLeg(ac,dest){var f=_schedFerryCost(ac,dest);if(f!=null)retur
 // One departure per (TIME, DESTINATION): a Milford and a Mt Cook at the same time are SEPARATE flights
 // needing separate aircraft — they must never be merged onto one plane. Key = "HH:MM|DEST".
 function _schedDepKeyTD(time,dest){return time+'|'+dest;}
+// "Travelling with" links bookings that must ride the SAME aircraft. Cluster the orders in a departure
+// so linked ones pack as one indivisible group (and end up on one tail). Returns an array of arrays of
+// order ids; an unlinked order is its own singleton cluster.
+function _schedTwClusters(ordersObj){
+  var ords=Object.keys(ordersObj||{});var seen={},out=[];
+  ords.forEach(function(o){if(seen[o])return;var cl=[o];seen[o]=1;var stack=[o];
+    while(stack.length){var cur=stack.pop();var tw=(typeof _rzTwList==='function')?_rzTwList(cur):[];
+      tw.forEach(function(p){p=String(p);if(ordersObj[p]!=null&&!seen[p]){seen[p]=1;cl.push(p);stack.push(p);}});}
+    out.push(cl);});
+  return out;
+}
 function _schedDayDepartures(date){
   var bks=_schedBookingsFor(date);if(!bks)return [];   // not loaded yet (fetch triggered on day-pick)
   var g={};
@@ -875,7 +889,7 @@ function _schedDayDepartures(date){
       e.orders[o]=(e.orders[o]||0)+_q;   // per booking group (a group can't be split across aircraft)
     });
   });
-  return Object.keys(g).map(function(k){var e=g[k];e.groups=Object.keys(e.orders).map(function(o){return e.orders[o];});return e;}).sort(function(a,b){var d=(_schedMinOf(a.time)||0)-(_schedMinOf(b.time)||0);return d!==0?d:String(a.dest).localeCompare(String(b.dest));});
+  return Object.keys(g).map(function(k){var e=g[k];e.groups=_schedTwClusters(e.orders).map(function(cl){var s=0;cl.forEach(function(o){s+=e.orders[o]||0;});return s;});return e;}).sort(function(a,b){var d=(_schedMinOf(a.time)||0)-(_schedMinOf(b.time)||0);return d!==0?d:String(a.dest).localeCompare(String(b.dest));});
 }
 // Flight hours for a return to a destination, by type. Milford 1.2/1.1; Mt Cook 2.1/1.8; Franz 2.2/1.9.
 var SCHED_DEST_HRS={MF:{airvan:1.2,caravan:1.1,sdb:1.1},MC:{airvan:2.1,caravan:1.8,sdb:1.8},FJ:{airvan:2.4,caravan:2.0,sdb:2.0},BRA:{airvan:0.5,caravan:0.5,sdb:0.5}};

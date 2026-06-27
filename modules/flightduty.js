@@ -150,7 +150,15 @@ function _fdActiveUid(){
 }
 
 // ── persistence ──
-window.fdSaveRow=function(uid,ds,patch){
+// Re-render but KEEP the record table's horizontal scroll (the month grid is wider than the screen;
+// a plain render() reset scrollLeft to 0 — "pinging you back to the left" while entering figures).
+function _fdSafeRender(){
+  var el=document.getElementById('fdRecScroll');var sl=el?el.scrollLeft:0;
+  if(typeof safeRender==='function')safeRender();else if(typeof render==='function')render();
+  if(sl)try{requestAnimationFrame(function(){var e2=document.getElementById('fdRecScroll');if(e2)e2.scrollLeft=sl;});}catch(_){}
+}
+window.fdSaveRow=function(uid,ds,patch,opts){
+  opts=opts||{};
   S._fdData=S._fdData||{};var k=_fdKey(uid,ds);
   var cur=S._fdData[k]||{};
   var row=Object.assign({},cur,patch,{by:(S.user&&S.user.name)||'',at:new Date().toISOString()});
@@ -161,18 +169,21 @@ window.fdSaveRow=function(uid,ds,patch){
     delete S._fdData[k];
     try{lsSet&&lsSet('ts_flightduty_cache',S._fdData);}catch(e){}
     try{if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flightduty?id=eq.'+encodeURIComponent(k),{method:'DELETE',headers:SH}).catch(function(){});}catch(e){}
-    if(typeof safeRender==='function')safeRender();return;
+    if(!opts.noRender)_fdSafeRender();return;
   }
   S._fdData[k]=row;
   try{lsSet&&lsSet('ts_flightduty_cache',S._fdData);}catch(e){}
   if(typeof sbU==='function')sbU('ts_flightduty',[{id:k,user_id:uid,fd_date:ds,duty_start:row.ds||null,duty_end:row.de||null,flight_time:+row.ft||0,ldg_c208:+row.lc||0,ldg_ga8:+row.lg||0,extended:!!row.ext,override:!!row.ov,override_reason:row.ovr||null,note:row.note||null,updated_at:row.at,updated_by:row.by}]).catch(function(){});
-  if(typeof safeRender==='function')safeRender();
+  if(!opts.noRender)_fdSafeRender();
 };
 window.fdEditField=function(uid,ds,field,value){
   if(value===''||value==null){/* keep blank */}
   else if(field==='lc'||field==='lg')value=Math.max(0,Math.round(+value)||0);   // landings = non-negative integer
   else if(field==='ft')value=Math.max(0,+value||0);                            // flight hours = non-negative
-  var p={};p[field]=value;window.fdSaveRow(uid,ds,p);
+  // Typed number fields (flight hrs / landings) save WITHOUT a re-render so focus + scroll stay put
+  // while you tab between them; the figures still persist and refresh when the row is closed (✓ Done).
+  var noR=(field==='ft'||field==='lc'||field==='lg');
+  var p={};p[field]=value;window.fdSaveRow(uid,ds,p,{noRender:noR});
 };
 // Duty start/end are locked to 15-minute blocks — round the entered time to the nearest quarter hour.
 function _fdHM(t){t=Math.round(t/15)*15;if(t<0)t=0;if(t>=1440)t=1425;return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');}
@@ -268,8 +279,8 @@ window.fdShiftMonth=function(dir){
 window.fdSetPilot=function(uid){S._fdPilot=uid;render();};
 window.fdSetTab=function(t){S._fdTab=t;render();};
 window.fdToggleLA=function(){S._fdLA=!S._fdLA;render();};          // look-ahead collapse toggle
-window.fdEditRow=function(ds){S._fdEditRow=ds;render();};          // open a day's row for editing
-window.fdEditDone=function(){S._fdEditRow=null;render();};         // close the editing row
+window.fdEditRow=function(ds){S._fdEditRow=ds;_fdSafeRender();};   // open a day's row for editing
+window.fdEditDone=function(){S._fdEditRow=null;_fdSafeRender();};  // close the editing row (refresh totals)
 
 // Prefill landings for a day from the calendar PIC allocation (best-effort, only for the loaded date).
 window.fdPrefillLandings=function(uid,ds){
@@ -449,7 +460,7 @@ function _fdRenderRecord(canManage){
     '<button class="btn btn-ghost" style="font-size:14px;padding:5px 14px" onclick="window.fdShiftMonth(1)">▶</button>'+
     '</div>';
   h+='<div style="font-size:11px;color:var(--text3);padding:0 2px 6px">Tap a day to enter or edit its times, flight hours and landings.</div>';
-  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:'+(516+(showC?58:0)+(showG?58:0))+'px;table-layout:fixed">';
+  h+='<div id="fdRecScroll" class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:'+(516+(showC?58:0)+(showG?58:0))+'px;table-layout:fixed">';
   h+='<colgroup><col style="width:90px"><col style="width:92px"><col style="width:112px"><col style="width:52px"><col style="width:62px"><col style="width:60px">'+(showC?'<col style="width:58px">':'')+(showG?'<col style="width:58px">':'')+'<col style="width:40px"></colgroup>';
   h+='<thead><tr style="background:var(--card2)">'+
     '<th style="text-align:left;padding:7px 8px;font-size:10px;color:var(--text3);font-weight:700">Date</th>'+
