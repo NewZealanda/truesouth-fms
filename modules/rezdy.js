@@ -1601,6 +1601,76 @@ window.rezdySchedMoveBlock=async function(id,newStart,newAc){
 // drag) opens the flight. Works with mouse and touch.
 function _rzColAcAt(x,y){try{var els=document.elementsFromPoint(x,y);for(var i=0;i<els.length;i++){var a=els[i].getAttribute&&els[i].getAttribute('data-ac');if(a)return a;}}catch(_){}return null;}
 function _rzBlockKeyAt(x,y,exclude){try{var els=document.elementsFromPoint(x,y);for(var i=0;i<els.length;i++){var k=els[i].getAttribute&&els[i].getAttribute('data-bkkey');if(k&&k!==exclude)return k;}}catch(_){}return null;}
+// ── Drag a passenger group (from a block's detail panel) onto the calendar ──────────────────────────
+// Drop on an aircraft COLUMN (the grid) → make that booking its own block on that aircraft at the
+// dropped time. Drop on an aircraft HEADING (data-colhead) → just reassign the aircraft (keep its time).
+// Either way the booking is pulled OUT of any combined block first. (v27.61)
+function _rzDropTargetAt(x,y){
+  try{var els=document.elementsFromPoint(x,y);
+    for(var i=0;i<els.length;i++){if(els[i].getAttribute&&els[i].getAttribute('data-colhead')){return {ac:els[i].getAttribute('data-ac'),head:true};}}
+    for(var j=0;j<els.length;j++){if(els[j].getAttribute&&els[j].getAttribute('data-ac')){return {ac:els[j].getAttribute('data-ac'),head:false,el:els[j]};}}
+  }catch(_){}
+  return null;
+}
+function _rzBookingName(order){var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(order);});return b?(b.customerName||order):order;}
+// Place a booking's flight at a specific clock time (used by the pax-group grid drop): set a dep-time
+// override per flight item (flyback items set their fly-back time instead).
+function _rzSetBookingDepTime(order,hhmm){
+  var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(order);});if(!b)return;
+  S._rzDepTimeOv=S._rzDepTimeOv||{};S._rzFlybackTime=S._rzFlybackTime||{};
+  ((b.items)||[]).forEach(function(it){
+    var prod=_rzProduct(it.product);if(!prod)return;
+    var ot=_rzDepTime(it.startTimeLocal||'');if(!ot)return;var orig=_rzHHMMcolon(ot);
+    if(_rzIsFlyback(prod)){S._rzFlybackTime[_rzFbTimeKey(prod,orig)]=hhmm;}
+    else if(hhmm!==orig){S._rzDepTimeOv[prod+'|'+orig]=hhmm;}else{delete S._rzDepTimeOv[prod+'|'+orig];}
+  });
+}
+window.rzPaxGroupDown=function(e,order){
+  if(e.button!=null&&e.button!==0)return;order=String(order);
+  S._rzPaxDrag={order:order,moved:false,_mins:null};
+  var g=document.getElementById('rzPaxGhost');if(g&&g.parentNode)g.parentNode.removeChild(g);
+  g=document.createElement('div');g.id='rzPaxGhost';
+  g.style.cssText='position:fixed;z-index:9999;pointer-events:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:800;padding:5px 10px;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.35);opacity:.96;transform:translate(-50%,-150%);white-space:nowrap';
+  g.textContent='✈ '+_rzBookingName(order);g.style.left=e.clientX+'px';g.style.top=e.clientY+'px';
+  document.body.appendChild(g);
+  try{if(e.target&&e.target.setPointerCapture)e.target.setPointerCapture(e.pointerId);}catch(_){}
+  document.addEventListener('pointermove',_rzPaxMove,true);
+  document.addEventListener('pointerup',_rzPaxUp,true);
+  document.addEventListener('pointercancel',_rzPaxUp,true);
+  if(e.preventDefault)e.preventDefault();if(e.stopPropagation)e.stopPropagation();
+};
+function _rzPaxMove(e){
+  var st=S._rzPaxDrag;if(!st)return;st.moved=true;
+  var g=document.getElementById('rzPaxGhost');if(g){g.style.left=e.clientX+'px';g.style.top=e.clientY+'px';}
+  _rzClearColHi();
+  var t=_rzDropTargetAt(e.clientX,e.clientY);var ln=document.getElementById('rzDragLine');
+  if(t&&t.ac){
+    try{var els=document.elementsFromPoint(e.clientX,e.clientY);for(var i=0;i<els.length;i++){if(els[i].getAttribute&&els[i].getAttribute('data-ac')===t.ac){els[i].style.boxShadow='inset 0 0 0 2px #7c3aed';S._rzHiCol=els[i];break;}}}catch(_){}
+  }
+  if(t&&!t.head&&t.el&&t.ac!=='__unalloc__'&&t.ac!=='__misc__'){
+    var r=t.el.getBoundingClientRect();var mins=_RZ_SCH_START*60+(e.clientY-r.top)/_RZ_PX_PER_MIN;mins=Math.round(mins/15)*15;mins=Math.max(_RZ_SCH_START*60,Math.min((_RZ_SCH_END*60)-15,mins));st._mins=mins;
+    if(ln){ln.style.top=((mins-_RZ_SCH_START*60)*_RZ_PX_PER_MIN)+'px';ln.style.display='block';var tt=document.getElementById('rzDragLineT');if(tt)tt.textContent=_rzMinToHHMM(mins);}
+  } else { st._mins=null;if(ln)ln.style.display='none'; }
+  if(e.preventDefault)e.preventDefault();
+}
+function _rzPaxUp(e){
+  var st=S._rzPaxDrag;S._rzPaxDrag=null;
+  document.removeEventListener('pointermove',_rzPaxMove,true);
+  document.removeEventListener('pointerup',_rzPaxUp,true);
+  document.removeEventListener('pointercancel',_rzPaxUp,true);
+  var g=document.getElementById('rzPaxGhost');if(g&&g.parentNode)g.parentNode.removeChild(g);
+  _rzClearColHi();var ln=document.getElementById('rzDragLine');if(ln)ln.style.display='none';
+  if(!st||!st.moved)return;
+  var t=_rzDropTargetAt(e.clientX,e.clientY);if(!t||!t.ac)return;
+  var order=st.order;var ac=t.ac;if(ac==='__unalloc__'||ac==='__misc__')ac='__none__';
+  if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();
+  S._rzSchedAttach=S._rzSchedAttach||{};if(S._rzSchedAttach[order])delete S._rzSchedAttach[order];   // pull out of any combined block
+  S._rzBookingAc=S._rzBookingAc||{};S._rzBookingAc[order]=ac;
+  if(!t.head&&st._mins!=null&&ac!=='__none__')_rzSetBookingDepTime(order,_rzMinToHHMM(st._mins));     // grid drop → place at the dropped time
+  if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
+  if(typeof toast==='function')toast(_rzBookingName(order)+' → '+(ac==='__none__'?'Unallocated':String(ac).replace('ZK-',''))+((!t.head&&st._mins!=null&&ac!=='__none__')?' @ '+_rzMinToHHMM(st._mins):'')+' ✓','ok');
+  render();
+}
 window.rzCalDown=function(e,key){
   if(e.button!=null&&e.button!==0)return;
   var meta=(S._rzBlockMeta||{})[key];if(!meta||meta.startMin==null||meta.endMin==null)return; // unparseable time → don't start a drag

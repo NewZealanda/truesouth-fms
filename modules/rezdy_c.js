@@ -1245,6 +1245,7 @@ function _rzRenderSchedule(){
         detailH+='<div style="border-top:1px solid var(--border2);padding-top:8px;margin-top:8px">'+
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
             '<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">'+
+              '<span onpointerdown="window.rzPaxGroupDown(event,\''+ordE+'\')" title="Drag onto the calendar to make a new block, or onto an aircraft heading to reassign" style="cursor:grab;color:var(--text3);font-size:15px;line-height:1;touch-action:none;user-select:none;padding:0 2px">⠿</span>'+
               '<span style="font-weight:700;font-size:13px;color:var(--text1)">'+_rzEsc(b.customerName||ord)+'</span>'+
               '<span style="font-size:11px;font-weight:800;padding:1px 8px;border-radius:10px;background:'+_bc+'22;border:1px solid '+_bc+'66;color:'+_bc+'">'+_rzBdCompact(_e)+' '+_rzEsc(_code)+'</span>'+
               (owing?'<span style="color:#ef4444;font-weight:800;font-size:11px">$ TO PAY</span>':'')+
@@ -1404,7 +1405,7 @@ function _rzRenderSchedule(){
     var _hml=(ac==='__unalloc__'||ac==='__misc__')?null:_rzMaintLevel(ac);
     const lbl=_rzEsc(ac==='__unalloc__'?'Unallocated':(ac==='__misc__'?'Misc  ＋':ac))+(_hml?(' <span style="color:'+(_hml==='block'?'#ef4444':'#f59e0b')+'">⚠</span>'):'');
     var _mc=(ac==='__misc__')?' onclick="window.schedNewMisc()" title="Add a meeting / note" style="cursor:pointer;':((_hml)?' title="'+_rzEsc(_rzMaintTip(ac))+'" style="':' style="');
-    headH+='<div'+_mc+'width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:2px solid '+acCol+';padding:6px 8px;text-align:center;font-weight:800;font-size:12px;color:'+acCol+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lbl+'</div>';
+    headH+='<div data-ac="'+_rzEsc(ac)+'" data-colhead="1"'+_mc+'width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border);border-bottom:2px solid '+acCol+';padding:6px 8px;text-align:center;font-weight:800;font-size:12px;color:'+acCol+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lbl+'</div>';
   });
   headH+='</div>';
 
