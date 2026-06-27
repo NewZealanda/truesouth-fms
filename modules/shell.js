@@ -296,6 +296,9 @@ function render(){
   // ── Nav migration (v26.12): Flight Record / Logbooks / Flight & Duty are now bundled into one
   // 'pilotbag' section as tier-2 tabs. Remap any restored last-view / home-pref / deep link.
   if(S.section==='flightrecord'||S.section==='logbook'||S.section==='flightduty'){S._pilotBagTab=S.section;S.section='pilotbag';}
+  // Business Plan is confidential — re-lock it the moment the user leaves the tab, so it always asks
+  // for the password again on the next visit (gate handled in renderBusinessPlan).
+  if(S.section!=='businessplan'&&S._bizUnlocked){S._bizUnlocked=false;S._bizUnlockErr=null;}
   // ── Remember the current view so a reload returns to the same page ──
   // Gated on S._viewRestored so the default-view renders during boot DON'T overwrite the
   // saved last view before _restoreLastView() has had a chance to read and apply it.

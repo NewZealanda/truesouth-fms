@@ -1236,32 +1236,43 @@ window.onload=()=>{
 </div>
 <script>
 (function(){
-  var startY=0, pulling=false, triggered=false;
+  // Pull-to-refresh, deliberately NOT sensitive: it only engages on a single-finger, mostly-vertical
+  // DOWN drag that starts at the very top of the page. A dead-zone must be cleared before the indicator
+  // even appears, the trigger distance is long, and any horizontal intent (table/calendar scrolling) or
+  // second finger cancels it — so casually scrolling around no longer fires an accidental refresh.
+  var startY=0,startX=0,armed=false,engaged=false,triggered=false;
   var indicator=document.getElementById('ptr-indicator');
   var icon=document.getElementById('ptr-icon');
   var label=document.getElementById('ptr-label');
-  var THRESHOLD=72;
+  var THRESHOLD=130;   // distance to actually trigger a refresh (was 72)
+  var ENGAGE=28;       // dead-zone: pull this far before the indicator starts showing
+  function _top(){return (window.scrollY||window.pageYOffset||0)<=0;}
+  function reset(){engaged=false;indicator.style.height='0';icon.style.transform='rotate(0deg)';}
   document.addEventListener('touchstart',function(e){
-    if(window.scrollY===0){startY=e.touches[0].clientY;pulling=true;triggered=false;}
+    if(e.touches.length!==1||!_top()){armed=false;return;}
+    startY=e.touches[0].clientY;startX=e.touches[0].clientX;armed=true;engaged=false;triggered=false;
   },{passive:true});
   document.addEventListener('touchmove',function(e){
-    if(!pulling||triggered) return;
-    var dy=e.touches[0].clientY-startY;
-    if(dy<=0){indicator.style.height='0';return;}
-    var h=Math.min(dy*0.7,156);
+    if(!armed||triggered)return;
+    if(e.touches.length!==1){armed=false;reset();return;}
+    var dy=e.touches[0].clientY-startY,dx=e.touches[0].clientX-startX;
+    // cancel if no longer at the top, pulling up, or the gesture is at all horizontal
+    if(!_top()||dy<=0||Math.abs(dx)>Math.abs(dy)*0.5){if(engaged)reset();armed=false;return;}
+    if(!engaged){if(dy<ENGAGE)return;engaged=true;}
+    var h=Math.min((dy-ENGAGE)*0.5,150);
     indicator.style.height=h+'px';
     if(dy>=THRESHOLD){icon.style.transform='rotate(180deg)';label.textContent='Release to refresh';}
-    else{icon.style.transform='rotate(0deg)';label.textContent='Pull to refresh';}
+    else{icon.style.transform='rotate(0deg)';label.textContent='Keep pulling to refresh';}
   },{passive:true});
   document.addEventListener('touchend',function(e){
-    if(!pulling) return;
-    pulling=false;
+    if(!armed){return;}armed=false;
+    if(!engaged||triggered){reset();return;}
     var dy=e.changedTouches[0].clientY-startY;
-    if(dy>=THRESHOLD&&!triggered){
-      triggered=true;if(navigator.vibrate)navigator.vibrate(50);icon.textContent='↻';icon.style.transform='rotate(0deg)';
-      label.textContent='Refreshing…';indicator.style.height='156px';
+    if(dy>=THRESHOLD){
+      triggered=true;if(navigator.vibrate)navigator.vibrate(40);icon.textContent='↻';icon.style.transform='rotate(0deg)';
+      label.textContent='Refreshing…';indicator.style.height='150px';
       setTimeout(function(){window.location.reload();},400);
-    } else {indicator.style.height='0';}
+    } else {reset();}
   },{passive:true});
 })();
 </script>

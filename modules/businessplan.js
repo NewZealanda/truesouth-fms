@@ -417,11 +417,44 @@ window.bizSetPnlHead=function(plid,field,m,value){var p=_bizState();var pl=p.pnl
 window.bizSetPnlCell=function(plid,sec,li,m,value){var p=_bizState();var pl=p.pnls.find(function(x){return x.id===plid;});if(!pl||!pl[sec]||!pl[sec][li])return;pl[sec][li].vals[m]=(value===''?0:(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizReset=function(){if(typeof confirm==='function'&&!confirm('Reset the Main Plan to the original spreadsheet values?'))return;S._bizPlan=JSON.parse(JSON.stringify(BIZ_DEFAULT));_bizSave();render();};
 
+// ── password gate (confidential) ──────────────────────────────────────────────────────────────────
+// The Business Plan is re-gated EVERY time the tab is opened: the user must re-enter their own password.
+// _bizUnlocked is cleared whenever they navigate away (in render(), shell.js), so it never stays open.
+// Verification hits Supabase Auth (GoTrue) with the current user's email — the entered password is sent
+// straight to the auth server and the issued tokens are discarded; nothing is stored or compared locally.
+async function _bizVerifyPassword(password){
+  var email=(S.user&&S.user.email)||'';if(!email||!password)return false;
+  try{
+    if(typeof SB==='undefined'||typeof SK==='undefined')return false;
+    var r=await fetch(SB+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({email:email,password:password})});
+    return !!(r&&r.ok);
+  }catch(e){return false;}
+}
+window.bizUnlockSubmit=async function(){
+  if(S._bizUnlocking)return;var el=document.getElementById('bizPw');var pw=el?String(el.value||''):'';
+  if(!pw){S._bizUnlockErr='Enter your password.';if(typeof render==='function')render();return;}
+  S._bizUnlocking=true;S._bizUnlockErr=null;
+  var ok=false;try{ok=await _bizVerifyPassword(pw);}catch(e){ok=false;}
+  S._bizUnlocking=false;
+  if(ok){S._bizUnlocked=true;S._bizUnlockErr=null;}else{S._bizUnlockErr='Incorrect password — try again.';}
+  if(typeof render==='function')render();
+};
+function _bizLockGate(){
+  return '<div class="card" style="max-width:380px;margin:36px auto;text-align:center;padding:28px 24px">'+
+    '<div style="font-size:34px;margin-bottom:6px">🔒</div>'+
+    '<div style="font-size:16px;font-weight:800;color:var(--text1);margin-bottom:4px">Confidential — Business Plan</div>'+
+    '<div style="font-size:12px;color:var(--text3);margin-bottom:16px">Re-enter your password to view this section.</div>'+
+    '<input id="bizPw" type="password" autocomplete="current-password" placeholder="Password" onkeydown="if(event.key===\'Enter\'){event.preventDefault();window.bizUnlockSubmit();}" style="width:100%;box-sizing:border-box;font-size:16px;padding:11px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:9px;text-align:center">'+
+    (S._bizUnlockErr?'<div style="color:#ef4444;font-size:12px;font-weight:700;margin-top:8px">'+S._bizUnlockErr+'</div>':'')+
+    '<button onclick="window.bizUnlockSubmit()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:var(--accent,#7c3aed);color:#fff;font-size:14px;font-weight:800;cursor:pointer">'+(S._bizUnlocking?'Checking…':'🔓 Unlock')+'</button>'+
+  '</div>';
+}
 // ── render ──
 function renderBusinessPlan(){
-  if(!S._bizLoaded){S._bizLoaded=true;if(window.loadBusinessPlan)window.loadBusinessPlan();}
   if(!(typeof hasRolePerm==='function'&&hasRolePerm('businessplan'))&&!(S.user&&S.user.superAdmin))
     return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+  if(!S._bizUnlocked)return _bizLockGate();                         // confidential — require password each visit
+  if(!S._bizLoaded){S._bizLoaded=true;if(window.loadBusinessPlan)window.loadBusinessPlan();}
   // Acquisition / Loan schedules / Loan timeline / FY Budgets / P&L are hidden for now (to be rebuilt
   // properly) — their render code is kept dormant below. Active tabs: Running costs, Pax tracker, Pay rates.
   var tabs=[{id:'pax',lbl:'Pax tracker'},{id:'running',lbl:'Running costs'},{id:'roster',lbl:'Pay rates'}];

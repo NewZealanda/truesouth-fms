@@ -940,7 +940,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.63';
+const APP_VER='v27.64';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3585,6 +3585,9 @@ function render(){
   // ── Nav migration (v26.12): Flight Record / Logbooks / Flight & Duty are now bundled into one
   // 'pilotbag' section as tier-2 tabs. Remap any restored last-view / home-pref / deep link.
   if(S.section==='flightrecord'||S.section==='logbook'||S.section==='flightduty'){S._pilotBagTab=S.section;S.section='pilotbag';}
+  // Business Plan is confidential — re-lock it the moment the user leaves the tab, so it always asks
+  // for the password again on the next visit (gate handled in renderBusinessPlan).
+  if(S.section!=='businessplan'&&S._bizUnlocked){S._bizUnlocked=false;S._bizUnlockErr=null;}
   // ── Remember the current view so a reload returns to the same page ──
   // Gated on S._viewRestored so the default-view renders during boot DON'T overwrite the
   // saved last view before _restoreLastView() has had a chance to read and apply it.
@@ -10853,32 +10856,43 @@ window.onload=()=>{
 </div>
 <script>
 (function(){
-  var startY=0, pulling=false, triggered=false;
+  // Pull-to-refresh, deliberately NOT sensitive: it only engages on a single-finger, mostly-vertical
+  // DOWN drag that starts at the very top of the page. A dead-zone must be cleared before the indicator
+  // even appears, the trigger distance is long, and any horizontal intent (table/calendar scrolling) or
+  // second finger cancels it — so casually scrolling around no longer fires an accidental refresh.
+  var startY=0,startX=0,armed=false,engaged=false,triggered=false;
   var indicator=document.getElementById('ptr-indicator');
   var icon=document.getElementById('ptr-icon');
   var label=document.getElementById('ptr-label');
-  var THRESHOLD=72;
+  var THRESHOLD=130;   // distance to actually trigger a refresh (was 72)
+  var ENGAGE=28;       // dead-zone: pull this far before the indicator starts showing
+  function _top(){return (window.scrollY||window.pageYOffset||0)<=0;}
+  function reset(){engaged=false;indicator.style.height='0';icon.style.transform='rotate(0deg)';}
   document.addEventListener('touchstart',function(e){
-    if(window.scrollY===0){startY=e.touches[0].clientY;pulling=true;triggered=false;}
+    if(e.touches.length!==1||!_top()){armed=false;return;}
+    startY=e.touches[0].clientY;startX=e.touches[0].clientX;armed=true;engaged=false;triggered=false;
   },{passive:true});
   document.addEventListener('touchmove',function(e){
-    if(!pulling||triggered) return;
-    var dy=e.touches[0].clientY-startY;
-    if(dy<=0){indicator.style.height='0';return;}
-    var h=Math.min(dy*0.7,156);
+    if(!armed||triggered)return;
+    if(e.touches.length!==1){armed=false;reset();return;}
+    var dy=e.touches[0].clientY-startY,dx=e.touches[0].clientX-startX;
+    // cancel if no longer at the top, pulling up, or the gesture is at all horizontal
+    if(!_top()||dy<=0||Math.abs(dx)>Math.abs(dy)*0.5){if(engaged)reset();armed=false;return;}
+    if(!engaged){if(dy<ENGAGE)return;engaged=true;}
+    var h=Math.min((dy-ENGAGE)*0.5,150);
     indicator.style.height=h+'px';
     if(dy>=THRESHOLD){icon.style.transform='rotate(180deg)';label.textContent='Release to refresh';}
-    else{icon.style.transform='rotate(0deg)';label.textContent='Pull to refresh';}
+    else{icon.style.transform='rotate(0deg)';label.textContent='Keep pulling to refresh';}
   },{passive:true});
   document.addEventListener('touchend',function(e){
-    if(!pulling) return;
-    pulling=false;
+    if(!armed){return;}armed=false;
+    if(!engaged||triggered){reset();return;}
     var dy=e.changedTouches[0].clientY-startY;
-    if(dy>=THRESHOLD&&!triggered){
-      triggered=true;if(navigator.vibrate)navigator.vibrate(50);icon.textContent='↻';icon.style.transform='rotate(0deg)';
-      label.textContent='Refreshing…';indicator.style.height='156px';
+    if(dy>=THRESHOLD){
+      triggered=true;if(navigator.vibrate)navigator.vibrate(40);icon.textContent='↻';icon.style.transform='rotate(0deg)';
+      label.textContent='Refreshing…';indicator.style.height='150px';
       setTimeout(function(){window.location.reload();},400);
-    } else {indicator.style.height='0';}
+    } else {reset();}
   },{passive:true});
 })();
 </script>
@@ -21577,11 +21591,44 @@ window.bizSetPnlHead=function(plid,field,m,value){var p=_bizState();var pl=p.pnl
 window.bizSetPnlCell=function(plid,sec,li,m,value){var p=_bizState();var pl=p.pnls.find(function(x){return x.id===plid;});if(!pl||!pl[sec]||!pl[sec][li])return;pl[sec][li].vals[m]=(value===''?0:(+value));_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizReset=function(){if(typeof confirm==='function'&&!confirm('Reset the Main Plan to the original spreadsheet values?'))return;S._bizPlan=JSON.parse(JSON.stringify(BIZ_DEFAULT));_bizSave();render();};
 
+// ── password gate (confidential) ──────────────────────────────────────────────────────────────────
+// The Business Plan is re-gated EVERY time the tab is opened: the user must re-enter their own password.
+// _bizUnlocked is cleared whenever they navigate away (in render(), shell.js), so it never stays open.
+// Verification hits Supabase Auth (GoTrue) with the current user's email — the entered password is sent
+// straight to the auth server and the issued tokens are discarded; nothing is stored or compared locally.
+async function _bizVerifyPassword(password){
+  var email=(S.user&&S.user.email)||'';if(!email||!password)return false;
+  try{
+    if(typeof SB==='undefined'||typeof SK==='undefined')return false;
+    var r=await fetch(SB+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK},body:JSON.stringify({email:email,password:password})});
+    return !!(r&&r.ok);
+  }catch(e){return false;}
+}
+window.bizUnlockSubmit=async function(){
+  if(S._bizUnlocking)return;var el=document.getElementById('bizPw');var pw=el?String(el.value||''):'';
+  if(!pw){S._bizUnlockErr='Enter your password.';if(typeof render==='function')render();return;}
+  S._bizUnlocking=true;S._bizUnlockErr=null;
+  var ok=false;try{ok=await _bizVerifyPassword(pw);}catch(e){ok=false;}
+  S._bizUnlocking=false;
+  if(ok){S._bizUnlocked=true;S._bizUnlockErr=null;}else{S._bizUnlockErr='Incorrect password — try again.';}
+  if(typeof render==='function')render();
+};
+function _bizLockGate(){
+  return '<div class="card" style="max-width:380px;margin:36px auto;text-align:center;padding:28px 24px">'+
+    '<div style="font-size:34px;margin-bottom:6px">🔒</div>'+
+    '<div style="font-size:16px;font-weight:800;color:var(--text1);margin-bottom:4px">Confidential — Business Plan</div>'+
+    '<div style="font-size:12px;color:var(--text3);margin-bottom:16px">Re-enter your password to view this section.</div>'+
+    '<input id="bizPw" type="password" autocomplete="current-password" placeholder="Password" onkeydown="if(event.key===\'Enter\'){event.preventDefault();window.bizUnlockSubmit();}" style="width:100%;box-sizing:border-box;font-size:16px;padding:11px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:9px;text-align:center">'+
+    (S._bizUnlockErr?'<div style="color:#ef4444;font-size:12px;font-weight:700;margin-top:8px">'+S._bizUnlockErr+'</div>':'')+
+    '<button onclick="window.bizUnlockSubmit()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:var(--accent,#7c3aed);color:#fff;font-size:14px;font-weight:800;cursor:pointer">'+(S._bizUnlocking?'Checking…':'🔓 Unlock')+'</button>'+
+  '</div>';
+}
 // ── render ──
 function renderBusinessPlan(){
-  if(!S._bizLoaded){S._bizLoaded=true;if(window.loadBusinessPlan)window.loadBusinessPlan();}
   if(!(typeof hasRolePerm==='function'&&hasRolePerm('businessplan'))&&!(S.user&&S.user.superAdmin))
     return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+  if(!S._bizUnlocked)return _bizLockGate();                         // confidential — require password each visit
+  if(!S._bizLoaded){S._bizLoaded=true;if(window.loadBusinessPlan)window.loadBusinessPlan();}
   // Acquisition / Loan schedules / Loan timeline / FY Budgets / P&L are hidden for now (to be rebuilt
   // properly) — their render code is kept dormant below. Active tabs: Running costs, Pax tracker, Pay rates.
   var tabs=[{id:'pax',lbl:'Pax tracker'},{id:'running',lbl:'Running costs'},{id:'roster',lbl:'Pay rates'}];
