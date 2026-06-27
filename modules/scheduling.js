@@ -948,6 +948,10 @@ function _schedDepDurMin(d){
   if(dest==='FJ')return 300;             // Franz Josef: ~5h
   return SCHED_BLOCK_MIN;                 // Milford (and default): 4.5h
 }
+// Destinations where the aircraft STAYS at the destination for the whole block (landing tours) and so
+// can't reposition for another departure mid-trip — unlike Milford/Branches, where it drops pax at QN
+// and is free to ferry. A tail away on one of these can't be reused until it's actually back.
+function _schedDestStays(dest){return dest==='MC'||dest==='FJ';}
 function _schedNowMin(){var n=new Date();return n.getHours()*60+n.getMinutes();}
 function _schedLockMap(){var c=_schedCfg();if(!c.locks||typeof c.locks!=='object')c.locks={};return c.locks;}
 // A departure is LOCKED if manually pinned, or (on today) its time has already passed — the
@@ -1018,7 +1022,7 @@ window.schedToggleLock=function(date,time){
 function _schedSimulate(date,opts,forced){
   opts=opts||{};forced=forced||{};var maxAc=(opts.maxAircraft!=null)?opts.maxAircraft:Infinity;
   var deps=_schedDayDepartures(date);
-  var freeAt={},everUsed={},plan=[],cost=0,loadedLegs=0,emptyLegs=0,paxShort=0,usedAtTime={};
+  var freeAt={},freeAtDest={},everUsed={},plan=[],cost=0,loadedLegs=0,emptyLegs=0,paxShort=0,usedAtTime={};
   // Projected hours-to-the-next-check per aircraft, decremented as the day's flights are assigned.
   // An aircraft is only eligible for a departure if the flight would still leave the 0.5h ferry
   // reserve (runLeft − flightHrs ≥ floor). e.g. airvan at −3.2 can do a 1.2h Milford (→ −4.4 ≥ −4.5).
@@ -1034,7 +1038,7 @@ function _schedSimulate(date,opts,forced){
       // Respect the committed aircraft; just position them so the rest of the day plans around it.
       var fixed=_schedDepAssignedAc(date,d.time,d.dest);var ldAc=[],ldCap=0;
       fixed.forEach(function(a){var ll=_schedLoadedLeg(a.ac,d.dest),el=_schedEmptyLeg(a.ac,d.dest);var out=(freeAt[a.ac]!=null&&freeAt[a.ac]>dm);
-        var cap=_schedNum(_schedTail(a.ac).cap)||_schedDefaultCap(a.ac);ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+_schedDepDurMin(d);_ut[a.ac]=1;_mxUse(a.ac,_schedDepFltHrs(d.dests,_schedIsAirvan(a.ac)));
+        var cap=_schedNum(_schedTail(a.ac).cap)||_schedDefaultCap(a.ac);ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+_schedDepDurMin(d);freeAtDest[a.ac]=d.dest;_ut[a.ac]=1;_mxUse(a.ac,_schedDepFltHrs(d.dests,_schedIsAirvan(a.ac)));
         if(ll!=null){loadedLegs+=2;cost+=2*ll;if(out){emptyLegs+=2;cost+=2*el;}}
         ldAc.push({ac:a.ac,cap:cap,reused:out});});
       if(ldCap<d.pax)paxShort+=(d.pax-ldCap);
@@ -1043,7 +1047,14 @@ function _schedSimulate(date,opts,forced){
     }
     // Exclude aircraft already assigned to another flight at this exact time — one plane can't fly two
     // departures at once (this is what stops a Milford and a Mt Cook 0800 sharing an aircraft).
-    var fleet=_schedFleetFor(date,d.time).filter(function(f){return !_ut[f.ac]&&_mxFits(f.ac,_schedDepFltHrs(d.dests,f.airvan));});
+    var fleet=_schedFleetFor(date,d.time).filter(function(f){
+      if(_ut[f.ac])return false;                                            // already flying at this exact time
+      // Still away on an EARLIER trip it can't reposition from in time: a different destination, or a
+      // landing tour (Mt Cook / Franz Josef) where the aircraft stays put — it can't be back in QN for
+      // this departure. (Milford/Branches same-dest reuse is fine — it drops pax and ferries.)
+      if(freeAt[f.ac]!=null&&freeAt[f.ac]>dm&&(freeAtDest[f.ac]!==d.dest||_schedDestStays(d.dest)))return false;
+      return _mxFits(f.ac,_schedDepFltHrs(d.dests,f.airvan));
+    });
     var maxNew=maxAc-Object.keys(everUsed).length;if(maxNew<0)maxNew=0;
     // An aircraft needs a FERRY only if it's still airborne from an earlier load at this departure
     // time (freeAt > now). One that never flew, or already returned to base, is free (fresh rotation).
@@ -1063,7 +1074,7 @@ function _schedSimulate(date,opts,forced){
       chosen=_schedPlanPick(d.pax,cand,maxNew,d.groups);
     }
     var depAc=[];var depCap=0;
-    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+_schedDepDurMin(d);_ut[c.ac]=1;_mxUse(c.ac,_schedDepFltHrs(d.dests,c.airvan));depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
+    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+_schedDepDurMin(d);freeAtDest[c.ac]=d.dest;_ut[c.ac]=1;_mxUse(c.ac,_schedDepFltHrs(d.dests,c.airvan));depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
       loadedLegs+=2;cost+=2*c.ll;if(c.reused){emptyLegs+=2;cost+=2*c.el;}});
     if(depCap<d.pax)paxShort+=(d.pax-depCap);
     plan.push({time:d.time,dest:d.dest,key:d.key,pax:d.pax,aircraft:depAc,cap:depCap,short:depCap<d.pax,locked:false,manualLock:_schedDepManualLock(date,d.time)});
