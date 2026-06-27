@@ -1072,7 +1072,17 @@ function _rzRenderSchedule(){
   Object.keys(bkGroups).forEach(function(k){var g=bkGroups[k];
     for(var i=g.bookings.length-1;i>=0;i--){
       var bk=g.bookings[i];var ord=String(bk.b.orderNumber||'');var tgt=_attach[ord]||_autoAttach[ord];   // manual combine wins, else auto ride-along into a return flight's spare seats
-      if(tgt&&tgt!==k&&bkGroups[tgt]){bkGroups[tgt]._fb.push(bk);g.bookings.splice(i,1);g.pax-=parseInt(bk.it.quantity,10)||0;if(bk.b._owing){}}
+      if(tgt&&tgt!==k&&bkGroups[tgt]){
+        var _qn=parseInt(bk.it.quantity,10)||0;
+        if(_rzIsFlyback(_rzProduct((bk.it&&bk.it.product)||''))){
+          bkGroups[tgt]._fb.push(bk);   // flyback rides the return leg → shown as a "+XA FLB" add-on
+        }else{
+          // any other flight folded in is a TRUE merge → its pax count toward the combined departure
+          bkGroups[tgt].bookings.push(bk);bkGroups[tgt].pax+=_qn;
+          var _bl=parseFloat(bk.b&&bk.b.balanceDue);if(isFinite(_bl)&&_bl>0)bkGroups[tgt].owing=true;
+        }
+        g.bookings.splice(i,1);g.pax-=_qn;
+      }
     }
   });
   Object.keys(bkGroups).forEach(function(k){if(!bkGroups[k].bookings.length)delete bkGroups[k];});
@@ -1240,7 +1250,7 @@ function _rzRenderSchedule(){
               (owing?'<span style="color:#ef4444;font-weight:800;font-size:11px">$ TO PAY</span>':'')+
             '</div>'+
             '<div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">'+
-              (_isFb?'<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.rezdySchedDetach(\''+ordE+'\')" title="Un-combine this flyback">↩ Detach</button>':'')+
+            (((S._rzSchedAttach||{})[ord])?'<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.rezdySchedDetach(\''+ordE+'\')" title="Un-combine this booking">↩ Detach</button>':'')+
               '<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px'+(S._rzAcPickFor===ord?';border-color:var(--accent);color:var(--accent)':'')+'" onclick="event.stopPropagation();window.rezdySchedAcPickToggle(\''+ordE+'\')" title="Move this booking to another aircraft">✈ Change aircraft</button>'+
               '<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px" onclick="window.rezdyGotoBooking(\''+ordE+'\')">View booking →</button>'+
             '</div>'+

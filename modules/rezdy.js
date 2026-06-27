@@ -1508,6 +1508,19 @@ function _rzReassignBlockToAc(src,ac){
   return orders.length;
 }
 function _rzReassignToast(n,ac){if(typeof toast==='function')toast(n+' booking'+(n===1?'':'s')+' → '+(ac==='__unalloc__'?'Unallocated':String(ac).replace('ZK-',''))+' ✓','ok');}
+// COMBINE one calendar block into another: every booking in srcKey folds into the tgtKey flight on the
+// target's aircraft (via S._rzSchedAttach). Works for any block — flight, flyback or departure. A
+// flyback folds in as a returning-leg rider ("+XA FLB"); any other flight is a TRUE merge (pax summed
+// into one departure). Returns how many bookings moved. (v27.60)
+function _rzSchedCombineInto(srcKey,tgtKey){
+  if(!srcKey||!tgtKey||srcKey===tgtKey)return 0;
+  var tgtAc=String(tgtKey).split('|')[0];if(!tgtAc||tgtAc==='__unalloc__'||tgtAc==='__misc__')return 0;
+  var ords=(typeof _rzOrdersForBlockKey==='function')?_rzOrdersForBlockKey(srcKey):[];if(!ords.length)return 0;
+  if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();
+  S._rzSchedAttach=S._rzSchedAttach||{};S._rzBookingAc=S._rzBookingAc||{};
+  ords.forEach(function(o){S._rzSchedAttach[o]=tgtKey;S._rzBookingAc[o]=tgtAc;});
+  return ords.length;
+}
 // Click-to-change a single booking's aircraft from the calendar block detail (the calendar is the
 // source of truth — this user override persists in S._rzBookingAc and flows to the seatmap/loadsheet
 // via _rzBookingAc → acHint). Toggling the picker open/closed is per-order.
@@ -1639,13 +1652,11 @@ function _rzCalUp(e){
     // Resize: drag the TOP edge to set the return (fly-back) time, the BOTTOM edge to set the end.
     if(st.zone==='top'){window.rezdySetFlybackTime(m.prod,m.origStart,hhmm);return;}
     if(st.zone==='bot'){window.rezdySetFlybackEnd(m.prod,m.origStart,hhmm);return;}
-    // Move: dropped onto another flight? → fold this flyback into it (combine), like the old drag did.
+    // Move: dropped onto ANY other block (flight or flyback)? → fold this flyback into it (combine).
     var tgt=_rzBlockKeyAt(e.clientX,e.clientY,m.key);var tgtAc=tgt?String(tgt).split('|')[0]:null;
-    if(tgt&&tgtAc&&tgtAc!=='__unalloc__'&&!_rzIsFlyback(String(tgt).split('|')[2]||'')&&typeof _rzOrdersForBlockKey==='function'){
-      var ords=_rzOrdersForBlockKey(m.key);S._rzSchedAttach=S._rzSchedAttach||{};S._rzBookingAc=S._rzBookingAc||{};
-      if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();
-      ords.forEach(function(o){S._rzSchedAttach[o]=tgt;S._rzBookingAc[o]=tgtAc;});
-      if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();return;
+    if(tgt&&tgtAc&&tgtAc!=='__unalloc__'&&tgtAc!=='__misc__'){
+      var _nf=_rzSchedCombineInto(m.key,tgt);
+      if(_nf){if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();if(typeof toast==='function')toast(_nf+' booking'+(_nf===1?'':'s')+' combined ✓','ok');render();return;}
     }
     // Dropped on an aircraft COLUMN → assign the flyback to that aircraft (its own block), plus set its
     // fly-back time from the drop height. Keyed by the HELD slot (m.origStart) so it round-trips. If a
@@ -1661,6 +1672,16 @@ function _rzCalUp(e){
   }
   if(st.zone==='top'){window.rezdySchedSetEdge(m.prod,m.origStart,'top',hhmm);return;}
   if(st.zone==='bot'){window.rezdySchedSetEdge(m.prod,m.origStart,'bot',hhmm);return;}
+  // Dropped ONTO another block → COMBINE the two into one departure (one aircraft, pax summed). No time
+  // override is recorded — the block simply adopts the target's slot. Dropping on empty space falls
+  // through to the normal move/retime + aircraft-reassign below.
+  var _ctgt=_rzBlockKeyAt(e.clientX,e.clientY,m.key);
+  if(_ctgt&&_ctgt!==m.key){var _ctAc=String(_ctgt).split('|')[0];
+    if(_ctAc&&_ctAc!=='__unalloc__'&&_ctAc!=='__misc__'){
+      var _nc=_rzSchedCombineInto(m.key,_ctgt);
+      if(_nc){if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();if(typeof toast==='function')toast(_nc+' booking'+(_nc===1?'':'s')+' combined ✓','ok');render();return;}
+    }
+  }
   // Move the whole booking block: shift departure (return follows), reassign aircraft if dropped elsewhere.
   var kk=m.prod+'|'+m.origStart;
   S._rzDepTimeOv=S._rzDepTimeOv||{};
