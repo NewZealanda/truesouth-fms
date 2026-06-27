@@ -940,7 +940,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.65';
+const APP_VER='v27.66';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -20434,9 +20434,21 @@ function _frAcHours(ac){try{return (typeof maintGetLatest==='function')?maintGet
 function _frNextStartHours(ac,date){
   if(!ac)return _frAcHours(ac);
   date=date||_frToday();
-  var last=null;
-  Object.keys(S._frData||{}).forEach(function(id){var r=(S._frData||{})[id];if(!r||r.aircraft!==ac||r.fr_date!==date)return;if(r.endHours==null||r.endHours==='')return;var e=+r.endHours;if(isFinite(e)&&(last==null||e>last))last=e;});
-  return (last!=null)?last:_frAcHours(ac);
+  // Look at the most recent airswitch reading available from ANY source — in-memory state AND the local
+  // cache (which holds offline-written records a cloud reload might not have yet) — and chain from the
+  // last SHUTDOWN (or an open flight's start if nothing has shut down). Never regress below the
+  // maintenance/airswitch latest, so a device that briefly went offline can't reset the next start low.
+  var lastEnd=null,lastStart=null;
+  function scan(store){if(!store)return;Object.keys(store).forEach(function(id){var r=store[id];if(!r||r.aircraft!==ac||r.fr_date!==date)return;
+    if(r.endHours!=null&&r.endHours!==''){var e=+r.endHours;if(isFinite(e)&&(lastEnd==null||e>lastEnd))lastEnd=e;}
+    if(r.startHours!=null&&r.startHours!==''){var s=+r.startHours;if(isFinite(s)&&(lastStart==null||s>lastStart))lastStart=s;}
+  });}
+  scan(S._frData);
+  try{if(typeof lsGet==='function'){var c=lsGet('ts_flight_records_cache');if(c&&typeof c==='object'&&c!==S._frData)scan(c);}}catch(e){}
+  var base=(lastEnd!=null)?lastEnd:lastStart;
+  var m=_frAcHours(ac);
+  if(base==null)return m;
+  return (m!=null&&isFinite(+m)&&+m>base)?+m:base;
 }
 // Co-pilot set on the CALENDAR for this aircraft today (the first of its departures that has one), so a
 // flight card / logbook row auto-records the second crew. Returns the pilot CODE (e.g. "MS") or ''.
@@ -20468,7 +20480,13 @@ window.loadFlightRecords=async function(){
     // Pull ALL records (not just this pilot) so the per-aircraft Today's Record shows every PIC's
     // flights — the last PIC reviews the whole day before uploading.
     var rows=await sbF('ts_flight_records','','updated_at');
-    if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.id]={id:r.id,user_id:r.user_id,fr_date:r.fr_date,aircraft:r.aircraft||'',type:r.actype||'',product:r.product||'',from:r.route_from||'',to:r.route_to||'',pob:r.pob||0,off:r.off_blocks||'',on:r.on_blocks||'',startHours:r.start_hours,endHours:r.end_hours,flightTime:r.flight_time,tacho:r.tacho,landings:r.landings||1,starts:r.starts!=null?r.starts:1,picName:r.pic_name||'',copilot:r.copilot||'',details:r.details||'',manual:!!r.manual,note:r.note||'',done:!!r.done,submitted:!!r.submitted,submittedBy:r.submitted_by||'',at:r.updated_at||'',by:r.updated_by||''};});S._frData=d;try{lsSet&&lsSet('ts_flight_records_cache',d);}catch(e){}}
+    if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.id]={id:r.id,user_id:r.user_id,fr_date:r.fr_date,aircraft:r.aircraft||'',type:r.actype||'',product:r.product||'',from:r.route_from||'',to:r.route_to||'',pob:r.pob||0,off:r.off_blocks||'',on:r.on_blocks||'',startHours:r.start_hours,endHours:r.end_hours,flightTime:r.flight_time,tacho:r.tacho,landings:r.landings||1,starts:r.starts!=null?r.starts:1,picName:r.pic_name||'',copilot:r.copilot||'',details:r.details||'',manual:!!r.manual,note:r.note||'',done:!!r.done,submitted:!!r.submitted,submittedBy:r.submitted_by||'',at:r.updated_at||'',by:r.updated_by||''};});
+      // MERGE, don't clobber: keep any LOCAL record the cloud is missing or that's newer than the cloud
+      // copy (e.g. a shutdown written OFFLINE and not yet synced). Replacing outright dropped that record,
+      // which reset the next flight's start TTIS to the maintenance number — the airswitch bug. (v27.66)
+      var _local=S._frData||{},_merged=d;
+      Object.keys(_local).forEach(function(id){var lr=_local[id],cr=d[id];if(!lr)return;if(!cr){_merged[id]=lr;}else if((lr.at||'')>(cr.at||'')){_merged[id]=lr;}});
+      S._frData=_merged;try{lsSet&&lsSet('ts_flight_records_cache',_merged);}catch(e){}}
   }catch(e){}
   if(typeof safeRender==='function')safeRender();
 };
