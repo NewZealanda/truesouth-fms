@@ -897,9 +897,13 @@ function _rzNewBookingModal(){
 }
 // The aircraft assigned to a booking: a manual pill override, else whatever the comments note.
 // The '__none__' sentinel means explicitly unallocated (overrides any comment).
-function _rzBookingAc(b,order){order=String(order);var ov=(S._rzBookingAc||{})[order];if(ov==='__none__')return null;if(ov)return ov;
+function _rzBookingAc(b,order){order=String(order);var ov=(S._rzBookingAc||{})[order];if(ov==='__none__')return null;
+  // Honour a manual pin — but ONLY while that aircraft can fly today. A pin to an aircraft that's been
+  // marked unavailable / in maintenance falls back to auto, so disabling a tail re-homes its bookings
+  // instead of stranding them (the pin is kept, so it's honoured again once the aircraft is back).
+  if(ov&&(typeof _schedAcCanFly!=='function'||_schedAcCanFly(ov)))return ov;
   // travelling-with: ride a linked partner's manually-set aircraft (so linking + assigning one moves both)
-  var _tw=(typeof _rzTwList==='function')?_rzTwList(order):[];for(var _i=0;_i<_tw.length;_i++){var _pv=(S._rzBookingAc||{})[_tw[_i]];if(_pv&&_pv!=='__none__')return _pv;}
+  var _tw=(typeof _rzTwList==='function')?_rzTwList(order):[];for(var _i=0;_i<_tw.length;_i++){var _pv=(S._rzBookingAc||{})[_tw[_i]];if(_pv&&_pv!=='__none__'&&(typeof _schedAcCanFly!=='function'||_schedAcCanFly(_pv)))return _pv;}
   var auto=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;return auto||null;}
 // ── "Travelling with" — link bookings so they ride the same aircraft (and seat as one group) ────────
 // S._rzTravelWith: { order:[linkedOrder,…] } bidirectional; persisted per-date in the pickup blob.

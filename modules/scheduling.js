@@ -745,14 +745,25 @@ function _schedEnsureAuto(){
     });
     var dp=_schedDayPlan(date);
     var map={};
+    var _manAc=S._rzBookingAc||{};
     dp.departures.forEach(function(d){
       if(d.locked)return;                            // committed — keep current assignment
       var orders=byKey[d.key]||{};
+      // Manual aircraft pins are FIXED: place them on their tail and RESERVE those seats, so the auto
+      // packer can't pile more onto a tail that already carries pinned pax (that was overbooking a tail
+      // after another was made unavailable). A pin to an aircraft that can't fly today is ignored — the
+      // booking auto-allocates instead (so disabling a tail cleanly re-homes whatever was pinned to it).
+      var reserved={},autoOrders={};
+      Object.keys(orders).forEach(function(o){var pin=_manAc[o];
+        if(pin&&pin!=='__none__'&&pin!=='__unalloc__'&&((S&&S.aircraft)||{})[pin]&&(typeof _schedAcCanFly!=='function'||_schedAcCanFly(pin))){
+          map[o]=pin;reserved[pin]=(reserved[pin]||0)+(orders[o]||0);
+        }else{autoOrders[o]=orders[o];}
+      });
+      if(!d.aircraft.length||!Object.keys(autoOrders).length)return;
       // Travelling-with: merge linked orders into ONE pack group so they share a tail; expand after.
-      var _cls=_schedTwClusters(orders);
-      var groupsArr=_cls.map(function(cl){var size=0,inf=false;cl.forEach(function(o){size+=orders[o]||0;if(_infO[o])inf=true;});return {order:cl[0],size:size,inf:inf,_members:cl};});
-      if(!groupsArr.length||!d.aircraft.length)return;
-      var chosen=d.aircraft.map(function(a){return {ac:a.ac,cap:a.cap,priority:_schedIsPriority(a.ac)};});
+      var _cls=_schedTwClusters(autoOrders);
+      var groupsArr=_cls.map(function(cl){var size=0,inf=false;cl.forEach(function(o){size+=autoOrders[o]||0;if(_infO[o])inf=true;});return {order:cl[0],size:size,inf:inf,_members:cl};});
+      var chosen=d.aircraft.map(function(a){return {ac:a.ac,cap:Math.max(0,(a.cap||0)-(reserved[a.ac]||0)),priority:_schedIsPriority(a.ac)};});
       var packed=_schedPack(groupsArr,chosen);
       groupsArr.forEach(function(grp){var ac=packed[grp.order];if(ac==null)return;(grp._members||[grp.order]).forEach(function(o){map[o]=ac;});});
     });
