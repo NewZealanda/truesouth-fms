@@ -921,6 +921,14 @@ window.rezdySchedBlockNoteCommit=function(){if(window.pickupSave)window.pickupSa
 // ── "Travelling with" — link bookings so they ride the same aircraft (and seat as one group) ────────
 // S._rzTravelWith: { order:[linkedOrder,…] } bidirectional; persisted per-date in the pickup blob.
 function _rzTwList(order){var a=(S._rzTravelWith||{})[String(order)];return (a&&a.length)?a.slice():[];}
+// Full travelling-with cluster for an order (transitive: A↔B, B↔C ⇒ {A,B,C}), sorted for a stable key.
+function _rzTwCluster(order){order=String(order);var seen={},stack=[order],out=[];while(stack.length){var c=stack.pop();if(seen[c])continue;seen[c]=1;out.push(c);_rzTwList(c).forEach(function(p){p=String(p);if(!seen[p])stack.push(p);});}return out.sort();}
+// Canonical seating GROUP id for an order — the lead (first) order of its TW cluster, so every linked
+// booking's passengers share one group and the seater/packer seats them together. Unlinked → its own order.
+function _rzTwGroup(order){var c=_rzTwCluster(order);return (c.length>1)?c[0]:String(order);}
+// Re-apply the TW group to every already-seated pax (so linking/unlinking regroups them live, without
+// needing a re-push). Pax id is "ORDER|cN", so the order prefix maps each back to its booking.
+function _rzTwRegroupSeated(){if(!Array.isArray(S._rzManPax))return;S._rzManPax.forEach(function(p){if(p&&p.id){p.group=_rzTwGroup(String(p.id).split('|')[0]);}});}
 function _rzTwLink(a,b){a=String(a);b=String(b);if(!a||!b||a===b)return;S._rzTravelWith=S._rzTravelWith||{};
   function add(x,y){var l=S._rzTravelWith[x]||(S._rzTravelWith[x]=[]);if(l.indexOf(y)<0)l.push(y);}add(a,b);add(b,a);}
 function _rzTwUnlink(a,b){a=String(a);b=String(b);var m=S._rzTravelWith||{};
@@ -932,7 +940,8 @@ function _rzTwPropagate(order){order=String(order);var ac=(S._rzBookingAc||{})[o
 window.rezdyTwToggle=function(order){order=String(order);S._rzTwPickFor=(S._rzTwPickFor===String(order))?null:String(order);render();};
 window.rezdyTwSet=function(a,b){a=String(a);b=String(b);if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();
   if(_rzTwList(a).indexOf(b)>=0){_rzTwUnlink(a,b);}else{_rzTwLink(a,b);_rzTwPropagate(a);}
-  if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
+  if(typeof _rzTwRegroupSeated==='function')_rzTwRegroupSeated();   // regroup already-seated pax live
+  if(window.pickupSave)window.pickupSave(true);if(typeof _rzManSave==='function')_rzManSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
   if(typeof toast==='function')toast(_rzTwList(a).indexOf(b)>=0?('Linked: '+_rzBookingName(a)+' + '+_rzBookingName(b)):'Unlinked','ok');render();};
 // True when a booking's aircraft is coming from cost-aware auto-allocation (no manual override).
 function _rzBookingAcIsAuto(b,order){order=String(order);if((S._rzBookingAc||{})[order])return false;return !!((typeof _schedAutoAcFor==='function')&&_schedAutoAcFor(order));}

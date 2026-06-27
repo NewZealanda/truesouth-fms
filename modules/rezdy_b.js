@@ -1771,7 +1771,7 @@ window.rezdyManPull=function(depScope,preview){
       // Weight = actual if captured, else the declared weight (Rezdy +4kg) flagged as declared.
       var hasA=!isInf&&r.actual!=null;var useDecl=!isInf&&!hasA&&r.declared!=null;
       var wv=isInf?'':(hasA?String(r.actual):(useDecl?String(r.declared):''));
-      fresh.push({id:id,name:r.name||'',weight:wv,declared:(r.declared!=null?r.declared:null),declaredWeight:useDecl,type:isInf?'adult':(r.type==='child'?'child':'adult'),infantName:null,group:order,paymentReq:owing,ac:ex?ex.ac:null,acHint:acHint,infantOf:isInf?(r.attach!=null?order+'|c'+r.attach:undefined):(ex?ex.infantOf:undefined),_preview:!isCheckedIn});
+      fresh.push({id:id,name:r.name||'',weight:wv,declared:(r.declared!=null?r.declared:null),declaredWeight:useDecl,type:isInf?'adult':(r.type==='child'?'child':'adult'),infantName:null,group:((typeof _rzTwGroup==='function')?_rzTwGroup(order):order),paymentReq:owing,ac:ex?ex.ac:null,acHint:acHint,infantOf:isInf?(r.attach!=null?order+'|c'+r.attach:undefined):(ex?ex.infantOf:undefined),_preview:!isCheckedIn});
     });
   });
   // Lap infants follow their host's aircraft (they aren't seated).
