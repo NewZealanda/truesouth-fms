@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.79';
+const APP_VER='v27.80';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -14976,6 +14976,23 @@ function _wxCallReasons(c){return (c&&c.reasons&&c.reasons.length)?c.reasons:((c
 window.wxOpenDep=function(dep){if(S._wxOpen===dep){S._wxOpen=null;}else{S._wxOpen=dep;var c=_wxCall(dep)||{};S._wxDraft={dep:dep,reasons:_wxCallReasons(c).slice(),nextDay:c.nextDay||'',comment:c.comment||''};}render();};
 window.wxToggleReason=function(r){S._wxDraft=S._wxDraft||{};var a=S._wxDraft.reasons||(S._wxDraft.reasons=[]);var i=a.indexOf(r);if(i>=0)a.splice(i,1);else a.push(r);render();};   // multi-select, toggleable
 window.wxDraftSet=function(field,val){S._wxDraft=S._wxDraft||{};S._wxDraft[field]=val;if(field!=='comment')render();};   // comment via oninput → no render (keep focus)
+// Everyone who should hear a weather call was made for the day: the OTHER PICs flying today + the
+// rostered desk staff (status desk/admin/called-in, or role 'desk' on a working day). Excludes the
+// person who made the call. Returns user ids.
+function _wxBroadcastRecipients(date,excludeId){
+  var ids={};
+  try{(_wxDepartures(date)||[]).forEach(function(dep){(dep.pics||[]).forEach(function(code){var u=(typeof _rzWxUserForPilot==='function')?_rzWxUserForPilot(code):null;if(u&&u.id)ids[u.id]=1;});});}catch(e){}
+  try{
+    var roster=S.roster||{},off={rdo:1,leave:1,ul:1,sick:1,'':1},deskSt={desk:1,admin_duty:1,called_in:1};
+    (S.users||[]).forEach(function(u){
+      if(!u||!u.id||u.inactive)return;
+      var st=(typeof _rGetStatus==='function')?_rGetStatus(u,date,roster):'';
+      if(deskSt[st]||(u.role==='desk'&&!off[st]))ids[u.id]=1;
+    });
+  }catch(e){}
+  if(excludeId&&ids[excludeId])delete ids[excludeId];
+  return Object.keys(ids);
+}
 window.wxSubmit=function(status){
   var d=S._wxDraft||{};var dep=d.dep;if(!dep)return;var reasons=(d.reasons||[]).slice();
   if((status==='cancelled'||status==='final')&&!reasons.length){if(typeof toast==='function')toast('Pick at least one reason (cloud/rain/wind/snow/visibility) first.','warn');return;}
@@ -14984,6 +15001,14 @@ window.wxSubmit=function(status){
   S._wxOpen=null;S._wxDraft=null;
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();
   if(typeof auditLog==='function')auditLog('weather_call',{dep:dep,status:status,reasons:reasons.join(',')});
+  // Notify the OTHER PICs flying today + the rostered desk staff that a weather call has been made.
+  try{
+    var _wd=(_wxDepartures(S.rezdyDate)||[]).find(function(x){return x.key===String(dep);});
+    var _wlbl=_wd?(_wd.time+' '+_wxDepLabel(_wd)):String(dep);
+    var _wmsg='Weather call — '+_wxStatusLabel(status)+': '+_wlbl+(reasons.length?' ('+reasons.join(', ')+')':'')+' · by '+((S.user&&(S.user.name||S.user.email))||'a pilot');
+    var _recips=_wxBroadcastRecipients(S.rezdyDate,(S.user&&S.user.id)||null);
+    if(_recips.length&&typeof sbU==='function')sbU('ts_notifications',_recips.map(function(uid){return {user_id:uid,type:'weather_call',message:_wmsg,read:false,created_at:new Date().toISOString()};}));
+  }catch(_e){}
   if(typeof toast==='function')toast('Weather call recorded: '+_wxStatusLabel(status),status==='cancelled'?'warn':'ok');
   render();
 };
