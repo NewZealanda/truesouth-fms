@@ -940,7 +940,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.69';
+const APP_VER='v27.70';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3650,7 +3650,13 @@ function render(){
   // Per-user "open the app to" preference — applied once on the first authed render.
   if(S.user&&!S._homeApplied){S._homeApplied=true;if(typeof _applyHomePref==='function')_applyHomePref();}
   if(S.user&&!_sectionAllowed(S.section||'operations')){var _fs=_firstAllowedSection();S.section=_fs;S.tab=_defaultTabFor(_fs);}
+  // Preserve scroll of marked containers (e.g. the calendar grid) across the full innerHTML rebuild, so
+  // a background re-render (realtime / presence / reconnect) doesn't jump them back to the top-left —
+  // which read as the calendar "flashing / reloading".
+  var _keepScroll={};
+  try{r.querySelectorAll('[data-keepscroll]').forEach(function(el){if(el.id&&(el.scrollLeft||el.scrollTop))_keepScroll[el.id]={l:el.scrollLeft,t:el.scrollTop};});}catch(e){}
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
+  try{Object.keys(_keepScroll).forEach(function(id){var el=document.getElementById(id);if(el){el.scrollLeft=_keepScroll[id].l;el.scrollTop=_keepScroll[id].t;}});}catch(e){}
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
   if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')||(S._rzLsActiveId&&S.activeTabId&&S.tab==='rloadsheets')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest&&S._lsMapOpen)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
@@ -14228,6 +14234,14 @@ function _rzBookingAc(b,order){order=String(order);var ov=(S._rzBookingAc||{})[o
   // travelling-with: ride a linked partner's manually-set aircraft (so linking + assigning one moves both)
   var _tw=(typeof _rzTwList==='function')?_rzTwList(order):[];for(var _i=0;_i<_tw.length;_i++){var _pv=(S._rzBookingAc||{})[_tw[_i]];if(_pv&&_pv!=='__none__'&&(typeof _schedAcCanFly!=='function'||_schedAcCanFly(_pv)))return _pv;}
   var auto=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;return auto||null;}
+// ── Per-block calendar notes ────────────────────────────────────────────────────────────────────
+// A free-text note on a calendar flight, shown in the block after the title (📝) and editable in the
+// block detail. Keyed per-departure (time|dest), aircraft-independent, so it survives a reassign and
+// is shared by any aircraft on that departure. Persisted per-date in the pickup blob.
+function _rzBlockNoteKey(b){if(!b)return '';var p=String(b.order||'').split('|');return (p.length>=3)?(p[1]+'|'+p[2]):String(b.order||'');}
+function _rzBlockNoteGet(b){var k=_rzBlockNoteKey(b);return (k&&(S._rzBlockNote||{})[k])||'';}
+window.rezdySchedBlockNoteInput=function(key,val){S._rzBlockNote=S._rzBlockNote||{};key=String(key||'');if(!key)return;val=String(val||'');if(val.trim())S._rzBlockNote[key]=val;else delete S._rzBlockNote[key];};   // live edit, no render (keep focus)
+window.rezdySchedBlockNoteCommit=function(){if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();if(typeof render==='function')render();};   // on blur → save + sync + reflect in the block
 // ── "Travelling with" — link bookings so they ride the same aircraft (and seat as one group) ────────
 // S._rzTravelWith: { order:[linkedOrder,…] } bidirectional; persisted per-date in the pickup blob.
 function _rzTwList(order){var a=(S._rzTravelWith||{})[String(order)];return (a&&a.length)?a.slice():[];}
@@ -15899,7 +15913,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};S._rzBkCalled={};S._rzTravelWith={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};S._rzBkCalled={};S._rzTravelWith={};S._rzBlockNote={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -16294,9 +16308,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge','wxCalls','bkCalled','travelWith'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge','wxCalls','bkCalled','travelWith','blockNote'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{},wxCalls:S._rzWxCalls||{},bkCalled:S._rzBkCalled||{},travelWith:S._rzTravelWith||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{},wxCalls:S._rzWxCalls||{},bkCalled:S._rzBkCalled||{},travelWith:S._rzTravelWith||{},blockNote:S._rzBlockNote||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -16333,6 +16347,7 @@ function _pkApplyBlob(d){
   S._rzWxCalls=(d.wxCalls&&typeof d.wxCalls==='object')?d.wxCalls:{};
   S._rzBkCalled=(d.bkCalled&&typeof d.bkCalled==='object')?d.bkCalled:{};
   S._rzTravelWith=(d.travelWith&&typeof d.travelWith==='object')?d.travelWith:{};
+  S._rzBlockNote=(d.blockNote&&typeof d.blockNote==='object')?d.blockNote:{};
 }
 function _pkSnapshot(d){try{return JSON.parse(JSON.stringify(d));}catch(e){return null;}}
 function _pkEq(a,b){try{return JSON.stringify(a===undefined?null:a)===JSON.stringify(b===undefined?null:b);}catch(e){return false;}}
@@ -18537,7 +18552,7 @@ const _RZ_SLOT_MIN=15;                 // minutes per grid row
 const _RZ_PX_PER_SLOT=15;              // height of one 15-min row
 const _RZ_PX_PER_MIN=_RZ_PX_PER_SLOT/_RZ_SLOT_MIN;
 const _RZ_AXIS_W=50;                   // left time-axis width
-const _RZ_COL_W=150;                   // each aircraft column width
+let _RZ_COL_W=150;                     // each aircraft column width (narrower on mobile — set per render)
 function _rzMinsFromHHMM(s){const m=/^(\d{1,2}):(\d{2})$/.exec(s||'');if(!m)return null;return (+m[1])*60+(+m[2]);}
 // Per-minute "now" line update — repositions the existing element directly (no re-render → no
 // flash). Does nothing if the calendar isn't on screen or the day isn't today.
@@ -18745,6 +18760,12 @@ function _rzRenderSchedule(){
             (_grp.coPilot?'<span class="pill" title="Co-pilot" style="background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.5);color:#818cf8;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">＋✈ '+_rzEsc(_grp.coPilot)+' <span onclick="event.stopPropagation();window.rezdySchedClearCoPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove co-pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
+      // Free-text note for this flight — shows on the block (📝) after the title. Keyed per departure.
+      (function(){var _bk=_grp.start+'|'+(_grp.gcode||'');var _bkJs=_rzEsc(_bk).replace(/'/g,"\\'");var _bv=(S._rzBlockNote||{})[_bk]||'';
+        detailH+='<div style="margin:0 0 8px">'+
+          '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:4px">📝 Notes <span style="font-weight:400;text-transform:none;letter-spacing:0">— shown on the block</span></div>'+
+          '<textarea oninput="window.rezdySchedBlockNoteInput(\''+_bkJs+'\',this.value)" onchange="window.rezdySchedBlockNoteCommit()" placeholder="Add a note for this flight…" style="width:100%;box-sizing:border-box;min-height:46px;font-size:14px;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:8px">'+_rzEsc(_bv)+'</textarea>'+
+        '</div>';})();
       // Flyback (FLB/CCF): the seats are held in an outbound slot — let the operator set the actual
       // fly-back time here (defaults to 15:30). A 15-minute dropdown (no free-typed clock — that lost
       // focus on every keystroke).
@@ -18857,6 +18878,7 @@ function _rzRenderSchedule(){
       if(_RZ_SCH_END-_RZ_SCH_START<3)_RZ_SCH_END=Math.min(24,_RZ_SCH_START+3);
     } else {_RZ_SCH_START=6;_RZ_SCH_END=18;}
   })();
+  _RZ_COL_W=S.mobileView?98:150;   // zoom the columns out on a phone so more aircraft fit on screen
   const slots=((_RZ_SCH_END-_RZ_SCH_START)*60)/_RZ_SLOT_MIN;
   const gridH=slots*_RZ_PX_PER_SLOT;
 
@@ -18953,8 +18975,9 @@ function _rzRenderSchedule(){
       blocksH+='<div'+_pdown+(isBk?' data-bkkey="'+_rzEsc(String(b.order))+'"':'')+(_mlvl?' title="'+_rzEsc(_mtip)+'"':' title="Drag to move · drag the top/bottom edge to set departure/return · tap to open"')+' ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:grab;overflow:hidden;box-sizing:border-box;line-height:1.25;touch-action:none;user-select:none'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
         (_canResize?'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:6px 6px 0 0;cursor:ns-resize"></div><div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:0 0 6px 6px;cursor:ns-resize"></div>':'')+
-        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_conflictIcon+_forcedIcon+_autoIcon+_departedIcon+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
-        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
+        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:normal;word-break:break-word;overflow:hidden;pointer-events:none">'+_conflictIcon+_forcedIcon+_autoIcon+_departedIcon+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
+        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:normal;word-break:break-word;overflow:hidden;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
+        (function(){var _bn=isBk?_rzBlockNoteGet(b):'';return _bn?'<div style="font-size:10px;color:#fbbf24;white-space:normal;word-break:break-word;overflow:hidden;pointer-events:none;margin-top:1px">📝 '+_rzEsc(_bn)+'</div>':'';})()+
         '</div>';
     });
     var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
@@ -18985,7 +19008,7 @@ function _rzRenderSchedule(){
     nowLine='<div id="rzNowLine" style="position:absolute;left:0;right:0;top:'+_ny+'px;height:2px;background:#ef4444;z-index:60;pointer-events:none;display:'+(_inR?'block':'none')+'"><div style="position:absolute;left:2px;top:-4px;width:8px;height:8px;border-radius:50%;background:#ef4444"></div><div id="rzNowTime" style="position:absolute;right:4px;top:-9px;font-size:9px;font-weight:800;color:#ef4444">'+String(_n.getHours()).padStart(2,'0')+':'+String(_n.getMinutes()).padStart(2,'0')+'</div></div>';
     if(!S._rzNowTimer)S._rzNowTimer=setInterval(_rzTickNowLine,60000);
   }
-  const grid='<div class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+
+  const grid='<div id="rzCalGrid" data-keepscroll="1" class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+
     headH+
     '<div style="display:flex;position:relative">'+axis+colsH+nowLine+
       '<div id="rzDragLine" style="position:absolute;left:'+_RZ_AXIS_W+'px;right:0;top:0;border-top:2px dashed #ef4444;z-index:70;pointer-events:none;display:none"><div id="rzDragLineT" style="position:absolute;left:4px;top:-9px;font-size:10px;font-weight:800;color:#ef4444;background:var(--card);padding:0 5px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div></div>'+

@@ -982,7 +982,7 @@ const _RZ_SLOT_MIN=15;                 // minutes per grid row
 const _RZ_PX_PER_SLOT=15;              // height of one 15-min row
 const _RZ_PX_PER_MIN=_RZ_PX_PER_SLOT/_RZ_SLOT_MIN;
 const _RZ_AXIS_W=50;                   // left time-axis width
-const _RZ_COL_W=150;                   // each aircraft column width
+let _RZ_COL_W=150;                     // each aircraft column width (narrower on mobile — set per render)
 function _rzMinsFromHHMM(s){const m=/^(\d{1,2}):(\d{2})$/.exec(s||'');if(!m)return null;return (+m[1])*60+(+m[2]);}
 // Per-minute "now" line update — repositions the existing element directly (no re-render → no
 // flash). Does nothing if the calendar isn't on screen or the day isn't today.
@@ -1190,6 +1190,12 @@ function _rzRenderSchedule(){
             (_grp.coPilot?'<span class="pill" title="Co-pilot" style="background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.5);color:#818cf8;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">＋✈ '+_rzEsc(_grp.coPilot)+' <span onclick="event.stopPropagation();window.rezdySchedClearCoPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove co-pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
+      // Free-text note for this flight — shows on the block (📝) after the title. Keyed per departure.
+      (function(){var _bk=_grp.start+'|'+(_grp.gcode||'');var _bkJs=_rzEsc(_bk).replace(/'/g,"\\'");var _bv=(S._rzBlockNote||{})[_bk]||'';
+        detailH+='<div style="margin:0 0 8px">'+
+          '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:4px">📝 Notes <span style="font-weight:400;text-transform:none;letter-spacing:0">— shown on the block</span></div>'+
+          '<textarea oninput="window.rezdySchedBlockNoteInput(\''+_bkJs+'\',this.value)" onchange="window.rezdySchedBlockNoteCommit()" placeholder="Add a note for this flight…" style="width:100%;box-sizing:border-box;min-height:46px;font-size:14px;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:8px">'+_rzEsc(_bv)+'</textarea>'+
+        '</div>';})();
       // Flyback (FLB/CCF): the seats are held in an outbound slot — let the operator set the actual
       // fly-back time here (defaults to 15:30). A 15-minute dropdown (no free-typed clock — that lost
       // focus on every keystroke).
@@ -1302,6 +1308,7 @@ function _rzRenderSchedule(){
       if(_RZ_SCH_END-_RZ_SCH_START<3)_RZ_SCH_END=Math.min(24,_RZ_SCH_START+3);
     } else {_RZ_SCH_START=6;_RZ_SCH_END=18;}
   })();
+  _RZ_COL_W=S.mobileView?98:150;   // zoom the columns out on a phone so more aircraft fit on screen
   const slots=((_RZ_SCH_END-_RZ_SCH_START)*60)/_RZ_SLOT_MIN;
   const gridH=slots*_RZ_PX_PER_SLOT;
 
@@ -1398,8 +1405,9 @@ function _rzRenderSchedule(){
       blocksH+='<div'+_pdown+(isBk?' data-bkkey="'+_rzEsc(String(b.order))+'"':'')+(_mlvl?' title="'+_rzEsc(_mtip)+'"':' title="Drag to move · drag the top/bottom edge to set departure/return · tap to open"')+' ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
         'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:grab;overflow:hidden;box-sizing:border-box;line-height:1.25;touch-action:none;user-select:none'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
         (_canResize?'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:6px 6px 0 0;cursor:ns-resize"></div><div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:0 0 6px 6px;cursor:ns-resize"></div>':'')+
-        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_conflictIcon+_forcedIcon+_autoIcon+_departedIcon+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
-        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
+        '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:normal;word-break:break-word;overflow:hidden;pointer-events:none">'+_conflictIcon+_forcedIcon+_autoIcon+_departedIcon+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
+        (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:normal;word-break:break-word;overflow:hidden;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
+        (function(){var _bn=isBk?_rzBlockNoteGet(b):'';return _bn?'<div style="font-size:10px;color:#fbbf24;white-space:normal;word-break:break-word;overflow:hidden;pointer-events:none;margin-top:1px">📝 '+_rzEsc(_bn)+'</div>':'';})()+
         '</div>';
     });
     var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
@@ -1430,7 +1438,7 @@ function _rzRenderSchedule(){
     nowLine='<div id="rzNowLine" style="position:absolute;left:0;right:0;top:'+_ny+'px;height:2px;background:#ef4444;z-index:60;pointer-events:none;display:'+(_inR?'block':'none')+'"><div style="position:absolute;left:2px;top:-4px;width:8px;height:8px;border-radius:50%;background:#ef4444"></div><div id="rzNowTime" style="position:absolute;right:4px;top:-9px;font-size:9px;font-weight:800;color:#ef4444">'+String(_n.getHours()).padStart(2,'0')+':'+String(_n.getMinutes()).padStart(2,'0')+'</div></div>';
     if(!S._rzNowTimer)S._rzNowTimer=setInterval(_rzTickNowLine,60000);
   }
-  const grid='<div class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+
+  const grid='<div id="rzCalGrid" data-keepscroll="1" class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+
     headH+
     '<div style="display:flex;position:relative">'+axis+colsH+nowLine+
       '<div id="rzDragLine" style="position:absolute;left:'+_RZ_AXIS_W+'px;right:0;top:0;border-top:2px dashed #ef4444;z-index:70;pointer-events:none;display:none"><div id="rzDragLineT" style="position:absolute;left:4px;top:-9px;font-size:10px;font-weight:800;color:#ef4444;background:var(--card);padding:0 5px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div></div>'+

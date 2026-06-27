@@ -361,7 +361,13 @@ function render(){
   // Per-user "open the app to" preference — applied once on the first authed render.
   if(S.user&&!S._homeApplied){S._homeApplied=true;if(typeof _applyHomePref==='function')_applyHomePref();}
   if(S.user&&!_sectionAllowed(S.section||'operations')){var _fs=_firstAllowedSection();S.section=_fs;S.tab=_defaultTabFor(_fs);}
+  // Preserve scroll of marked containers (e.g. the calendar grid) across the full innerHTML rebuild, so
+  // a background re-render (realtime / presence / reconnect) doesn't jump them back to the top-left —
+  // which read as the calendar "flashing / reloading".
+  var _keepScroll={};
+  try{r.querySelectorAll('[data-keepscroll]').forEach(function(el){if(el.id&&(el.scrollLeft||el.scrollTop))_keepScroll[el.id]={l:el.scrollLeft,t:el.scrollTop};});}catch(e){}
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
+  try{Object.keys(_keepScroll).forEach(function(id){var el=document.getElementById(id);if(el){el.scrollLeft=_keepScroll[id].l;el.scrollTop=_keepScroll[id].t;}});}catch(e){}
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
   if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')||(S._rzLsActiveId&&S.activeTabId&&S.tab==='rloadsheets')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest&&S._lsMapOpen)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}

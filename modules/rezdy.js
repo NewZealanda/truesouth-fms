@@ -905,6 +905,14 @@ function _rzBookingAc(b,order){order=String(order);var ov=(S._rzBookingAc||{})[o
   // travelling-with: ride a linked partner's manually-set aircraft (so linking + assigning one moves both)
   var _tw=(typeof _rzTwList==='function')?_rzTwList(order):[];for(var _i=0;_i<_tw.length;_i++){var _pv=(S._rzBookingAc||{})[_tw[_i]];if(_pv&&_pv!=='__none__'&&(typeof _schedAcCanFly!=='function'||_schedAcCanFly(_pv)))return _pv;}
   var auto=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;return auto||null;}
+// ── Per-block calendar notes ────────────────────────────────────────────────────────────────────
+// A free-text note on a calendar flight, shown in the block after the title (📝) and editable in the
+// block detail. Keyed per-departure (time|dest), aircraft-independent, so it survives a reassign and
+// is shared by any aircraft on that departure. Persisted per-date in the pickup blob.
+function _rzBlockNoteKey(b){if(!b)return '';var p=String(b.order||'').split('|');return (p.length>=3)?(p[1]+'|'+p[2]):String(b.order||'');}
+function _rzBlockNoteGet(b){var k=_rzBlockNoteKey(b);return (k&&(S._rzBlockNote||{})[k])||'';}
+window.rezdySchedBlockNoteInput=function(key,val){S._rzBlockNote=S._rzBlockNote||{};key=String(key||'');if(!key)return;val=String(val||'');if(val.trim())S._rzBlockNote[key]=val;else delete S._rzBlockNote[key];};   // live edit, no render (keep focus)
+window.rezdySchedBlockNoteCommit=function(){if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();if(typeof render==='function')render();};   // on blur → save + sync + reflect in the block
 // ── "Travelling with" — link bookings so they ride the same aircraft (and seat as one group) ────────
 // S._rzTravelWith: { order:[linkedOrder,…] } bidirectional; persisted per-date in the pickup blob.
 function _rzTwList(order){var a=(S._rzTravelWith||{})[String(order)];return (a&&a.length)?a.slice():[];}
