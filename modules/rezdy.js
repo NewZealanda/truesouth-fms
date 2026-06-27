@@ -210,6 +210,20 @@ function _rzProductDest(code){var c=_rzProdCfg(code);return c?{short:c.short,apt
 // place combine even if they're different products (e.g. THH + STT both to Mt Cook). Flybacks keep
 // their own code (special return-leg handling). Falls back to the product code when unknown.
 function _rzGroupDest(prod){if(_rzIsFlyback(prod))return prod;var c=_rzProdCfg(prod);return (c&&c.short)?c.short:prod;}
+// Charters (CHT) carry no destination in Rezdy, so the operator sets it manually (calendar block). That
+// override drives the destination/fuel/route everywhere via _rzItemDest. Keyed per order, per-date blob.
+function _rzCharterDestFor(order){var d=(S._rzCharterDest||{})[String(order)];return (d&&String(d).trim())?String(d).trim():'';}
+function _rzItemDest(prod,order){if(prod==='CHT'){var d=_rzCharterDestFor(order);if(d)return d;}return _rzGroupDest(prod);}
+// A representative product code for a destination short (e.g. 'MC'→'THH') so a charter's chosen dest can
+// borrow that destination's airport + fuel/burn config for the loadsheet & W&B.
+function _rzDestRepProd(short){if(!short)return '';var rep='';try{Object.keys(_RZ_PROD_CFG||{}).some(function(code){var c=_RZ_PROD_CFG[code];if(c&&c.short===short){rep=code;return true;}return false;});}catch(e){}return rep;}
+window.rezdyCharterDestSetBlock=function(blockKey,dest){
+  var ords=(typeof _rzOrdersForBlockKey==='function')?_rzOrdersForBlockKey(blockKey):[];
+  S._rzCharterDest=S._rzCharterDest||{};dest=String(dest||'').trim();
+  ords.forEach(function(o){if(dest)S._rzCharterDest[o]=dest;else delete S._rzCharterDest[o];});
+  if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
+  if(typeof toast==='function')toast('Charter destination → '+(dest?((_RZ_DEST_NAMES&&_RZ_DEST_NAMES[dest])||dest):'unset'),'ok');render();
+};
 function _rzDepKey(ac,start,prod){return ac+'|'+start+'|'+_rzGroupDest(prod);}
 // ── Maintenance status for scheduling ──────────────────────────────────────────
 // Hours to the next check (nextCheck − current TTIS). Negative = into the allowed extension.

@@ -13,7 +13,11 @@ function _rzManAcProd(dep,acId){
 }
 // Destination for one aircraft's pax on a departure (for the "SLA → MC" seatmap label / loadsheet
 // dest). Derives the product from the seated pax; a Flybacks departure always returns to Queenstown.
+// A charter's operator-set destination for this aircraft+departure (via the seated charter pax' order).
+function _rzManCharterDest(dep,acId){var found='';(S._rzManPax||[]).some(function(p){if(p.ac===acId&&!p.infantOf&&_rzPaxDep(p)===dep){var i=_rzManDepInfo(p.group);if(i&&i.prod==='CHT'){var d=(typeof _rzCharterDestFor==='function')?_rzCharterDestFor(p.group):'';if(d){found=d;return true;}}}return false;});return found;}
 function _rzManAcDest(dep,acId){
+  var cd=_rzManCharterDest(dep,acId);   // charter destination override → borrow that dest's airport
+  if(cd){var rp=(typeof _rzDestRepProd==='function')?_rzDestRepProd(cd):'';var dd=rp?_rzProductDest(rp):null;if(dd)return dd;}
   var d=_rzProductDest(_rzManAcProd(dep,acId));
   if(!d&&dep===RZ_FLYBACK_DEP)d={short:'QN',apt:'NZQN'};
   return d;
@@ -39,6 +43,7 @@ function _rzManDefFuelKg(dep,acId){
   (S._rzManPax||[]).forEach(function(p){
     if(p.ac!==acId||p.infantOf||_rzPaxDep(p)!==dep)return;
     var i=_rzManDepInfo(p.group);var prod=i?i.prod:'';
+    if(prod==='CHT'){var _cd=(typeof _rzCharterDestFor==='function')?_rzCharterDestFor(p.group):'';var _rp=(_cd&&typeof _rzDestRepProd==='function')?_rzDestRepProd(_cd):'';if(_rp)prod=_rp;}   // charter fuels for its chosen destination
     var f=(prod==='FLB'||prod==='CCF')?_milfordFuelKg(acId):_rzProdFuelKg(prod,acId);
     if(f!=null&&(max==null||f>max))max=f;
   });
@@ -1062,7 +1067,7 @@ function _rzRenderSchedule(){
       var start=_rzHHMMcolon(t);if(_rzMinsFromHHMM(start)==null)return;
       var prod=_rzProduct(it.product);
       var key=_rzDepKey(ac,start,prod);   // group by destination so same place+time+aircraft = one flight
-      var g=bkGroups[key]||(bkGroups[key]={aircraft:ac,start:start,product:prod,gcode:_rzGroupDest(prod),products:{},pax:0,bookings:[],owing:false,key:key,_fromBooking:true,_fb:[]});
+      var g=bkGroups[key]||(bkGroups[key]={aircraft:ac,start:start,product:prod,gcode:((typeof _rzItemDest==='function')?_rzItemDest(prod,String(b.orderNumber||'')):_rzGroupDest(prod)),products:{},pax:0,bookings:[],owing:false,key:key,_fromBooking:true,_fb:[]});
       g.products[prod]=true;
       g.pax+=parseInt(it.quantity,10)||0;g.bookings.push({b:b,it:it});if(owing)g.owing=true;
     });
@@ -1096,6 +1101,7 @@ function _rzRenderSchedule(){
     var _prods=Object.keys(g.products||{});if(!_prods.length)_prods=[g.product];
     var _dur=Math.max.apply(null,_prods.map(function(p){return _rzProductDuration(p);})); // longest wins for a combined flight
     g.disp=(_prods.length===1)?g.product:(g.gcode||g.product);                            // single product shows its code; mixed shows the destination
+    if(g.product==='CHT'){var _cd=(g.gcode&&g.gcode!=='CHT')?g.gcode:'';g.disp='CHT → '+(_cd?((typeof _RZ_DEST_NAMES!=='undefined'&&_RZ_DEST_NAMES[_cd])?_cd:_cd):'set dest');g._charterDestUnset=!_cd;}   // charters carry no Rezdy dest — show the operator-set one (or prompt)
     var em=sm+_dur;
     g.end=String(Math.floor(em/60)).padStart(2,'0')+':'+String(em%60).padStart(2,'0');
     // FLB/CCF seats are parked in the OUTBOUND (e.g. 1200) Rezdy slot to hold them, but the flight
@@ -1190,6 +1196,16 @@ function _rzRenderSchedule(){
             (_grp.coPilot?'<span class="pill" title="Co-pilot" style="background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.5);color:#818cf8;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px">＋✈ '+_rzEsc(_grp.coPilot)+' <span onclick="event.stopPropagation();window.rezdySchedClearCoPilot(\''+_rzEsc(_grp.key).replace(/'/g,"\\'")+'\')" title="Remove co-pilot" style="cursor:pointer;opacity:.7;margin-left:2px">✕</span></span>':'')+
           '</div>'+
           '<button class="btn btn-ghost" style="font-size:12px" onclick="S._schedGroupKey=null;render()">✕ Close</button></div>';
+      // Charter destination — Rezdy can't carry it, so the operator sets it; drives the planner + loadsheet.
+      if(_grp.product==='CHT'){
+        var _cdCur=(_grp.gcode&&_grp.gcode!=='CHT')?_grp.gcode:'';var _kJs=_rzEsc(_grp.key).replace(/'/g,"\\'");
+        var _cdOpts=[['MF','Milford'],['MC','Mount Cook'],['FJ','Franz Josef'],['BRA','Branches'],['QN','Queenstown']];
+        detailH+='<div style="margin:0 0 10px;padding:9px 11px;border-radius:9px;border:1px solid '+(_cdCur?'rgba(34,197,94,.4)':'rgba(245,158,11,.55)')+';background:'+(_cdCur?'rgba(34,197,94,.08)':'rgba(245,158,11,.08)')+'">'+
+          '<div style="font-size:11px;font-weight:800;color:'+(_cdCur?'#22c55e':'#f59e0b')+';margin-bottom:6px">✈ Charter destination'+(_cdCur?'':' — not set (the planner assumes Milford until you choose)')+'</div>'+
+          '<div style="display:flex;flex-wrap:wrap;gap:6px">'+_cdOpts.map(function(o){var on=_cdCur===o[0];return '<button onclick="window.rezdyCharterDestSetBlock(\''+_kJs+'\',\''+o[0]+'\')" style="padding:5px 11px;border-radius:14px;border:'+(on?'2px solid #22c55e':'1px solid var(--border2)')+';background:'+(on?'rgba(34,197,94,.15)':'transparent')+';color:'+(on?'#22c55e':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer">'+(on?'✓ ':'')+o[1]+'</button>';}).join('')+
+          (_cdCur?'<button onclick="window.rezdyCharterDestSetBlock(\''+_kJs+'\',\'\')" style="padding:5px 10px;border-radius:14px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:11px;cursor:pointer">clear</button>':'')+
+        '</div></div>';
+      }
       // Free-text note for this flight — shows on the block (📝) after the title. Keyed per departure.
       (function(){var _bk=_grp.start+'|'+(_grp.gcode||'');var _bkJs=_rzEsc(_bk).replace(/'/g,"\\'");var _bv=(S._rzBlockNote||{})[_bk]||'';
         detailH+='<div style="margin:0 0 8px">'+

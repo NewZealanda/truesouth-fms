@@ -738,7 +738,7 @@ function _schedEnsureAuto(){
         var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;
         var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';
         if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;
-        var dst=(typeof _rzGroupDest==='function')?_rzGroupDest(prod):'MF';
+        var dst=(typeof _rzItemDest==='function')?_rzItemDest(prod,o):((typeof _rzGroupDest==='function')?_rzGroupDest(prod):'MF');   // charter dest override
         var k=_schedDepKeyTD(start,dst);
         var g=byKey[k]||(byKey[k]={});g[o]=(g[o]||0)+(parseInt(it.quantity,10)||0);
       });
@@ -892,7 +892,7 @@ function _schedDayDepartures(date){
       var start=(typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t;
       var prod=(typeof _rzProduct==='function')?_rzProduct(it.product):'';
       if((typeof _rzIsFlyback==='function')&&_rzIsFlyback(prod))return;
-      var dst=(typeof _rzGroupDest==='function')?_rzGroupDest(prod):'MF';
+      var dst=(typeof _rzItemDest==='function')?_rzItemDest(prod,o):((typeof _rzGroupDest==='function')?_rzGroupDest(prod):'MF');   // charter dest override honoured
       var key=_schedDepKeyTD(start,dst);
       var e=g[key]||(g[key]={time:start,dest:dst,key:key,pax:0,dests:[dst],orders:{}});
       var _q=(parseInt(it.quantity,10)||0);
