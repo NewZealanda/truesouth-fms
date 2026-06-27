@@ -563,15 +563,15 @@ function renderLoadsheet(){
           ${!f.sig?`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:#94a3b8;font-family:'Barlow Condensed',sans-serif;font-size:15px;letter-spacing:.12em">${(!S.sigMode||S.sigMode==='draw')?'DRAW SIGNATURE HERE':'APPLY NAME ABOVE'}</div>`:''}
         </div>
         <button onclick="clearSig()" style="margin-top:6px;padding:5px 12px;border-radius:6px;border:1px solid var(--border2);background:transparent;font-size:12px;cursor:pointer;color:var(--text2)">Clear</button>`
-        :`<div style="padding:10px;background:var(--card2);border-radius:8px;font-size:12px;color:var(--text3);margin-bottom:8px">${canSign?(r&&a&&r.towCog!=null&&r.towCog<a.cogMin?"⚠ Forward CoG — fix seating before signing.":!allOk?"⚠ Fix W&B before signing.":""):"Only pilots can sign loadsheets. Save as draft for a pilot to complete."}</div>`}
+        :`<div style="padding:10px;background:var(--card2);border-radius:8px;font-size:12px;color:var(--text3);margin-bottom:8px">${canSign?(r&&r.towCog!=null&&r.towCog<r.cogMin?"⚠ Forward CoG — fix seating before signing.":!allOk?"⚠ Fix W&B before signing.":""):"Only pilots can sign loadsheets. Save as draft for a pilot to complete."}</div>`}
         <div style="margin-top:12px">
           ${(()=>{
             // Block submit/save for invalid (>=capacity) AND removed seats — both carry weight in
             // calcFormWB but a removed-seat pax is hidden on the grid, so it must gate signing too.
             const _gateRm=(a&&a.removedSeats)||[];
             const _overCap=a?Object.keys(f.seats).filter(i=>{const n=parseInt(i);return (n>=a.seats.length||_gateRm.includes(n))&&(parseFloat(f.seats[i])>0||f.names[i]);}).length:0;
-            const fwdCog=r&&a&&r.towCog!=null&&r.towCog<a.cogMin;
-            const fwdWarn=fwdCog?`<div style="padding:8px 12px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fde68a">&#x26a0; Forward CoG ${r.towCog?.toFixed(2)}" &#x2014; forward of limit ${a?.cogMin}". Adjust seating before submitting.</div>`:'';
+            const fwdCog=r&&r.towCog!=null&&r.towCog<r.cogMin;
+            const fwdWarn=fwdCog?`<div style="padding:8px 12px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fde68a">&#x26a0; Forward CoG ${r.towCog?.toFixed(2)}" &#x2014; forward of limit ${r.cogMin?.toFixed(2)}"${r.envelope?' (at this weight)':''}. Adjust seating before submitting.</div>`:'';
             // Two buttons side by side. Save Draft is for UNSIGNED work (disabled once signed);
             // Submit only enables once a signature is drawn (and W&B/PIC are OK).
             const signed=!!f.sig;

@@ -979,14 +979,14 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.75';
+const APP_VER='v27.76';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
 const CREW_DEF=[{id:'c1',name:"P. Daniell",weight:104},{id:'c2',name:"A. Adamson",weight:110},{id:'c3',name:"T. Patel",weight:89},{id:'c4',name:"J. Yang",weight:73},{id:'c5',name:"L. McLean",weight:70},{id:'c6',name:"L. Hancock",weight:96},{id:'c7',name:"D. Ogden",weight:85},{id:'c9',name:"J. Cooper",weight:89},{id:'c10',name:"M. Stott",weight:62},{id:'c11',name:"L. Vincent",weight:68}];
 const AC_DEF={
-  "ZK-SLD":{id:"ZK-SLD",name:"ZK-SLD",type:"GA-8 Airvan",ew:1059.91,ea:52.46,em:55603.546,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,cogEnv:[{w:1000,fwd:48,aft:64},{w:1089,fwd:48,aft:64},{w:1905,fwd:57,aft:64}],fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:35,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLDRev.#110626",layout:"ga8",fuelOver:20},
-  "ZK-SLQ":{id:"ZK-SLQ",name:"ZK-SLQ",type:"GA-8 Airvan",ew:1064.9,ea:53.15,em:56599.77,mtow:1905,mlw:1859,mrw:1906,cogMin:42,cogMax:64,cogEnv:[{w:1000,fwd:48,aft:64},{w:1089,fwd:48,aft:64},{w:1905,fwd:57,aft:64}],fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:35,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLQRev.#110626",layout:"ga8",fuelOver:20},
+  "ZK-SLD":{id:"ZK-SLD",name:"ZK-SLD",type:"GA-8 Airvan",ew:1059.91,ea:52.46,em:55603.546,mtow:1905,mlw:1860,mrw:1906,cogMin:42,cogMax:64,cogEnv:[{w:1000,fwd:48,aft:64},{w:1089,fwd:48,aft:64},{w:1905,fwd:57,aft:64}],fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:35,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLDRev.#110626",layout:"ga8",fuelOver:20},
+  "ZK-SLQ":{id:"ZK-SLQ",name:"ZK-SLQ",type:"GA-8 Airvan",ew:1064.9,ea:53.15,em:56599.77,mtow:1905,mlw:1860,mrw:1906,cogMin:42,cogMax:64,cogEnv:[{w:1000,fwd:48,aft:64},{w:1089,fwd:48,aft:64},{w:1905,fwd:57,aft:64}],fuelKg:108,fuelArm:67.5,gndBurn:1,burnDef:35,burnDefUnit:'l',seats:[{lbl:"PIC",arm:38,crew:true},{lbl:"Seat 1",arm:38},{lbl:"Seat 2",arm:69.8},{lbl:"Seat 3",arm:69.8},{lbl:"Seat 4",arm:99.3},{lbl:"Seat 5",arm:99.3},{lbl:"Seat 6",arm:127.8},{lbl:"Seat 7",arm:127.8}],cargo:[{lbl:"Baggage Shelf",arm:148.3,maxKg:9}],doc:"FMSSLQRev.#110626",layout:"ga8",fuelOver:20},
   "ZK-SLA":{id:"ZK-SLA",name:"ZK-SLA",type:"C-208B Grand Caravan",ew:2384.58,ea:192.24,em:458411.659,mtow:3968,mlw:3856,mrw:3969,cogMin:182.57,cogMax:204.4,cogEnv:[{w:2200,fwd:179.60,aft:204.35},{w:2495,fwd:179.60,aft:204.35},{w:3629,fwd:193.37,aft:204.35},{w:3969,fwd:199.15,aft:204.35}],fuelKg:363,fuelArm:201.98,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:133.5,crew:true},{lbl:"Seat 1",arm:133.5},{lbl:"Seat 2",arm:173.5},{lbl:"Seat 3",arm:173.5},{lbl:"Seat 4",arm:203.36},{lbl:"Seat 5",arm:203.36},{lbl:"Seat 6",arm:234.35},{lbl:"Seat 7",arm:234.35},{lbl:"Seat 8",arm:264.35},{lbl:"Seat 9",arm:264.35},{lbl:"Seat 10",arm:294.15},{lbl:"Seat 11",arm:294.15},{lbl:"Seat 12",arm:343},{lbl:"Seat 13",arm:343}],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSLARev.#110626",layout:"c208",fuelOver:50},
   "ZK-SDB":{id:"ZK-SDB",name:"ZK-SDB",type:"C-208B Grand Caravan",ew:2460.17,ea:192.958,em:474709.483,mtow:4110,mlw:4082,mrw:4111,cogMin:183.49,cogMax:204.4,fuelKg:363,fuelArm:203.1,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:135.5,crew:true},{lbl:"Seat 1",arm:135.5},{lbl:"Seat 2",arm:176.9},{lbl:"Seat 3",arm:176.9},{lbl:"Seat 4",arm:211.9},{lbl:"Seat 5",arm:211.9},{lbl:"Seat 6",arm:246.9},{lbl:"Seat 7",arm:246.9},{lbl:"Seat 8",arm:281.9},{lbl:"Seat 9",arm:281.9},{lbl:"Seat 10",arm:344},{lbl:"Seat 11",arm:344}],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSDBRev.#110626B",layout:"c208",fuelOver:50},
   "ZK-SLB":{id:"ZK-SLB",name:"ZK-SLB",type:"C-208B Grand Caravan",ew:2340.91,ea:190.01,em:444796.309,mtow:3968,mlw:3856,mrw:3969,cogMin:181.71,cogMax:204.4,cogEnv:[{w:2200,fwd:179.60,aft:204.35},{w:2495,fwd:179.60,aft:204.35},{w:3629,fwd:193.37,aft:204.35},{w:3969,fwd:199.15,aft:204.35}],fuelKg:363,fuelArm:201.98,gndBurn:11.34,burnDef:187,burnDefUnit:'lbs',seats:[{lbl:"PIC",arm:133.5,crew:true},{lbl:"Seat 1",arm:133.5},{lbl:"Seat 2",arm:173.5},{lbl:"Seat 3",arm:173.5},{lbl:"Seat 4",arm:203.36},{lbl:"Seat 5",arm:203.36},{lbl:"Seat 6",arm:234.35},{lbl:"Seat 7",arm:234.35},{lbl:"Seat 8",arm:264.35},{lbl:"Seat 9",arm:264.35},{lbl:"Seat 10",arm:294.15},{lbl:"Seat 11",arm:294.15},{lbl:"Seat 12",arm:343},{lbl:"Seat 13",arm:343}],removedSeats:[12,13],cargo:[{lbl:"Pod Zone 1",arm:132.4},{lbl:"Pod Zone 2",arm:182.1},{lbl:"Pod Zone 3",arm:233.4},{lbl:"Pod Zone 4",arm:287.6}],doc:"FMSSLBRev.#110626",layout:"c208",fuelOver:50}
@@ -1185,10 +1185,19 @@ function calcFormWB(form){
   wt-=burnKg;mom-=burnKg*a.fuelArm;
   // Fuel remaining at destination must stay at/above the 30-min final reserve.
   const fuelRemKg=fW-gndBurn-burnKg;const finalReserveKg=_finalReserveKg(form.ac);const reserveOk=fuelRemKg>=finalReserveKg;
-  return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn,tow,towCog,burnKg,lw:wt,lwCog:wt?mom/wt:0,
-    fuelRemKg,finalReserveKg,reserveOk,
-    towOk:tow<=a.mtow,lwOk:wt<=a.mlw,cogOk:towCog>=a.cogMin&&towCog<=a.cogMax,
-    mtow:a.mtow,mlw:a.mlw,cogMin:a.cogMin,cogMax:a.cogMax};
+  // CoG gate uses the flight-manual ENVELOPE when one exists for the aircraft (the forward limit moves
+  // aft with weight) — effective fwd/aft limits at the TAKEOFF weight; falls back to the rectangular
+  // cogMin/cogMax for aircraft with no envelope entered yet. cogMin/cogMax in the result are these
+  // effective limits, so every readout (pill, badge, "forward of limit" warning) follows automatically.
+  var _env=(typeof _wbEnvAt==='function')?_wbEnvAt(a,tow):null;
+  var _cogMin=_env?_env.fwd:a.cogMin,_cogMax=_env?_env.aft:a.cogMax;
+  var _lwe=(typeof _wbEnvAt==='function')?_wbEnvAt(a,wt):null;   // landing-weight limits (advisory landing check)
+  var _lwCog=wt?mom/wt:0;
+  var _cogOk=towCog>=_cogMin&&towCog<=_cogMax&&(!_lwe||(_lwCog>=_lwe.fwd&&_lwCog<=_lwe.aft));
+  return{crewW:cW+cpW,paxW:pW,cargoW:cg,zfw,fuelW:fW,rampW:rW,gndBurn,tow,towCog,burnKg,lw:wt,lwCog:_lwCog,
+    fuelRemKg,finalReserveKg,reserveOk,envelope:!!_env,
+    towOk:tow<=a.mtow,lwOk:wt<=a.mlw,cogOk:_cogOk,
+    mtow:a.mtow,mlw:a.mlw,cogMin:_cogMin,cogMax:_cogMax};
 }
 
 // ── CoG envelope (flight-manual polygon) ──────────────────────────────────────────────────────────
@@ -5017,15 +5026,15 @@ function renderLoadsheet(){
           ${!f.sig?`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:#94a3b8;font-family:'Barlow Condensed',sans-serif;font-size:15px;letter-spacing:.12em">${(!S.sigMode||S.sigMode==='draw')?'DRAW SIGNATURE HERE':'APPLY NAME ABOVE'}</div>`:''}
         </div>
         <button onclick="clearSig()" style="margin-top:6px;padding:5px 12px;border-radius:6px;border:1px solid var(--border2);background:transparent;font-size:12px;cursor:pointer;color:var(--text2)">Clear</button>`
-        :`<div style="padding:10px;background:var(--card2);border-radius:8px;font-size:12px;color:var(--text3);margin-bottom:8px">${canSign?(r&&a&&r.towCog!=null&&r.towCog<a.cogMin?"⚠ Forward CoG — fix seating before signing.":!allOk?"⚠ Fix W&B before signing.":""):"Only pilots can sign loadsheets. Save as draft for a pilot to complete."}</div>`}
+        :`<div style="padding:10px;background:var(--card2);border-radius:8px;font-size:12px;color:var(--text3);margin-bottom:8px">${canSign?(r&&r.towCog!=null&&r.towCog<r.cogMin?"⚠ Forward CoG — fix seating before signing.":!allOk?"⚠ Fix W&B before signing.":""):"Only pilots can sign loadsheets. Save as draft for a pilot to complete."}</div>`}
         <div style="margin-top:12px">
           ${(()=>{
             // Block submit/save for invalid (>=capacity) AND removed seats — both carry weight in
             // calcFormWB but a removed-seat pax is hidden on the grid, so it must gate signing too.
             const _gateRm=(a&&a.removedSeats)||[];
             const _overCap=a?Object.keys(f.seats).filter(i=>{const n=parseInt(i);return (n>=a.seats.length||_gateRm.includes(n))&&(parseFloat(f.seats[i])>0||f.names[i]);}).length:0;
-            const fwdCog=r&&a&&r.towCog!=null&&r.towCog<a.cogMin;
-            const fwdWarn=fwdCog?`<div style="padding:8px 12px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fde68a">&#x26a0; Forward CoG ${r.towCog?.toFixed(2)}" &#x2014; forward of limit ${a?.cogMin}". Adjust seating before submitting.</div>`:'';
+            const fwdCog=r&&r.towCog!=null&&r.towCog<r.cogMin;
+            const fwdWarn=fwdCog?`<div style="padding:8px 12px;background:rgba(245,158,11,.12);border:1px solid #f59e0b;border-radius:8px;margin-bottom:8px;font-size:12px;color:#fde68a">&#x26a0; Forward CoG ${r.towCog?.toFixed(2)}" &#x2014; forward of limit ${r.cogMin?.toFixed(2)}"${r.envelope?' (at this weight)':''}. Adjust seating before submitting.</div>`:'';
             // Two buttons side by side. Save Draft is for UNSIGNED work (disabled once signed);
             // Submit only enables once a signature is drawn (and W&B/PIC are OK).
             const signed=!!f.sig;
