@@ -1481,7 +1481,9 @@ function _rzRenderWeatherCalls(){
   var date=S.rezdyDate;
   // Make sure this day's data is loaded (bookings drive the departures; schedule adds manual blocks).
   if(S._rezdyBookings==null&&!S._rezdyLoading&&window.rezdyLoadBookings)window.rezdyLoadBookings();
-  if(!S._schedBlocks&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
+  // Must gate on _schedLoading too — rezdyLoadSchedule sets _schedLoading + re-renders while it fetches,
+  // so calling it unguarded on every render restarted the load forever (the flashing / never-loads bug).
+  if(!S._schedBlocks&&!S._schedLoading&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
   var loading=(S._rezdyLoading||S._rezdyBookings==null);
   var _today=(typeof _rzToday==='function')?_rzToday():date;
   // Lightweight, NON-sticky date nav (the operations date row's sticky header + Rezdy-refresh button
