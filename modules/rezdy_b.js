@@ -543,7 +543,7 @@ function _rzRenderPickups(){
         const collected=!!S._pickupCollected[id];
         const _pc=p.dropoff?RZ_DROP_COL:RZ_PK_COL;
         if(S._rzTransByAc){var _ac=p.ac||'__none__';if(_ac!==_lastAc){_lastAc=_ac;vansH+='<div style="margin:6px 0 4px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);display:flex;align-items:center;gap:6px">'+(_rzAcPill(p.ac)||'<span style="color:var(--text3)">Unallocated</span>')+'</div>';}}
-        vansH+='<div draggable="true" ondragstart="window.pickupDragStart(\''+_rzEsc(id).replace(/'/g,"\\'")+'\',event)" '+
+        vansH+='<div draggable="true" ondragstart="window.pickupDragStart(\''+_rzEsc(id).replace(/'/g,"\\'")+'\',event)" ondragover="event.preventDefault();event.stopPropagation();this.style.boxShadow=\'0 -3px 0 '+col+' inset\'" ondragleave="this.style.boxShadow=\'\'" ondrop="this.style.boxShadow=\'\';window.pickupReorderDrop('+vi+',\''+_depJs+'\',\''+_rzEsc(id).replace(/'/g,"\\'")+'\',event)" '+
           'style="background:var(--card2);border:1px solid var(--border2);border-left:3px solid '+_pc+';border-radius:8px;padding:10px;margin-bottom:8px;cursor:grab;'+(collected?'opacity:.55':'')+'">'+
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">'+
             '<div style="font-weight:700;font-size:13px;color:var(--text);min-width:0;'+(collected?'text-decoration:line-through':'')+'"><span style="color:var(--text3);font-weight:700;margin-right:6px;cursor:grab;font-size:17px;vertical-align:middle" title="Drag to reorder">≡</span>'+_rzEsc(p.customer||p.order)+(p.dropoff&&p.ac?' '+_rzAcPill(p.ac):'')+'</div>'+
@@ -1118,6 +1118,27 @@ window.myPkMove=function(vi,dep,id,dir){
   var from=ids.indexOf(id);if(from<0)return;
   var to=from+(dir<0?-1:1);if(to<0||to>=ids.length)return;
   ids.splice(from,1);ids.splice(to,0,id);
+  S._pickupOrder=S._pickupOrder||{};S._pickupOrder[vi+'|'+dep]=ids;
+  if(window.pickupSave)window.pickupSave(true);render();
+};
+// Drag a pickup card onto ANOTHER pickup card to reorder the run (transport board). Same-van = reorder;
+// from another van = move it in AND position it before the drop target. (Drop on the van background still
+// moves-to-van via pickupDropOnVan.)
+window.pickupReorderDrop=function(vi,dep,targetId,e){
+  if(e&&e.preventDefault)e.preventDefault();if(e&&e.stopPropagation)e.stopPropagation();
+  var id=S._rezdyDragId;S._rezdyDragId=null;
+  if(!id||id===targetId)return;
+  var pickups=_rzPickups();
+  var grp=((S._pickupVans||[])[vi]||[]).map(function(pid){return _rzPickupById(pickups,pid);}).filter(function(p){return p&&(p.depart||'—')===dep;}).sort(function(a,b){return _rzPkTimeVal(a)-_rzPkTimeVal(b);});
+  grp=_rzApplyMyOrder(grp,vi,dep);
+  var ids=grp.map(function(p){return p.id;});
+  var from=ids.indexOf(id);
+  if(from<0){   // came from another van → pull it out of every van, add to this one
+    S._pickupVans=(S._pickupVans||[]).map(function(v){return v.filter(function(x){return x!==id;});});
+    if(!S._pickupVans[vi])S._pickupVans[vi]=[];S._pickupVans[vi].push(id);
+    ids.push(id);from=ids.length-1;
+  }
+  ids.splice(from,1);var tgt=ids.indexOf(targetId);if(tgt<0)tgt=ids.length;ids.splice(tgt,0,id);
   S._pickupOrder=S._pickupOrder||{};S._pickupOrder[vi+'|'+dep]=ids;
   if(window.pickupSave)window.pickupSave(true);render();
 };
