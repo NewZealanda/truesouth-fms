@@ -224,6 +224,14 @@ window.rezdyCharterDestSetBlock=function(blockKey,dest){
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
   if(typeof toast==='function')toast('Charter destination → '+(dest?((_RZ_DEST_NAMES&&_RZ_DEST_NAMES[dest])||dest):'unset'),'ok');render();
 };
+// "Other…" — type any destination (e.g. Wanaka, Te Anau). The label/grouping update everywhere, but
+// the planner has no route/fuel data for an unlisted place, so the operator must pin the aircraft + set
+// the fuel by hand. (Send me the regular ones + their fuel and I'll add them as proper presets.)
+window.rezdyCharterDestOther=function(blockKey){
+  if(typeof prompt!=='function')return;
+  var v=prompt('Charter destination (e.g. Wanaka, Te Anau).\nNote: for places not in the preset list, set the aircraft + fuel by hand.','');
+  if(v==null)return;window.rezdyCharterDestSetBlock(blockKey,String(v).trim());
+};
 function _rzDepKey(ac,start,prod){return ac+'|'+start+'|'+_rzGroupDest(prod);}
 // ── Maintenance status for scheduling ──────────────────────────────────────────
 // Hours to the next check (nextCheck − current TTIS). Negative = into the allowed extension.

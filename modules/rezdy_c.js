@@ -1200,11 +1200,16 @@ function _rzRenderSchedule(){
       if(_grp.product==='CHT'){
         var _cdCur=(_grp.gcode&&_grp.gcode!=='CHT')?_grp.gcode:'';var _kJs=_rzEsc(_grp.key).replace(/'/g,"\\'");
         var _cdOpts=[['MF','Milford'],['MC','Mount Cook'],['FJ','Franz Josef'],['BRA','Branches'],['QN','Queenstown']];
+        var _cdPreset=_cdOpts.some(function(o){return o[0]===_cdCur;});
+        var _cdCustom=(_cdCur&&!_cdPreset)?_cdCur:'';   // a typed "Other" destination
         detailH+='<div style="margin:0 0 10px;padding:9px 11px;border-radius:9px;border:1px solid '+(_cdCur?'rgba(34,197,94,.4)':'rgba(245,158,11,.55)')+';background:'+(_cdCur?'rgba(34,197,94,.08)':'rgba(245,158,11,.08)')+'">'+
           '<div style="font-size:11px;font-weight:800;color:'+(_cdCur?'#22c55e':'#f59e0b')+';margin-bottom:6px">✈ Charter destination'+(_cdCur?'':' — not set (the planner assumes Milford until you choose)')+'</div>'+
           '<div style="display:flex;flex-wrap:wrap;gap:6px">'+_cdOpts.map(function(o){var on=_cdCur===o[0];return '<button onclick="window.rezdyCharterDestSetBlock(\''+_kJs+'\',\''+o[0]+'\')" style="padding:5px 11px;border-radius:14px;border:'+(on?'2px solid #22c55e':'1px solid var(--border2)')+';background:'+(on?'rgba(34,197,94,.15)':'transparent')+';color:'+(on?'#22c55e':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer">'+(on?'✓ ':'')+o[1]+'</button>';}).join('')+
+          '<button onclick="window.rezdyCharterDestOther(\''+_kJs+'\')" style="padding:5px 11px;border-radius:14px;border:'+(_cdCustom?'2px solid #22c55e':'1px dashed var(--border2)')+';background:'+(_cdCustom?'rgba(34,197,94,.15)':'transparent')+';color:'+(_cdCustom?'#22c55e':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer">'+(_cdCustom?('✓ '+_rzEsc(_cdCustom)):'Other…')+'</button>'+
           (_cdCur?'<button onclick="window.rezdyCharterDestSetBlock(\''+_kJs+'\',\'\')" style="padding:5px 10px;border-radius:14px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:11px;cursor:pointer">clear</button>':'')+
-        '</div></div>';
+        '</div>'+
+        (_cdCustom?'<div style="font-size:10px;color:var(--text3);margin-top:6px">Custom destination — the planner can’t cost the route, so pin the aircraft + set the fuel by hand.</div>':'')+
+        '</div>';
       }
       // Free-text note for this flight — shows on the block (📝) after the title. Keyed per departure.
       (function(){var _bk=_grp.start+'|'+(_grp.gcode||'');var _bkJs=_rzEsc(_bk).replace(/'/g,"\\'");var _bv=(S._rzBlockNote||{})[_bk]||'';

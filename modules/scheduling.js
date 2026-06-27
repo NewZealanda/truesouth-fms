@@ -606,6 +606,7 @@ function _schedSig(date,bks){
   try{parts.push('MP:'+JSON.stringify(S._schedPilots||{}));}catch(e){}   // manual pilot picks
   try{parts.push('BA:'+JSON.stringify(S._rzBookingAc||{}));}catch(e){}   // manual aircraft moves (so pilots re-allocate)
   try{parts.push('TW:'+JSON.stringify(S._rzTravelWith||{}));}catch(e){}  // travelling-with links (re-pack linked bookings together)
+  try{parts.push('CD:'+JSON.stringify(S._rzCharterDest||{}));}catch(e){} // charter destinations (re-plan when one changes — longer leg = different aircraft/fuel/route)
   return parts.join('|');
 }
 // The pilot a user has MANUALLY picked for an aircraft on the calendar (any of its blocks), or null.
