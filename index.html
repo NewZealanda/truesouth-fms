@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.72';
+const APP_VER='v27.73';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -13874,6 +13874,10 @@ window.rezdyRenameDep=function(dep){
 // Rezdy comments/notes (removed v26.89, per operator request).
 // Self-drive bookings shouldn't go in a van.
 function _rzIsSelfDrive(loc){return /self.?drive|own (car|transport|vehicle)|no pickup|no transfer|drive (your|them)self/i.test(String(loc||''));}
+// Self-walk = makes their own way to base on foot. Treated like self-drive (no van pickup, no drop-off)
+// but with NO numberplate (no car). The numberplate UI keys off _rzIsSelfDrive only, so it stays hidden.
+function _rzIsSelfWalk(loc){return /self.?walk/i.test(String(loc||''));}
+function _rzNoPickup(loc){return _rzIsSelfDrive(loc)||_rzIsSelfWalk(loc);}   // either → keep off the van runs
 // Manual "self-drive / no pickup needed" override (set on the booking when a customer drives
 // themselves but didn't tell us in the booking). Unlike no-show, they STAY on the flight/seatmap.
 function _rzManualSelfDrive(order){return !!((S._rzSelfDrive||{})[String(order||'')]);}
@@ -13931,9 +13935,10 @@ function _rzPickups(){
       const id=String(b.orderNumber||'')+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;
       const loc=(ov[id]!=null&&ov[id]!=='')?ov[id]:(it.pickup||'');
       const pdep=_rzDepTime(it.startTimeLocal||'');
-      const sd=_rzIsSelfDrive(loc)||_rzManualSelfDrive(b.orderNumber||'');
+      const _sw=_rzIsSelfWalk(loc);
+      const sd=_rzIsSelfDrive(loc)||_sw||_rzManualSelfDrive(b.orderNumber||'');   // self-walk excluded from vans like self-drive
       const ptime=(tov[id]!=null&&tov[id]!=='')?tov[id]:_rzDepTime(it.pickupTime||'');
-      const base={order:b.orderNumber||'',customer:b.customerName||'',pax:parseInt(it.quantity,10)||1,location:loc,phone:b.phone||'',ac:_ac,selfDrive:sd};
+      const base={order:b.orderNumber||'',customer:b.customerName||'',pax:parseInt(it.quantity,10)||1,location:loc,phone:b.phone||'',ac:_ac,selfDrive:sd,selfWalk:_sw};
       // Flybacks (FLB/CCF) ride the RETURN leg — there's no morning pickup, they're a DROP-OFF only
       // (fly Milford→Queenstown, then drive pax to their accommodation) under the "Flybacks" run.
       if(_rzIsFlyback(_rzProduct(it.product))){
@@ -14809,7 +14814,7 @@ function _wxDepartures(date){
     var parts=String(f.key||'').split('|');if(parts.length<3)return;          // skip manual blocks (key=id)
     if(!((S.aircraft||{})[parts[0]]))return;                                  // real aircraft only
     var gdest=parts[2]||'';var isFb=(typeof _rzIsFlyback==='function')&&_rzIsFlyback(gdest);
-    var t=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';if(!t)return;
+    var t=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';if(!t)return;   // f.depMin = the calendar (drag-adjusted) time, which the operator prefers
     var g=_row(isFb?(t+'·FB'):t,t,f.depMin,isFb,isFb?'MF':gdest,isFb?gdest:'');
     if(g.acs.indexOf(parts[0])<0)g.acs.push(parts[0]);
     var pic=man[f.key]||auto[f.key];if(pic&&g.pics.indexOf(pic)<0)g.pics.push(pic);
@@ -16157,7 +16162,7 @@ function _rzRenderPickups(){
   var _nDrop=vanPickups.filter(function(p){return p.dropoff;}).length;
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
     '<div><div class="st" style="margin-bottom:0">Transport Summary</div>'+
-      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0"><span style="color:'+RZ_PK_COL+';font-weight:700">'+_nPk+' pickups</span> · <span style="color:'+RZ_DROP_COL+';font-weight:700">'+_nDrop+' drop-offs</span> · '+_rzVehicles().length+' vehicles'+(selfDrive.length?' · '+selfDrive.length+' self-drive':'')+'</p></div>'+
+      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0"><span style="color:'+RZ_PK_COL+';font-weight:700">'+_nPk+' pickups</span> · <span style="color:'+RZ_DROP_COL+';font-weight:700">'+_nDrop+' drop-offs</span> · '+_rzVehicles().length+' vehicles'+(selfDrive.length?' · '+selfDrive.length+' self-drive/walk':'')+'</p></div>'+
     '<div style="display:flex;gap:6px;flex-shrink:0">'+
       '<button class="btn btn-ghost" style="font-size:12px'+(S._rzTransByAc?';border-color:rgba(96,165,250,.6);color:#60a5fa':'')+'" onclick="window.rzTransToggleByAc()" title="Group each van\'s stops by the aircraft flown">'+(S._rzTransByAc?'✈ By aircraft ✓':'✈ By aircraft')+'</button>'+
     '</div></div>';
@@ -16280,12 +16285,12 @@ function _rzRenderPickups(){
   let sdH='';
   var sdShown=selfDrive.filter(function(p){return !depFilter||(p.depart||'—')===depFilter;});
   if(sdShown.length){
-    sdH='<div class="card" style="border-left:3px solid #a78bfa"><div style="font-weight:800;font-size:13px;color:#a78bfa;margin-bottom:8px">Self-drive ('+sdShown.length+')</div>'+
+    sdH='<div class="card" style="border-left:3px solid #a78bfa"><div style="font-weight:800;font-size:13px;color:#a78bfa;margin-bottom:8px">Self-drive / walk ('+sdShown.length+')</div>'+
       '<div style="display:flex;flex-direction:column;gap:6px">';
     sdShown.forEach(function(p){
       sdH+='<div style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:9px 11px">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
-          '<div><span style="font-weight:700;font-size:13px;color:var(--text)">'+_rzEsc(p.customer||p.order)+'</span>'+
+          '<div><span style="font-weight:700;font-size:13px;color:var(--text)">'+_rzEsc(p.customer||p.order)+'</span>'+(p.selfWalk?'<span title="Self-walk — makes their own way on foot, no numberplate" style="font-size:10px;font-weight:800;color:#34d399;background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.5);padding:1px 6px;border-radius:9px;margin-left:6px;white-space:nowrap">🚶 walk</span>':'')+
             (p.depart?'<span style="font-size:11px;color:var(--text3);margin-left:8px">🛫 Dep '+_rzEsc(p.depart)+'</span>':'')+'</div>'+
           '<span style="font-size:11px;font-weight:700;color:#a78bfa">'+p.pax+' pax</span>'+
         '</div>'+

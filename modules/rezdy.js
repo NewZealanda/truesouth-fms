@@ -450,6 +450,10 @@ window.rezdyRenameDep=function(dep){
 // Rezdy comments/notes (removed v26.89, per operator request).
 // Self-drive bookings shouldn't go in a van.
 function _rzIsSelfDrive(loc){return /self.?drive|own (car|transport|vehicle)|no pickup|no transfer|drive (your|them)self/i.test(String(loc||''));}
+// Self-walk = makes their own way to base on foot. Treated like self-drive (no van pickup, no drop-off)
+// but with NO numberplate (no car). The numberplate UI keys off _rzIsSelfDrive only, so it stays hidden.
+function _rzIsSelfWalk(loc){return /self.?walk/i.test(String(loc||''));}
+function _rzNoPickup(loc){return _rzIsSelfDrive(loc)||_rzIsSelfWalk(loc);}   // either → keep off the van runs
 // Manual "self-drive / no pickup needed" override (set on the booking when a customer drives
 // themselves but didn't tell us in the booking). Unlike no-show, they STAY on the flight/seatmap.
 function _rzManualSelfDrive(order){return !!((S._rzSelfDrive||{})[String(order||'')]);}
@@ -507,9 +511,10 @@ function _rzPickups(){
       const id=String(b.orderNumber||'')+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;
       const loc=(ov[id]!=null&&ov[id]!=='')?ov[id]:(it.pickup||'');
       const pdep=_rzDepTime(it.startTimeLocal||'');
-      const sd=_rzIsSelfDrive(loc)||_rzManualSelfDrive(b.orderNumber||'');
+      const _sw=_rzIsSelfWalk(loc);
+      const sd=_rzIsSelfDrive(loc)||_sw||_rzManualSelfDrive(b.orderNumber||'');   // self-walk excluded from vans like self-drive
       const ptime=(tov[id]!=null&&tov[id]!=='')?tov[id]:_rzDepTime(it.pickupTime||'');
-      const base={order:b.orderNumber||'',customer:b.customerName||'',pax:parseInt(it.quantity,10)||1,location:loc,phone:b.phone||'',ac:_ac,selfDrive:sd};
+      const base={order:b.orderNumber||'',customer:b.customerName||'',pax:parseInt(it.quantity,10)||1,location:loc,phone:b.phone||'',ac:_ac,selfDrive:sd,selfWalk:_sw};
       // Flybacks (FLB/CCF) ride the RETURN leg — there's no morning pickup, they're a DROP-OFF only
       // (fly Milford→Queenstown, then drive pax to their accommodation) under the "Flybacks" run.
       if(_rzIsFlyback(_rzProduct(it.product))){
@@ -1385,7 +1390,7 @@ function _wxDepartures(date){
     var parts=String(f.key||'').split('|');if(parts.length<3)return;          // skip manual blocks (key=id)
     if(!((S.aircraft||{})[parts[0]]))return;                                  // real aircraft only
     var gdest=parts[2]||'';var isFb=(typeof _rzIsFlyback==='function')&&_rzIsFlyback(gdest);
-    var t=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';if(!t)return;
+    var t=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';if(!t)return;   // f.depMin = the calendar (drag-adjusted) time, which the operator prefers
     var g=_row(isFb?(t+'·FB'):t,t,f.depMin,isFb,isFb?'MF':gdest,isFb?gdest:'');
     if(g.acs.indexOf(parts[0])<0)g.acs.push(parts[0]);
     var pic=man[f.key]||auto[f.key];if(pic&&g.pics.indexOf(pic)<0)g.pics.push(pic);

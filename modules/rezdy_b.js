@@ -461,7 +461,7 @@ function _rzRenderPickups(){
   var _nDrop=vanPickups.filter(function(p){return p.dropoff;}).length;
   const hdr='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
     '<div><div class="st" style="margin-bottom:0">Transport Summary</div>'+
-      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0"><span style="color:'+RZ_PK_COL+';font-weight:700">'+_nPk+' pickups</span> · <span style="color:'+RZ_DROP_COL+';font-weight:700">'+_nDrop+' drop-offs</span> · '+_rzVehicles().length+' vehicles'+(selfDrive.length?' · '+selfDrive.length+' self-drive':'')+'</p></div>'+
+      '<p style="font-size:12px;color:var(--text3);margin:2px 0 0"><span style="color:'+RZ_PK_COL+';font-weight:700">'+_nPk+' pickups</span> · <span style="color:'+RZ_DROP_COL+';font-weight:700">'+_nDrop+' drop-offs</span> · '+_rzVehicles().length+' vehicles'+(selfDrive.length?' · '+selfDrive.length+' self-drive/walk':'')+'</p></div>'+
     '<div style="display:flex;gap:6px;flex-shrink:0">'+
       '<button class="btn btn-ghost" style="font-size:12px'+(S._rzTransByAc?';border-color:rgba(96,165,250,.6);color:#60a5fa':'')+'" onclick="window.rzTransToggleByAc()" title="Group each van\'s stops by the aircraft flown">'+(S._rzTransByAc?'✈ By aircraft ✓':'✈ By aircraft')+'</button>'+
     '</div></div>';
@@ -584,12 +584,12 @@ function _rzRenderPickups(){
   let sdH='';
   var sdShown=selfDrive.filter(function(p){return !depFilter||(p.depart||'—')===depFilter;});
   if(sdShown.length){
-    sdH='<div class="card" style="border-left:3px solid #a78bfa"><div style="font-weight:800;font-size:13px;color:#a78bfa;margin-bottom:8px">Self-drive ('+sdShown.length+')</div>'+
+    sdH='<div class="card" style="border-left:3px solid #a78bfa"><div style="font-weight:800;font-size:13px;color:#a78bfa;margin-bottom:8px">Self-drive / walk ('+sdShown.length+')</div>'+
       '<div style="display:flex;flex-direction:column;gap:6px">';
     sdShown.forEach(function(p){
       sdH+='<div style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:9px 11px">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
-          '<div><span style="font-weight:700;font-size:13px;color:var(--text)">'+_rzEsc(p.customer||p.order)+'</span>'+
+          '<div><span style="font-weight:700;font-size:13px;color:var(--text)">'+_rzEsc(p.customer||p.order)+'</span>'+(p.selfWalk?'<span title="Self-walk — makes their own way on foot, no numberplate" style="font-size:10px;font-weight:800;color:#34d399;background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.5);padding:1px 6px;border-radius:9px;margin-left:6px;white-space:nowrap">🚶 walk</span>':'')+
             (p.depart?'<span style="font-size:11px;color:var(--text3);margin-left:8px">🛫 Dep '+_rzEsc(p.depart)+'</span>':'')+'</div>'+
           '<span style="font-size:11px;font-weight:700;color:#a78bfa">'+p.pax+' pax</span>'+
         '</div>'+
