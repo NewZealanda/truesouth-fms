@@ -575,6 +575,20 @@ function renderAdminAircraft(){
       <div style="display:grid;grid-template-columns:1.5fr 90px 90px 32px;gap:8px;margin-bottom:4px">${['Label','Arm (in)','Max (kg)',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}</div>
       ${sR}${ed?`<button class="btn btn-ghost" style="margin-top:8px;font-size:12px" onclick="S.admin.acDraft.seats.push({lbl:'Seat '+S.admin.acDraft.seats.length,arm:0});render()">+ Add Seat</button>`:''}
     </div>
+    ${(function(){
+      var env=d.cogEnv||[];
+      var rowsH=env.map(function(p,i){return '<div style="display:grid;grid-template-columns:96px 96px 96px 32px;gap:8px;margin-bottom:4px">'+
+        '<input class="fi" type="number" value="'+(p.w!=null?p.w:'')+'" onblur="if('+ed+')S.admin.acDraft.cogEnv['+i+'].w=parseFloat(this.value)||0" style="font-size:13px" '+ro+'>'+
+        '<input class="fi" type="number" step="0.01" value="'+(p.fwd!=null?p.fwd:'')+'" onblur="if('+ed+')S.admin.acDraft.cogEnv['+i+'].fwd=parseFloat(this.value)||0" style="font-size:13px" '+ro+'>'+
+        '<input class="fi" type="number" step="0.01" value="'+(p.aft!=null?p.aft:'')+'" onblur="if('+ed+')S.admin.acDraft.cogEnv['+i+'].aft=parseFloat(this.value)||0" style="font-size:13px" '+ro+'>'+
+        (ed?'<button class="icon-btn red" onclick="S.admin.acDraft.cogEnv.splice('+i+',1);render()">✕</button>':'<span></span>')+
+      '</div>';}).join('');
+      return '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">CoG envelope <span style="font-weight:400;text-transform:none;letter-spacing:0">— flight-manual points, lowest weight first. Leave empty to use the C of G min/max box.</span></div>'+
+        '<div style="display:grid;grid-template-columns:96px 96px 96px 32px;gap:8px;margin-bottom:4px">'+['Weight (kg)','Fwd (in)','Aft (in)',''].map(function(h){return '<span style="font-size:10px;font-weight:700;color:var(--text3)">'+h+'</span>';}).join('')+'</div>'+
+        rowsH+
+        (ed?'<button class="btn btn-ghost" style="margin-top:6px;font-size:12px" onclick="S.admin.acDraft.cogEnv=(S.admin.acDraft.cogEnv||[]);S.admin.acDraft.cogEnv.push({w:0,fwd:(S.admin.acDraft.cogMin||0),aft:(S.admin.acDraft.cogMax||0)});render()">+ Add envelope point</button>':'')+
+      '</div>';
+    })()}
     ${ad.acErr?`<div style="padding:8px;background:var(--err-bg);border-radius:7px;color:var(--err-text);font-size:13px;margin-top:8px">${ad.acErr}</div>`:''}
     ${ad.acSaved?`<div style="padding:8px;background:var(--ok-bg);border-radius:7px;color:var(--ok-text);font-size:13px;font-weight:600;margin-top:8px">✓ Saved & synced</div>`:''}
   </div>`;

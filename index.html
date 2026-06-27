@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.73';
+const APP_VER='v27.74';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1191,6 +1191,57 @@ function calcFormWB(form){
     mtow:a.mtow,mlw:a.mlw,cogMin:a.cogMin,cogMax:a.cogMax};
 }
 
+// ── CoG envelope (flight-manual polygon) ──────────────────────────────────────────────────────────
+// a.cogEnv = [{w,fwd,aft}, …] (weight kg, forward & aft CoG limit in inches at that weight) — the
+// loaded envelope read straight off the flight manual. When present it's drawn as the true polygon and
+// used for an ADVISORY in/out check. The signing gate still uses the rectangular cogMin/cogMax + MTOW/
+// MLW (unchanged) until an envelope has been entered + verified for that aircraft.
+function _wbEnvRows(a){var e=a&&a.cogEnv;if(!Array.isArray(e))return null;var r=e.filter(function(p){return p&&isFinite(+p.w)&&isFinite(+p.fwd)&&isFinite(+p.aft);}).map(function(p){return {w:+p.w,fwd:+p.fwd,aft:+p.aft};}).sort(function(x,y){return x.w-y.w;});return r.length>=2?r:null;}
+function _wbEnvAt(a,weight){var rows=_wbEnvRows(a);if(!rows)return null;weight=+weight;
+  if(weight<=rows[0].w)return {fwd:rows[0].fwd,aft:rows[0].aft};
+  if(weight>=rows[rows.length-1].w)return {fwd:rows[rows.length-1].fwd,aft:rows[rows.length-1].aft};
+  for(var i=1;i<rows.length;i++){if(weight<=rows[i].w){var p0=rows[i-1],p1=rows[i],t=(weight-p0.w)/((p1.w-p0.w)||1);return {fwd:p0.fwd+(p1.fwd-p0.fwd)*t,aft:p0.aft+(p1.aft-p0.aft)*t};}}
+  return null;}
+function _wbInEnv(a,cog,weight){var e=_wbEnvAt(a,weight);if(!e)return null;return cog>=e.fwd-1e-6&&cog<=e.aft+1e-6;}
+// Build the loadsheet's CoG envelope graph (SVG) — envelope polygon (or the rectangular limit box if no
+// flight-manual envelope is entered yet) with the Takeoff (●) and Landing (○) points plotted on it.
+function _wbEnvelopeSVG(acId,r){
+  var a=S.aircraft[acId];if(!a||!r||r.towCog==null)return '';
+  var rows=_wbEnvRows(a);
+  var xs=[],ys=[];
+  if(rows){rows.forEach(function(p){xs.push(p.fwd,p.aft);ys.push(p.w);});}
+  else{xs.push(a.cogMin,a.cogMax);ys.push(a.ew||0,a.mtow);}
+  xs.push(r.towCog,r.lwCog);ys.push(r.tow,r.lw,a.mtow,a.mlw,a.ew||0);
+  var xmin=Math.min.apply(null,xs),xmax=Math.max.apply(null,xs),ymin=Math.min.apply(null,ys),ymax=Math.max.apply(null,ys);
+  var xpad=((xmax-xmin)*0.12)||1,ypad=((ymax-ymin)*0.08)||50;xmin-=xpad;xmax+=xpad;ymin-=ypad;ymax+=ypad;
+  var W=340,H=250,padL=46,padR=10,padT=12,padB=28;
+  function X(c){return padL+(c-xmin)/((xmax-xmin)||1)*(W-padL-padR);}
+  function Y(w){return padT+(ymax-w)/((ymax-ymin)||1)*(H-padT-padB);}
+  var poly;
+  if(rows){var pts=[];rows.forEach(function(p){pts.push([X(p.fwd),Y(p.w)]);});for(var i=rows.length-1;i>=0;i--)pts.push([X(rows[i].aft),Y(rows[i].w)]);poly=pts.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ');}
+  else{poly=[[X(a.cogMin),Y(a.ew||ymin)],[X(a.cogMin),Y(a.mtow)],[X(a.cogMax),Y(a.mtow)],[X(a.cogMax),Y(a.ew||ymin)]].map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ');}
+  var towIn=rows?_wbInEnv(a,r.towCog,r.tow):(r.towCog>=a.cogMin&&r.towCog<=a.cogMax&&r.tow<=a.mtow);
+  var lwIn=rows?_wbInEnv(a,r.lwCog,r.lw):(r.lwCog>=a.cogMin&&r.lwCog<=a.cogMax&&r.lw<=a.mlw);
+  var s='<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-width:360px;display:block">';
+  s+='<rect x="'+padL+'" y="'+padT+'" width="'+(W-padL-padR)+'" height="'+(H-padT-padB)+'" fill="none" stroke="var(--border2)" stroke-width="1"/>';
+  s+='<polygon points="'+poly+'" fill="rgba(34,197,94,.13)" stroke="'+(rows?'#22c55e':'#94a3b8')+'" stroke-width="1.5"'+(rows?'':' stroke-dasharray="4 3"')+'/>';
+  [['MTOW',a.mtow,'#ef4444'],['MLW',a.mlw,'#f59e0b']].forEach(function(L){var y=Y(L[1]);if(y>padT&&y<H-padB){s+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="'+L[2]+'" stroke-width="1" stroke-dasharray="3 3"/><text x="'+(W-padR-2)+'" y="'+(y-2).toFixed(1)+'" text-anchor="end" font-size="8" fill="'+L[2]+'">'+L[0]+'</text>';}});
+  s+='<line x1="'+X(r.towCog).toFixed(1)+'" y1="'+Y(r.tow).toFixed(1)+'" x2="'+X(r.lwCog).toFixed(1)+'" y2="'+Y(r.lw).toFixed(1)+'" stroke="var(--text3)" stroke-width="1" stroke-dasharray="2 2"/>';
+  s+='<circle cx="'+X(r.lwCog).toFixed(1)+'" cy="'+Y(r.lw).toFixed(1)+'" r="4" fill="var(--card)" stroke="'+(lwIn?'#22c55e':'#ef4444')+'" stroke-width="2"/>';
+  s+='<circle cx="'+X(r.towCog).toFixed(1)+'" cy="'+Y(r.tow).toFixed(1)+'" r="5" fill="'+(towIn?'#22c55e':'#ef4444')+'"/>';
+  s+='<text x="'+((padL+W-padR)/2).toFixed(0)+'" y="'+(H-5)+'" text-anchor="middle" font-size="9" fill="var(--text3)">CoG (in)</text>';
+  s+='<text x="11" y="'+((padT+H-padB)/2).toFixed(0)+'" text-anchor="middle" font-size="9" fill="var(--text3)" transform="rotate(-90 11 '+((padT+H-padB)/2).toFixed(0)+')">Weight (kg)</text>';
+  s+='<text x="'+padL+'" y="'+(H-padB+11)+'" text-anchor="middle" font-size="8" fill="var(--text3)">'+xmin.toFixed(0)+'″</text>';
+  s+='<text x="'+(W-padR)+'" y="'+(H-padB+11)+'" text-anchor="end" font-size="8" fill="var(--text3)">'+xmax.toFixed(0)+'″</text>';
+  s+='</svg>';
+  s+='<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.6">'+
+     '<span style="color:'+(towIn?'#22c55e':'#ef4444')+';font-weight:700">● Takeoff</span> '+r.tow.toFixed(0)+'kg @ '+r.towCog.toFixed(2)+'″'+(towIn?'':' <b>OUTSIDE</b>')+' &nbsp; '+
+     '<span style="color:'+(lwIn?'#22c55e':'#ef4444')+';font-weight:700">○ Landing</span> '+r.lw.toFixed(0)+'kg @ '+r.lwCog.toFixed(2)+'″'+(lwIn?'':' <b>OUTSIDE</b>')+
+     (rows?'':'<div style="color:#f59e0b;margin-top:3px">⚠ Rectangular limit box shown — add the flight-manual envelope points for '+_rzEscSafe2(a.type||acId)+' in Admin ▸ Aircraft to draw the true envelope.</div>')+
+     '</div>';
+  return s;
+}
+function _rzEscSafe2(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 // Score a candidate assignment (lower=better)
 function scoreAssign(acId,paxList){
   const a=S.aircraft[acId];if(!a)return 1e9;
@@ -4940,6 +4991,10 @@ function renderLoadsheet(){
         </div>
         ${!allOk?`<div style="margin-top:12px;padding:10px;background:var(--err-bg);border:1px solid var(--err-border);border-radius:8px;color:var(--err-text);font-size:13px;font-weight:600">⚠ One or more limits exceeded</div>`:
           `<div style="margin-top:12px;padding:10px;background:var(--ok-bg);border:1px solid var(--ok-border);border-radius:8px;color:var(--ok-text);font-size:13px;font-weight:600">✓ All weights and C of G within limits</div>`}
+        <div style="margin-top:12px">
+          <button onclick="S._wbEnvOpen=!S._wbEnvOpen;render()" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:12px;font-weight:700;cursor:pointer">${S._wbEnvOpen?'▴ Hide CoG envelope':'📈 Show CoG envelope graph'}</button>
+          ${S._wbEnvOpen?`<div style="margin-top:10px">${(typeof _wbEnvelopeSVG==='function')?_wbEnvelopeSVG(f.ac,r):''}</div>`:''}
+        </div>
       </div>`;
 
       const canSign=hasRolePerm('sign_loadsheet');
@@ -6727,6 +6782,20 @@ function renderAdminAircraft(){
       <div style="display:grid;grid-template-columns:1.5fr 90px 90px 32px;gap:8px;margin-bottom:4px">${['Label','Arm (in)','Max (kg)',''].map(h=>`<span style="font-size:10px;font-weight:700;color:var(--text3)">${h}</span>`).join('')}</div>
       ${sR}${ed?`<button class="btn btn-ghost" style="margin-top:8px;font-size:12px" onclick="S.admin.acDraft.seats.push({lbl:'Seat '+S.admin.acDraft.seats.length,arm:0});render()">+ Add Seat</button>`:''}
     </div>
+    ${(function(){
+      var env=d.cogEnv||[];
+      var rowsH=env.map(function(p,i){return '<div style="display:grid;grid-template-columns:96px 96px 96px 32px;gap:8px;margin-bottom:4px">'+
+        '<input class="fi" type="number" value="'+(p.w!=null?p.w:'')+'" onblur="if('+ed+')S.admin.acDraft.cogEnv['+i+'].w=parseFloat(this.value)||0" style="font-size:13px" '+ro+'>'+
+        '<input class="fi" type="number" step="0.01" value="'+(p.fwd!=null?p.fwd:'')+'" onblur="if('+ed+')S.admin.acDraft.cogEnv['+i+'].fwd=parseFloat(this.value)||0" style="font-size:13px" '+ro+'>'+
+        '<input class="fi" type="number" step="0.01" value="'+(p.aft!=null?p.aft:'')+'" onblur="if('+ed+')S.admin.acDraft.cogEnv['+i+'].aft=parseFloat(this.value)||0" style="font-size:13px" '+ro+'>'+
+        (ed?'<button class="icon-btn red" onclick="S.admin.acDraft.cogEnv.splice('+i+',1);render()">✕</button>':'<span></span>')+
+      '</div>';}).join('');
+      return '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">CoG envelope <span style="font-weight:400;text-transform:none;letter-spacing:0">— flight-manual points, lowest weight first. Leave empty to use the C of G min/max box.</span></div>'+
+        '<div style="display:grid;grid-template-columns:96px 96px 96px 32px;gap:8px;margin-bottom:4px">'+['Weight (kg)','Fwd (in)','Aft (in)',''].map(function(h){return '<span style="font-size:10px;font-weight:700;color:var(--text3)">'+h+'</span>';}).join('')+'</div>'+
+        rowsH+
+        (ed?'<button class="btn btn-ghost" style="margin-top:6px;font-size:12px" onclick="S.admin.acDraft.cogEnv=(S.admin.acDraft.cogEnv||[]);S.admin.acDraft.cogEnv.push({w:0,fwd:(S.admin.acDraft.cogMin||0),aft:(S.admin.acDraft.cogMax||0)});render()">+ Add envelope point</button>':'')+
+      '</div>';
+    })()}
     ${ad.acErr?`<div style="padding:8px;background:var(--err-bg);border-radius:7px;color:var(--err-text);font-size:13px;margin-top:8px">${ad.acErr}</div>`:''}
     ${ad.acSaved?`<div style="padding:8px;background:var(--ok-bg);border-radius:7px;color:var(--ok-text);font-size:13px;font-weight:600;margin-top:8px">✓ Saved & synced</div>`:''}
   </div>`;

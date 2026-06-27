@@ -541,6 +541,10 @@ function renderLoadsheet(){
         </div>
         ${!allOk?`<div style="margin-top:12px;padding:10px;background:var(--err-bg);border:1px solid var(--err-border);border-radius:8px;color:var(--err-text);font-size:13px;font-weight:600">⚠ One or more limits exceeded</div>`:
           `<div style="margin-top:12px;padding:10px;background:var(--ok-bg);border:1px solid var(--ok-border);border-radius:8px;color:var(--ok-text);font-size:13px;font-weight:600">✓ All weights and C of G within limits</div>`}
+        <div style="margin-top:12px">
+          <button onclick="S._wbEnvOpen=!S._wbEnvOpen;render()" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:12px;font-weight:700;cursor:pointer">${S._wbEnvOpen?'▴ Hide CoG envelope':'📈 Show CoG envelope graph'}</button>
+          ${S._wbEnvOpen?`<div style="margin-top:10px">${(typeof _wbEnvelopeSVG==='function')?_wbEnvelopeSVG(f.ac,r):''}</div>`:''}
+        </div>
       </div>`;
 
       const canSign=hasRolePerm('sign_loadsheet');
