@@ -1070,6 +1070,15 @@ function _rzCheckinModal(){
   var cust=b?(b.customerName||d.order):d.order;
   var already=!!((S._rzBookingCheckedIn||{})[d.order]);
   var canUndo=!!(d._hist&&d._hist.length);
+  // Pilot for this booking (so the desk can tell passengers who's flying them) — resolved from the
+  // calendar/seatmap allocation for the booking's aircraft + departure; shown as a first name.
+  var _ciPilotName='';
+  try{
+    var _ciAc=(typeof _rzBookingAc==='function')?_rzBookingAc(b,d.order):null;
+    var _ciDep=(b&&b.items&&b.items[0])?_rzDepTime(b.items[0].startTimeLocal||''):'';
+    var _ciCode=(_ciAc&&typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(_ciAc,_ciDep):null;
+    if(_ciCode){var _cr=(S.crew||[]).find(function(c){return String(c.code||'').toUpperCase()===String(_ciCode).toUpperCase();});_ciPilotName=(_cr&&_cr.n)?String(_cr.n).trim().split(/\s+/)[0]:String(_ciCode);}
+  }catch(_e){}
   // Fixed-size box so the check-in looks the SAME regardless of lunches / plate / pax count — uses the
   // desktop real estate; the passenger list scrolls inside for big groups. Still an overlaid modal.
   var _dlg='background:var(--card);border:1px solid var(--border2);border-radius:16px;box-shadow:0 16px 50px rgba(0,0,0,.5);width:560px;max-width:calc(100vw - 24px);height:min(740px,calc(100dvh - 64px));display:flex;flex-direction:column;overflow:hidden';
@@ -1078,6 +1087,7 @@ function _rzCheckinModal(){
     '<div style="flex-shrink:0;padding:16px 18px 12px;border-bottom:1px solid var(--border2)">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><div class="st" style="margin-bottom:0">'+(already?'Edit check-in':'Check in')+' — '+_rzEsc(cust)+'</div><button onclick="window.rezdyCheckinCancel()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>'+
       '<p style="font-size:12px;color:var(--text3);margin:8px 0 0">Enter every passenger’s name. <b>Actual weight</b> is optional — blank falls back to the declared weight (red “(d)”). The toggle cycles <b>A</b>→<b>C</b>→<b>i</b>; an infant is a lap pax.</p>'+
+      (_ciPilotName?'<div style="margin-top:9px;display:inline-flex;align-items:center;gap:7px;background:rgba(96,165,250,.14);border:1px solid rgba(96,165,250,.5);border-radius:9px;padding:5px 12px"><span style="font-size:15px">✈</span><span style="font-size:13px;font-weight:800;color:#60a5fa">Your pilot today: '+_rzEsc(_ciPilotName)+'</span></div>':'')+
     '</div>'+
     '<div style="flex:1 1 auto;overflow:auto;padding:14px 18px">';
   var _ciBal=b?parseFloat(b.balanceDue):0;
