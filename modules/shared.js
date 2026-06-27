@@ -638,7 +638,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.78';
+const APP_VER='v27.79';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -861,9 +861,10 @@ function calcFormWB(form){
 
 // ── CoG envelope (flight-manual polygon) ──────────────────────────────────────────────────────────
 // a.cogEnv = [{w,fwd,aft}, …] (weight kg, forward & aft CoG limit in inches at that weight) — the
-// loaded envelope read straight off the flight manual. When present it's drawn as the true polygon and
-// used for an ADVISORY in/out check. The signing gate still uses the rectangular cogMin/cogMax + MTOW/
-// MLW (unchanged) until an envelope has been entered + verified for that aircraft.
+// loaded envelope read straight off the flight manual. When present it's drawn as the true polygon AND
+// (since v27.76) drives the SIGNING GATE: calcFormWB.cogOk uses the effective fwd/aft limits at the
+// takeoff weight (plus an advisory landing-weight check). Aircraft with no envelope entered fall back to
+// the rectangular cogMin/cogMax + MTOW/MLW.
 function _wbEnvRows(a){var e=a&&a.cogEnv;
   // Cloud-stored aircraft saved before envelopes existed won't carry cogEnv — fall back to the baked-in
   // flight-manual default for that tail (only when none is set at all; an explicit empty array is honoured).

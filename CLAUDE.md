@@ -90,7 +90,21 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.48 (latest) — nightly sweep: 3 date/UTC off-by-one fixes.** `ARCHITECTURE_REVIEW_v27.48.md` is
+- **v27.79 (latest) — nightly sweep: loadsheet "change aircraft" now persists+broadcasts.**
+  `ARCHITECTURE_REVIEW_v27.79.md` is the latest full sweep (first since v27.48; covers the undocumented
+  v27.49→v27.78 cycle). One real fix: **`window.lsAc`** (loadsheet aircraft switch) was render-only — it
+  mutates the form heavily (sets `ac`, bumps excess pax to unallocated, clears cargo/fuel on type change,
+  voids the signature) but never called `autoSaveLS()`, so the switch was lost on refresh and never synced
+  to other devices. Added `S.formDirty=true;autoSaveLS()` (matches every sibling loadsheet handler). Also
+  corrected a stale/misleading comment on the CoG **signing gate** in `shared.js` (v27.76 moved the gate to
+  the flight-manual envelope; the comment still said it used the rectangle — no code change). Verified clean:
+  per-seat 7-map moves, CoG-envelope NaN/div-by-zero guards + fallback chain, v27.78 transport reorder
+  broadcasts via `pickupSave`, XSS escaping on the v27.77 passenger list/seat bubbles, all date sites
+  `_rIso`/`_todayLocal`-guarded. build + `node --check` (4 blocks) → 0 errors; live truesouth.netlify.app
+  loads clean with **no console errors** (read-only). ⚠️ **COMMIT BLOCKED:** the VM session can't write to
+  `.git` and stale `.git/HEAD.lock` + `.git/index.lock` (26–27 Jun) are present — NOT deleted (per rule).
+  v27.79 is built + in the working tree but UNCOMMITTED; Andrew must clear the locks and commit.
+- **v27.48 — nightly sweep: 3 date/UTC off-by-one fixes.** `ARCHITECTURE_REVIEW_v27.48.md` is
   the latest full sweep (first sweep doc since v26.76; covers the v26.77→v27.47 cycle). All three fixes
   are the same root cause — a LOCAL `Date` formatted via `toISOString().slice(0,10)`, which lands on the
   previous calendar day in NZ (UTC+12/+13): (1) `rezdy.js _wxNextDays` Weather-call reschedule chips

@@ -1584,6 +1584,9 @@ window.lsAc=v=>{
     else if(!wb.lwOk)toast('⚠ '+acDisp(v)+' landing weight '+wb.lw.toFixed(0)+'kg exceeds MLW '+newA.mlw+'kg.','warn');
     else if(!wb.cogOk)toast('⚠ '+acDisp(v)+' C of G out of range.','warn');
   }
+  // Switching the loadsheet aircraft mutates the form (ac, reseats excess pax, clears cargo/fuel/sig)
+  // — persist + broadcast it, or the change is lost on refresh and never syncs to other devices.
+  S.formDirty=true;autoSaveLS();
   render();
 };
 window.lsCopyFlight=function(targetAc){
