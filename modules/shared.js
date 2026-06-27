@@ -382,6 +382,45 @@ async function _sbSignIn(email,password){
   try{localStorage.setItem('ts_sb_session',JSON.stringify(sess));}catch(e){}
   return {ok:true,session:sess,claims:_jwtClaims(j.access_token)};
 }
+// ── Biometric unlock (Face ID / Touch ID) via WebAuthn platform passkey ───────────────────────────
+// A LOCAL presence gate: enrolling creates a platform passkey bound to this site + device (stored in
+// the secure enclave; the credential id is kept in localStorage). Verifying triggers Face ID/Touch ID
+// and, on success, proves the device owner is present — used to unlock the app (a remembered session)
+// and the confidential Business Plan tab. The password ALWAYS remains as a fallback. Opt-in per device.
+function _bioAvail(){return !!(window.PublicKeyCredential&&navigator.credentials&&navigator.credentials.create&&navigator.credentials.get);}
+function _bioStore(){try{return JSON.parse(localStorage.getItem('ts_bio')||'{}')||{};}catch(e){return {};}}
+function _bioSetStore(o){try{localStorage.setItem('ts_bio',JSON.stringify(o||{}));}catch(e){}}
+function _bioEnrolledFor(uid){var s=_bioStore();return !!(uid&&s[uid]&&s[uid].id);}
+function _bioAnyEnrolled(){var s=_bioStore();return Object.keys(s).some(function(k){return s[k]&&s[k].id;});}
+function _b64uFromBuf(buf){var b=new Uint8Array(buf),s='';for(var i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+function _bufFromB64u(str){str=String(str||'').replace(/-/g,'+').replace(/_/g,'/');while(str.length%4)str+='=';var bin=atob(str),u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u.buffer;}
+function _bioChallenge(){var u=new Uint8Array(32);try{(window.crypto||{}).getRandomValues&&window.crypto.getRandomValues(u);}catch(e){}return u;}
+async function _bioEnroll(user){
+  if(!_bioAvail()||!user||!user.id)return {ok:false,err:'unsupported'};
+  try{
+    var cred=await navigator.credentials.create({publicKey:{
+      challenge:_bioChallenge(),rp:{name:'TrueSouth FMS'},
+      user:{id:new TextEncoder().encode(String(user.id)),name:String(user.email||user.id),displayName:String(user.name||user.email||'')},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'preferred'},
+      timeout:60000,attestation:'none'
+    }});
+    if(!cred||!cred.rawId)return {ok:false,err:'cancelled'};
+    var s=_bioStore();s[user.id]={id:_b64uFromBuf(cred.rawId),name:user.name||user.email||'',at:Date.now()};_bioSetStore(s);
+    return {ok:true};
+  }catch(e){return {ok:false,err:(e&&e.name)||'error'};}
+}
+async function _bioVerify(uid){
+  if(!_bioAvail())return false;
+  try{
+    var s=_bioStore();var allow=[];
+    if(uid&&s[uid]&&s[uid].id)allow=[{type:'public-key',id:_bufFromB64u(s[uid].id)}];
+    else Object.keys(s).forEach(function(k){if(s[k]&&s[k].id)allow.push({type:'public-key',id:_bufFromB64u(s[k].id)});});
+    var a=await navigator.credentials.get({publicKey:{challenge:_bioChallenge(),allowCredentials:allow.length?allow:undefined,userVerification:'required',timeout:60000}});
+    return !!a;
+  }catch(e){return false;}
+}
+function _bioRemove(uid){var s=_bioStore();if(uid)delete s[uid];else s={};_bioSetStore(s);}
 // Build an S.user object from JWT claims + the public user record.
 function _userFromClaims(claims){
   var appId=claims.app_id,role=claims.user_role||'desk';
@@ -599,7 +638,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.70';
+const APP_VER='v27.71';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

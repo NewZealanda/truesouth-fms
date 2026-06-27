@@ -208,28 +208,32 @@ async function loadAll(){
     let _sess=null;try{_sess=JSON.parse(localStorage.getItem('ts_sb_session')||'null');}catch(e){}
     if(_sess&&_sess.refresh_token){
       _applySession(_sess);
-      S._authRestoring=true;S._introStart=Date.now(); // first render shows the intro, not a login flash
-      // Safety net: if the refresh hangs (no network), fall back to the login form rather than
-      // spinning forever.
-      setTimeout(function(){if(S._authRestoring&&!S.user){S._authRestoring=false;render();}},8000);
-      (async function(){
-        const ok=await _sbRefresh();
-        if(ok&&_sbSession&&_sbSession.access_token){
-          S.user=_userFromClaims(_jwtClaims(_sbSession.access_token));
-          auditLog('session_restore',{via:'supabase',user:S.user.email});
-          await _reloadCoreTables();
-          // Re-resolve the user NOW that S.users is loaded: the first pass ran before the user list was
-          // fetched, so rec was empty and name fell back to the email claim (or '' if absent) — which is
-          // why signed/saved loadsheets showed a blank name. With S.users present, name = the real name.
-          var _u2=_userFromClaims(_jwtClaims(_sbSession.access_token));
-          if(_u2&&(_u2.name||_u2.email)){_u2.superAdmin=S.user.superAdmin||_u2.superAdmin;S.user=_u2;}
-          _loadAuditLog(); // S.user now set → load the audit history on refresh too
-          // Keep the intro on screen for its full one-time play before revealing the app (Skip cuts it).
-          S._authRestoring=false;S._appLoading=true;initRealtime();render();setTimeout(function(){restoreWorkspace();},400);
-          var _introRem=Math.max(300,INTRO_MS-(Date.now()-(S._introStart||Date.now())));
-          setTimeout(function(){S._appLoading=false;render();},_introRem);
-        } else { S._authRestoring=false;_applySession(null);try{localStorage.removeItem('ts_sb_session');}catch(e){} render(); }
-      })();
+      // The actual session restore — extracted so a Face ID lock can defer it until the user unlocks.
+      window._bioDoSessionRestore=function(){
+        S._bioLock=false;
+        S._authRestoring=true;S._introStart=Date.now(); // first render shows the intro, not a login flash
+        // Safety net: if the refresh hangs (no network), fall back to the login form rather than spinning.
+        setTimeout(function(){if(S._authRestoring&&!S.user){S._authRestoring=false;render();}},8000);
+        (async function(){
+          const ok=await _sbRefresh();
+          if(ok&&_sbSession&&_sbSession.access_token){
+            S.user=_userFromClaims(_jwtClaims(_sbSession.access_token));
+            auditLog('session_restore',{via:'supabase',user:S.user.email});
+            await _reloadCoreTables();
+            var _u2=_userFromClaims(_jwtClaims(_sbSession.access_token));
+            if(_u2&&(_u2.name||_u2.email)){_u2.superAdmin=S.user.superAdmin||_u2.superAdmin;S.user=_u2;}
+            _loadAuditLog();
+            S._authRestoring=false;S._appLoading=true;initRealtime();render();setTimeout(function(){restoreWorkspace();},400);
+            var _introRem=Math.max(300,INTRO_MS-(Date.now()-(S._introStart||Date.now())));
+            setTimeout(function(){S._appLoading=false;render();},_introRem);
+          } else { S._authRestoring=false;_applySession(null);try{localStorage.removeItem('ts_sb_session');}catch(e){} render(); }
+        })();
+        render();
+      };
+      // If Face ID/Touch ID is enrolled on THIS device, hold at a biometric lock screen instead of
+      // auto-entering. "Use password" (on the lock screen) bypasses it entirely — nobody gets locked out.
+      if(typeof _bioAnyEnrolled==='function'&&_bioAnyEnrolled()){S._bioLock=true;}
+      else{window._bioDoSessionRestore();}
     }
   } else {
     const savedUser=sessionStorage.getItem('ts_user');
@@ -1214,6 +1218,16 @@ function logout(){
     clearTimeout(_sbRefreshTimer);_applySession(null);  // restores the anon key on SH
   }
   S.user=null;sessionStorage.removeItem('ts_user');localStorage.removeItem('ts_remembered_user');S._notifications=[];S.__notifStr='';S._notifOpen=false;broadcastPresence(null);if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}S.rtStatus='offline';S.rtPresence={};S._presSection=null;clearInterval(_presInterval);render();}
+// ── Biometric (Face ID / Touch ID) app-unlock handlers ──
+window.bioUnlockApp=async function(silent){
+  if(S._bioBusy)return;S._bioBusy=true;if(!silent)S._bioErr=null;render();
+  var ok=false;try{ok=await _bioVerify();}catch(e){ok=false;}
+  S._bioBusy=false;
+  if(ok){if(typeof window._bioDoSessionRestore==='function')window._bioDoSessionRestore();else{S._bioLock=false;render();}}
+  else{if(!silent)S._bioErr='Couldn’t verify — try again, or use your password.';render();}   // silent = the auto-attempt (no user gesture); the tap on the button is the reliable path
+};
+// Fallback: skip the biometric lock and sign in with the password (clears the stored session).
+window.bioUsePassword=function(){S._bioLock=false;S._authRestoring=false;try{if(typeof _applySession==='function')_applySession(null);localStorage.removeItem('ts_sb_session');}catch(e){}render();};
 
 // ── Shared Workspace Persistence ──
 async function saveWorkspace(){

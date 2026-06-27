@@ -440,15 +440,24 @@ window.bizUnlockSubmit=async function(){
   if(typeof render==='function')render();
 };
 function _bizLockGate(){
+  var _bio=(typeof _bioAvail==='function'&&_bioAvail()&&typeof _bioEnrolledFor==='function'&&_bioEnrolledFor((S.user&&S.user.id)||''));
   return '<div class="card" style="max-width:380px;margin:36px auto;text-align:center;padding:28px 24px">'+
     '<div style="font-size:34px;margin-bottom:6px">🔒</div>'+
     '<div style="font-size:16px;font-weight:800;color:var(--text1);margin-bottom:4px">Confidential — Business Plan</div>'+
     '<div style="font-size:12px;color:var(--text3);margin-bottom:16px">Re-enter your password to view this section.</div>'+
+    (_bio?'<button onclick="window.bizBioUnlock()" '+(S._bizUnlocking?'disabled':'')+' style="width:100%;margin-bottom:14px;padding:12px;border:none;border-radius:9px;background:var(--accent,#7c3aed);color:#fff;font-size:14px;font-weight:800;cursor:pointer;opacity:'+(S._bizUnlocking?'.7':'1')+'">🆔 Unlock with Face ID / Touch ID</button><div style="font-size:11px;color:var(--text3);margin-bottom:10px">or password</div>':'')+
     '<input id="bizPw" type="password" autocomplete="current-password" placeholder="Password" onkeydown="if(event.key===\'Enter\'){event.preventDefault();window.bizUnlockSubmit();}" style="width:100%;box-sizing:border-box;font-size:16px;padding:11px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:9px;text-align:center">'+
     (S._bizUnlockErr?'<div style="color:#ef4444;font-size:12px;font-weight:700;margin-top:8px">'+S._bizUnlockErr+'</div>':'')+
-    '<button onclick="window.bizUnlockSubmit()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:var(--accent,#7c3aed);color:#fff;font-size:14px;font-weight:800;cursor:pointer">'+(S._bizUnlocking?'Checking…':'🔓 Unlock')+'</button>'+
+    '<button onclick="window.bizUnlockSubmit()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:'+(_bio?'var(--card2)':'var(--accent,#7c3aed)')+';color:'+(_bio?'var(--text2)':'#fff')+';border:'+(_bio?'1px solid var(--border2)':'none')+';font-size:14px;font-weight:800;cursor:pointer">'+(S._bizUnlocking?'Checking…':'🔓 Unlock with password')+'</button>'+
   '</div>';
 }
+window.bizBioUnlock=async function(){
+  if(S._bizUnlocking)return;S._bizUnlocking=true;S._bizUnlockErr=null;render();
+  var ok=false;try{ok=await _bioVerify((S.user&&S.user.id)||'');}catch(e){ok=false;}
+  S._bizUnlocking=false;
+  if(ok){S._bizUnlocked=true;S._bizUnlockErr=null;}else{S._bizUnlockErr='Face ID didn’t verify — try again or use your password.';}
+  render();
+};
 // ── render ──
 function renderBusinessPlan(){
   if(!(typeof hasRolePerm==='function'&&hasRolePerm('businessplan'))&&!(S.user&&S.user.superAdmin))
