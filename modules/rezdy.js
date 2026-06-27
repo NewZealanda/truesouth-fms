@@ -1467,7 +1467,14 @@ window.wxSubmit=function(status){
   var d=S._wxDraft||{};var dep=d.dep;if(!dep)return;var reasons=(d.reasons||[]).slice();
   if((status==='cancelled'||status==='final')&&!reasons.length){if(typeof toast==='function')toast('Pick at least one reason (cloud/rain/wind/snow/visibility) first.','warn');return;}
   S._rzWxCalls=S._rzWxCalls||{};
-  S._rzWxCalls[String(dep)]={status:status,reasons:(status==='on'?[]:reasons),nextDay:(status==='cancelled'?(d.nextDay||''):''),comment:d.comment||'',by:(S.user&&(S.user.name||S.user.email))||'',at:new Date().toISOString()};
+  var _by=(S.user&&(S.user.name||S.user.email))||'',_at=new Date().toISOString();
+  var _prev=S._rzWxCalls[String(dep)]||{};
+  // Keep a running history of status changes (e.g. Final → Cancelled, On → Off) so the dropdown shows
+  // the trail of who changed it to what, when.
+  var _hist=Array.isArray(_prev.history)?_prev.history.slice():[];
+  _hist.push({status:status,reasons:(status==='on'?[]:reasons.slice()),by:_by,at:_at});
+  if(_hist.length>30)_hist=_hist.slice(-30);
+  S._rzWxCalls[String(dep)]={status:status,reasons:(status==='on'?[]:reasons),nextDay:(status==='cancelled'?(d.nextDay||''):''),comment:d.comment||'',by:_by,at:_at,history:_hist,_remind:_prev._remind};
   S._wxOpen=null;S._wxDraft=null;
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();
   if(typeof auditLog==='function')auditLog('weather_call',{dep:dep,status:status,reasons:reasons.join(',')});
@@ -1524,6 +1531,19 @@ function _rzWxUserForPilot(code){
 }
 try{setInterval(function(){try{_wxCheckReminders();}catch(e){}},60000);}catch(_e){}
 function _wxDayLabel(iso,baseDate){var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];try{var d=new Date(iso+'T00:00:00');var b=baseDate?new Date(baseDate+'T00:00:00'):new Date();var diff=Math.round((d-b)/86400000);if(diff===1)return 'Tomorrow';return days[d.getDay()]+' '+d.getDate();}catch(e){return iso;}}
+// Status-change trail for a weather call (Final → Cancelled → On …), newest first. Shown in the dropdown.
+function _wxHistoryHtml(call){
+  var h=(call&&Array.isArray(call.history))?call.history:[];
+  if(h.length<2)return '';   // only worth showing once it's actually been changed
+  var rows=h.slice().reverse().map(function(e){var c=_wxStatusColor(e.status);var rs=(e.reasons&&e.reasons.length)?(' — '+e.reasons.join(', ')):'';
+    return '<div style="display:flex;align-items:baseline;gap:8px;padding:3px 0;font-size:11px">'+
+      '<span style="color:'+c+';font-weight:800;white-space:nowrap">'+_rzEsc(_wxStatusLabel(e.status))+'</span>'+
+      '<span style="flex:1;color:var(--text3);min-width:0">'+_rzEsc(rs)+'</span>'+
+      '<span style="color:var(--text3);white-space:nowrap">'+_rzEsc(e.by||'')+(e.at?' · '+_rzEsc(_wxCallAtLabel(e.at)):'')+'</span></div>';
+  }).join('');
+  return '<div style="margin-top:10px;border-top:1px dashed var(--border2);padding-top:8px">'+
+    '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:3px">🕘 History</div>'+rows+'</div>';
+}
 function _rzRenderWeatherCalls(){
   var date=S.rezdyDate;
   // Make sure this day's data is loaded (bookings drive the departures; schedule adds manual blocks).
@@ -1547,7 +1567,7 @@ function _rzRenderWeatherCalls(){
   if(!deps.length){h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No departures scheduled for this day.</div></div>';return h;}
   var nd=_wxNextDays(date);var draft=S._wxDraft||{};
   deps.forEach(function(dep){
-    var call=_wxCall(dep.time);var st=call&&call.status;var col=_wxStatusColor(st);
+    var call=_wxCall(dep.key);var st=call&&call.status;var col=_wxStatusColor(st);
     var acPills=dep.acs.map(function(a){var c=(typeof _rzAcCol==='function')?_rzAcCol(a):'#888';return '<span style="display:inline-block;border:1.5px solid '+c+';color:'+c+';border-radius:8px;padding:0 7px;font-weight:800;font-size:11px;white-space:nowrap">'+_rzEsc(String(a).replace('ZK-',''))+'</span>';}).join(' ');
     var picStr=dep.pics.length?dep.pics.join(', '):'';
     var _rs=_wxCallReasons(call);
@@ -1573,6 +1593,7 @@ function _rzRenderWeatherCalls(){
           '<button onclick="window.wxSubmit(\'cancelled\')" style="flex:1;min-width:110px;padding:10px;border-radius:9px;border:none;background:#ef4444;color:#fff;font-size:13px;font-weight:800;cursor:pointer">✕ Cancelled</button>'+
           '<button onclick="window.wxSubmit(\'final\')" style="flex:1;min-width:110px;padding:10px;border-radius:9px;border:none;background:#f59e0b;color:#3a2c06;font-size:13px;font-weight:800;cursor:pointer">⚠ Final (office)</button>'+
         '</div>'+
+        _wxHistoryHtml(call)+
         (call?'<button onclick="window.wxClear(\''+dep.key+'\')" style="margin-top:8px;background:none;border:none;color:var(--text3);font-size:11px;text-decoration:underline;cursor:pointer">clear this call</button>':'')+
       '</div>';
     }
