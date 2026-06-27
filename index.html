@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.84';
+const APP_VER='v27.85';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -19601,6 +19601,12 @@ function _rzSchedEditForm(){
     '<div><label>End</label><input class="fi" type="time" value="'+_rzEsc(ed.end)+'" onchange="window.schedEditField(\'end\',this.value)"></div>'+
     '<div><label>Colour</label><input class="fi" type="color" value="'+_rzEsc(ed.color||(isMeeting?'#a78bfa':_rzAcCol(ed.aircraft)))+'" onchange="window.schedEditField(\'color\',this.value)" style="height:38px;padding:3px"></div>'+
   '</div>'+
+  (function(){var _ed=ed.date||S.rezdyDate;return '<div style="margin-bottom:10px"><label>Date <span style="font-weight:400;color:var(--text3);font-size:11px">— move this block to another day</span></label>'+
+    '<div style="display:flex;align-items:center;gap:6px">'+
+      '<button class="btn btn-ghost" style="font-size:14px;padding:7px 12px;line-height:1" title="A day earlier" onclick="window.schedEditDateShift(-1)">◀</button>'+
+      '<input class="fi" type="date" value="'+_rzEsc(_ed)+'" onchange="window.schedEditField(\'date\',this.value)" style="flex:1">'+
+      '<button class="btn btn-ghost" style="font-size:14px;padding:7px 12px;line-height:1" title="A day later" onclick="window.schedEditDateShift(1)">▶</button>'+
+    '</div>'+(_ed!==S.rezdyDate?'<div style="font-size:11px;color:#f59e0b;margin-top:4px">↪ Will move to '+_rzEsc((typeof _rzDowLabel==='function')?_rzDowLabel(_ed):_ed)+' — it leaves this day’s view on save.</div>':'')+'</div>';})()+
   (isMeeting?'':'<div style="margin-bottom:10px"><label>Flight type</label><select class="fi" onchange="window.schedEditField(\'ftype\',this.value)">'+
     ['Maintenance','Training','Ferry','Private Hire','Other'].map(function(t){return '<option value="'+t+'"'+((ed.ftype||'Maintenance')===t?' selected':'')+'>'+t+'</option>';}).join('')+
   '</select></div>')+
@@ -19630,6 +19636,8 @@ function _rzSchedEditForm(){
   '</div></div>';
   return h;
 }
+// Nudge the block's date a day earlier/later (move a maintenance/ferry block forward or back).
+window.schedEditDateShift=function(delta){var ed=S._schedEdit;if(!ed)return;var base=ed.date||S.rezdyDate;var d=new Date(base+'T00:00:00');if(isNaN(d.getTime()))d=new Date();d.setDate(d.getDate()+(delta||0));ed.date=(typeof _rIso==='function')?_rIso(d):d.toISOString().slice(0,10);render();};
 window.schedSetMeetingPilot=function(code){if(S._schedEdit){S._schedEdit.pilot=(S._schedEdit.pilot===code?'':code);render();}};
 window.schedToggleAttendee=function(code){var ed=S._schedEdit;if(!ed||!code)return;ed.attendees=ed.attendees||[];var i=ed.attendees.indexOf(code);if(i>=0)ed.attendees.splice(i,1);else ed.attendees.push(code);render();};
 window.schedNewPilotBlock=function(code){S._schedEdit={id:null,aircraft:'__pilot__',pilot:code||'',label:'Meeting',start:'09:00',end:'10:00',color:'#a78bfa',notes:'',ftype:'Meeting'};render();};
@@ -20064,7 +20072,7 @@ window.schedNewMisc=function(){
 window.schedEditBlock=function(id){
   const b=(S._schedBlocks||[]).find(function(x){return x.id===id;});
   if(!b)return;
-  S._schedEdit={id:b.id,aircraft:b.aircraft||'',pilot:b.pilot||'',attendees:(b.attendees||[]).slice(),label:b.label||'',start:b.start||'09:00',end:b.end||'10:00',color:b.color||_rzAcCol(b.aircraft),notes:b.notes||'',ftype:b.ftype||'Maintenance'};
+  S._schedEdit={id:b.id,aircraft:b.aircraft||'',pilot:b.pilot||'',attendees:(b.attendees||[]).slice(),label:b.label||'',start:b.start||'09:00',end:b.end||'10:00',color:b.color||_rzAcCol(b.aircraft),notes:b.notes||'',ftype:b.ftype||'Maintenance',date:S.rezdyDate};
   render();
 };
 window.schedEditField=function(field,val){
@@ -20092,11 +20100,13 @@ window.schedSaveBlock=async function(){
   if(!ed.start||!ed.end){toast('Start and end required','err');return;}
   if(ed.end<=ed.start){toast('End time must be after the start time','err');return;}
   const id=ed.id||('sch_'+Date.now()+'_'+Math.floor(Math.random()*1e5));
-  const payload={id:id,block_date:S.rezdyDate,data:{aircraft:ed.aircraft,pilot:(ed.aircraft==='__pilot__'?(ed.pilot||''):''),attendees:(ed.attendees||[]),label:ed.label||'',start:ed.start,end:ed.end,color:ed.color||_rzAcCol(ed.aircraft),notes:ed.notes||'',ftype:ed.ftype||'Maintenance'}};
+  const _bd=ed.date||S.rezdyDate;const _moved=(_bd!==S.rezdyDate);
+  const payload={id:id,block_date:_bd,data:{aircraft:ed.aircraft,pilot:(ed.aircraft==='__pilot__'?(ed.pilot||''):''),attendees:(ed.attendees||[]),label:ed.label||'',start:ed.start,end:ed.end,color:ed.color||_rzAcCol(ed.aircraft),notes:ed.notes||'',ftype:ed.ftype||'Maintenance'}};
   const r=await sbU('ts_schedule',[payload]);
   if(!r){toast('Save failed','err');return;}
-  if(ed.pilot){S._schedPilots=S._schedPilots||{};S._schedPilots[id]=ed.pilot;if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();}  // apply the draft pilot to the new block
+  if(ed.pilot&&!_moved){S._schedPilots=S._schedPilots||{};S._schedPilots[id]=ed.pilot;if(window.pickupSave)window.pickupSave(true);_rzSchedBroadcast();}  // pilot is per-day; only apply when staying on this date
   S._schedEdit=null;
+  if(_moved){toast('Moved to '+((typeof _rzDowLabel==='function')?_rzDowLabel(_bd):_bd)+' ✓','ok');if(typeof window.rezdySetDate==='function'){window.rezdySetDate(_bd);return;}}  // jump to the new day so it's visible
   toast('Block saved ✓','ok');
   await window.rezdyLoadSchedule();
   _rzSchedBroadcast();
