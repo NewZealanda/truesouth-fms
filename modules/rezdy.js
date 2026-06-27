@@ -897,7 +897,26 @@ function _rzNewBookingModal(){
 }
 // The aircraft assigned to a booking: a manual pill override, else whatever the comments note.
 // The '__none__' sentinel means explicitly unallocated (overrides any comment).
-function _rzBookingAc(b,order){order=String(order);var ov=(S._rzBookingAc||{})[order];if(ov==='__none__')return null;if(ov)return ov;var auto=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;return auto||null;}
+function _rzBookingAc(b,order){order=String(order);var ov=(S._rzBookingAc||{})[order];if(ov==='__none__')return null;if(ov)return ov;
+  // travelling-with: ride a linked partner's manually-set aircraft (so linking + assigning one moves both)
+  var _tw=(typeof _rzTwList==='function')?_rzTwList(order):[];for(var _i=0;_i<_tw.length;_i++){var _pv=(S._rzBookingAc||{})[_tw[_i]];if(_pv&&_pv!=='__none__')return _pv;}
+  var auto=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;return auto||null;}
+// ── "Travelling with" — link bookings so they ride the same aircraft (and seat as one group) ────────
+// S._rzTravelWith: { order:[linkedOrder,…] } bidirectional; persisted per-date in the pickup blob.
+function _rzTwList(order){var a=(S._rzTravelWith||{})[String(order)];return (a&&a.length)?a.slice():[];}
+function _rzTwLink(a,b){a=String(a);b=String(b);if(!a||!b||a===b)return;S._rzTravelWith=S._rzTravelWith||{};
+  function add(x,y){var l=S._rzTravelWith[x]||(S._rzTravelWith[x]=[]);if(l.indexOf(y)<0)l.push(y);}add(a,b);add(b,a);}
+function _rzTwUnlink(a,b){a=String(a);b=String(b);var m=S._rzTravelWith||{};
+  function rm(x,y){if(m[x]){m[x]=m[x].filter(function(z){return z!==y;});if(!m[x].length)delete m[x];}}rm(a,b);rm(b,a);}
+function _rzTwNames(order){return _rzTwList(order).map(function(o){return _rzBookingName(o);});}
+function _rzTwBadge(order){var ns=_rzTwNames(order);if(!ns.length)return '';return '<span title="Travelling with '+_rzEsc(ns.join(', '))+'" style="font-size:9px;font-weight:900;letter-spacing:.04em;color:#0ea5e9;background:rgba(14,165,233,.15);border:1px solid rgba(14,165,233,.55);padding:1px 6px;border-radius:9px;white-space:nowrap;cursor:help">TW</span>';}
+// When a booking's aircraft is set, pull its travelling-with partners onto the same aircraft.
+function _rzTwPropagate(order){order=String(order);var ac=(S._rzBookingAc||{})[order];if(ac==null)return;S._rzBookingAc=S._rzBookingAc||{};_rzTwList(order).forEach(function(o){if(S._rzBookingAc[o]!==ac)S._rzBookingAc[o]=ac;});}
+window.rezdyTwToggle=function(order){order=String(order);S._rzTwPickFor=(S._rzTwPickFor===String(order))?null:String(order);render();};
+window.rezdyTwSet=function(a,b){a=String(a);b=String(b);if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();
+  if(_rzTwList(a).indexOf(b)>=0){_rzTwUnlink(a,b);}else{_rzTwLink(a,b);_rzTwPropagate(a);}
+  if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
+  if(typeof toast==='function')toast(_rzTwList(a).indexOf(b)>=0?('Linked: '+_rzBookingName(a)+' + '+_rzBookingName(b)):'Unlinked','ok');render();};
 // True when a booking's aircraft is coming from cost-aware auto-allocation (no manual override).
 function _rzBookingAcIsAuto(b,order){order=String(order);if((S._rzBookingAc||{})[order])return false;return !!((typeof _schedAutoAcFor==='function')&&_schedAutoAcFor(order));}
 // Aircraft selector pills for one booking. Comments supply the default; a pill overrides it; the
@@ -1531,6 +1550,7 @@ window.rezdySchedSetBookingAc=function(order,ac){
   S._rzBookingAc=S._rzBookingAc||{};
   S._rzBookingAc[order]=(ac==='__unalloc__'||ac==='__none__')?'__none__':ac;
   if(S._rzSchedAttach&&S._rzSchedAttach[order])delete S._rzSchedAttach[order]; // a manual move breaks a flyback combine
+  if(typeof _rzTwPropagate==='function')_rzTwPropagate(order);                 // keep travelling-with partners together
   S._rzAcPickFor=null;
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();render();
   if(typeof toast==='function')toast('Booking → '+(ac==='__unalloc__'||ac==='__none__'?'Unallocated':String(ac).replace('ZK-',''))+' ✓','ok');
@@ -1606,11 +1626,39 @@ function _rzBlockKeyAt(x,y,exclude){try{var els=document.elementsFromPoint(x,y);
 // dropped time. Drop on an aircraft HEADING (data-colhead) → just reassign the aircraft (keep its time).
 // Either way the booking is pulled OUT of any combined block first. (v27.61)
 function _rzDropTargetAt(x,y){
-  try{var els=document.elementsFromPoint(x,y);
-    for(var i=0;i<els.length;i++){if(els[i].getAttribute&&els[i].getAttribute('data-colhead')){return {ac:els[i].getAttribute('data-ac'),head:true};}}
-    for(var j=0;j<els.length;j++){if(els[j].getAttribute&&els[j].getAttribute('data-ac')){return {ac:els[j].getAttribute('data-ac'),head:false,el:els[j]};}}
+  try{var els=document.elementsFromPoint(x,y);var headAc=null,blockKey=null,gridAc=null,gridEl=null;
+    for(var i=0;i<els.length;i++){var el=els[i];if(!el.getAttribute)continue;
+      if(headAc==null&&el.getAttribute('data-colhead'))headAc=el.getAttribute('data-ac');
+      if(blockKey==null){var bk=el.getAttribute('data-bkkey');if(bk)blockKey=bk;}
+      if(gridAc==null){var a=el.getAttribute('data-ac');if(a&&!el.getAttribute('data-colhead')){gridAc=a;gridEl=el;}}
+    }
+    if(headAc!=null)return {ac:headAc,head:true};                              // aircraft heading
+    if(blockKey!=null)return {ac:(String(blockKey).split('|')[0]||gridAc),block:blockKey,el:gridEl}; // an existing block
+    if(gridAc!=null)return {ac:gridAc,el:gridEl};                              // empty grid space
   }catch(_){}
   return null;
+}
+// Effective departure minutes for a booking's first real (non-flyback) flight (override-aware).
+function _rzBookingDepMin(order){
+  var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(order);});if(!b)return null;
+  var items=(b.items)||[];
+  for(var i=0;i<items.length;i++){var it=items[i];var prod=_rzProduct(it.product);if(_rzIsFlyback(prod))continue;var t=_rzDepTime(it.startTimeLocal||'');if(!t)continue;var orig=_rzHHMMcolon(t);var ov=(S._rzDepTimeOv||{})[prod+'|'+orig];return _rzMinsFromHHMM(ov||orig);}
+  if(items[0]){var t0=_rzDepTime(items[0].startTimeLocal||'');if(t0)return _rzMinsFromHHMM(_rzHHMMcolon(t0));}
+  return null;
+}
+// An existing booking flight (block key) on `ac` departing at depMin (override-aware), or null.
+function _rzFlightOnAcAt(ac,depMin,excludeKey){
+  if(depMin==null)return null;
+  var fl=(typeof _schedDayFlights==='function')?(_schedDayFlights(S.rezdyDate)||[]):[];
+  for(var i=0;i<fl.length;i++){var f=fl[i];if(f.ac===ac&&f.depMin===depMin&&f.key!==excludeKey&&String(f.key).indexOf('|')>=0)return f.key;}
+  return null;
+}
+// Fold a single booking into an existing block (combine). Skips if it's already in that block.
+function _rzCombineOrderInto(order,tgtKey){
+  var tgtAc=String(tgtKey).split('|')[0];if(!tgtAc||tgtAc==='__unalloc__'||tgtAc==='__misc__')return false;
+  if(((typeof _rzOrdersForBlockKey==='function')?_rzOrdersForBlockKey(tgtKey):[]).indexOf(String(order))>=0)return false;
+  S._rzSchedAttach=S._rzSchedAttach||{};S._rzBookingAc=S._rzBookingAc||{};
+  S._rzSchedAttach[String(order)]=tgtKey;S._rzBookingAc[String(order)]=tgtAc;return true;
 }
 function _rzBookingName(order){var b=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(order);});return b?(b.customerName||order):order;}
 // Place a booking's flight at a specific clock time (used by the pax-group grid drop): set a dep-time
@@ -1662,13 +1710,34 @@ function _rzPaxUp(e){
   _rzClearColHi();var ln=document.getElementById('rzDragLine');if(ln)ln.style.display='none';
   if(!st||!st.moved)return;
   var t=_rzDropTargetAt(e.clientX,e.clientY);if(!t||!t.ac)return;
-  var order=st.order;var ac=t.ac;if(ac==='__unalloc__'||ac==='__misc__')ac='__none__';
-  if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();
-  S._rzSchedAttach=S._rzSchedAttach||{};if(S._rzSchedAttach[order])delete S._rzSchedAttach[order];   // pull out of any combined block
-  S._rzBookingAc=S._rzBookingAc||{};S._rzBookingAc[order]=ac;
-  if(!t.head&&st._mins!=null&&ac!=='__none__')_rzSetBookingDepTime(order,_rzMinToHHMM(st._mins));     // grid drop → place at the dropped time
+  var order=st.order;if(typeof _rzSchedPushUndo==='function')_rzSchedPushUndo();
+  S._rzSchedAttach=S._rzSchedAttach||{};S._rzBookingAc=S._rzBookingAc||{};
+  var note='';
+  if(t.block){
+    // Dropped onto an existing block → COMBINE into it.
+    if(S._rzSchedAttach[order])delete S._rzSchedAttach[order];
+    _rzCombineOrderInto(order,t.block);note=' — combined';
+  } else if(t.head){
+    // Dropped on an aircraft HEADING → reassign; if that aircraft already has a departure at this
+    // booking's time, combine into it instead of making a second block.
+    var ac=t.ac;if(ac==='__unalloc__'||ac==='__misc__')ac='__none__';
+    var ex=(ac!=='__none__')?_rzFlightOnAcAt(ac,_rzBookingDepMin(order),null):null;
+    if(S._rzSchedAttach[order])delete S._rzSchedAttach[order];
+    S._rzBookingAc[order]=ac;
+    if(ex&&_rzCombineOrderInto(order,ex))note=' — combined';
+    else note=' → '+(ac==='__none__'?'Unallocated':String(ac).replace('ZK-',''));
+  } else {
+    // Dropped on EMPTY grid space → new block on that aircraft at the dropped time.
+    var ac2=t.ac;if(ac2==='__unalloc__'||ac2==='__misc__')ac2='__none__';
+    if(S._rzSchedAttach[order])delete S._rzSchedAttach[order];
+    S._rzBookingAc[order]=ac2;
+    if(st._mins!=null&&ac2!=='__none__'){_rzSetBookingDepTime(order,_rzMinToHHMM(st._mins));note=' → '+String(ac2).replace('ZK-','')+' @ '+_rzMinToHHMM(st._mins);}
+    else note=' → '+(ac2==='__none__'?'Unallocated':String(ac2).replace('ZK-',''));
+  }
+  // keep any "travelling with" partners on the same aircraft
+  if(typeof _rzTwPropagate==='function')_rzTwPropagate(order);
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzSchedBroadcast==='function')_rzSchedBroadcast();
-  if(typeof toast==='function')toast(_rzBookingName(order)+' → '+(ac==='__none__'?'Unallocated':String(ac).replace('ZK-',''))+((!t.head&&st._mins!=null&&ac!=='__none__')?' @ '+_rzMinToHHMM(st._mins):'')+' ✓','ok');
+  if(typeof toast==='function')toast(_rzBookingName(order)+note+' ✓','ok');
   render();
 }
 window.rzCalDown=function(e,key){
@@ -2067,6 +2136,7 @@ function _rzBookingCard(b){
        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
          '<span onclick="window.rezdyToggleRow(\''+oE+'\')" style="cursor:pointer;color:var(--text2);display:inline-block;transition:transform .12s;'+(open?'transform:rotate(90deg)':'')+'">▸</span>'+
          '<span style="font-size:15px;font-weight:800;color:var(--text1)">'+_rzEsc(b.customerName||ono)+'</span>'+
+         ((typeof _rzTwBadge==='function')?_rzTwBadge(ono):'')+
          (_rzBookingHasLunch(b)?'<span title="Lunch / meal ordered" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:#f59e0b;color:#3a2c06;font-weight:900;font-size:11px;border-radius:4px;flex-shrink:0;line-height:1">L</span>':'')+
          (function(){var _pl=_rzPlate(ono);if(!_pl||!_pl.plate)return '';var _pt='Numberplate '+_pl.plate+(_pl.done?' (entered into system)':' (enter into the separate system)');return '<span title="'+_rzEsc(_pt)+'" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:'+(_pl.done?'#22c55e':'#3b82f6')+';color:#fff;font-weight:900;font-size:11px;border-radius:4px;flex-shrink:0;line-height:1">P</span>';})()+
          '<span style="font-size:11px;color:var(--text3)">#'+_rzEsc(ono)+'</span>'+

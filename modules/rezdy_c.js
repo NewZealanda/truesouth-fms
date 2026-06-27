@@ -1249,9 +1249,11 @@ function _rzRenderSchedule(){
               '<span style="font-weight:700;font-size:13px;color:var(--text1)">'+_rzEsc(b.customerName||ord)+'</span>'+
               '<span style="font-size:11px;font-weight:800;padding:1px 8px;border-radius:10px;background:'+_bc+'22;border:1px solid '+_bc+'66;color:'+_bc+'">'+_rzBdCompact(_e)+' '+_rzEsc(_code)+'</span>'+
               (owing?'<span style="color:#ef4444;font-weight:800;font-size:11px">$ TO PAY</span>':'')+
+              ((typeof _rzTwBadge==='function')?_rzTwBadge(ord):'')+
             '</div>'+
             '<div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">'+
             (((S._rzSchedAttach||{})[ord])?'<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.rezdySchedDetach(\''+ordE+'\')" title="Un-combine this booking">↩ Detach</button>':'')+
+              '<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px'+(S._rzTwPickFor===ord?';border-color:#0ea5e9;color:#0ea5e9':'')+'" onclick="event.stopPropagation();window.rezdyTwToggle(\''+ordE+'\')" title="Link another booking as travelling-with (same aircraft / sit together)">🔗 Travelling with</button>'+
               '<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px'+(S._rzAcPickFor===ord?';border-color:var(--accent);color:var(--accent)':'')+'" onclick="event.stopPropagation();window.rezdySchedAcPickToggle(\''+ordE+'\')" title="Move this booking to another aircraft">✈ Change aircraft</button>'+
               '<button class="btn btn-ghost" style="font-size:11px;padding:3px 9px" onclick="window.rezdyGotoBooking(\''+ordE+'\')">View booking →</button>'+
             '</div>'+
@@ -1260,6 +1262,14 @@ function _rzRenderSchedule(){
             _fleetPick.map(function(id){var _on=_curAc===id;var c=_rzAcCol(id);return '<button onclick="event.stopPropagation();window.rezdySchedSetBookingAc(\''+ordE+'\',\''+id+'\')" style="font-size:11px;font-weight:800;padding:4px 11px;border-radius:14px;border:'+(_on?'2px solid '+c:'1px solid '+c+'66')+';background:'+c+(_on?'33':'14')+';color:'+c+';cursor:pointer">'+(_on?'✓ ':'')+id.replace('ZK-','')+'</button>';}).join('')+
             '<button onclick="event.stopPropagation();window.rezdySchedSetBookingAc(\''+ordE+'\',\'__none__\')" style="font-size:11px;font-weight:800;padding:4px 11px;border-radius:14px;border:'+(_curAc?'1px solid var(--border2)':'2px solid var(--text3)')+';background:transparent;color:var(--text3);cursor:pointer">Unallocated</button>'+
           '</div>':'')+
+          (S._rzTwPickFor===ord?(function(){
+            var others=(S._rezdyBookings||[]).filter(function(ob){if(_rzIsCancelled(ob))return false;var oo=String(ob.orderNumber||'');return oo&&oo!==ord;});
+            if(!others.length)return '<div style="margin-top:8px;font-size:11px;color:var(--text3)">No other bookings today to link.</div>';
+            return '<div style="margin-top:8px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:5px">Travelling with — tap to link / unlink</div><div style="display:flex;flex-wrap:wrap;gap:5px">'+
+              others.map(function(ob){var oo=String(ob.orderNumber||'');var ooE=_rzEsc(oo).replace(/'/g,"\\'");var on=(typeof _rzTwList==='function')&&_rzTwList(ord).indexOf(oo)>=0;var nm=ob.customerName||oo;var be=_rzEffBreakdown(ob);
+                return '<button onclick="event.stopPropagation();window.rezdyTwSet(\''+ordE+'\',\''+ooE+'\')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:14px;border:'+(on?'2px solid #0ea5e9':'1px solid var(--border2)')+';background:'+(on?'rgba(14,165,233,.15)':'transparent')+';color:'+(on?'#0ea5e9':'var(--text2)')+';cursor:pointer">'+(on?'✓ ':'')+_rzEsc(nm)+' <span style="opacity:.7">'+_rzBdCompact(be)+'</span></button>';}).join('')+
+            '</div></div>';
+          })():'')+
           _rzPaxBubbles(b,{drag:true})+
         '</div>';
       });
