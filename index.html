@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.76';
+const APP_VER='v27.77';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -4505,18 +4505,21 @@ function renderLsSeatGrid(f,a){
       var isOccupied=!!nm||parseFloat(wt)>0;
       var isSelSeat=S._selFormSeat===idx;
       var isDropTarget=!isPIC&&!isCoPilot&&(S._selFormSeat!=null||S._selUnalloc!=null)&&!isSelSeat;
+      // Seatmap-style bubbles: clean card background + a group-colour LEFT accent + dark bold name
+      // (instead of a fully group-tinted box) — easier to read at a glance.
       var bgCol=isSelSeat?'rgba(245,158,11,.45)':isPIC?'rgba(59,130,246,.18)':isCoPilot?'rgba(100,116,139,.12)':
-        isOccupied?(gc?gc+'30':'rgba(124,58,237,.14)'):(isDropTarget?'rgba(124,58,237,.08)':'var(--card2)');
+        isOccupied?'var(--card2)':(isDropTarget?'rgba(124,58,237,.08)':'var(--card2)');
       var borderCol=isSelSeat?'#f59e0b':isPIC?'#3b82f6':isCoPilot?'#64748b':
-        isOccupied?(gc||'var(--accent)'):(isDropTarget?'var(--accent)':'var(--border2)');
-      var nameCol=gc?gc:(isPIC?'#93c5fd':isCoPilot?'#94a3b8':'var(--text1)');
+        isOccupied?'var(--border2)':(isDropTarget?'var(--accent)':'var(--border2)');
+      var accentCol=(isOccupied&&!isPIC&&!isCoPilot)?(gc||'#7c3aed'):null;   // group-colour left accent
+      var nameCol=isPIC?'#93c5fd':isCoPilot?'#94a3b8':'var(--text1)';
       var clickable=!isCoPilot;
       var _clickFn=isPIC?'window.lsPicChangePopup()':clickable?(_lsMode==='move'?'window.tapFormSeat('+idx+',\''+f.ac+'\',event)':'window.lsSeatEditPopup('+idx+')'):''
 ;      var _dragSrc=(_lsMode==='move'&&isOccupied&&!isPIC&&!isCoPilot)?' draggable="true" ondragstart="window.lsSeatDragStart('+idx+',event)"':'';
       var _dropTgt=(!isPIC&&!isCoPilot)?' ondragover="event.preventDefault();this.style.outline=\'2px solid #22c55e\'" ondragleave="this.style.outline=\'\'" ondrop="window.lsDropOnSeat('+idx+',event);this.style.outline=\'\'"':'';
       var _dragAttrs=_dragSrc+_dropTgt;
       seatsCol+='<div onclick="'+_clickFn+'"'+_dragAttrs+' style="'
-        +'width:'+sW+'px;height:'+sH+'px;border-radius:10px;border:2px solid '+borderCol+';'
+        +'width:'+sW+'px;height:'+sH+'px;border-radius:10px;border:2px solid '+borderCol+';'+(accentCol?'border-left:5px solid '+accentCol+';':'')
         +'background:'+bgCol+';cursor:'+(_lsMode==='move'&&isOccupied&&!isPIC&&!isCoPilot?'grab':clickable?'pointer':'default')+';'
         +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
         +'position:relative;padding:3px 5px;text-align:center;flex-shrink:0;'
@@ -4526,15 +4529,15 @@ function renderLsSeatGrid(f,a){
         +(isPIC?'#3b82f6':isCoPilot?'#64748b':'var(--text3)')+';line-height:1">'
         +(isPIC?'PIC':isCoPilot?'CP':cell.lbl)+'</div>';
       if(displayNm){
-        seatsCol+='<div style="font-size:'+(isMob?'10':'12')+'px;font-weight:800;color:'+nameCol+';'
-          +'line-height:1.1;max-width:'+(sW-10)+'px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'
-          +'margin-top:'+(isPIC||isCoPilot?'2':'6')+'px">'+displayNm.toUpperCase()+'</div>';
+        seatsCol+='<div style="font-size:'+(isMob?'11':'12.5')+'px;font-weight:800;color:'+nameCol+';'
+          +'line-height:1.15;max-width:'+(sW-12)+'px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'
+          +'margin-top:'+(isPIC||isCoPilot?'2':'6')+'px">'+esc(isPIC||isCoPilot?displayNm:displayNm.split(' ')[0])+'</div>';
       } else if(!isPIC&&!isCoPilot){
         seatsCol+='<div style="font-size:11px;color:var(--border2);margin-top:8px">+</div>';
       }
       if(isOccupied&&!isPIC&&!isCoPilot&&parseFloat(wt)>0){
         _rowWt+=parseFloat(wt)||0;_rowWt+=parseFloat(bg)||0;
-        seatsCol+='<div style="font-size:'+(isMob?'8':'9')+'px;color:'+(gc?gc:'var(--text3)')+';margin-top:2px;opacity:.9">'+wt+'kg'+(parseFloat(bg)>0?' +🎒':'')+'</div>';
+        seatsCol+='<div style="font-size:'+(isMob?'9':'10')+'px;font-weight:700;color:var(--text2);margin-top:2px">'+esc(String(wt))+'kg'+(parseFloat(bg)>0?' +🎒':'')+'</div>';
       }
       if(!isPIC&&!isCoPilot&&isOccupied&&paxType==='C'){
         seatsCol+='<div style="position:absolute;bottom:3px;right:3px;font-size:7px;font-weight:900;background:rgba(251,146,60,.7);color:#7c2d12;border-radius:3px;padding:0 3px;line-height:1.6">C</div>';
@@ -4554,6 +4557,31 @@ function renderLsSeatGrid(f,a){
   });
   seatsCol+='</div>';
   return seatsCol;
+}
+// Collapsed (default) list of every seated passenger with their seat number — quick read for pilots.
+function _lsPaxList(f,a){
+  if(!a||!a.seats)return '';
+  var rows=[];
+  a.seats.forEach(function(s,idx){
+    var nm=(idx===0?(f.names[0]||f.pic||''):(f.names[idx]||'')).trim();
+    if(!nm)return;
+    var role=idx===0?'PIC':(idx===1&&f.coPilot?'CP':(s.lbl||('Seat '+idx)));
+    var infN=(f.infantNames&&f.infantNames[idx])?String(f.infantNames[idx]).trim():'';
+    var isChild=idx>0&&(f.paxType||{})[idx]==='C';
+    rows.push('<div style="display:flex;gap:10px;align-items:baseline;padding:4px 0;border-top:1px solid var(--border2)">'+
+      '<span style="min-width:48px;font-size:12px;font-weight:800;color:var(--text3);flex-shrink:0">'+esc(role)+'</span>'+
+      '<span style="font-size:13.5px;font-weight:600;color:var(--text1)">'+esc(nm)+
+        (isChild?'<span style="font-size:10px;font-weight:800;color:#fb923c;margin-left:6px">CHILD</span>':'')+
+        (infN?'<span style="font-size:11px;color:#ec4899;margin-left:6px">👶 '+esc(infN)+'</span>':'')+
+      '</span></div>');
+  });
+  if(!rows.length)return '';
+  var open=!!S._lsPaxListOpen;
+  return '<div class="card" style="padding:9px 13px;margin-top:8px">'+
+    '<button onclick="event.stopPropagation();S._lsPaxListOpen=!S._lsPaxListOpen;render()" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:none;border:none;cursor:pointer;color:var(--text1);font-size:13px;font-weight:800;padding:2px 0">'+
+      '<span>👥 Passenger list ('+rows.length+')</span><span style="color:var(--text3);font-weight:700">'+(open?'▴ hide':'▾ show')+'</span></button>'+
+    (open?'<div style="margin-top:6px">'+rows.join('')+'</div>':'')+
+  '</div>';
 }
 
 // ── Seat editor popup ──
@@ -4824,12 +4852,12 @@ function renderLoadsheet(){
       const hasPerson=nm||parseFloat(wt);
       const selUnalloc=S._selUnalloc!=null;const selSeat=S._selFormSeat===idx;
       const isCp=idx===1&&!!f.coPilot;
-      return`<div onclick="window.tapFormSeat(${idx},'${f.ac}',event)" draggable="${nm?'true':'false'}" ondragstart="window.lsSeatDragStart(${idx},event)" ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'" ondragleave="event.currentTarget.style.outline=''" ondrop="window.lsDropOnSeat(${idx},event)" style="position:relative;cursor:${selUnalloc||nm?'pointer':'default'};background:${selSeat?'rgba(245,158,11,.4)':selUnalloc&&!nm?'rgba(124,58,237,.15)':'var(--card2)'};border-radius:7px;padding:4px 6px;border:${payReq?'2px solid #ef4444':selSeat?'2px solid #f59e0b':selUnalloc&&!nm?'2px dashed var(--accent)':'1px solid var(--border2)'};outline:${selSeat?'3px solid rgba(245,158,11,.3)':'none'};transition:outline .1s">
+      return`<div onclick="window.tapFormSeat(${idx},'${f.ac}',event)" draggable="${nm?'true':'false'}" ondragstart="window.lsSeatDragStart(${idx},event)" ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'" ondragleave="event.currentTarget.style.outline=''" ondrop="window.lsDropOnSeat(${idx},event)" style="position:relative;cursor:${selUnalloc||nm?'pointer':'default'};background:${selSeat?'rgba(245,158,11,.4)':selUnalloc&&!nm?'rgba(124,58,237,.15)':'var(--card2)'};border-radius:7px;padding:4px 6px;border:${payReq?'2px solid #ef4444':selSeat?'2px solid #f59e0b':selUnalloc&&!nm?'2px dashed var(--accent)':'1px solid var(--border2)'};outline:${selSeat?'3px solid rgba(245,158,11,.3)':'none'};border-left:5px solid ${nm?(gc||'var(--border2)'):'var(--border2)'};transition:outline .1s">
         ${payReq?`<div onclick="event.stopPropagation();window.lsTogglePayReq(${idx})" style="background:#ef4444;color:#fff;font-size:13px;font-weight:900;letter-spacing:.1em;text-align:center;border-radius:5px;padding:5px 0;margin:0 0 5px;cursor:pointer;box-shadow:0 1px 4px rgba(239,68,68,.5)">💲 PAYMENT REQUIRED</div>`:''}
         <div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;margin-bottom:2px">
           <span style="font-size:9px;font-weight:700;color:var(--text3);min-width:16px;flex-shrink:0">${s.lbl}</span>
           ${nm
-            ?`<div onclick="event.stopPropagation();window.lsNamePopup(${idx})" style="padding:2px 9px;border-radius:20px;background:${gc||'var(--card)'};${gc?'':'border:1px solid var(--border2);'}color:${gc?'#fff':'var(--text1)'};font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px">${esc(displayNm.split(' ')[0])}</div>`
+            ?`<div onclick="event.stopPropagation();window.lsNamePopup(${idx})" style="font-size:12.5px;font-weight:800;color:var(--text1);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">${esc(displayNm.split(' ')[0])}</div>`
             :`<input class="fi" type="text" placeholder="Name" style="flex:1;font-size:11px;padding:2px 5px;min-width:0" onblur="lsN(${idx},this.value)" onclick="event.stopPropagation()">`
           }
           ${infantNm?`<span style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:12px;background:rgba(236,72,153,.15);border:1px solid rgba(236,72,153,.35);font-size:9px;font-weight:700;color:#ec4899;white-space:nowrap">👶 ${esc(infantNm)}<button onclick="event.stopPropagation();window.lsRmInfant(${idx})" style="background:none;border:none;color:#ec4899;font-size:10px;cursor:pointer;padding:0;line-height:1;opacity:.7;margin-left:1px">×</button></span>`:''}
@@ -4961,6 +4989,7 @@ function renderLoadsheet(){
       <div style="display:flex;gap:${isMob?'8px':'14px'};align-items:flex-start;${isMob?'':'flex-wrap:wrap;'}">
         <div style="${isMob?'flex:1 1 0;min-width:0':'flex:1;min-width:180px'};overflow-x:auto;-webkit-overflow-scrolling:touch">
           ${renderLsSeatGrid(f,a)}
+          ${_lsPaxList(f,a)}
           ${(!isPod||isMob)?cargoSection:''}
         </div>
         ${(isPod&&!isMob)?`<div style="flex:0 0 195px;min-width:150px">${cargoSection}</div>`:''}
