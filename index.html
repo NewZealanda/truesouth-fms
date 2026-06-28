@@ -992,7 +992,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.17';
+const APP_VER='v28.18';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3192,9 +3192,9 @@ window.updateLoginSuffix=function(){
   if(!m){m=document.createElement('span');m.id='li_e_meas';m.style.cssText='position:absolute;left:-9999px;top:0;white-space:pre;visibility:hidden;pointer-events:none';document.body.appendChild(m);}
   var cs=getComputedStyle(e);m.style.fontSize=cs.fontSize;m.style.fontFamily=cs.fontFamily;m.style.fontWeight=cs.fontWeight;m.style.letterSpacing=cs.letterSpacing;
   m.textContent=e.value||e.placeholder||'yourname';
-  var pad=3;                                   // input has no internal padding now → just a hair for the caret, so the suffix TOUCHES the text and moves with it as you type
+  var pad=1;                                   // input has no internal padding → just 1px for the caret, so the @suffix TOUCHES the last letter and moves with it as you type
   var avail=(e.parentElement?e.parentElement.clientWidth:320)-(s?s.offsetWidth:200)-6;
-  e.style.flex='0 0 auto';e.style.width=Math.max(40,Math.min(m.offsetWidth+pad,avail))+'px';
+  e.style.flex='0 0 auto';e.style.width=Math.max(8,Math.min(m.offsetWidth+pad,avail))+'px';
 };
 function logout(){
   if(AUTH_PHASE_C){
@@ -3982,7 +3982,7 @@ function renderLoginInner(){
           <div style="display:flex;align-items:center;width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;box-sizing:border-box;overflow:hidden">
             <input id="li_e" type="text" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
               oninput="window.updateLoginSuffix&&window.updateLoginSuffix()" onfocus="window.updateLoginSuffix&&window.updateLoginSuffix()" onchange="window.updateLoginSuffix&&window.updateLoginSuffix()" onanimationstart="window.updateLoginSuffix&&window.updateLoginSuffix()"
-              style="flex:0 0 auto;width:54px;min-width:40px;padding:0;background:transparent;border:none;color:#fff;font-size:16px;outline:none;-webkit-user-select:text;user-select:text;touch-action:manipulation"
+              style="flex:0 0 auto;width:54px;min-width:8px;padding:0;background:transparent;border:none;color:#fff;font-size:16px;outline:none;-webkit-user-select:text;user-select:text;touch-action:manipulation"
               onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
             <span id="li_e_sfx" style="color:#fff;font-size:16px;white-space:nowrap;pointer-events:none;user-select:none">@truesouthflights.co.nz</span>
             <img alt="" src="data:," onerror="window.updateLoginSuffix&&(updateLoginSuffix(),setTimeout(updateLoginSuffix,120),setTimeout(updateLoginSuffix,350),setTimeout(updateLoginSuffix,800),setTimeout(updateLoginSuffix,1500))" style="display:none">
