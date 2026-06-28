@@ -992,7 +992,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.16';
+const APP_VER='v28.17';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -15043,11 +15043,16 @@ function _rzAcRows(acId){
 }
 // Find the booking order numbers that make up a booking-block key (aircraft|start|product).
 function _rzOrdersForBlockKey(key){
-  var out=[];
+  var out=[];var attach=S._rzSchedAttach||{};
   (S._rezdyBookings||[]).forEach(function(b){
     if(_rzIsCancelled(b))return;
-    var ac=_rzBookingAc(b,String(b.orderNumber||''))||'__unalloc__';
-    ((b.items)||[]).forEach(function(it){var t=_rzDepTime(it.startTimeLocal||'');if(!t)return;var start=_rzHHMMcolon(t);var prod=_rzProduct(it.product);if(_rzDepKey(ac,start,prod)===key)out.push(String(b.orderNumber||''));});
+    var order=String(b.orderNumber||'');
+    // A booking COMBINED (manually attached) into a target block belongs to THAT block, not its own
+    // departure slot — so block ops (reassign / change-aircraft) move the whole combined group together
+    // instead of stranding the attached riders (which then fell back to auto-allocation). v28.17
+    if(attach[order]){if(attach[order]===key)out.push(order);return;}
+    var ac=_rzBookingAc(b,order)||'__unalloc__';
+    ((b.items)||[]).forEach(function(it){var t=_rzDepTime(it.startTimeLocal||'');if(!t)return;var start=_rzHHMMcolon(t);var prod=_rzProduct(it.product);if(_rzDepKey(ac,start,prod)===key)out.push(order);});
   });
   return out;
 }
@@ -15301,6 +15306,10 @@ function _rzRenderWeatherCalls(){
   // Must gate on _schedLoading too — rezdyLoadSchedule sets _schedLoading + re-renders while it fetches,
   // so calling it unguarded on every render restarted the load forever (the flashing / never-loads bug).
   if(!S._schedBlocks&&!S._schedLoading&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
+  // The calendar PIC pins (S._schedPilots) live in the pickup blob. The seatmap loads it; the Weather
+  // page did NOT — so opening Weather without the blob loaded left S._schedPilots empty and the PIC fell
+  // back to AUTO (showing e.g. TP instead of the calendar-set JY). Load it here too. (v28.17)
+  if(!S._rzManPickupSynced&&window.rezdyLoadPickups){S._rzManPickupSynced=true;window.rezdyLoadPickups();}
   var loading=(S._rezdyLoading||S._rezdyBookings==null);
   var _today=(typeof _rzToday==='function')?_rzToday():date;
   // Lightweight, NON-sticky date nav (the operations date row's sticky header + Rezdy-refresh button
