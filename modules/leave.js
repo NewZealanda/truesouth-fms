@@ -118,7 +118,7 @@ function _lvCanApprove(role){
 function _lvCanApproveRole(myRole,reqRole){
   if(myRole==='superadmin')return true;
   if(myRole==='admin')return reqRole!=='superadmin';
-  if(myRole==='cx_manager')return reqRole==='desk'||reqRole==='ground_staff';
+  if(myRole==='cx_manager')return reqRole!=='superadmin'&&reqRole!=='admin';   // CX Mgr approves all non-admin staff (incl. pilots)
   return false;
 }
 
