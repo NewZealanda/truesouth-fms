@@ -125,10 +125,9 @@ function _lvCanApprove(role){
 // only if they are the requester's DIRECT manager (reports_to). Pass the request object.
 function _lvCanApproveReq(req){
   var myRole=(S.user&&S.user.role)||'desk';var reqRole=(req&&req.user_role)||'desk';
-  if(myRole==='superadmin')return true;
-  if(myRole==='admin')return reqRole!=='superadmin';
-  if(myRole==='cx_manager'&&((typeof hasRolePerm!=='function')||hasRolePerm('leave_approve')))return reqRole!=='superadmin'&&reqRole!=='admin';
-  // org-based: I'm this requester's direct manager
+  if(myRole==='superadmin')return true;                 // superadmin actions everyone
+  if(myRole==='admin')return reqRole!=='superadmin';    // admin actions everyone except superadmin
+  // Everyone else (incl. CX Manager) can only action their OWN direct reports (reports_to).
   if(req&&S.user&&String(_lvManagerOf(req.user_id))===String(S.user.id))return true;
   return false;
 }
@@ -811,9 +810,10 @@ function _lvHistoryHtml(id){
 
 // ── Notifications ──
 window._notifyLeaveApprovers=async function(requestId,requesterRole,requesterName,leaveType,startDate,endDate,requesterId){
-  // Notify the blanket approvers (CX Mgr + admins; admins only for an admin's own leave) AND the
-  // requester's DIRECT manager from the org structure (Settings ▸ Reports to), deduped, minus self.
-  var roles=(requesterRole==='superadmin'||requesterRole==='admin')?['admin','superadmin']:['cx_manager','admin','superadmin'];
+  // Notify admins/superadmin (they action everyone) AND the requester's DIRECT manager from the org
+  // structure (Settings ▸ Reports to) — so a CX Mgr / any manager is notified only for their own
+  // reports, not everyone. Deduped, minus self.
+  var roles=['admin','superadmin'];
   var recips={};
   (S.users||[]).forEach(function(u){if(!u.inactive&&roles.indexOf(u.role)>=0)recips[String(u.id)]=true;});
   if(requesterId){var rq=(S.users||[]).find(function(u){return String(u.id)===String(requesterId);});if(rq&&rq.reportsTo)recips[String(rq.reportsTo)]=true;delete recips[String(requesterId)];}
