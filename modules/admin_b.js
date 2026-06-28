@@ -777,6 +777,20 @@ function generatePrintHTML(sheet){
       +'</td>';
   }
 
+  // CoG envelope graph — reuse the on-screen SVG, but swap the CSS variables (which don't exist in the
+  // standalone print/Drive-upload document) for concrete print colours.
+  var cogEnvHTML='';
+  if(r&&typeof _wbEnvelopeSVG==='function'){
+    var _env=_wbEnvelopeSVG(f.ac,r);
+    if(_env){
+      _env=_env.replace(/var\(--border2\)/g,'#cbd5e1').replace(/var\(--text3\)/g,'#555').replace(/var\(--text2\)/g,'#333').replace(/var\(--card\)/g,'#ffffff');
+      cogEnvHTML='<div style="margin-bottom:14px;font-family:Arial,sans-serif;page-break-inside:avoid">'
+        +'<div style="'+THSPAN+'">CENTRE OF GRAVITY ENVELOPE</div>'
+        +'<div style="border:1px solid #e2e8f0;border-top:none;padding:12px 10px">'+_env+'</div>'
+        +'</div>';
+    }
+  }
+
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>True South Flights — Loadsheet</title></head><body style="font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;margin:0;padding:20px;background:#fff">'
 
     // Header
@@ -814,6 +828,9 @@ function generatePrintHTML(sheet){
     +thRow('Weight & Balance',2)
     +wbRows
     +'</table></td></tr></table>'
+
+    // CoG envelope graph
+    +cogEnvHTML
 
     // Occupants
     +'<table style="width:100%;border-collapse:collapse;margin-bottom:14px">'
