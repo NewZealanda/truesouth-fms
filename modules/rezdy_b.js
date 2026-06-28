@@ -50,13 +50,31 @@ function _rzRenderBookings(){
       '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:800;margin-bottom:8px">'+(deps.length?'Departure':'Cancelled bookings')+(searching?' — paused while searching':'')+'</div>'+
       '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">';
     // Available fleet pax seats today = sum of seat capacity for aircraft that CAN fly (not off/maint on
-    // the resources board). Seats-remaining per departure = this minus the departure's seated pax.
+    // the resources board). Seats-remaining per departure = this minus the seated pax.
     var _fleetSeats=0;try{['ZK-SLA','ZK-SLB','ZK-SDB','ZK-SLD','ZK-SLQ'].forEach(function(ac){if(!(S.aircraft||{})[ac])return;if(typeof _schedAcCanFly==='function'&&!_schedAcCanFly(ac))return;_fleetSeats+=(typeof _schedTail==='function'?((typeof _schedNum==='function'&&_schedNum(_schedTail(ac).cap))||(typeof _schedDefaultCap==='function'?_schedDefaultCap(ac):0)):0);});}catch(e){}
+    // Flybacks are HELD in an outbound slot (e.g. 1200) and ride the returning aircraft, so they consume
+    // seats from THAT slot's pool. Build per-slot regular pax + per-slot flyback pax; remaining for a slot
+    // = fleet - (its regular pax + flybacks held in it). The FLB chip mirrors the tightest held slot, so a
+    // 1200 with 1 pax + a flyback of 2 both read (fleet-3). 0930 has no flyback held in it → unaffected.
+    var _depPaxBySlot={},_fbBySlot={};
+    try{active.forEach(function(b){
+      var e=(typeof _rzEffBreakdown==='function')?_rzEffBreakdown(b):null;var pax=e?((e.a||0)+(e.c||0)):0;
+      if(typeof _rzBookingIsFlyback==='function'&&_rzBookingIsFlyback(b)){
+        var fbIt=(b.items||[]).find(function(it){return _rzIsFlyback(_rzProduct(it&&it.product));})||{};
+        var slot=_rzDepTime(fbIt.startTimeLocal||'');
+        _fbBySlot[slot]=(_fbBySlot[slot]||0)+pax;
+      }else{var dd=_rzBookingDep(b);_depPaxBySlot[dd]=(_depPaxBySlot[dd]||0)+pax;}
+    });}catch(e){}
     deps.forEach(function(d){
       var depB=active.filter(function(b){return _rzBookingDep(b)===d;});
       var cnt=depB.length;
-      var _depSeats=0;depB.forEach(function(b){try{var e=(typeof _rzEffBreakdown==='function')?_rzEffBreakdown(b):null;if(e)_depSeats+=(e.a||0)+(e.c||0);}catch(_){}});
-      var _rem=_fleetSeats-_depSeats;
+      var _rem;
+      if(d===RZ_FLYBACK_DEP){
+        _rem=_fleetSeats;
+        Object.keys(_fbBySlot).forEach(function(slot){var committed=(_depPaxBySlot[slot]||0)+_fbBySlot[slot];var r=_fleetSeats-committed;if(r<_rem)_rem=r;});
+      }else{
+        _rem=_fleetSeats-(_depPaxBySlot[d]||0)-(_fbBySlot[d]||0);
+      }
       var prod='';depB.some(function(b){var c=_rzProduct((((b.items||[])[0]||{}).product)||'');if(c){prod=c;return true;}return false;});
       var on=!searching&&depFilter===d;
       depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:800">'+
