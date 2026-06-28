@@ -1502,7 +1502,7 @@ function renderAdminPerms(){
       {k:'ground',        lbl:'Ground',     tip:'Access the Ground section — Transport, Pickups & My Pickups'},
       {k:'sign_loadsheet',lbl:'Sign',       tip:'Sign off on loadsheets as PIC'},
       {k:'weather_call',  lbl:'Weather',    tip:'Record per-departure weather calls (any pilot/ops can)'},
-      {k:'resources',     lbl:'Scheduling', tip:'Access the Resource board + cost-aware aircraft/pilot allocation'}
+      {k:'resources',     lbl:'Resources',  tip:'Access the Resource board + cost-aware aircraft/pilot allocation'}
     ]},
     {cat:'Maintenance', col:'#a78bfa', perms:[
       {k:'maintenance',   lbl:'Maint',      tip:'Access to the maintenance section'},
@@ -1518,7 +1518,8 @@ function renderAdminPerms(){
       {k:'flightduty',    lbl:'F&D',         tip:'Access Flight & Duty — own record + team summary'},
       {k:'flightduty_manage',lbl:'F&D Mgr',  tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'},
       {k:'flightrecord',  lbl:'Flt Record',  tip:'Access the Flight Record (log flights, aircraft records)'},
-      {k:'flightrecord_manage',lbl:'Flt Rec Mgr',tip:'Flight Record statistics + view/manage all pilots\' logbooks'}
+      {k:'flightrecord_manage',lbl:'Flt Rec Mgr',tip:'Flight Record statistics + view/manage all pilots\' logbooks'},
+      {k:'data_recording',lbl:'Data Rec',  tip:'Access the Data Recording section — aircraft records, statistics & the full records table'}
     ]},
     {cat:'Admin & System', col:'#ef4444', perms:[
       {k:'admin_crew',    lbl:'Crew',        tip:'View and edit crew profiles and endorsements'},

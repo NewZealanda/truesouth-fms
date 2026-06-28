@@ -318,8 +318,7 @@ function _renderApprovals(lv,role){
   [{id:'pending',lbl:'Pending'},{id:'approved',lbl:'Approved'},{id:'declined',lbl:'Declined'},{id:'all',lbl:'All'}].forEach(function(s){
     var on=f.status===s.id;
     var cnt=allReqs?allReqs.filter(function(r){
-      var canSee=_lvCanApproveReq(r);
-      return canSee&&(s.id==='all'||r.status===s.id);
+      return (s.id==='all'||r.status===s.id);   // any approver/manager sees ALL requests here
     }).length:0;
     h+='<button tabindex="-1" onclick="S._leave.filter.status=\''+s.id+'\';render()" style="padding:5px 12px;border-radius:7px;border:1.5px solid '+(on?'#c084fc':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.18)':'transparent')+';color:'+(on?'#c084fc':'var(--text3)')+';font-size:12px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+s.lbl+(cnt>0?' ('+cnt+')':'')+'</button>';
   });
@@ -337,7 +336,8 @@ function _renderApprovals(lv,role){
   }
 
   var filtered=allReqs.filter(function(r){
-    if(!_lvCanApproveReq(r))return false;
+    // Show ALL requests (anyone who reached Approvals can view everyone for planning); the approve/
+    // decline/edit controls below are still scoped per-request to the requester's direct manager.
     if(f.status!=='all'&&r.status!==f.status)return false;
     if(f.dateFrom&&r.end_date<f.dateFrom)return false;
     if(f.dateTo&&r.start_date>f.dateTo)return false;
@@ -355,6 +355,7 @@ function _renderApprovals(lv,role){
     var _calDays=_lvDays(r.start_date,r.end_date,false);
     var _rdoExcl=Math.max(0,_calDays-(_lvWorkingDays(r.user_id,r.start_date,r.end_date)));
     var isDecline=lv.declineId===r.id;
+    var _canAct=_lvCanApproveReq(r);   // managers see all requests but only ACTION their direct reports (admins/CX Mgr action all)
 
     // Conflicts: everyone else with overlapping leave (approved OR pending)
     var overlaps=allReqs.filter(function(o){
@@ -416,8 +417,11 @@ function _renderApprovals(lv,role){
       h+='<div style="font-size:11px;color:var(--text3);margin-top:4px">'+sc.lbl+' by '+_lvEsc(r.reviewed_by_name)+' · '+new Date(r.reviewed_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short'})+'</div>';
     }
 
-    // Approve / Decline buttons (pending only)
-    if(r.status==='pending'){
+    // Approve / Decline buttons (pending only) — only for requests this user can action (their reports)
+    if(r.status==='pending'&&!_canAct){
+      h+='<div style="margin-top:10px;font-size:11px;color:var(--text3)">👤 Awaiting their manager’s approval (view only)</div>';
+    }
+    if(r.status==='pending'&&_canAct){
       h+='<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">';
       if(!isDecline){
         h+='<button tabindex="-1" onclick="window.approveLeave(\''+r.id+'\')" style="padding:7px 18px;background:#22c55e;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer">✓ Approve</button>';
@@ -434,7 +438,7 @@ function _renderApprovals(lv,role){
     }
     // Approver tools: edit the request directly + view full history
     h+='<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">';
-    h+='<button tabindex="-1" onclick="window.leaveEditOpen(\''+r.id+'\')" style="padding:6px 13px;border-radius:7px;border:1px solid rgba(124,58,237,.4);background:rgba(124,58,237,.1);color:#c084fc;font-size:12px;font-weight:600;cursor:pointer">✎ Edit</button>';
+    if(_canAct)h+='<button tabindex="-1" onclick="window.leaveEditOpen(\''+r.id+'\')" style="padding:6px 13px;border-radius:7px;border:1px solid rgba(124,58,237,.4);background:rgba(124,58,237,.1);color:#c084fc;font-size:12px;font-weight:600;cursor:pointer">✎ Edit</button>';
     h+='<button tabindex="-1" onclick="window.toggleLeaveHistory(\''+r.id+'\')" style="padding:6px 13px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">🕑 History</button>';
     if(role==='superadmin')h+='<button tabindex="-1" onclick="window.deleteLeaveRequest(\''+r.id+'\')" style="padding:6px 11px;border-radius:7px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#f87171;font-size:12px;cursor:pointer" title="Permanently delete (superadmin)">🗑</button>';
     h+='</div>';

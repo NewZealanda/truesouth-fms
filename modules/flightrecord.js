@@ -318,13 +318,9 @@ function renderFlightRecord(){
   var uid=(S.user&&S.user.id)||'';
   var open=_frOpenFlight(uid);
   var page=S._frPage||'log';
+  if(page==='stats'||page==='browse')page=S._frPage='record';   // Statistics + Records moved to the Data Recording section
   var _tabs=[{lbl:'Log a flight',on:page==='log',onclick:"S._frPage='log';render()"},{lbl:'Aircraft records',on:page==='record',onclick:"S._frPage='record';render()"}];
-  if(_frStatsAllowed())_tabs.push({lbl:'Statistics',on:page==='stats',onclick:"S._frPage='stats';render()"});
-  var _canBrowse=(S.user&&S.user.superAdmin)||(typeof hasRolePerm==='function'&&hasRolePerm('flightrecord_manage'));
-  if(_canBrowse)_tabs.push({lbl:'Records',on:page==='browse',onclick:"S._frPage='browse';render()"});
   var h=(typeof _tier2==='function')?_tier2(_tabs):'';
-  if(page==='browse'&&_canBrowse){ h+=_frRenderBrowse(); return h; }
-  if(page==='stats'&&_frStatsAllowed()){ h+=_frRenderStats(); return h; }
   if(page==='record'){ h+=_frRenderTodayRecord(uid); return h; }
   if(open){ h+=open.on?_frRenderConfirm(open):_frRenderLand(open); }
   else { h+=_frRenderStart(uid); }
@@ -418,6 +414,19 @@ function _frTodayBody(recs,today){
     h+='</div></div>';
   });
   return h;
+}
+// ── Data Recording section (data_recording perm) — bundles Aircraft records, Statistics, Records ──
+function renderDataRecording(){
+  if(!S._frLoaded){S._frLoaded=true;if(window.loadFlightRecords)window.loadFlightRecords();}
+  if(!S._maintLoaded&&typeof window.ensureMaintenance==='function')window.ensureMaintenance();
+  var tab=S._drTab||'aircraft';
+  var tabs=[{lbl:'Aircraft records',on:tab==='aircraft',onclick:"S._drTab='aircraft';render()"},
+            {lbl:'Statistics',on:tab==='stats',onclick:"S._drTab='stats';render()"},
+            {lbl:'Records',on:tab==='records',onclick:"S._drTab='records';render()"}];
+  var h=(typeof _tier2==='function')?_tier2(tabs):'';
+  if(tab==='stats')return h+_frRenderStats();
+  if(tab==='records')return h+_frRenderBrowse();
+  return h+_frRenderTodayRecord((S.user&&S.user.id)||'');
 }
 // ── Records browser / editor (flightrecord_manage) — searchable, inline-editable master list ──────
 var _FRB_PAGE=200;

@@ -157,6 +157,7 @@ function _sectionAllowed(sec){
     case 'flightduty':  return (hasRolePerm('flightduty'))||!!(S.user&&S.user.superAdmin);
     case 'businessplan':return (hasRolePerm('businessplan'))||!!(S.user&&S.user.superAdmin);
     case 'flightrecord':return (hasRolePerm('flightrecord'))||!!(S.user&&S.user.superAdmin);
+    case 'datarecording':return (hasRolePerm('data_recording'))||!!(S.user&&S.user.superAdmin);
     case 'resources':   return hasRolePerm('resources'); // gated further by the feature toggle in nav
     case 'training':    return !!S.user; // training is available to every signed-in user
     case 'weather':     return hasRolePerm('weather_call')||hasRolePerm('operations')||!!(S.user&&S.user.superAdmin); // any pilot/ops can record a weather call
@@ -212,6 +213,7 @@ var HOME_OPTIONS=[
   {id:'logbook',label:'Logbook',section:'pilotbag',tab:'logbook'},
   {id:'flightduty',label:'Flight & Duty',section:'pilotbag',tab:'flightduty'},
   {id:'resources',label:'Resource board',section:'resources'},
+  {id:'datarecording',label:'Data Recording',section:'datarecording'},
   {id:'businessplan',label:'Business Plan',section:'businessplan'},
   {id:'settings',label:'Settings',section:'settings',tab:'admin'},
   {id:'training',label:'Training',section:'training'}
@@ -780,6 +782,11 @@ function renderDrawer(){
       h+=_mn('Search','search');
     }
   }
+  // Data Recording — aircraft records / statistics / full records table (admin / cx_manager / superadmin).
+  {var _canDR=hasRolePerm('data_recording')||(S.user&&S.user.superAdmin);
+   if(_canDR){var _onDR=sec==='datarecording';
+     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'datarecording\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onDR?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onDR?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onDR?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📊</span><span style="flex:1">Data Recording</span></button>';
+   }}
   // TSF Business Plan.
   {var _canBP=hasRolePerm('businessplan')||(S.user&&S.user.superAdmin);
    if(_canBP){
@@ -987,6 +994,10 @@ function renderApp(){
         if(_sec==='flightrecord'){
           if(!(hasRolePerm('flightrecord')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-flightrecord">'+renderFlightRecord()+'</div>';
+        }
+        if(_sec==='datarecording'){
+          if(!(hasRolePerm('data_recording')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-datarecording">'+renderDataRecording()+'</div>';
         }
         if(_sec==='logbook'){
           if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
