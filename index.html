@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.87';
+const APP_VER='v27.88';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -22791,6 +22791,17 @@ function _schedCfg(){
 function _schedTail(ac){return _schedCfg().tails[ac]||{cap:_schedDefaultCap(ac),rt:'',ferry:'',status:'ok',note:''};}
 function _schedEnabled(){return !!_schedCfg().enabled;}
 function _schedNum(v){v=parseFloat(v);return isFinite(v)?v:null;}
+// ── Aircraft↔route preference (operator rule) ──────────────────────────────────
+// Standing rule: keep the CARAVANS (SLA/SLB/SDB) on the Milford run so big-plane seats stay open for
+// last-minute Milford bookings, and send the AIRVANS (SLD/SLQ) to Mt Cook / Franz / anywhere else. It's
+// a COST-BOUNDED preference: a "mismatch" (caravan off Milford, or airvan on Milford) adds W dollars to
+// the optimiser's OBJECTIVE only (not the reported $ cost), so the allocator honours the rule UNLESS
+// doing so would cost more than W extra per mismatched aircraft. W is operator-set (default $100; 0 off).
+var SCHED_ROUTE_PREF_W=100;
+function _schedRoutePrefW(){var v=_schedNum(_schedCfg().routePrefW);return v==null?SCHED_ROUTE_PREF_W:Math.max(0,v);}
+// 1 if this aircraft↔destination pairing goes against the rule, else 0. Blank dest = Milford (FCF).
+function _schedAcRouteMismatch(ac,dest){var mf=(!dest||dest==='MF');var av=_schedIsAirvan(ac);return ((av&&mf)||(!av&&!mf))?1:0;}
+window.schedSetRoutePrefW=function(v){var c=_schedCfg();var n=_schedNum(v);c.routePrefW=(n==null?'':Math.max(0,n));_schedSave();render();};
 // ── Calculated costs (run/hr × hours + landings) ───────────────────────────────
 // Per TYPE (averaged owned Airvan / Caravan, plus the SDB lease) we hold a running cost $/hr and a
 // landings+fees figure. Milford RETURN = airvan 1.2h · caravan/SDB 1.1h; FERRY (empty) = 1.0h all.
@@ -22950,6 +22961,7 @@ function renderSchedulingSettings(){
   var _aoRules=[
     ['Seat capacity','HARD — never exceeded. Each booking group must also fit WHOLE in one aircraft (a 14 = 8+6 needs a 13-seat caravan, not two 7-seat airvans).','#ef4444'],
     ['Lowest total day cost','The whole day is planned as one before it starts — every UNLOCKED departure together — for the cheapest mix of route + empty-ferry costs (SDB counts as its own dearer route), using only aircraft that are serviceable, within maintenance hours, and free at that time.','#22c55e'],
+    ['Caravans on Milford / airvans elsewhere','Keeps the caravans (SLA/SLB/SDB) on the Milford run so big-plane seats stay open for last-minute bookings, and sends the airvans to Mt Cook / Franz / other. Cost-BOUNDED: it only overrides the cheapest plan when doing so adds no more than the $ threshold below per mis-matched aircraft. Set the threshold to $0 to turn this off.','#a78bfa'],
     ['Aircraft priority ★','Among equally-cheap plans it prefers your ★ priority tails (SDB kept for last). This is the FIRST rule broken — it will reach past your priority order if that makes the day cheaper. Set the ★ order in Maintenance.','#f59e0b'],
     ['Your manual choices','Always win — a "Change aircraft" pick, a pinned tail, or a departure you marked Departed is left exactly as-is; the optimiser only plans around it.','#60a5fa']
   ];
@@ -22964,6 +22976,12 @@ function renderSchedulingSettings(){
   });
   h+='<div style="margin-top:10px;padding:8px 10px;border-radius:9px;background:rgba(96,165,250,.10);border:1px solid rgba(96,165,250,.4);font-size:11.5px;color:var(--text2);line-height:1.45">'+
     '<b style="color:#60a5fa">Pilots don\'t restrict aircraft.</b> Aircraft are chosen on the rules above alone — pilots are matched on AFTER. A type-rated pilot stays with their aircraft for the whole day\'s rotation (only swapping once back in QN), earlier ★ pilots first. If no rated pilot is free for a flight it\'s flagged <b>no pilot</b> + a call-in decision is shown — it never changes the aircraft plan. (Only SDB needs its own endorsement to be crewed.)</div>'+
+    '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border2)">'+
+      '<span style="font-size:12.5px;font-weight:800;color:#a78bfa">Caravan/Milford preference threshold</span>'+
+      '<span style="font-size:11.5px;color:var(--text3)">override the cheapest plan to honour the rule only when it adds ≤</span>'+
+      '$<input type="number" min="0" step="10" value="'+_schedEsc(String(_schedRoutePrefW()))+'" onchange="schedSetRoutePrefW(this.value)" style="width:74px;padding:5px 7px;border-radius:7px;border:1px solid var(--border2);background:var(--bg2);color:var(--text1);font-size:12.5px;font-weight:700;text-align:right">'+
+      '<span style="font-size:11.5px;color:var(--text3)">per mis-matched aircraft per day (0 = off)</span>'+
+    '</div>'+
   '</div>';
 
   // Route costs — ONE live price list that is exactly what the allocator uses. Run/hr & landings come
@@ -23760,7 +23778,8 @@ window.schedToggleLock=function(date,time){
 function _schedSimulate(date,opts,forced){
   opts=opts||{};forced=forced||{};var maxAc=(opts.maxAircraft!=null)?opts.maxAircraft:Infinity;
   var deps=_schedDayDepartures(date);
-  var freeAt={},freeAtDest={},everUsed={},plan=[],cost=0,loadedLegs=0,emptyLegs=0,paxShort=0,usedAtTime={};
+  var _prefW=_schedRoutePrefW();   // route-preference weight ($/mismatched aircraft) — objective only, not $ cost
+  var freeAt={},freeAtDest={},everUsed={},plan=[],cost=0,mis=0,loadedLegs=0,emptyLegs=0,paxShort=0,usedAtTime={};
   // Projected hours-to-the-next-check per aircraft, decremented as the day's flights are assigned.
   // An aircraft is only eligible for a departure if the flight would still leave the 0.5h ferry
   // reserve (runLeft − flightHrs ≥ floor). e.g. airvan at −3.2 can do a 1.2h Milford (→ −4.4 ≥ −4.5).
@@ -23776,7 +23795,7 @@ function _schedSimulate(date,opts,forced){
       // Respect the committed aircraft; just position them so the rest of the day plans around it.
       var fixed=_schedDepAssignedAc(date,d.time,d.dest);var ldAc=[],ldCap=0;
       fixed.forEach(function(a){var ll=_schedLoadedLeg(a.ac,d.dest),el=_schedEmptyLeg(a.ac,d.dest);var out=(freeAt[a.ac]!=null&&freeAt[a.ac]>dm);
-        var cap=_schedNum(_schedTail(a.ac).cap)||_schedDefaultCap(a.ac);ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+_schedDepDurMin(d);freeAtDest[a.ac]=d.dest;_ut[a.ac]=1;_mxUse(a.ac,_schedDepFltHrs(d.dests,_schedIsAirvan(a.ac)));
+        var cap=_schedNum(_schedTail(a.ac).cap)||_schedDefaultCap(a.ac);ldCap+=cap;everUsed[a.ac]=true;freeAt[a.ac]=dm+_schedDepDurMin(d);freeAtDest[a.ac]=d.dest;_ut[a.ac]=1;mis+=_schedAcRouteMismatch(a.ac,d.dest);_mxUse(a.ac,_schedDepFltHrs(d.dests,_schedIsAirvan(a.ac)));
         if(ll!=null){loadedLegs+=2;cost+=2*ll;if(out){emptyLegs+=2;cost+=2*el;}}
         ldAc.push({ac:a.ac,cap:cap,reused:out});});
       if(ldCap<d.pax)paxShort+=(d.pax-ldCap);
@@ -23798,7 +23817,8 @@ function _schedSimulate(date,opts,forced){
     // time (freeAt > now). One that never flew, or already returned to base, is free (fresh rotation).
     var cand=fleet.map(function(f){var ll=_schedLoadedLeg(f.ac,d.dest),el=_schedEmptyLeg(f.ac,d.dest);
       var out=(freeAt[f.ac]!=null&&freeAt[f.ac]>dm);
-      return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,isNew:!everUsed[f.ac],ll:ll,el:el,inc:2*ll+(out?2*el:0)};})
+      var mm=_schedAcRouteMismatch(f.ac,d.dest);   // route-preference penalty (objective only; NOT added to cost below)
+      return {ac:f.ac,cap:f.cap,priority:f.priority,airvan:f.airvan,reused:out,isNew:!everUsed[f.ac],ll:ll,el:el,mm:mm,inc:2*ll+(out?2*el:0)+_prefW*mm};})
       .filter(function(c){return !(c.reused&&(_schedNoFerry(c.ac)||opts.noReuse));});   // no-ferry aircraft can't reposition; opts.noReuse = a fresh-tails-only "spread" comparison plan
     var chosen;var fset=forced[d.key];
     if(fset&&fset.length){
@@ -23812,13 +23832,13 @@ function _schedSimulate(date,opts,forced){
       chosen=_schedPlanPick(d.pax,cand,maxNew,d.groups);
     }
     var depAc=[];var depCap=0;
-    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+_schedDepDurMin(d);freeAtDest[c.ac]=d.dest;_ut[c.ac]=1;_mxUse(c.ac,_schedDepFltHrs(d.dests,c.airvan));depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
+    chosen.forEach(function(c){everUsed[c.ac]=true;freeAt[c.ac]=dm+_schedDepDurMin(d);freeAtDest[c.ac]=d.dest;_ut[c.ac]=1;mis+=(c.mm||0);_mxUse(c.ac,_schedDepFltHrs(d.dests,c.airvan));depCap+=c.cap;depAc.push({ac:c.ac,cap:c.cap,reused:c.reused});
       loadedLegs+=2;cost+=2*c.ll;if(c.reused){emptyLegs+=2;cost+=2*c.el;}});
     if(depCap<d.pax)paxShort+=(d.pax-depCap);
     plan.push({time:d.time,dest:d.dest,key:d.key,pax:d.pax,aircraft:depAc,cap:depCap,short:depCap<d.pax,locked:false,manualLock:_schedDepManualLock(date,d.time)});
   });
   var acUsed=Object.keys(everUsed);
-  return {date:date,departures:plan,cost:Math.round(cost),loadedLegs:loadedLegs,emptyLegs:emptyLegs,paxShort:paxShort,aircraftUsed:acUsed,pilotsNeeded:acUsed.length};
+  return {date:date,departures:plan,cost:Math.round(cost),mis:mis,prefW:_prefW,loadedLegs:loadedLegs,emptyLegs:emptyLegs,paxShort:paxShort,aircraftUsed:acUsed,pilotsNeeded:acUsed.length};
 }
 // Feasible aircraft SETS that could cover one departure (seats ≥ pax AND every booking group packs
 // whole), cheapest static route cost first. The refinement re-costs each through _schedSimulate so the
@@ -23859,6 +23879,9 @@ function _schedDayPlan(date,opts){
   var candCache={};unlocked.forEach(function(d){candCache[d.key]=_schedDepCandidateSets(date,d);});
   var _sk=function(arr){return arr.slice().sort().join(',');};
   var best=base,forced={};
+  // Compare on the OBJECTIVE = real $ cost + W×route-preference mismatches (keeps caravans on Milford /
+  // airvans on landing tours unless honouring it costs more than W per mismatch). cost stays the pure $.
+  var _W=_schedRoutePrefW();var _obj=function(p){return (p.cost||0)+_W*(p.mis||0);};
   // Hill-climb over the WHOLE day. Each round tries every improving reassignment — SINGLE departures and
   // PAIRS of departures together — re-costs the entire day via _schedSimulate, and keeps the cheapest
   // verified improvement (pax-short never worse). Pairs matter because the best plan often needs TWO
@@ -23871,7 +23894,7 @@ function _schedDayPlan(date,opts){
     function _consider(assign){
       var f={};Object.keys(forced).forEach(function(k){f[k]=forced[k];});Object.keys(assign).forEach(function(k){f[k]=assign[k];});
       var sim=_schedSimulate(date,opts,f);
-      if(sim.paxShort<=best.paxShort&&sim.cost<best.cost-0.5&&(!move||sim.cost<move.plan.cost))move={assign:assign,plan:sim};
+      if(sim.paxShort<=best.paxShort&&_obj(sim)<_obj(best)-0.5&&(!move||_obj(sim)<_obj(move.plan)))move={assign:assign,plan:sim};
     }
     // 1) single-departure moves
     for(var ui=0;ui<unlocked.length;ui++){var d1=unlocked[ui],s1=candCache[d1.key]||[];
