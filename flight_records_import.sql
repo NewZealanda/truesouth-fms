@@ -1,2 +1,5 @@
--- SUPERSEDED: this single file was too large for the Supabase SQL editor.
--- Use the split files flight_records_import_part01.sql … part10.sql instead (run each in order).
+-- SUPERSEDED. The import is now LEG-SPLIT (one record per flown leg).
+-- Run in this order in the Supabase SQL editor:
+--   1) flight_records_import_0_RESET.sql        (once — clears any previous fr_imp_ rows)
+--   2) flight_records_import_legs_part01.sql … part16.sql   (any order; safe to re-run)
+-- Verify after the last part:  select count(*) from ts_flight_records where id like 'fr_imp_%';  (expect ~25479)
