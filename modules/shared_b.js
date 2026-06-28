@@ -476,7 +476,10 @@ function initRealtime(){
           var _pspl=msg.payload.payload;
           if(_pspl&&_pspl.id){
             var _pt2=S.padTabs.find(function(t){return t.id===_pspl.id;});
-            if(_pt2&&_pspl.stroke){
+            if(_pt2&&_pspl.stroke&&_pspl.stroke.clear){
+              _pt2.drawing=[];
+              if(S.activePadId===_pspl.id){var _cvc=document.getElementById('pad-canvas');if(_cvc){var _cx=_cvc.getContext('2d');_cx.clearRect(0,0,_cvc.width,_cvc.height);}}
+            } else if(_pt2&&_pspl.stroke){
               if(!_pt2.drawing)_pt2.drawing=[];
               _pt2.drawing.push(_pspl.stroke);
               if(S.activePadId===_pspl.id){

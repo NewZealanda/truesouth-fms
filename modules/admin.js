@@ -29,6 +29,9 @@ function renderAdmin(){
       return {people:renderAdminPeople,perms:renderAdminPerms,reportsto:renderReportsTo}[_s]?.()||renderAdminPeople();
     }
     if(typeof hasRolePerm==='function'&&hasRolePerm('admin_crew')) return renderAdminPeople();
+    // Settings is open to everyone (settings perm default-on), but People/Permissions stay gated.
+    // A role with neither always at least has Preferences — land there instead of a dead no-access card.
+    if(typeof _renderUserPrefs==='function'){if(!S.admin)S.admin={};S.admin.section='userprefs';return _renderUserPrefs();}
     return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
   }
   const ad=S.admin;
@@ -575,7 +578,7 @@ const roleColour={superadmin:'#f43f5e',admin:'#f59e0b',pilot:'#7B9EC6',desk:'#f9
       +(role?'<span style="color:'+(roleColour[role]||'#64748b')+';font-weight:600">'+role+'</span>':'')
       +(email?'<span>'+esc(email)+'</span>':'')
       +(endorses.length?endorses.filter(function(e){return e.startsWith('ZK-');}).map(function(e){var ec=AC_COL[e]||'#64748b';return'<span style="padding:1px 7px;border-radius:12px;background:'+ec+'22;border:1px solid '+ec+'55;color:'+ec+';font-size:9px;font-weight:700">'+e.replace('ZK-','')+'</span>';}).join(''):'')
-      +(caaNum?'<span>CAA '+caaNum+'</span>':'')
+      +(caaNum?'<span>CAA '+esc(caaNum)+'</span>':'')
       +'</div>'
       +(pills?'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">'+pills+'</div>':'')
       +'</div>'

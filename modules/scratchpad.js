@@ -146,6 +146,9 @@ window.clearPadCanvas=function(){
   act.drawing=[];act._dirty=true;
   var cv=document.getElementById('pad-canvas');
   if(cv){var ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);}
+  // Persist the emptied drawing (so it survives refresh) and broadcast the clear to other devices.
+  if(typeof window._broadcastPadStroke==='function')window._broadcastPadStroke(act.id,{clear:true});
+  if(typeof window._padAutoSave==='function')window._padAutoSave(act);
 };
 
 window.setPadColor=function(c){S._padDrawColor=c;S._padEraser=false;render();};

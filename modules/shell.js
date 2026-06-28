@@ -240,34 +240,49 @@ function _renderHomePicker(){
 // User Preferences page — per-device personal settings: landing page, theme, and sound (master mute,
 // notification-sound toggle, selectable chime with previews). Reachable from the account modal.
 window.goUserPrefs=function(){S.showAccount=false;if(!S.admin)S.admin={};S.admin.section='userprefs';if(typeof window.setTab==='function')window.setTab('admin');else{S.section='settings';if(typeof render==='function')render();}};
+window.setThemeLight=function(v){var isL=(typeof _themeIsLight==='function')&&_themeIsLight();if(!!v!==!!isL&&typeof window.toggleTheme==='function')window.toggleTheme();};
 function _renderUserPrefs(){
   var muted=(typeof _soundMuted==='function')&&_soundMuted();
   var notifOn=(typeof _notifSoundOn==='function')?_notifSoundOn():true;
   var curChime=(typeof _chimeGet==='function')?_chimeGet():'classic';
   var chimes=(typeof _rzChimeList==='function')?_rzChimeList():[{id:'classic',name:'Classic'}];
-  var h='<div class="card"><div class="st">User preferences</div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:0 0 14px">These settings are saved on this device.</p>'+
-    _renderHomePicker()+
-    '<div style="height:1px;background:var(--border2);margin:6px 0 16px"></div>'+
-    '<div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Appearance</div>'+
-    '<button onclick="window.toggleTheme()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:18px">'+((typeof _themeIsLight==='function'&&_themeIsLight())?'\u{1F319} Switch to dark mode':'☀️ Switch to light mode')+'</button>'+
-    '<div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Sound</div>'+
-    '<button onclick="window.toggleMute()" style="width:100%;padding:10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">'+(muted?'🔔 Unmute all sound':'🔇 Mute all sound')+'</button>'+
-    '<button onclick="window.toggleNotifSound()" '+(muted?'disabled':'')+' style="width:100%;padding:10px;background:var(--card2);border:1px solid '+(notifOn&&!muted?'var(--accent)':'var(--border2)')+';border-radius:8px;color:var(--text2);font-size:13px;font-weight:700;cursor:'+(muted?'not-allowed':'pointer')+';opacity:'+(muted?'.5':'1')+';margin-bottom:14px">'+(notifOn?'🔔 Play a sound for notifications: ON':'🔕 Play a sound for notifications: OFF')+'</button>'+
-    '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">Notification chime <span style="font-weight:400;color:var(--text3)">— tap to choose, ▶ to hear it</span></div>'+
-    '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">';
+  var light=(typeof _themeIsLight==='function')&&_themeIsLight();
+  var ACC='var(--accent,#7c3aed)';
+  var _hd=function(t){return '<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:0 0 12px">'+t+'</div>';};
+  // Toggle row: label + description on the left, ON/OFF pill on the right.
+  var _toggle=function(label,desc,on,onclick,disabled){
+    var pill='<span style="flex-shrink:0;padding:5px 13px;border-radius:20px;font-size:11px;font-weight:800;background:'+(on?'rgba(34,197,94,.15)':'var(--card2)')+';border:1px solid '+(on?'rgba(34,197,94,.55)':'var(--border2)')+';color:'+(on?'#22c55e':'var(--text3)')+'">'+(on?'ON':'OFF')+'</span>';
+    return '<button '+(disabled?'disabled':'')+' onclick="'+onclick+'" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;padding:12px 14px;border:1px solid var(--border2);border-radius:10px;background:var(--card2);cursor:'+(disabled?'not-allowed':'pointer')+';opacity:'+(disabled?'.55':'1')+';margin-bottom:8px">'+
+      '<span style="min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:var(--text)">'+label+'</span>'+(desc?'<span style="display:block;font-size:11px;color:var(--text3);margin-top:2px">'+desc+'</span>':'')+'</span>'+pill+'</button>';
+  };
+  var h='<div style="max-width:600px;margin:0 auto">';
+  h+='<p style="font-size:12px;color:var(--text3);margin:0 0 14px;text-align:center">⚙️ These settings are saved on this device.</p>';
+  // ── Landing page ──
+  h+='<div class="card">'+_renderHomePicker()+'</div>';
+  // ── Appearance (segmented Light / Dark) ──
+  h+='<div class="card">'+_hd('Appearance')+
+    '<div style="display:flex;gap:4px;padding:4px;background:var(--card2);border:1px solid var(--border2);border-radius:10px">'+
+      '<button onclick="window.setThemeLight(1)" style="flex:1;padding:11px;border:none;border-radius:7px;background:'+(light?ACC:'transparent')+';color:'+(light?'#fff':'var(--text2)')+';font-size:13px;font-weight:'+(light?'800':'600')+';cursor:pointer;transition:all .12s">☀️ Light</button>'+
+      '<button onclick="window.setThemeLight(0)" style="flex:1;padding:11px;border:none;border-radius:7px;background:'+(!light?ACC:'transparent')+';color:'+(!light?'#fff':'var(--text2)')+';font-size:13px;font-weight:'+(!light?'800':'600')+';cursor:pointer;transition:all .12s">🌙 Dark</button>'+
+    '</div></div>';
+  // ── Sound ──
+  h+='<div class="card">'+_hd('Sound')+
+    _toggle('All sound',muted?'Everything is silenced on this device':'App sounds can play on this device',!muted,'window.toggleMute()',false)+
+    _toggle('Notification sound',muted?'Unmute all sound above to enable':'Play a chime when a notification arrives',notifOn&&!muted,'window.toggleNotifSound()',muted)+
+    '<div style="font-size:12px;font-weight:700;color:var(--text2);margin:14px 0 8px">Notification chime <span style="font-weight:400;color:var(--text3)">— tap to choose, ▶ to hear</span></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">';
   chimes.forEach(function(c){var on=c.id===curChime;
-    h+='<div style="display:flex;align-items:center;gap:8px">'+
-      '<button onclick="window.setChime(\''+c.id+'\')" style="flex:1;text-align:left;padding:9px 12px;border-radius:8px;border:1px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.12)':'transparent')+';color:var(--text2);font-size:13px;font-weight:'+(on?'800':'600')+';cursor:pointer">'+(on?'✓ ':'')+c.name+'</button>'+
-      '<button onclick="window.previewChime(\''+c.id+'\')" title="Preview" style="flex-shrink:0;width:42px;padding:9px 0;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>'+
+    h+='<div style="display:flex;align-items:center;gap:4px;border:1px solid '+(on?ACC:'var(--border2)')+';border-radius:10px;background:'+(on?'rgba(124,58,237,.12)':'var(--card2)')+';padding:4px 4px 4px 11px">'+
+      '<button onclick="window.setChime(\''+c.id+'\')" style="flex:1;min-width:0;text-align:left;background:none;border:none;color:var(--text2);font-size:13px;font-weight:'+(on?'800':'600')+';cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(on?'✓ ':'')+c.name+'</button>'+
+      '<button onclick="window.previewChime(\''+c.id+'\')" title="Preview" style="flex-shrink:0;width:32px;height:32px;border-radius:8px;border:1px solid var(--border2);background:var(--card);color:var(--text2);font-size:12px;cursor:pointer">▶</button>'+
     '</div>';
   });
-  h+='</div>'+(muted?'<div style="font-size:11px;color:#f59e0b;margin-top:4px">All sound is muted — unmute above to hear chimes.</div>':'')+'</div>';
+  h+='</div>'+(muted?'<div style="font-size:11px;color:#f59e0b;margin-top:10px">🔇 All sound is muted — unmute above to hear chimes.</div>':'')+'</div>';
   // ── Face ID / Touch ID unlock ──
   if(typeof _bioAvail==='function'&&_bioAvail()){
     var _uid=(S.user&&S.user.id)||'';
     var _enr=(typeof _bioEnrolledFor==='function')&&_bioEnrolledFor(_uid);
-    h+='<div class="card"><div class="st">Face ID / Touch ID</div>'+
+    h+='<div class="card">'+_hd('Face ID / Touch ID')+
       '<p style="font-size:12px;color:var(--text3);margin:0 0 12px;line-height:1.5">Unlock the app and the Business Plan tab with Face ID / Touch ID on this device. Your password always still works as a fallback.</p>'+
       (_enr
         ? '<div style="display:flex;align-items:center;gap:8px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.4);border-radius:9px;padding:9px 12px;margin-bottom:10px"><span style="font-size:16px">✅</span><span style="font-size:13px;font-weight:700;color:#4ade80">Enabled on this device</span></div>'
@@ -276,6 +291,7 @@ function _renderUserPrefs(){
       (S._bioErr?'<div style="color:#f87171;font-size:12px;font-weight:700;margin-top:8px">'+esc(S._bioErr)+'</div>':'')+
     '</div>';
   }
+  h+='</div>'; // close max-width wrapper
   return h;
 }
 window.bioEnrollNow=async function(){
@@ -560,7 +576,7 @@ function renderLoginInner(){
             onkeydown="if(event.key==='Enter')window.tryLogin();else if(event.key==='Backspace'&&S.loginErr&&this.value){this.value='';event.preventDefault();}">
         </div>
         ${S.resetStep!==1?`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><input type="checkbox" id="li_rem" checked style="width:16px;height:16px;cursor:pointer;accent-color:#7B9EC6"><label for="li_rem" style="font-size:13px;color:rgba(255,255,255,.6);cursor:pointer">Remember me on this device</label></div><button type="submit" style="width:100%;padding:13px;background:linear-gradient(135deg,#7B9EC6,#4A6D96);border:none;border-radius:8px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.5px">✈ Sign In</button></form>`:''}
-${S.resetStep===1?`<div style='margin-top:16px;padding:14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:10px'><div style='font-size:13px;color:#6ee7b7;margin-bottom:10px;font-weight:600'>📧 Reset email sent to ${S.resetEmail||'your email'}</div><div id='reset-err' style='display:none;color:#fca5a5;font-size:12px;margin-bottom:8px;background:rgba(239,68,68,.1);padding:6px 10px;border-radius:6px'></div><input id='li_reset_code' type='text' maxlength='6' placeholder='6-digit code' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:18px;text-align:center;letter-spacing:4px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_pw' type='password' placeholder='New password (min 6 chars)' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_conf' type='password' placeholder='Confirm new password' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:10px' onkeydown="if(event.key==='Enter')window.handleReset()"><div style='display:flex;gap:8px'><button onclick='window.handleReset()' style='flex:2;padding:10px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer'>Set New Password</button><button onclick='S.resetStep=0;S.resetCode=null;render()' style='flex:1;padding:10px;background:rgba(255,255,255,.08);border:none;border-radius:8px;color:rgba(255,255,255,.6);font-size:12px;cursor:pointer'>Cancel</button></div></div>`:''}
+${S.resetStep===1?`<div style='margin-top:16px;padding:14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:10px'><div style='font-size:13px;color:#6ee7b7;margin-bottom:10px;font-weight:600'>📧 Reset email sent to ${esc(S.resetEmail||'your email')}</div><div id='reset-err' style='display:none;color:#fca5a5;font-size:12px;margin-bottom:8px;background:rgba(239,68,68,.1);padding:6px 10px;border-radius:6px'></div><input id='li_reset_code' type='text' maxlength='6' placeholder='6-digit code' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:18px;text-align:center;letter-spacing:4px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_pw' type='password' placeholder='New password (min 6 chars)' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:8px'><input id='li_reset_conf' type='password' placeholder='Confirm new password' style='width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:10px' onkeydown="if(event.key==='Enter')window.handleReset()"><div style='display:flex;gap:8px'><button onclick='window.handleReset()' style='flex:2;padding:10px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer'>Set New Password</button><button onclick='S.resetStep=0;S.resetCode=null;render()' style='flex:1;padding:10px;background:rgba(255,255,255,.08);border:none;border-radius:8px;color:rgba(255,255,255,.6);font-size:12px;cursor:pointer'>Cancel</button></div></div>`:''}
       </div>
       <div style="text-align:center;margin-top:20px;font-size:11px;color:rgba(255,255,255,.2)">True South Flights Ltd · Queenstown, New Zealand</div>
       <div style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:14px;font-size:10px;color:rgba(255,255,255,.18);pointer-events:none">${APP_VER}</div>
@@ -576,8 +592,8 @@ function renderAccountModal(){
     <div style="background:var(--card);border-radius:14px;border:1px solid var(--border);padding:24px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <div>
-          <div style="font-size:16px;font-weight:700">${u.name||u.email}</div>
-          <div style="font-size:12px;color:var(--text3)">${u.email} · <span style="color:${({'superadmin':'#f43f5e','admin':'#f59e0b','pilot':'#7B9EC6','desk':'#10b981','maint':'#a78bfa','ground_staff':'#64748b'}[u.role]||'#888')}">${u.role}</span></div>
+          <div style="font-size:16px;font-weight:700">${esc(u.name||u.email||'')}</div>
+          <div style="font-size:12px;color:var(--text3)">${esc(u.email||'')} · <span style="color:${({'superadmin':'#f43f5e','admin':'#f59e0b','pilot':'#7B9EC6','desk':'#10b981','maint':'#a78bfa','ground_staff':'#64748b'}[u.role]||'#888')}">${esc(u.role||'')}</span></div>
         </div>
         <button onclick="S.showAccount=false;S.changePwMsg=null;render()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">×</button>
       </div>
@@ -927,8 +943,8 @@ function renderApp(){
           <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=false;S._notifOpen=false;S.section='training';render()" style="background:rgba(124,58,237,.18);border:none;width:28px;height:28px;border-radius:6px;font-size:14px;color:#fff;cursor:pointer;font-weight:700" title="Training">🎓</button>
           <button tabindex="-1" onclick="event.stopPropagation();S.showAccount=true;render()" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 10px 5px 6px;border-radius:20px;cursor:pointer;font-size:11px;color:rgba(255,255,255,.75)" title="Profile & Settings">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${(S.user.name.match(/\b\w/g)||['?']).slice(0,2).join('').toUpperCase()}</div>
-            <span style="white-space:nowrap">${S.user.name.split(' ')[0]}</span>
-            ${S.mobileView?'':`<span style="font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.06em">${S.user.role}</span>`}
+            <span style="white-space:nowrap">${esc((S.user.name||'').split(' ')[0])}</span>
+            ${S.mobileView?'':`<span style="font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.06em">${esc(S.user.role||'')}</span>`}
           </button>
         </div>
       </div>

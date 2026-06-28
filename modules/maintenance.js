@@ -700,7 +700,7 @@ function renderMaintBookings(){
       ${bks.map((b,bi)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;background:var(--card2);padding:6px 8px;border-radius:6px;flex-wrap:wrap">
         <label style="font-size:10px;color:var(--text3)">Go<br><input type="date" class="fi" value="${b.date||''}" onchange="window.editBooking('${ac}',${bi},'date',this.value)" style="width:118px;font-size:11px"></label>
         <label style="font-size:10px;color:var(--text3)">Return<br><input type="date" class="fi" value="${b.end||''}" min="${b.date||''}" onchange="window.editBooking('${ac}',${bi},'end',this.value)" style="width:118px;font-size:11px"></label>
-        <input type="text" class="fi" value="${b.notes||''}" onchange="window.editBooking('${ac}',${bi},'notes',this.value)" placeholder="Notes" style="flex:1;min-width:90px;font-size:11px">
+        <input type="text" class="fi" value="${esc(b.notes||'')}" onchange="window.editBooking('${ac}',${bi},'notes',this.value)" placeholder="Notes" style="flex:1;min-width:90px;font-size:11px">
         <label style="display:flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap">
           <input type="checkbox" ${b.confirmed?'checked':''} onchange="window.editBooking('${ac}',${bi},'confirmed',this.checked)"> Confirmed
         </label>
