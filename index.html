@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.96';
+const APP_VER='v27.97';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -20936,13 +20936,13 @@ function _rzEscSafe(s){if(typeof _rzEsc==='function')return _rzEsc(s);if(typeof 
 //  NOTE: persistence needs the ts_flight_records table — see flight_record.sql.
 // ─────────────────────────────────────────────────────────────────────────────
 
-var FR_PRODUCTS_DEFAULT=['FCF','FLB','MFOH','THH','FJHH','MCHS','STT','Ferry','Maintenance','Training','Private Hire'];
+var FR_PRODUCTS_DEFAULT=['FCF','FLB','MFOH','THH','FJHH','MCHS','STT','CHT','Ferry','Maintenance','Training','Private Hire'];
 var FR_LOCS_DEFAULT=['QN','MF','MC','FJ','WF'];
 
 function _frToday(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function _frNowHM(){var d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
 function _frMins(t){var m=/(\d{1,2}):(\d{2})/.exec(String(t||''));return m?(+m[1])*60+(+m[2]):null;}
-function _frProducts(){var o=S._frSettings&&Array.isArray(S._frSettings.products)?S._frSettings.products:null;var list=(o&&o.length)?o:FR_PRODUCTS_DEFAULT;if(list.indexOf('FLB')<0){list=list.slice();list.splice(Math.min(1,list.length),0,'FLB');}return list;}
+function _frProducts(){var o=S._frSettings&&Array.isArray(S._frSettings.products)?S._frSettings.products:null;var list=((o&&o.length)?o:FR_PRODUCTS_DEFAULT).slice();if(list.indexOf('FLB')<0)list.splice(Math.min(1,list.length),0,'FLB');if(list.indexOf('CHT')<0){var fi=list.indexOf('Ferry');if(fi>=0)list.splice(fi,0,'CHT');else list.push('CHT');}return list;}
 function _frAdj(){var a=S._frSettings&&S._frSettings.adj!=null?(+S._frSettings.adj):1;return isNaN(a)?1:Math.max(0,a);} // taxi adjustment, in tenths (default 0.1)
 function _frAcShort(ac){return String(ac||'').replace(/^ZK-?/,'');}
 function _frAcList(){return Object.keys((S&&S.aircraft)||{});}
