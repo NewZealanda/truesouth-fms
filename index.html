@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.92';
+const APP_VER='v27.93';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2095,7 +2095,7 @@ async function loadAll(){
     const us=_pUsers;
     const _initPads=_pPads;
     if(us&&us.length){
-      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,isPilot:r.is_pilot||r.role==='pilot'||false,inactive:r.inactive||false}));
+      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',reportsTo:r.reports_to||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,isPilot:r.is_pilot||r.role==='pilot'||false,inactive:r.inactive||false}));
       lsSet('ts_users_cache',S.users);window.loadNotifications&&window.loadNotifications();
     } else {
       const cached=lsGet('ts_users_cache');
@@ -2634,7 +2634,7 @@ async function reloadTable(table){
   } else if(table==='ts_users'){
     const us=await sbF(USERS_TBL());
     if(us&&us.length){
-      S.users=us.map(function(r){return{id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',
+      S.users=us.map(function(r){return{id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',reportsTo:r.reports_to||'',
         passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,
         superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,
         isPilot:r.is_pilot||r.role==='pilot'||false,inactive:r.inactive||false};});
@@ -4161,11 +4161,11 @@ function renderDrawer(){
     }
    }}
   // Roster & Leave combined — show the group only if the user can reach at least one item.
-  {var _canApproveLeaveNav=hasRolePerm('leave_approve');
+  {var _canApproveLeaveNav=hasRolePerm('leave_approve')||(typeof _lvHasReports==='function'&&_lvHasReports());   // org-managers (set in Reports to) approve their reports even without the perm
   if(_canRoster||_canLeave||_canApproveLeaveNav){
   var _lvActive=sec==='leave';
   // Match the Approvals tab: only count pending requests this approver can actually action.
-  var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveRole!=='function'||_lvCanApproveRole(role,r.user_role||'desk'));}).length:0;
+  var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveReq!=='function'||_lvCanApproveReq(r));}).length:0;
   var _rlOn=sec==='roster'||sec==='leave';
   var _rlExp=_isExp('roster');
   h+='<button tabindex="-1" onclick="S._drawerExp[\'roster\']=!S._drawerExp[\'roster\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_rlOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_rlOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_rlOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🗓️</span><span style="flex:1">Roster'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_rlExp?'▲':'▼')+'</span></button>';
@@ -4214,6 +4214,7 @@ function renderDrawer(){
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
       h+=_sn('People','people');
       if(_canUsers)h+=_sn('Permissions','perms');
+      if(_canUsers)h+=_sn('Reports to','reportsto');
       if(hasRolePerm('operations'))h+=_sn('Operations','operations');
       if(_isAdminPlus){
         h+=_sn('Drive','gdrive');
@@ -4262,6 +4263,7 @@ function renderSettingsSubTabs(){
   const sections=[];
   if(_canUsers||_canCrew)sections.push({id:'people',lbl:'People'});
   if(_canUsers)sections.push({id:'perms',lbl:'Permissions'});
+  if(_canUsers)sections.push({id:'reportsto',lbl:'Reports to'});
   if(hasRolePerm('operations'))sections.push({id:'operations',lbl:'Operations'});
   // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20.
   if(_adminPlus)sections.push({id:'gdrive',lbl:'Drive'},{id:'statistics',lbl:'Statistics'});
@@ -6275,15 +6277,68 @@ function renderAdmin(){
   if(!isAdmin){
     if(typeof hasRolePerm==='function'&&hasRolePerm('admin_users')){
       const _s=(S.admin||{}).section||'people';
-      return {people:renderAdminPeople,perms:renderAdminPerms}[_s]?.()||renderAdminPeople();
+      return {people:renderAdminPeople,perms:renderAdminPerms,reportsto:renderReportsTo}[_s]?.()||renderAdminPeople();
     }
     if(typeof hasRolePerm==='function'&&hasRolePerm('admin_crew')) return renderAdminPeople();
     return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
   }
   const ad=S.admin;
   const ad_section=ad.section||'people';
-  return {people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,fuels:renderAdminFuels,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad_section]?.()||renderAdminPeople();
+  return {people:renderAdminPeople,perms:renderAdminPerms,reportsto:renderReportsTo,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,fuels:renderAdminFuels,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad_section]?.()||renderAdminPeople();
 }
+
+// ── Reports-to (org structure) — Settings ▸ Reports to ──────────────────────────
+// Each user gets a `reportsTo` = their manager's user id (persisted to ts_users.reports_to via the
+// reports_to.sql migration). A manager can approve the leave of their DIRECT reports; admins + CX
+// Manager still see everyone. This page lets an admin assign managers and view each manager's team.
+function _rtRoleLbl(r){return ({superadmin:'Superadmin',admin:'Admin',cx_manager:'CX Manager',pilot:'Pilot',desk:'Desk',ground_staff:'Ground',maint:'Maintenance',maintenance:'Maintenance',accounts:'Accounts',marketing:'Marketing'})[r]||r||'';}
+function renderReportsTo(){
+  var esc=(typeof _rzEsc==='function')?_rzEsc:function(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});};
+  var users=(S.users||[]).filter(function(u){return !u.inactive;}).slice().sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''));});
+  var reportsOf=function(mid){return users.filter(function(u){return String(u.reportsTo||'')===String(mid);});};
+  var h='<div class="card"><div class="st">Reports to</div>'+
+    '<p style="font-size:12.5px;color:var(--text3);margin:2px 0 14px;line-height:1.5">Set each person’s manager. A manager can see and approve leave for the people who report directly to them (admins and the CX Manager still see everyone). Tap a manager to view their team.</p>';
+  // By-manager view (click to expand)
+  var managers=users.filter(function(u){return reportsOf(u.id).length>0;});
+  h+='<div style="margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800">Managers</div>';
+  if(!managers.length)h+='<div style="font-size:12.5px;color:var(--text3);padding:4px 0 10px">No managers assigned yet — set someone’s manager in the list below and they’ll appear here.</div>';
+  managers.forEach(function(m){
+    var team=reportsOf(m.id),open=!!(S._rtOpen||{})[m.id];
+    h+='<div style="border:1px solid var(--border2);border-radius:10px;margin-bottom:8px;overflow:hidden">'+
+      '<div onclick="window.rtToggle(\''+esc(String(m.id)).replace(/\x27/g,"\\\x27")+'\')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--card2)">'+
+        '<span style="font-weight:800;color:var(--text1);font-size:13.5px">'+esc(m.name)+'</span>'+
+        '<span style="font-size:10px;color:var(--text3);font-weight:700">'+esc(_rtRoleLbl(m.role))+'</span>'+
+        '<span style="margin-left:auto;font-size:11px;color:var(--accent);font-weight:800">'+team.length+' report'+(team.length===1?'':'s')+' '+(open?'▴':'▾')+'</span>'+
+      '</div>'+
+      (open?'<div style="padding:2px 12px 8px">'+team.map(function(t){return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border2)"><span style="font-size:12.5px;color:var(--text1)">'+esc(t.name)+'</span><span style="font-size:10px;color:var(--text3)">'+esc(_rtRoleLbl(t.role))+'</span></div>';}).join('')+'</div>':'')+
+    '</div>';
+  });
+  // Assign managers
+  h+='<div style="margin:16px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800">Set who reports to whom</div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.04em"><th style="text-align:left;padding:6px 8px">Person</th><th style="text-align:left;padding:6px 8px">Reports to (manager)</th></tr></thead><tbody>';
+  users.forEach(function(u){
+    var idJs=esc(String(u.id)).replace(/\x27/g,"\\\x27");
+    var opts='<option value="">— none —</option>'+users.filter(function(m){return m.id!==u.id;}).map(function(m){return '<option value="'+esc(String(m.id))+'"'+(String(u.reportsTo||'')===String(m.id)?' selected':'')+'>'+esc(m.name)+' ('+esc(_rtRoleLbl(m.role))+')</option>';}).join('');
+    h+='<tr style="border-top:1px solid var(--border2)"><td style="padding:6px 8px;font-weight:700;color:var(--text1)">'+esc(u.name)+'<div style="font-size:10px;color:var(--text3);font-weight:600">'+esc(_rtRoleLbl(u.role))+'</div></td>'+
+      '<td style="padding:6px 8px"><select onchange="window.rtSetManager(\''+idJs+'\',this.value)" style="width:100%;max-width:340px;padding:6px 8px;border-radius:7px;border:1px solid var(--border2);background:var(--bg2);color:var(--text1);font-size:13px">'+opts+'</select></td></tr>';
+  });
+  h+='</tbody></table></div></div>';
+  return h;
+}
+window.rtToggle=function(id){S._rtOpen=S._rtOpen||{};if(S._rtOpen[id])delete S._rtOpen[id];else S._rtOpen[id]=true;render();};
+window.rtSetManager=async function(uid,mgr){
+  var u=(S.users||[]).find(function(x){return String(x.id)===String(uid);});if(!u)return;
+  if(String(mgr)===String(uid)){if(typeof toast==='function')toast('A person can’t report to themselves.','warn');return;}
+  u.reportsTo=mgr||'';
+  try{if(typeof lsSet==='function')lsSet('ts_users_cache',S.users);}catch(e){}
+  render();
+  // Direct PATCH of just reports_to — never touches name/weight/password (the public view doesn't expose
+  // weight/hash, so writing the whole record could wipe them). Row always exists, so PATCH-by-id is safe.
+  try{
+    var pr=await _sbFetch(SB+'/rest/v1/ts_users?id=eq.'+encodeURIComponent(uid),{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify({reports_to:mgr||null})});
+    if(typeof toast==='function')toast(pr&&pr.ok?'Saved':'Could not save — has reports_to.sql been run in Supabase?',pr&&pr.ok?'ok':'warn');
+  }catch(e){if(typeof toast==='function')toast('Could not save — offline?','warn');}
+};
 
 function renderAdminStatistics(){
   // ── Filter state ─────────────────────────────────────────────────────────
@@ -12747,16 +12802,27 @@ async function _lvUnstampRoster(req){
   }
 }
 function _lvFmt(ds){if(!ds)return '';var d=new Date(ds+'T00:00:00');return d.toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'});}
+// Manager of a user (their reports_to app id), and whether the signed-in user manages anyone.
+function _lvManagerOf(uid){uid=String(uid||'');var u=(S.users||[]).find(function(x){return String(x.id)===uid;});return u?String(u.reportsTo||''):'';}
+function _lvHasReports(){var me=S.user&&S.user.id;if(!me)return false;return (S.users||[]).some(function(u){return String(u.reportsTo||'')===String(me)&&!u.inactive;});}
 function _lvCanApprove(role){
-  // Base "can approve leave at all" is now driven by the permission grid (leave_approve);
-  // the per-request hierarchy below (_lvCanApproveRole) still limits WHO they can approve.
+  // "Can approve at all" (shows the Approvals tab): admins always; anyone with the leave_approve
+  // permission (admin/CX Mgr by default); OR anyone set as a manager of at least one person — org
+  // structure (Settings ▸ Reports to) drives manager approval even for non-admin roles.
+  role=role||(S.user&&S.user.role)||'desk';
   if(role==='superadmin'||role==='admin')return true;
-  return (typeof hasRolePerm==='function')?hasRolePerm('leave_approve'):(role==='cx_manager');
+  if((typeof hasRolePerm==='function')&&hasRolePerm('leave_approve'))return true;
+  return _lvHasReports();
 }
-function _lvCanApproveRole(myRole,reqRole){
+// Can the signed-in user approve THIS request? Admin/superadmin/CX Mgr = all (non-admin); otherwise
+// only if they are the requester's DIRECT manager (reports_to). Pass the request object.
+function _lvCanApproveReq(req){
+  var myRole=(S.user&&S.user.role)||'desk';var reqRole=(req&&req.user_role)||'desk';
   if(myRole==='superadmin')return true;
   if(myRole==='admin')return reqRole!=='superadmin';
-  if(myRole==='cx_manager')return reqRole!=='superadmin'&&reqRole!=='admin';   // CX Mgr approves all non-admin staff (incl. pilots)
+  if(myRole==='cx_manager'&&((typeof hasRolePerm!=='function')||hasRolePerm('leave_approve')))return reqRole!=='superadmin'&&reqRole!=='admin';
+  // org-based: I'm this requester's direct manager
+  if(req&&S.user&&String(_lvManagerOf(req.user_id))===String(S.user.id))return true;
   return false;
 }
 
@@ -12801,7 +12867,7 @@ function renderLeave(){
   if(!S._rosterLoaded&&window.loadRosterFromCloud){S._rosterLoaded=true;window.loadRosterFromCloud();if(window.loadRosterLeave)window.loadRosterLeave();}
 
   var pendingCt=canApprove&&lv.allReqs
-    ?lv.allReqs.filter(function(r){return r.status==='pending'&&_lvCanApproveRole(role,r.user_role||'desk');}).length
+    ?lv.allReqs.filter(function(r){return r.status==='pending'&&_lvCanApproveReq(r);}).length
     :0;
 
   var h='<div style="padding:20px 16px;max-width:960px;margin:0 auto">';
@@ -12945,7 +13011,7 @@ function _renderApprovals(lv,role){
   [{id:'pending',lbl:'Pending'},{id:'approved',lbl:'Approved'},{id:'declined',lbl:'Declined'},{id:'all',lbl:'All'}].forEach(function(s){
     var on=f.status===s.id;
     var cnt=allReqs?allReqs.filter(function(r){
-      var canSee=_lvCanApproveRole(role,r.user_role||'desk');
+      var canSee=_lvCanApproveReq(r);
       return canSee&&(s.id==='all'||r.status===s.id);
     }).length:0;
     h+='<button tabindex="-1" onclick="S._leave.filter.status=\''+s.id+'\';render()" style="padding:5px 12px;border-radius:7px;border:1.5px solid '+(on?'#c084fc':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.18)':'transparent')+';color:'+(on?'#c084fc':'var(--text3)')+';font-size:12px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+s.lbl+(cnt>0?' ('+cnt+')':'')+'</button>';
@@ -12964,7 +13030,7 @@ function _renderApprovals(lv,role){
   }
 
   var filtered=allReqs.filter(function(r){
-    if(!_lvCanApproveRole(role,r.user_role||'desk'))return false;
+    if(!_lvCanApproveReq(r))return false;
     if(f.status!=='all'&&r.status!==f.status)return false;
     if(f.dateFrom&&r.end_date<f.dateFrom)return false;
     if(f.dateTo&&r.start_date>f.dateTo)return false;
@@ -13214,7 +13280,7 @@ window.submitLeaveRequest=async function(){
     var res=r.ok?await r.json():null;
     if(res&&res[0]){
       try{await sbU('ts_leave_audit',[{request_id:res[0].id,action:'submitted',performed_by:uid,performed_by_name:uname}]);}catch(e){}
-      try{await window._notifyLeaveApprovers(res[0].id,urole,uname,f.type,f.startDate,f.endDate);}catch(e){}
+      try{await window._notifyLeaveApprovers(res[0].id,urole,uname,f.type,f.startDate,f.endDate,uid);}catch(e){}
       try{window._triggerLeaveEmail(res[0].id,'submitted').catch(function(){});}catch(e){}
       S._leave.form={show:false,type:'annual',startDate:'',endDate:'',reason:''};
       S._leave._myLoaded=false;S._leave._allLoaded=false;
@@ -13237,7 +13303,7 @@ window.approveLeave=async function(id){
   var me=S.user;
   var req=(S._leave?.allReqs||[]).find(function(r){return r.id===id;});
   if(!req)return;
-  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk')){toast('Not authorised to approve this request.','warn');return;}
+  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveReq(req)){toast('Not authorised to approve this request.','warn');return;}
   var overlaps=(S._leave?.allReqs||[]).filter(function(r){
     return r.id!==id&&r.status==='approved'&&r.start_date<=req.end_date&&r.end_date>=req.start_date;
   });
@@ -13271,7 +13337,7 @@ window.declineLeave=async function(id){
   var comment=(document.getElementById('decline-comment-'+id)||{}).value||S._leave?.declineComment||'';
   var req=(S._leave?.allReqs||[]).find(function(r){return r.id===id;});
   if(!req)return;
-  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk')){toast('Not authorised to decline this request.','warn');return;}
+  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveReq(req)){toast('Not authorised to decline this request.','warn');return;}
   var _wasApproved=req.status==='approved';
   var ok=await sbPatch('ts_leave_requests',id,{
     status:'declined',admin_comment:comment||null,
@@ -13392,7 +13458,7 @@ window.leaveEditSave=async function(){
   var days=(typeof _lvWorkingDays==='function')?_lvWorkingDays(req.user_id,e.startDate,e.endDate):_lvDays(e.startDate,e.endDate);
   var isOwner=req.user_id===(me&&me.id);
   // Approvers editing someone else's request must actually be allowed to approve that role.
-  if(!isOwner&&(!_lvCanApprove(me&&me.role)||!_lvCanApproveRole(me&&me.role,req.user_role||'desk'))){toast('Not authorised to edit this request.','warn');return;}
+  if(!isOwner&&(!_lvCanApprove(me&&me.role)||!_lvCanApproveReq(req))){toast('Not authorised to edit this request.','warn');return;}
   var reapprove=isOwner&&req.status==='approved';
   var patch={leave_type:e.type,start_date:e.startDate,end_date:e.endDate,reason:e.reason||null,total_days:days};
   if(reapprove){patch.status='pending';patch.reviewed_at=null;patch.reviewed_by=null;patch.reviewed_by_name=null;patch.admin_comment=null;}
@@ -13401,7 +13467,7 @@ window.leaveEditSave=async function(){
   var action=reapprove?'edited_resubmit':(isOwner?'edited':'edited_by_approver');
   var detail=(me&&(me.name||me.email)||'?')+' edited — '+changes.join('; ')+(reapprove?' (re-approval required)':'');
   try{await sbU('ts_leave_audit',[{request_id:e.id,action:action,performed_by:me&&me.id,performed_by_name:me&&(me.name||me.email),comment:detail}]);}catch(_){}
-  if(reapprove){try{await window._notifyLeaveApprovers(e.id,req.user_role||'desk',req.user_name||(me&&me.name),e.type,e.startDate,e.endDate);}catch(_){}}
+  if(reapprove){try{await window._notifyLeaveApprovers(e.id,req.user_role||'desk',req.user_name||(me&&me.name),e.type,e.startDate,e.endDate,req.user_id);}catch(_){}}
   else if(!isOwner&&req.user_id){try{await sbU('ts_notifications',[{user_id:req.user_id,type:'leave_edited',message:'Your leave was updated by '+((me&&me.name)||'an approver')+' — '+changes.join('; '),read:false,created_at:new Date().toISOString()}]);if(me&&me.id===req.user_id)window.loadNotifications();}catch(_){}}
   var o=document.getElementById('leave-edit-ov');if(o)o.remove();S._leaveEdit=null;
   if(S._leave){S._leave._myLoaded=false;S._leave._allLoaded=false;if(S._leave._audit)delete S._leave._audit[e.id];}
@@ -13433,14 +13499,17 @@ function _lvHistoryHtml(id){
 }
 
 // ── Notifications ──
-window._notifyLeaveApprovers=async function(requestId,requesterRole,requesterName,leaveType,startDate,endDate){
-  var approverRoles=(requesterRole==='desk'||requesterRole==='ground_staff')
-    ?['cx_manager','admin','superadmin']:['admin','superadmin'];
-  var approvers=(S.users||[]).filter(function(u){return approverRoles.indexOf(u.role)>=0&&!u.inactive;});
-  if(!approvers.length)return;
+window._notifyLeaveApprovers=async function(requestId,requesterRole,requesterName,leaveType,startDate,endDate,requesterId){
+  // Notify the blanket approvers (CX Mgr + admins; admins only for an admin's own leave) AND the
+  // requester's DIRECT manager from the org structure (Settings ▸ Reports to), deduped, minus self.
+  var roles=(requesterRole==='superadmin'||requesterRole==='admin')?['admin','superadmin']:['cx_manager','admin','superadmin'];
+  var recips={};
+  (S.users||[]).forEach(function(u){if(!u.inactive&&roles.indexOf(u.role)>=0)recips[String(u.id)]=true;});
+  if(requesterId){var rq=(S.users||[]).find(function(u){return String(u.id)===String(requesterId);});if(rq&&rq.reportsTo)recips[String(rq.reportsTo)]=true;delete recips[String(requesterId)];}
+  var ids=Object.keys(recips);if(!ids.length)return;
   var lt=LEAVE_TYPES.find(function(t){return t.id===leaveType;});
   var msg=requesterName+' has requested '+(lt?lt.lbl:leaveType)+' from '+_lvFmt(startDate)+' to '+_lvFmt(endDate);
-  var notifs=approvers.map(function(u){return{user_id:u.id,type:'leave_submitted',message:msg,reference_id:requestId,read:false,created_at:new Date().toISOString()};});
+  var notifs=ids.map(function(id){return{user_id:id,type:'leave_submitted',message:msg,reference_id:requestId,read:false,created_at:new Date().toISOString()};});
   await sbU('ts_notifications',notifs);
   window.loadNotifications();
 };

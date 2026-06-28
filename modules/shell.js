@@ -754,11 +754,11 @@ function renderDrawer(){
     }
    }}
   // Roster & Leave combined — show the group only if the user can reach at least one item.
-  {var _canApproveLeaveNav=hasRolePerm('leave_approve');
+  {var _canApproveLeaveNav=hasRolePerm('leave_approve')||(typeof _lvHasReports==='function'&&_lvHasReports());   // org-managers (set in Reports to) approve their reports even without the perm
   if(_canRoster||_canLeave||_canApproveLeaveNav){
   var _lvActive=sec==='leave';
   // Match the Approvals tab: only count pending requests this approver can actually action.
-  var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveRole!=='function'||_lvCanApproveRole(role,r.user_role||'desk'));}).length:0;
+  var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveReq!=='function'||_lvCanApproveReq(r));}).length:0;
   var _rlOn=sec==='roster'||sec==='leave';
   var _rlExp=_isExp('roster');
   h+='<button tabindex="-1" onclick="S._drawerExp[\'roster\']=!S._drawerExp[\'roster\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_rlOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_rlOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_rlOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🗓️</span><span style="flex:1">Roster'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_rlExp?'▲':'▼')+'</span></button>';
@@ -807,6 +807,7 @@ function renderDrawer(){
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
       h+=_sn('People','people');
       if(_canUsers)h+=_sn('Permissions','perms');
+      if(_canUsers)h+=_sn('Reports to','reportsto');
       if(hasRolePerm('operations'))h+=_sn('Operations','operations');
       if(_isAdminPlus){
         h+=_sn('Drive','gdrive');
@@ -855,6 +856,7 @@ function renderSettingsSubTabs(){
   const sections=[];
   if(_canUsers||_canCrew)sections.push({id:'people',lbl:'People'});
   if(_canUsers)sections.push({id:'perms',lbl:'Permissions'});
+  if(_canUsers)sections.push({id:'reportsto',lbl:'Reports to'});
   if(hasRolePerm('operations'))sections.push({id:'operations',lbl:'Operations'});
   // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20.
   if(_adminPlus)sections.push({id:'gdrive',lbl:'Drive'},{id:'statistics',lbl:'Statistics'});

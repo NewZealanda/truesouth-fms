@@ -126,7 +126,7 @@ async function loadAll(){
     const us=_pUsers;
     const _initPads=_pPads;
     if(us&&us.length){
-      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,isPilot:r.is_pilot||r.role==='pilot'||false,inactive:r.inactive||false}));
+      S.users=us.map(r=>({id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',reportsTo:r.reports_to||'',passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,isPilot:r.is_pilot||r.role==='pilot'||false,inactive:r.inactive||false}));
       lsSet('ts_users_cache',S.users);window.loadNotifications&&window.loadNotifications();
     } else {
       const cached=lsGet('ts_users_cache');
@@ -665,7 +665,7 @@ async function reloadTable(table){
   } else if(table==='ts_users'){
     const us=await sbF(USERS_TBL());
     if(us&&us.length){
-      S.users=us.map(function(r){return{id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',
+      S.users=us.map(function(r){return{id:r.id,name:r.name,email:r.email,role:r.role,linkedCrew:r.linked_crew||'',reportsTo:r.reports_to||'',
         passwordHash:r.password_hash||'',weight:parseFloat(r.weight)||0,
         superAdmin:r.super_admin||r.role==='superadmin'||r.email==='andrew@truesouthflights.co.nz'||r.email==='adamsonandrew1@gmail.com'||false,
         isPilot:r.is_pilot||r.role==='pilot'||false,inactive:r.inactive||false};});

@@ -16,15 +16,68 @@ function renderAdmin(){
   if(!isAdmin){
     if(typeof hasRolePerm==='function'&&hasRolePerm('admin_users')){
       const _s=(S.admin||{}).section||'people';
-      return {people:renderAdminPeople,perms:renderAdminPerms}[_s]?.()||renderAdminPeople();
+      return {people:renderAdminPeople,perms:renderAdminPerms,reportsto:renderReportsTo}[_s]?.()||renderAdminPeople();
     }
     if(typeof hasRolePerm==='function'&&hasRolePerm('admin_crew')) return renderAdminPeople();
     return '<div class="card"><p style="color:var(--text3)">No sections available for your role.</p></div>';
   }
   const ad=S.admin;
   const ad_section=ad.section||'people';
-  return {people:renderAdminPeople,perms:renderAdminPerms,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,fuels:renderAdminFuels,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad_section]?.()||renderAdminPeople();
+  return {people:renderAdminPeople,perms:renderAdminPerms,reportsto:renderReportsTo,gdrive:renderAdminGDrive,aerodromes:renderAerodromes,fuels:renderAdminFuels,statistics:renderAdminStatistics,audit:renderAdminAudit}[ad_section]?.()||renderAdminPeople();
 }
+
+// ── Reports-to (org structure) — Settings ▸ Reports to ──────────────────────────
+// Each user gets a `reportsTo` = their manager's user id (persisted to ts_users.reports_to via the
+// reports_to.sql migration). A manager can approve the leave of their DIRECT reports; admins + CX
+// Manager still see everyone. This page lets an admin assign managers and view each manager's team.
+function _rtRoleLbl(r){return ({superadmin:'Superadmin',admin:'Admin',cx_manager:'CX Manager',pilot:'Pilot',desk:'Desk',ground_staff:'Ground',maint:'Maintenance',maintenance:'Maintenance',accounts:'Accounts',marketing:'Marketing'})[r]||r||'';}
+function renderReportsTo(){
+  var esc=(typeof _rzEsc==='function')?_rzEsc:function(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});};
+  var users=(S.users||[]).filter(function(u){return !u.inactive;}).slice().sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''));});
+  var reportsOf=function(mid){return users.filter(function(u){return String(u.reportsTo||'')===String(mid);});};
+  var h='<div class="card"><div class="st">Reports to</div>'+
+    '<p style="font-size:12.5px;color:var(--text3);margin:2px 0 14px;line-height:1.5">Set each person’s manager. A manager can see and approve leave for the people who report directly to them (admins and the CX Manager still see everyone). Tap a manager to view their team.</p>';
+  // By-manager view (click to expand)
+  var managers=users.filter(function(u){return reportsOf(u.id).length>0;});
+  h+='<div style="margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800">Managers</div>';
+  if(!managers.length)h+='<div style="font-size:12.5px;color:var(--text3);padding:4px 0 10px">No managers assigned yet — set someone’s manager in the list below and they’ll appear here.</div>';
+  managers.forEach(function(m){
+    var team=reportsOf(m.id),open=!!(S._rtOpen||{})[m.id];
+    h+='<div style="border:1px solid var(--border2);border-radius:10px;margin-bottom:8px;overflow:hidden">'+
+      '<div onclick="window.rtToggle(\''+esc(String(m.id)).replace(/\x27/g,"\\\x27")+'\')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--card2)">'+
+        '<span style="font-weight:800;color:var(--text1);font-size:13.5px">'+esc(m.name)+'</span>'+
+        '<span style="font-size:10px;color:var(--text3);font-weight:700">'+esc(_rtRoleLbl(m.role))+'</span>'+
+        '<span style="margin-left:auto;font-size:11px;color:var(--accent);font-weight:800">'+team.length+' report'+(team.length===1?'':'s')+' '+(open?'▴':'▾')+'</span>'+
+      '</div>'+
+      (open?'<div style="padding:2px 12px 8px">'+team.map(function(t){return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border2)"><span style="font-size:12.5px;color:var(--text1)">'+esc(t.name)+'</span><span style="font-size:10px;color:var(--text3)">'+esc(_rtRoleLbl(t.role))+'</span></div>';}).join('')+'</div>':'')+
+    '</div>';
+  });
+  // Assign managers
+  h+='<div style="margin:16px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:800">Set who reports to whom</div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.04em"><th style="text-align:left;padding:6px 8px">Person</th><th style="text-align:left;padding:6px 8px">Reports to (manager)</th></tr></thead><tbody>';
+  users.forEach(function(u){
+    var idJs=esc(String(u.id)).replace(/\x27/g,"\\\x27");
+    var opts='<option value="">— none —</option>'+users.filter(function(m){return m.id!==u.id;}).map(function(m){return '<option value="'+esc(String(m.id))+'"'+(String(u.reportsTo||'')===String(m.id)?' selected':'')+'>'+esc(m.name)+' ('+esc(_rtRoleLbl(m.role))+')</option>';}).join('');
+    h+='<tr style="border-top:1px solid var(--border2)"><td style="padding:6px 8px;font-weight:700;color:var(--text1)">'+esc(u.name)+'<div style="font-size:10px;color:var(--text3);font-weight:600">'+esc(_rtRoleLbl(u.role))+'</div></td>'+
+      '<td style="padding:6px 8px"><select onchange="window.rtSetManager(\''+idJs+'\',this.value)" style="width:100%;max-width:340px;padding:6px 8px;border-radius:7px;border:1px solid var(--border2);background:var(--bg2);color:var(--text1);font-size:13px">'+opts+'</select></td></tr>';
+  });
+  h+='</tbody></table></div></div>';
+  return h;
+}
+window.rtToggle=function(id){S._rtOpen=S._rtOpen||{};if(S._rtOpen[id])delete S._rtOpen[id];else S._rtOpen[id]=true;render();};
+window.rtSetManager=async function(uid,mgr){
+  var u=(S.users||[]).find(function(x){return String(x.id)===String(uid);});if(!u)return;
+  if(String(mgr)===String(uid)){if(typeof toast==='function')toast('A person can’t report to themselves.','warn');return;}
+  u.reportsTo=mgr||'';
+  try{if(typeof lsSet==='function')lsSet('ts_users_cache',S.users);}catch(e){}
+  render();
+  // Direct PATCH of just reports_to — never touches name/weight/password (the public view doesn't expose
+  // weight/hash, so writing the whole record could wipe them). Row always exists, so PATCH-by-id is safe.
+  try{
+    var pr=await _sbFetch(SB+'/rest/v1/ts_users?id=eq.'+encodeURIComponent(uid),{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify({reports_to:mgr||null})});
+    if(typeof toast==='function')toast(pr&&pr.ok?'Saved':'Could not save — has reports_to.sql been run in Supabase?',pr&&pr.ok?'ok':'warn');
+  }catch(e){if(typeof toast==='function')toast('Could not save — offline?','warn');}
+};
 
 function renderAdminStatistics(){
   // ── Filter state ─────────────────────────────────────────────────────────
