@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.95';
+const APP_VER='v27.96';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -21013,11 +21013,21 @@ window.loadFlightRecords=async function(){
   try{var c=lsGet&&lsGet('ts_flight_records_cache');if(c&&typeof c==='object')S._frData=c;}catch(e){}
   // settings (adjustment + products)
   try{if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_settings?key=eq.fr_settings&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value){S._frSettings=JSON.parse(s[0].value);if(typeof _sbSetBase==='function')_sbSetBase('fr_settings',S._frSettings);}}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});}catch(e){}
-  if(typeof sbF!=='function'){if(typeof render==='function')render();return;}
+  if(typeof _sbFetch!=='function'){if(typeof render==='function')render();return;}
   try{
     // Pull ALL records (not just this pilot) so the per-aircraft Today's Record shows every PIC's
-    // flights — the last PIC reviews the whole day before uploading.
-    var rows=await sbF('ts_flight_records','','updated_at');
+    // flights. MUST paginate: PostgREST caps a plain select at 1000 rows, and with the legacy import
+    // there are 15k+ records — without paging, whole months/pilots silently vanish (the "gap" bug).
+    var rows=[],_pg=0,_PAGE=1000;
+    while(_pg<60){
+      var _rr=await _sbFetch(SB+'/rest/v1/ts_flight_records?select=*&order=updated_at.desc&limit='+_PAGE+'&offset='+(_pg*_PAGE),{headers:{...SH}});
+      if(!_rr.ok){if(_pg===0)rows=null;break;}
+      var _arr=await _rr.json();
+      if(!Array.isArray(_arr)){if(_pg===0)rows=null;break;}
+      rows=rows.concat(_arr);
+      if(_arr.length<_PAGE)break;
+      _pg++;
+    }
     if(Array.isArray(rows)){var d={};rows.forEach(function(r){d[r.id]={id:r.id,user_id:r.user_id,fr_date:r.fr_date,aircraft:r.aircraft||'',type:r.actype||'',product:r.product||'',from:r.route_from||'',to:r.route_to||'',pob:r.pob||0,off:r.off_blocks||'',on:r.on_blocks||'',startHours:r.start_hours,endHours:r.end_hours,flightTime:r.flight_time,tacho:r.tacho,landings:r.landings||1,starts:r.starts!=null?r.starts:1,picName:r.pic_name||'',copilot:r.copilot||'',details:r.details||'',manual:!!r.manual,note:r.note||'',done:!!r.done,submitted:!!r.submitted,submittedBy:r.submitted_by||'',at:r.updated_at||'',by:r.updated_by||''};});
       // MERGE, don't clobber: keep any LOCAL record the cloud is missing or that's newer than the cloud
       // copy (e.g. a shutdown written OFFLINE and not yet synced). Replacing outright dropped that record,
