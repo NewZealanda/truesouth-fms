@@ -1901,9 +1901,9 @@ window.rzCalToggleLock=function(){S._rzCalUnlocked=!S._rzCalUnlocked;render();};
 window.rzCalDown=function(e,key){
   if(e.button!=null&&e.button!==0)return;
   var meta=(S._rzBlockMeta||{})[key];if(!meta||meta.startMin==null||meta.endMin==null)return; // unparseable time → don't start a drag
-  // Mobile + locked: no drag/resize. Don't preventDefault (so the calendar still scrolls); just open the
-  // block on a clean tap. The block carries touch-action:auto in this state so vertical scroll passes through.
-  if(S.mobileView&&_rzCalLocked()){
+  // Locked (the DEFAULT on every device): no drag/resize — just open the block on a tap/click. Don't
+  // preventDefault so the calendar still scrolls. The block carries touch-action:auto in this state.
+  if(_rzCalLocked()){
     var sx=e.clientX,sy=e.clientY;
     var _tapUp=function(ev){document.removeEventListener('pointerup',_tapUp,true);document.removeEventListener('pointercancel',_tapUp,true);
       if(Math.abs(ev.clientX-sx)<8&&Math.abs(ev.clientY-sy)<8){if(meta.isManual)window.schedEditBlock(meta.id);else window.rezdySchedShowGroup(meta.order);}};

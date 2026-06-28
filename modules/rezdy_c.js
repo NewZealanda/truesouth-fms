@@ -1189,7 +1189,7 @@ function _rzRenderSchedule(){
     '<div><div class="st" style="margin-bottom:0">Calendar</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzDowLabel(S.rezdyDate)+' · '+_totBk+' booking'+(_totBk===1?'':'s')+(blocks.length?' · '+blocks.length+' manual block'+(blocks.length===1?'':'s'):'')+'</p>'+_calBd+'</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start">'+
-      (S.mobileView?'<button class="btn" style="font-size:12px;font-weight:800;'+(S._rzCalUnlocked?'color:#f59e0b;background:transparent;border:1px solid rgba(245,158,11,.55)':'background:var(--accent);color:#fff;border:1px solid var(--accent)')+'" onclick="window.rzCalToggleLock()" title="'+(S._rzCalUnlocked?'Calendar unlocked — blocks can be moved. Tap to lock and prevent accidental moves.':'Calendar locked — tap to unlock before moving blocks.')+'">'+(S._rzCalUnlocked?'🔓 Unlocked':'🔒 Locked')+'</button>':'')+
+      '<button class="btn" style="font-size:12px;font-weight:800;'+(S._rzCalUnlocked?'color:#f59e0b;background:transparent;border:1px solid rgba(245,158,11,.55)':'background:var(--accent);color:#fff;border:1px solid var(--accent)')+'" onclick="window.rzCalToggleLock()" title="'+(S._rzCalUnlocked?'Calendar unlocked — blocks can be moved. Tap to lock and prevent accidental moves.':'Calendar locked — tap to unlock before moving blocks.')+'">'+(S._rzCalUnlocked?'🔓 Unlocked':'🔒 Locked')+'</button>'+
       '<button class="btn btn-ghost" style="font-size:12px'+((S._rzSchedUndo&&S._rzSchedUndo.length)?'':';opacity:.4')+'" '+((S._rzSchedUndo&&S._rzSchedUndo.length)?'':'disabled ')+'onclick="window.rezdySchedUndo()" title="Undo the last combine / move">↶ Undo</button>'+
       '<button class="btn btn-ghost" style="font-size:12px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.rezdySchedResetRezdy()" title="Clear manual combines/moves and revert to Rezdy">⟲ Reset to Rezdy</button>'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.schedNewBlock()">+ Add block</button>'+
@@ -1346,7 +1346,7 @@ function _rzRenderSchedule(){
   _RZ_COL_W=S.mobileView?98:150;   // zoom the columns out on a phone so more aircraft fit on screen
   // Mobile drag-lock: when locked, blocks must let touch-scroll pass through (touch-action:auto) and the
   // resize edges are inert. Desktop is never locked. _rzCalLocked() lives in rezdy.js.
-  var _calLk=(S.mobileView&&typeof _rzCalLocked==='function'&&_rzCalLocked());
+  var _calLk=(typeof _rzCalLocked==='function'&&_rzCalLocked());
   const slots=((_RZ_SCH_END-_RZ_SCH_START)*60)/_RZ_SLOT_MIN;
   const gridH=slots*_RZ_PX_PER_SLOT;
 

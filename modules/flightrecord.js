@@ -373,14 +373,15 @@ function _frTodayBody(recs,today){
     h+='<div class="card" style="padding:0;overflow-x:auto;border-left:4px solid '+(submitted?'#16a34a':'#f59e0b')+'">';
     h+='<div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><span style="font-size:17px;font-weight:800;color:'+_frAcCol(ac)+'">'+_frEsc(_frAcShort(ac))+'</span> <span style="font-size:12px;color:var(--text3)">'+_frEsc(_frAcType(ac))+'</span></div>'+
       '<div style="font-size:12px;color:var(--text2)">'+list.length+' flight'+(list.length===1?'':'s')+' · flight '+totFlt.toFixed(1)+'h · tacho '+totTacho.toFixed(1)+'h · '+totLdg+' ldg'+(isC208?' · '+totSt+' starts':'')+' · TTIS → '+(maxEnd!=null?maxEnd.toFixed(1):'—')+'</div></div>';
-    var cols=['PIC','Co-pilot','Type','Route','Off','On','Flt h','Tacho','TTIS st','TTIS end','Ldg'].concat(isC208?['Starts']:[]).concat(['Notes']);
-    h+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:'+(isC208?830:770)+'px"><thead><tr style="background:var(--card2)">'+cols.map(function(t,i){return '<th style="text-align:'+(i<4?'left':'center')+';padding:6px 7px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+    var cols=['PIC','Co-pilot','Type','Route','POB','Off','On','Flt h','Tacho','TTIS st','TTIS end','Ldg'].concat(isC208?['Starts']:[]).concat(['Notes']);
+    h+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:'+(isC208?880:820)+'px"><thead><tr style="background:var(--card2)">'+cols.map(function(t,i){return '<th style="text-align:'+(i<4?'left':'center')+';padding:6px 7px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
     list.forEach(function(r){
       h+='<tr onclick="window.frEdit(\''+r.id+'\')" style="border-top:1px solid var(--border2);cursor:pointer">'+
         '<td style="padding:5px 7px;font-weight:700">'+_frEsc(pname(r.user_id))+'</td>'+
         '<td style="padding:5px 7px;color:var(--text2)">'+_frEsc(r.copilot?_frPilotName(r.copilot):'')+'</td>'+
         '<td style="padding:5px 7px;color:var(--text2)">'+_frEsc(r.product||'')+(r.product==='Ferry'?'':'')+'</td>'+
         '<td style="padding:5px 7px;color:var(--text2)">'+_frEsc((r.from||'')+(r.to?'→'+r.to:''))+'</td>'+
+        '<td style="padding:5px 7px;text-align:center;font-weight:700">'+(r.pob!=null&&r.pob!==''?r.pob:'')+'</td>'+
         '<td style="padding:5px 7px;text-align:center">'+_frEsc(r.off||'')+'</td>'+
         '<td style="padding:5px 7px;text-align:center">'+_frEsc(r.on||'')+'</td>'+
         '<td style="padding:5px 7px;text-align:center;font-weight:700">'+(r.flightTime!=null?r.flightTime.toFixed(1):'')+'</td>'+
