@@ -396,8 +396,17 @@ function render(){
   // which read as the calendar "flashing / reloading".
   var _keepScroll={};
   try{r.querySelectorAll('[data-keepscroll]').forEach(function(el){if(el.id&&(el.scrollLeft||el.scrollTop))_keepScroll[el.id]={l:el.scrollLeft,t:el.scrollTop};});}catch(e){}
+  // Also preserve the WINDOW (page) vertical scroll when the VIEW is unchanged — the calendar (and other
+  // long pages) grow the page itself, so a background realtime/sync re-render would otherwise yank you
+  // back to the top mid-scroll. We only restore when section+tab match the previous render, so genuine
+  // navigation still lands at the top. (Keyed on section|tab, NOT the date, so day-stepping keeps place.)
+  var _winSig=String(S.section||'')+'|'+String(S.tab||'');
+  var _winY=null,_winX=0;
+  try{if(_winSig===S._lastViewSig){_winY=window.pageYOffset||window.scrollY||0;_winX=window.pageXOffset||window.scrollX||0;}}catch(e){}
+  S._lastViewSig=_winSig;
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
   try{Object.keys(_keepScroll).forEach(function(id){var el=document.getElementById(id);if(el){el.scrollLeft=_keepScroll[id].l;el.scrollTop=_keepScroll[id].t;}});}catch(e){}
+  if(_winY!=null&&(_winY||_winX)){try{window.scrollTo(_winX,_winY);}catch(e){}}
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
   if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')||(S._rzLsActiveId&&S.activeTabId&&S.tab==='rloadsheets')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest&&S._lsMapOpen)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
