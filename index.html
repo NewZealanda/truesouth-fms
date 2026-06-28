@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.06';
+const APP_VER='v28.07';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -21897,19 +21897,22 @@ function renderLogbook(){
     var newMonth=mon!==lastMonth;lastMonth=mon;
     var dayTot=legs.reduce(function(s,r){return s+(+r.flightTime||0);},0);
     var open=!!S._lbDayOpen[d];
-    // route summary — Dep-Dest per leg (ferries → "QN-WF"); pair a one-way A-B with a later B-A into a
-    // return "A-B-A"; then collapse identical routes into "route ×N", in first-seen order.
-    var _toks=legs.map(_frRoute);
-    var _remain={};_toks.forEach(function(t){_remain[t]=(_remain[t]||0)+1;});
-    var _finals=[];
-    _toks.forEach(function(t){
-      if(_remain[t]<=0)return;                       // already consumed (as a return partner)
-      if(_frIsOneWay(t)){var p=t.split('-'),rev=p[1]+'-'+p[0];
-        if(rev!==t&&(_remain[rev]||0)>0){_remain[t]--;_remain[rev]--;_finals.push(p[0]+'-'+p[1]+'-'+p[0]);return;}}
-      _remain[t]--;_finals.push(t);
+    // Day summary = how many COMPLETE round trips from base. Count the OUTBOUND legs (QN→destination,
+    // excluding ferries) — each one is a full QN-DEST-QN trip; the return/ferry legs are the back-halves
+    // and are folded in. So a Milford day reads "QN-MF-QN ×4" even when some returns were logged as
+    // ferries (no route to pair with). Ferry-only / training days (no outbound) fall back to leg routes.
+    var _trips={},_torder=[];
+    legs.forEach(function(r){
+      var f=String(r.from||'').trim().toUpperCase(),t=String(r.to||'').trim().toUpperCase();
+      if(f==='QN'&&t&&t!=='QN'&&!/ferry/i.test(r.product||'')){var k='QN-'+t+'-QN';if(_torder.indexOf(k)<0)_torder.push(k);_trips[k]=(_trips[k]||0)+1;}
     });
-    var seen={},order=[];_finals.forEach(function(rt){if(order.indexOf(rt)<0)order.push(rt);seen[rt]=(seen[rt]||0)+1;});
-    var summary=order.map(function(rt){return _frEsc(rt)+(seen[rt]>1?' ×'+seen[rt]:'');}).join(' · ');
+    var summary;
+    if(_torder.length){
+      summary=_torder.map(function(k){return _frEsc(k)+(_trips[k]>1?' ×'+_trips[k]:'');}).join(' · ');
+    } else {
+      var _o={},_oo=[];legs.forEach(function(r){var rt=_frRoute(r);if(_oo.indexOf(rt)<0)_oo.push(rt);_o[rt]=(_o[rt]||0)+1;});
+      summary=_oo.map(function(rt){return _frEsc(rt)+(_o[rt]>1?' ×'+_o[rt]:'');}).join(' · ');
+    }
     var regs=_frUniq(legs.map(function(r){return _frAcShort(r.aircraft);})).join(', ');
     var types=_frUniq(legs.map(function(r){return _frAcType(r.aircraft);})).filter(Boolean).join('/');
     var pics=_frUniq(legs.map(function(r){return _frPicName(r);})).filter(Boolean).join(', ');
