@@ -49,14 +49,20 @@ function _rzRenderBookings(){
     depSel='<div class="card" style="padding:10px 12px'+(searching?';opacity:.5':'')+'">'+
       '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:800;margin-bottom:8px">'+(deps.length?'Departure':'Cancelled bookings')+(searching?' — paused while searching':'')+'</div>'+
       '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">';
+    // Available fleet pax seats today = sum of seat capacity for aircraft that CAN fly (not off/maint on
+    // the resources board). Seats-remaining per departure = this minus the departure's seated pax.
+    var _fleetSeats=0;try{['ZK-SLA','ZK-SLB','ZK-SDB','ZK-SLD','ZK-SLQ'].forEach(function(ac){if(!(S.aircraft||{})[ac])return;if(typeof _schedAcCanFly==='function'&&!_schedAcCanFly(ac))return;_fleetSeats+=(typeof _schedTail==='function'?((typeof _schedNum==='function'&&_schedNum(_schedTail(ac).cap))||(typeof _schedDefaultCap==='function'?_schedDefaultCap(ac):0)):0);});}catch(e){}
     deps.forEach(function(d){
       var depB=active.filter(function(b){return _rzBookingDep(b)===d;});
       var cnt=depB.length;
+      var _depSeats=0;depB.forEach(function(b){try{var e=(typeof _rzEffBreakdown==='function')?_rzEffBreakdown(b):null;if(e)_depSeats+=(e.a||0)+(e.c||0);}catch(_){}});
+      var _rem=_fleetSeats-_depSeats;
       var prod='';depB.some(function(b){var c=_rzProduct((((b.items||[])[0]||{}).product)||'');if(c){prod=c;return true;}return false;});
       var on=!searching&&depFilter===d;
       depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:800">'+
         '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">'+_rzEsc(_rzDepDisplay(d))+((_rzDepShowProduct(d)&&prod)?' '+_rzEsc(prod):'')+'</span>'+
         '<span style="font-size:10px;font-weight:700;opacity:'+(on?'.9':'.6')+'">'+cnt+' bkg'+(cnt===1?'':'s')+'</span>'+
+        '<span style="font-size:9px;font-weight:800;color:'+(on?'#fff':(_rem<0?'#ef4444':_rem<=2?'#f59e0b':'#22c55e'))+';opacity:'+(on?'.95':'1')+'">'+(_rem<0?(Math.abs(_rem)+' over'):(_rem+' seat'+(_rem===1?'':'s')+' left'))+'</span>'+
       '</button>';
     });
     // "Cancelled" pseudo-departure — view the whole day's cancelled bookings in one place.

@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v27.85';
+const APP_VER='v27.86';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -15942,14 +15942,20 @@ function _rzRenderBookings(){
     depSel='<div class="card" style="padding:10px 12px'+(searching?';opacity:.5':'')+'">'+
       '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:800;margin-bottom:8px">'+(deps.length?'Departure':'Cancelled bookings')+(searching?' — paused while searching':'')+'</div>'+
       '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">';
+    // Available fleet pax seats today = sum of seat capacity for aircraft that CAN fly (not off/maint on
+    // the resources board). Seats-remaining per departure = this minus the departure's seated pax.
+    var _fleetSeats=0;try{['ZK-SLA','ZK-SLB','ZK-SDB','ZK-SLD','ZK-SLQ'].forEach(function(ac){if(!(S.aircraft||{})[ac])return;if(typeof _schedAcCanFly==='function'&&!_schedAcCanFly(ac))return;_fleetSeats+=(typeof _schedTail==='function'?((typeof _schedNum==='function'&&_schedNum(_schedTail(ac).cap))||(typeof _schedDefaultCap==='function'?_schedDefaultCap(ac):0)):0);});}catch(e){}
     deps.forEach(function(d){
       var depB=active.filter(function(b){return _rzBookingDep(b)===d;});
       var cnt=depB.length;
+      var _depSeats=0;depB.forEach(function(b){try{var e=(typeof _rzEffBreakdown==='function')?_rzEffBreakdown(b):null;if(e)_depSeats+=(e.a||0)+(e.c||0);}catch(_){}});
+      var _rem=_fleetSeats-_depSeats;
       var prod='';depB.some(function(b){var c=_rzProduct((((b.items||[])[0]||{}).product)||'');if(c){prod=c;return true;}return false;});
       var on=!searching&&depFilter===d;
       depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:800">'+
         '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">'+_rzEsc(_rzDepDisplay(d))+((_rzDepShowProduct(d)&&prod)?' '+_rzEsc(prod):'')+'</span>'+
         '<span style="font-size:10px;font-weight:700;opacity:'+(on?'.9':'.6')+'">'+cnt+' bkg'+(cnt===1?'':'s')+'</span>'+
+        '<span style="font-size:9px;font-weight:800;color:'+(on?'#fff':(_rem<0?'#ef4444':_rem<=2?'#f59e0b':'#22c55e'))+';opacity:'+(on?'.95':'1')+'">'+(_rem<0?(Math.abs(_rem)+' over'):(_rem+' seat'+(_rem===1?'':'s')+' left'))+'</span>'+
       '</button>';
     });
     // "Cancelled" pseudo-departure — view the whole day's cancelled bookings in one place.
@@ -18930,6 +18936,19 @@ function _schedDayFlights(date){
   return flights;
 }
 var RZ_MAINT_DRIVE_MIN=90;   // QN↔Wanaka drive buffer around a maintenance ferry (pilot cooldown/warmup)
+// Is this manual block a maintenance ferry, and which way? 'out' = QN→WF (plane LEAVES for maintenance →
+// blocks the rest of the day); 'back' = WF→QN (plane RETURNS → blocks the day BEFORE it). Recognised by
+// the auto-ferry id suffix OR a QN-WF / WF-QN style label on a Maintenance/Ferry block.
+function _rzMaintFerryDir(b){
+  if(!b)return '';
+  if(/_out$/.test(String(b.id||'')))return 'out';
+  if(/_back$/.test(String(b.id||'')))return 'back';
+  var ft=String(b.ftype||'').toLowerCase();if(ft!=='maintenance'&&ft!=='ferry')return '';
+  var lp=String(b.label||'').toUpperCase().split(/[-–\/]/).map(function(s){return s.trim();});
+  if(lp[1]==='WF')return 'out';     // QN→WF — leaving for maintenance
+  if(lp[0]==='WF')return 'back';    // WF→QN — coming home
+  return '';
+}
 
 function _rzRenderSchedule(){
   if(S._schedLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading schedule…</div>';
@@ -19253,17 +19272,18 @@ function _rzRenderSchedule(){
     // Scheduled maintenance: if a maintenance booking covers the viewed date, lay a full-day "AT
     // MAINTENANCE" backdrop in this aircraft's column so it reads as unavailable (behind any flights).
     if(ac!=='__unalloc__'&&ac!=='__misc__'){
+      // The maintenance ferries themselves drive the "blocked out" backdrop so it follows the flights:
+      // a QN→WF (out) ferry blocks from its END to the bottom of the day (plane's gone); a WF→QN (back)
+      // ferry blocks from the top to its START (plane's not home yet); both on one day = between them. A
+      // maintenance BOOKING covering the date still hatches the full day even with no ferry present.
+      var _outF=blocks.filter(function(x){return x.aircraft===ac&&_rzMaintFerryDir(x)==='out';})[0];
+      var _backF=blocks.filter(function(x){return x.aircraft===ac&&_rzMaintFerryDir(x)==='back';})[0];
       var _mbk=(function(){var bks=((S.maintenance&&S.maintenance.bookings)||{})[ac]||[];for(var _i=0;_i<bks.length;_i++){var _b=bks[_i];if(_b&&_b.date&&S.rezdyDate>=_b.date&&S.rezdyDate<=(_b.end||_b.date))return _b;}return null;})();
-      if(_mbk){var _mn=(_mbk.notes||'').trim();
-        // Span ONLY between the maintenance ferries: from the QN→WF (out) ferry to the WF→QN (back)
-        // ferry. The ferry blocks are date-specific, so on the go day only "out" is present (block runs
-        // out→end of grid), on the return day only "back" (start→back), middle days = full day.
-        var _outF=blocks.filter(function(x){return x.aircraft===ac&&(/_out$/.test(String(x.id||''))||x.label==='QN-WF');})[0];
-        var _backF=blocks.filter(function(x){return x.aircraft===ac&&(/_back$/.test(String(x.id||''))||x.label==='WF-QN');})[0];
+      if(_mbk||_outF||_backF){var _mn=_mbk?(_mbk.notes||'').trim():'';
         var _mTop=_outF?_rzSchTop(_outF.end||_outF.start):0;
         var _mBot=_backF?_rzSchTop(_backF.start):gridH;
-        var _mHt=Math.max(_RZ_PX_PER_SLOT,_mBot-_mTop);
-        blocksH+='<div title="At maintenance'+(_mn?(' — '+_rzEsc(_mn)):'')+'" style="position:absolute;left:2px;right:2px;top:'+_mTop+'px;height:'+_mHt+'px;background:repeating-linear-gradient(45deg,rgba(239,68,68,.09),rgba(239,68,68,.09) 9px,rgba(239,68,68,.16) 9px,rgba(239,68,68,.16) 18px);border:1px solid rgba(239,68,68,.45);border-radius:6px;z-index:0;display:flex;align-items:center;justify-content:center;pointer-events:none">'+
+        var _mHt=_mBot-_mTop;
+        if(_mHt>2)blocksH+='<div title="At maintenance'+(_mn?(' — '+_rzEsc(_mn)):'')+'" style="position:absolute;left:2px;right:2px;top:'+_mTop+'px;height:'+_mHt+'px;background:repeating-linear-gradient(45deg,rgba(239,68,68,.09),rgba(239,68,68,.09) 9px,rgba(239,68,68,.16) 9px,rgba(239,68,68,.16) 18px);border:1px solid rgba(239,68,68,.45);border-radius:6px;z-index:0;display:flex;align-items:center;justify-content:center;pointer-events:none">'+
           '<div style="transform:rotate(-90deg);white-space:nowrap;font-weight:800;font-size:12px;color:#ef4444;letter-spacing:.06em;text-shadow:0 1px 2px var(--card)">🔧 AT MAINTENANCE'+(_mn?(' · '+_rzEsc(_mn)):'')+'</div></div>';
       }
     }

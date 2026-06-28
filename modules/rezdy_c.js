@@ -1046,6 +1046,19 @@ function _schedDayFlights(date){
   return flights;
 }
 var RZ_MAINT_DRIVE_MIN=90;   // QN↔Wanaka drive buffer around a maintenance ferry (pilot cooldown/warmup)
+// Is this manual block a maintenance ferry, and which way? 'out' = QN→WF (plane LEAVES for maintenance →
+// blocks the rest of the day); 'back' = WF→QN (plane RETURNS → blocks the day BEFORE it). Recognised by
+// the auto-ferry id suffix OR a QN-WF / WF-QN style label on a Maintenance/Ferry block.
+function _rzMaintFerryDir(b){
+  if(!b)return '';
+  if(/_out$/.test(String(b.id||'')))return 'out';
+  if(/_back$/.test(String(b.id||'')))return 'back';
+  var ft=String(b.ftype||'').toLowerCase();if(ft!=='maintenance'&&ft!=='ferry')return '';
+  var lp=String(b.label||'').toUpperCase().split(/[-–\/]/).map(function(s){return s.trim();});
+  if(lp[1]==='WF')return 'out';     // QN→WF — leaving for maintenance
+  if(lp[0]==='WF')return 'back';    // WF→QN — coming home
+  return '';
+}
 
 function _rzRenderSchedule(){
   if(S._schedLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading schedule…</div>';
@@ -1369,17 +1382,18 @@ function _rzRenderSchedule(){
     // Scheduled maintenance: if a maintenance booking covers the viewed date, lay a full-day "AT
     // MAINTENANCE" backdrop in this aircraft's column so it reads as unavailable (behind any flights).
     if(ac!=='__unalloc__'&&ac!=='__misc__'){
+      // The maintenance ferries themselves drive the "blocked out" backdrop so it follows the flights:
+      // a QN→WF (out) ferry blocks from its END to the bottom of the day (plane's gone); a WF→QN (back)
+      // ferry blocks from the top to its START (plane's not home yet); both on one day = between them. A
+      // maintenance BOOKING covering the date still hatches the full day even with no ferry present.
+      var _outF=blocks.filter(function(x){return x.aircraft===ac&&_rzMaintFerryDir(x)==='out';})[0];
+      var _backF=blocks.filter(function(x){return x.aircraft===ac&&_rzMaintFerryDir(x)==='back';})[0];
       var _mbk=(function(){var bks=((S.maintenance&&S.maintenance.bookings)||{})[ac]||[];for(var _i=0;_i<bks.length;_i++){var _b=bks[_i];if(_b&&_b.date&&S.rezdyDate>=_b.date&&S.rezdyDate<=(_b.end||_b.date))return _b;}return null;})();
-      if(_mbk){var _mn=(_mbk.notes||'').trim();
-        // Span ONLY between the maintenance ferries: from the QN→WF (out) ferry to the WF→QN (back)
-        // ferry. The ferry blocks are date-specific, so on the go day only "out" is present (block runs
-        // out→end of grid), on the return day only "back" (start→back), middle days = full day.
-        var _outF=blocks.filter(function(x){return x.aircraft===ac&&(/_out$/.test(String(x.id||''))||x.label==='QN-WF');})[0];
-        var _backF=blocks.filter(function(x){return x.aircraft===ac&&(/_back$/.test(String(x.id||''))||x.label==='WF-QN');})[0];
+      if(_mbk||_outF||_backF){var _mn=_mbk?(_mbk.notes||'').trim():'';
         var _mTop=_outF?_rzSchTop(_outF.end||_outF.start):0;
         var _mBot=_backF?_rzSchTop(_backF.start):gridH;
-        var _mHt=Math.max(_RZ_PX_PER_SLOT,_mBot-_mTop);
-        blocksH+='<div title="At maintenance'+(_mn?(' — '+_rzEsc(_mn)):'')+'" style="position:absolute;left:2px;right:2px;top:'+_mTop+'px;height:'+_mHt+'px;background:repeating-linear-gradient(45deg,rgba(239,68,68,.09),rgba(239,68,68,.09) 9px,rgba(239,68,68,.16) 9px,rgba(239,68,68,.16) 18px);border:1px solid rgba(239,68,68,.45);border-radius:6px;z-index:0;display:flex;align-items:center;justify-content:center;pointer-events:none">'+
+        var _mHt=_mBot-_mTop;
+        if(_mHt>2)blocksH+='<div title="At maintenance'+(_mn?(' — '+_rzEsc(_mn)):'')+'" style="position:absolute;left:2px;right:2px;top:'+_mTop+'px;height:'+_mHt+'px;background:repeating-linear-gradient(45deg,rgba(239,68,68,.09),rgba(239,68,68,.09) 9px,rgba(239,68,68,.16) 9px,rgba(239,68,68,.16) 18px);border:1px solid rgba(239,68,68,.45);border-radius:6px;z-index:0;display:flex;align-items:center;justify-content:center;pointer-events:none">'+
           '<div style="transform:rotate(-90deg);white-space:nowrap;font-weight:800;font-size:12px;color:#ef4444;letter-spacing:.06em;text-shadow:0 1px 2px var(--card)">🔧 AT MAINTENANCE'+(_mn?(' · '+_rzEsc(_mn)):'')+'</div></div>';
       }
     }
