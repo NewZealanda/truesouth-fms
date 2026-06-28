@@ -19,8 +19,10 @@ alter table public.ts_users add column if not exists reports_to text;
 
 -- 2) Recreate the safe public view to include reports_to (app reads this, not the
 --    base table — the base table's password_hash stays hidden).
+--    NOTE: reports_to is appended LAST — CREATE OR REPLACE VIEW can only add new
+--    columns at the end, it can't insert one mid-list (that reads as a rename).
 create or replace view public.ts_users_public as
-  select id, name, email, role, linked_crew, reports_to, inactive, created_at
+  select id, name, email, role, linked_crew, inactive, created_at, reports_to
   from public.ts_users;
 grant select on public.ts_users_public to anon, authenticated;
 
