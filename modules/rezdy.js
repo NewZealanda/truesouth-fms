@@ -974,20 +974,44 @@ function _rzBookingAcPills(b,order){
   var manual=(S._rzBookingAc||{})[String(order)];
   var cur=(manual==='__none__')?null:_rzBookingAc(b,order);
   var isAuto=_rzBookingAcIsAuto(b,order);
+  var noneOn=(manual==='__none__');
   var oE=_rzEsc(String(order)).replace(/'/g,"\\'");
+  var _autoAc=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;
+  var _chg=(manual&&manual!=='__none__'&&_autoAc&&manual!==_autoAc);
+  var open=!!((S._rzBkAcPickOpen||{})[String(order)]);
+  var lbl='<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Aircraft</span>';
+  var note=noneOn?'<span style="font-size:10px;color:var(--text3);margin-left:2px">unallocated</span>':(cur?'<span title="'+(_chg?('Auto-allocation chose '+_rzEsc(_autoAc.replace('ZK-',''))):'')+'" style="font-size:10px;color:'+(_chg?'#f59e0b':(isAuto?'#22c55e':'var(--text3)'))+';margin-left:2px">'+(_chg?'✏ user change from auto':(manual?'set':(isAuto?'⚙ auto-allocated':'from comments')))+'</span>':'');
+  var pilotLine=_rzBookingPilotLine(b,order);
+  if(!open){
+    // Collapsed (default): show ONLY the currently-allocated aircraft. Tap it to reveal the switcher —
+    // this stops easy mis-taps from silently moving a booking to another aircraft.
+    var chip;
+    if(noneOn) chip='<button onclick="window.rezdyBookingAcPickToggle(\''+oE+'\')" class="pill" title="Tap to change aircraft" style="cursor:pointer;background:#475569;color:#fff;border:none;font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">None</button>';
+    else if(cur){var col=_rzAcCol(cur);chip='<button onclick="window.rezdyBookingAcPickToggle(\''+oE+'\')" class="pill" title="Tap to change aircraft" style="cursor:pointer;background:'+col+';color:#fff;border:none;font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">'+_rzEsc(cur.replace('ZK-',''))+'</button>';}
+    else chip='<button onclick="window.rezdyBookingAcPickToggle(\''+oE+'\')" class="pill" title="Tap to allocate an aircraft" style="cursor:pointer;background:transparent;color:var(--text3);border:1px dashed var(--border2);font-size:11px;font-weight:800;padding:3px 10px;border-radius:14px">＋ allocate</button>';
+    var hint='<span onclick="window.rezdyBookingAcPickToggle(\''+oE+'\')" style="cursor:pointer;font-size:10px;color:var(--text3);margin-left:2px">tap to change ▾</span>';
+    return '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:7px 10px">'+lbl+chip+note+hint+'</div>'+pilotLine;
+  }
+  // Open: the full switcher (revealed only after a deliberate tap on the aircraft chip).
   var pills='';
   fleet.forEach(function(id){
     var on=cur===id;var col=_rzAcCol(id);
     pills+='<button onclick="window.rezdyBookingSetAc(\''+oE+'\',\''+id.replace(/'/g,"\\'")+'\')" class="pill" style="cursor:pointer;opacity:'+(on?'1':'.38')+';border:1.5px solid '+(on?col:'var(--border2)')+';background:'+(on?col:'transparent')+';color:'+(on?'#fff':col)+';font-weight:800;font-size:11px;padding:3px 10px;border-radius:14px">'+id.replace('ZK-','')+'</button>';
   });
-  // Explicit "None" / unallocated pill.
-  var noneOn=(manual==='__none__');
   pills+='<button onclick="window.rezdyBookingSetAc(\''+oE+'\',\'__none__\')" class="pill" title="Unallocated — no aircraft" style="cursor:pointer;opacity:'+(noneOn?'1':'.38')+';border:1.5px solid '+(noneOn?'#94a3b8':'var(--border2)')+';background:'+(noneOn?'#475569':'transparent')+';color:'+(noneOn?'#fff':'var(--text3)')+';font-weight:800;font-size:11px;padding:3px 10px;border-radius:14px">None</button>';
-  var _autoAc=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(order):null;
-  var _chg=(manual&&manual!=='__none__'&&_autoAc&&manual!==_autoAc);
-  var note=noneOn?'<span style="font-size:10px;color:var(--text3);margin-left:2px">unallocated</span>':(cur?'<span title="'+(_chg?('Auto-allocation chose '+_rzEsc(_autoAc.replace('ZK-',''))):'')+'" style="font-size:10px;color:'+(_chg?'#f59e0b':(isAuto?'#22c55e':'var(--text3)'))+';margin-left:2px">'+(_chg?'✏ user change from auto':(manual?'set':(isAuto?'⚙ auto-allocated':'from comments')))+'</span>':'');
-  return '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:7px 10px">'+
-    '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Aircraft</span>'+pills+note+'</div>';
+  var done='<button onclick="window.rezdyBookingAcPickToggle(\''+oE+'\')" class="pill" title="Close" style="cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text3);font-weight:800;font-size:11px;padding:3px 9px;border-radius:14px;margin-left:2px">✓ done</button>';
+  return '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:7px 10px">'+lbl+pills+note+done+'</div>'+pilotLine;
+}
+// Pilot (PIC) for a booking = the pilot allocated to its aircraft on that departure (from the calendar /
+// auto-allocation). Shown under the aircraft row in the booking dropdown. Blank if no aircraft / no pilot.
+function _rzBookingPilotLine(b,order){
+  var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,order):null;if(!ac)return '';
+  var t='';try{var it=((b&&b.items)||[]).find(function(x){return !_rzIsFlyback(_rzProduct(x&&x.product));})||((b&&b.items)||[])[0];if(it)t=_rzDepTime(it.startTimeLocal||'');}catch(e){}
+  var nm='';
+  try{var code=(typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(ac,t):null;
+    if(code)nm=(typeof _frPilotName==='function'?_frPilotName(code):String(code))||'';}catch(e){}
+  if(!nm)return '';
+  return '<div style="display:flex;align-items:center;gap:5px;padding:0 10px 6px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Pilot</span><span style="font-size:12px;font-weight:700;color:var(--text1)">'+_rzEsc(nm)+'</span></div>';
 }
 // Collapsed-card aircraft summary — just the selected aircraft (or "None"); the full pill selector
 // only appears once the booking dropdown is expanded.
@@ -1007,8 +1031,11 @@ window.rezdyBookingSetAc=function(order,ac){
   order=String(order);S._rzBookingAc=S._rzBookingAc||{};
   if(S._rzBookingAc[order]===ac)delete S._rzBookingAc[order]; // tap the selected pill to revert to comments
   else S._rzBookingAc[order]=ac;
+  if(S._rzBkAcPickOpen)delete S._rzBkAcPickOpen[order];   // collapse the switcher again after a deliberate choice
   if(window.pickupSave)window.pickupSave(true);render();
 };
+// Reveal / hide the aircraft switcher for one booking (collapsed by default to avoid accidental swaps).
+window.rezdyBookingAcPickToggle=function(order){order=String(order);S._rzBkAcPickOpen=S._rzBkAcPickOpen||{};if(S._rzBkAcPickOpen[order])delete S._rzBkAcPickOpen[order];else S._rzBkAcPickOpen[order]=true;render();};
 window.rezdyBookingToggleWx=function(order){order=String(order);S._rzBookingWx=S._rzBookingWx||{};if(S._rzBookingWx[order])delete S._rzBookingWx[order];else S._rzBookingWx[order]=true;if(window.pickupSave)window.pickupSave(true);render();};
 window.rezdyBookingToggleCheckedIn=function(order){order=String(order);S._rzBookingCheckedIn=S._rzBookingCheckedIn||{};if(S._rzBookingCheckedIn[order])delete S._rzBookingCheckedIn[order];else S._rzBookingCheckedIn[order]=true;if(window.pickupSave)window.pickupSave(true);render();};
 // Click the "Checked in" pill: opens the check-in popup. If already checked in it opens in EDIT
@@ -1863,9 +1890,23 @@ function _rzPaxUp(e){
   if(typeof toast==='function')toast(_rzBookingName(order)+note+' ✓','ok');
   render();
 }
+// Calendar drag-lock — ON MOBILE the blocks are easy to nudge by accident, so the calendar starts
+// LOCKED (like the roster) and the operator must tap Unlock before move/resize works. Desktop is never
+// locked (mouse drags are deliberate). Default state = locked (S._rzCalUnlocked falsy).
+function _rzCalLocked(){return !(S&&S._rzCalUnlocked);}
+window.rzCalToggleLock=function(){S._rzCalUnlocked=!S._rzCalUnlocked;render();};
 window.rzCalDown=function(e,key){
   if(e.button!=null&&e.button!==0)return;
   var meta=(S._rzBlockMeta||{})[key];if(!meta||meta.startMin==null||meta.endMin==null)return; // unparseable time → don't start a drag
+  // Mobile + locked: no drag/resize. Don't preventDefault (so the calendar still scrolls); just open the
+  // block on a clean tap. The block carries touch-action:auto in this state so vertical scroll passes through.
+  if(S.mobileView&&_rzCalLocked()){
+    var sx=e.clientX,sy=e.clientY;
+    var _tapUp=function(ev){document.removeEventListener('pointerup',_tapUp,true);document.removeEventListener('pointercancel',_tapUp,true);
+      if(Math.abs(ev.clientX-sx)<8&&Math.abs(ev.clientY-sy)<8){if(meta.isManual)window.schedEditBlock(meta.id);else window.rezdySchedShowGroup(meta.order);}};
+    document.addEventListener('pointerup',_tapUp,true);document.addEventListener('pointercancel',_tapUp,true);
+    return;
+  }
   var blk=e.currentTarget,col=blk.parentNode;
   var rect=blk.getBoundingClientRect(),crect=col.getBoundingClientRect();
   var offY=e.clientY-rect.top;

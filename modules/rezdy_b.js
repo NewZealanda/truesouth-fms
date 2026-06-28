@@ -336,7 +336,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};S._rzBkCalled={};S._rzTravelWith={};S._rzBlockNote={};S._rzCharterDest={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};S._rzBkCalled={};S._rzTravelWith={};S._rzBlockNote={};S._rzCharterDest={};S._rzBkAcPickOpen={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();

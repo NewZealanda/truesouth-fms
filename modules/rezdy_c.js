@@ -1189,6 +1189,7 @@ function _rzRenderSchedule(){
     '<div><div class="st" style="margin-bottom:0">Calendar</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">'+_rzDowLabel(S.rezdyDate)+' · '+_totBk+' booking'+(_totBk===1?'':'s')+(blocks.length?' · '+blocks.length+' manual block'+(blocks.length===1?'':'s'):'')+'</p>'+_calBd+'</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start">'+
+      (S.mobileView?'<button class="btn" style="font-size:12px;font-weight:800;'+(S._rzCalUnlocked?'color:#f59e0b;background:transparent;border:1px solid rgba(245,158,11,.55)':'background:var(--accent);color:#fff;border:1px solid var(--accent)')+'" onclick="window.rzCalToggleLock()" title="'+(S._rzCalUnlocked?'Calendar unlocked — blocks can be moved. Tap to lock and prevent accidental moves.':'Calendar locked — tap to unlock before moving blocks.')+'">'+(S._rzCalUnlocked?'🔓 Unlocked':'🔒 Locked')+'</button>':'')+
       '<button class="btn btn-ghost" style="font-size:12px'+((S._rzSchedUndo&&S._rzSchedUndo.length)?'':';opacity:.4')+'" '+((S._rzSchedUndo&&S._rzSchedUndo.length)?'':'disabled ')+'onclick="window.rezdySchedUndo()" title="Undo the last combine / move">↶ Undo</button>'+
       '<button class="btn btn-ghost" style="font-size:12px;color:#f59e0b;border-color:rgba(245,158,11,.4)" onclick="window.rezdySchedResetRezdy()" title="Clear manual combines/moves and revert to Rezdy">⟲ Reset to Rezdy</button>'+
       '<button class="btn btn-ghost" style="font-size:12px" onclick="window.schedNewBlock()">+ Add block</button>'+
@@ -1343,6 +1344,9 @@ function _rzRenderSchedule(){
     } else {_RZ_SCH_START=6;_RZ_SCH_END=18;}
   })();
   _RZ_COL_W=S.mobileView?98:150;   // zoom the columns out on a phone so more aircraft fit on screen
+  // Mobile drag-lock: when locked, blocks must let touch-scroll pass through (touch-action:auto) and the
+  // resize edges are inert. Desktop is never locked. _rzCalLocked() lives in rezdy.js.
+  var _calLk=(S.mobileView&&typeof _rzCalLocked==='function'&&_rzCalLocked());
   const slots=((_RZ_SCH_END-_RZ_SCH_START)*60)/_RZ_SLOT_MIN;
   const gridH=slots*_RZ_PX_PER_SLOT;
 
@@ -1438,8 +1442,8 @@ function _rzRenderSchedule(){
       // Departed (locked) → a small 🛫 marker; the aircraft is pinned for this flight.
       var _departedIcon=(isBk&&typeof _schedDepManualLock==='function'&&_schedDepManualLock(S.rezdyDate,String(b.order||'').split('|')[1]))?'<span title="Departed — aircraft locked" style="pointer-events:auto;cursor:help;font-size:10px;margin-right:3px;color:#22c55e" onpointerdown="event.stopPropagation()">🛫</span>':'';
       blocksH+='<div'+_pdown+(isBk?' data-bkkey="'+_rzEsc(String(b.order))+'"':'')+(_mlvl?' title="'+_rzEsc(_mtip)+'"':' title="Drag to move · drag the top/bottom edge to set departure/return · tap to open"')+' ondragover="event.preventDefault()" ondrop="window.rezdySchedDropPilot(\''+_rzEsc(String(_dropKey)).replace(/'/g,"\\'")+'\',event)" '+
-        'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:grab;overflow:hidden;box-sizing:border-box;line-height:1.25;touch-action:none;user-select:none'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
-        (_canResize?'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:6px 6px 0 0;cursor:ns-resize"></div><div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:0 0 6px 6px;cursor:ns-resize"></div>':'')+
+        'style="position:absolute;'+_pos+'top:'+top+'px;height:'+ht+'px;background:'+col+(isBk?'22':'26')+';border:1px '+(isBk?'dashed':'solid')+' '+col+';border-left:3px solid '+(_mlvl?_mcol:col)+';border-radius:6px;padding:'+(compact?'1px 5px':'3px 6px')+';cursor:'+(_calLk?'pointer':'grab')+';overflow:hidden;box-sizing:border-box;line-height:1.25;touch-action:'+(_calLk?'auto':'none')+';user-select:none'+(sel?';outline:2px solid '+col+';outline-offset:1px':'')+'">'+
+        ((_canResize&&!_calLk)?'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:6px 6px 0 0;cursor:ns-resize"></div><div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:'+col+'66;border-radius:0 0 6px 6px;cursor:ns-resize"></div>':'')+
         '<div style="font-weight:700;font-size:11px;color:'+col+';white-space:normal;word-break:break-word;overflow:hidden;pointer-events:none">'+_conflictIcon+_forcedIcon+_autoIcon+_departedIcon+(_mlvl?'<span style="color:'+_mcol+'">⚠ </span>':'')+(isBk&&b.over?'<span style="color:#ef4444;font-weight:900">⛔ OVER </span>':'')+(isBk?'📋 ':'')+_rzEsc(isBk?(b.label||b.aircraft):_rzManBlockTitle(b))+'</div>'+
         (compact?'':'<div style="font-size:10px;color:var(--text2);white-space:normal;word-break:break-word;overflow:hidden;pointer-events:none">'+_rzEsc(b.start)+(' – '+_rzEsc(b.end))+(b.notes?(' · '+_rzEsc(b.notes)):'')+'</div>')+
         (function(){var _bn=isBk?_rzBlockNoteGet(b):'';return _bn?'<div style="font-size:10px;color:#fbbf24;white-space:normal;word-break:break-word;overflow:hidden;pointer-events:none;margin-top:1px">📝 '+_rzEsc(_bn)+'</div>':'';})()+
