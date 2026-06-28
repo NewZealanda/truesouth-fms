@@ -89,10 +89,13 @@ window.loadFlightRecords=async function(){
   try{
     // Pull ALL records (not just this pilot) so the per-aircraft Today's Record shows every PIC's
     // flights. MUST paginate: PostgREST caps a plain select at 1000 rows, and with the legacy import
-    // there are 15k+ records — without paging, whole months/pilots silently vanish (the "gap" bug).
+    // there are 25k+ records — without paging, whole months/pilots silently vanish (the "gap" bug).
+    // Order by a UNIQUE key (id) so the page boundaries are STABLE: the legacy import gives every row
+    // the same updated_at, and paginating on a non-unique column skips/duplicates rows across pages
+    // (that's why a 2nd leg could go missing). id is the primary key → deterministic paging.
     var rows=[],_pg=0,_PAGE=1000;
-    while(_pg<60){
-      var _rr=await _sbFetch(SB+'/rest/v1/ts_flight_records?select=*&order=updated_at.desc&limit='+_PAGE+'&offset='+(_pg*_PAGE),{headers:{...SH}});
+    while(_pg<80){
+      var _rr=await _sbFetch(SB+'/rest/v1/ts_flight_records?select=*&order=id.asc&limit='+_PAGE+'&offset='+(_pg*_PAGE),{headers:{...SH}});
       if(!_rr.ok){if(_pg===0)rows=null;break;}
       var _arr=await _rr.json();
       if(!Array.isArray(_arr)){if(_pg===0)rows=null;break;}
