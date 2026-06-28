@@ -110,7 +110,13 @@ window.loadFlightRecords=async function(){
       var _local=S._frData||{},_merged=d;
       Object.keys(_local).forEach(function(id){var lr=_local[id],cr=d[id];if(!lr)return;
         if(!S._frLoadAll && String(lr.fr_date||'')<_cut)return;   // outside the 12-month window → drop the old cached row (keeps the page fast)
-        if(!cr){_merged[id]=lr;}else if((lr.at||'')>(cr.at||'')){_merged[id]=lr;}});
+        if(!cr){
+          // Cloud is missing this local row. Imported rows ('fr_imp_%') are never created offline on a
+          // device, so missing-from-cloud means it was DELETED server-side — drop it (don't resurrect a
+          // deleted import row from a stale cache). Only genuine app records survive as offline writes.
+          if(String(id).indexOf('fr_imp_')===0)return;
+          _merged[id]=lr;
+        }else if((lr.at||'')>(cr.at||'')){_merged[id]=lr;}});
       S._frData=_merged;try{lsSet&&lsSet('ts_flight_records_cache',_merged);}catch(e){}}
   }catch(e){}
   if(typeof safeRender==='function')safeRender();
