@@ -1454,7 +1454,10 @@ function _wxDepartures(date){
     var t=(typeof _rzMinToHHMM==='function')?_rzMinToHHMM(f.depMin):'';if(!t)return;   // f.depMin = the calendar (drag-adjusted) time, which the operator prefers
     var g=_row(isFb?(t+'·FB'):t,t,f.depMin,isFb,isFb?'MF':gdest,isFb?gdest:'');
     if(g.acs.indexOf(parts[0])<0)g.acs.push(parts[0]);
-    var pic=man[f.key]||auto[f.key];if(pic&&g.pics.indexOf(pic)<0)g.pics.push(pic);
+    // PIC must come LIVE from the calendar (manual pin → block → auto), exactly like the seatmap —
+    // not the stale S._schedAutoPilots cache, which is why the weather-call PIC was sometimes wrong.
+    var pic=(typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(parts[0],parts[1]):(man[f.key]||auto[f.key]);
+    if(pic&&g.pics.indexOf(pic)<0)g.pics.push(pic);
   });
   // Attached flybacks (folded into a host flight → not their own entry in _schedDayFlights): still get
   // their own weather call at the return time, on the host aircraft/PIC.
@@ -1471,7 +1474,8 @@ function _wxDepartures(date){
       var t=_rzMinToHHMM(dm);var hac=String(tgt).split('|')[0];
       var g=_row(t+'·FB',t,dm,true,'MF',prod);
       if(hac&&((S.aircraft||{})[hac])&&g.acs.indexOf(hac)<0)g.acs.push(hac);
-      var pic=man[tgt]||auto[tgt];if(pic&&g.pics.indexOf(pic)<0)g.pics.push(pic);
+      var pic=(typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(hac,String(tgt).split('|')[1]):(man[tgt]||auto[tgt]);
+      if(pic&&g.pics.indexOf(pic)<0)g.pics.push(pic);
     });
   });
   // Fill the actual product code(s) for non-flyback departures (matched by departure time), e.g. FCF.
