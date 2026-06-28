@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.00';
+const APP_VER='v28.01';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -21681,10 +21681,39 @@ function _frBlockStr(r){var blk=_frMins(r.on)-_frMins(r.off);if(blk<0)blk+=1440;
 // Each pilot's personal logbook, auto-built from their flight records. Solid table; tap a
 // row to expand and adjust. Columns: Month · Day · Type · Registration · PIC · Co-Pilot · Details · Flight time.
 function _frUserName(id){var u=(S.users||[]).find(function(x){return x.id===id;});return u?(u.name||''):'';}
+// Display label for a logbook owner: a real account name if the id resolves, else the pic_name carried
+// on their flight records (imported / placeholder pilots), else the raw id.
+function _frPilotLabel(uid){var n=_frUserName(uid);if(n)return n;var pn='';Object.keys(S._frData||{}).some(function(k){var r=S._frData[k];if(r&&r.user_id===uid&&r.picName){pn=r.picName;return true;}return false;});return pn||String(uid||'?');}
+// True when this logbook owner is NOT a real app account (a placeholder / imported pilot) — admins can
+// rename these to attach a proper name to the whole logbook.
+function _frIsPlaceholderPilot(uid){return !!uid&&!_frUserName(uid);}
+window.frLbRenamePilot=function(uid){
+  if(!uid||typeof prompt!=='function')return;
+  var ids=[];Object.keys(S._frData||{}).forEach(function(k){if((S._frData[k]||{}).user_id===uid)ids.push(k);});
+  var cur=_frPilotLabel(uid);
+  var nm=prompt('Name for this logbook — applies to all '+ids.length+' flight'+(ids.length===1?'':'s')+':',cur);
+  if(nm==null)return;nm=String(nm).trim();if(!nm)return;
+  ids.forEach(function(k){S._frData[k].picName=nm;});
+  try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}
+  try{if(typeof _sbFetch==='function')_sbFetch(SB+'/rest/v1/ts_flight_records?user_id=eq.'+encodeURIComponent(uid),{method:'PATCH',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify({pic_name:nm})}).then(function(r){if(typeof toast==='function')toast(r&&r.ok?('Renamed to '+nm+' ('+ids.length+' flights)'):'Saved locally — server update failed',r&&r.ok?'ok':'warn');});}catch(e){}
+  render();
+};
 function _frUniq(a){var o=[],s={};(a||[]).forEach(function(x){if(x!=null&&x!==''&&!s[x]){s[x]=1;o.push(x);}});return o;}
 window.frLbDayToggle=function(d){S._lbDayOpen=S._lbDayOpen||{};if(S._lbDayOpen[d])delete S._lbDayOpen[d];else S._lbDayOpen[d]=true;render();};
 function _frPicName(r){return r.picName||_frUserName(r.user_id)||'';}
 function _frDetails(r){return r.details||((r.from||'')+(r.to?'-'+r.to:''))||(r.product||'');}
+// Route token for the logbook: prefer a Dep-Dest from the from/to fields (so a Ferry shows "QN-WF",
+// not the word "Ferry"), unless details already encodes a full multi-hop route (e.g. imported "QN-MF-QN").
+function _frRoute(r){
+  var d=String((r&&r.details)||'').trim();
+  if(/^[A-Za-z]{2,4}(?:-[A-Za-z]{2,4}){2,}$/.test(d))return d.toUpperCase();   // already a return/multi-hop
+  var f=String((r&&r.from)||'').trim().toUpperCase(),t=String((r&&r.to)||'').trim().toUpperCase();
+  if(f&&t)return f+'-'+t;                       // Dep-Dest (ferries included)
+  if(d&&/-/.test(d))return d.toUpperCase();
+  if(d)return d;
+  return String((r&&r.product)||'—');
+}
+function _frIsOneWay(t){return /^[A-Za-z]{2,4}-[A-Za-z]{2,4}$/.test(t);}
 function renderLogbook(){
   if(!S._frLoaded){S._frLoaded=true;if(window.loadFlightRecords)window.loadFlightRecords();}
   if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Sign in to view your logbook.</div>';
@@ -21696,7 +21725,7 @@ function renderLogbook(){
   if(mgr){
     var pilots={};Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r)pilots[r.user_id]=1;});pilots[S.user.id]=1;
     h+='<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text3);font-weight:700">Logbook for</span>';
-    Object.keys(pilots).forEach(function(uid){var nm=_frUserName(uid)||'?';var on=uid===viewUid;h+='<button onclick="S._lbUid=\''+_frJs(uid)+'\';S._lbEditId=null;render()" style="padding:6px 12px;border-radius:8px;border:2px solid '+(on?'#7c3aed':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.14)':'transparent')+';color:'+(on?'#a78bfa':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer">'+_frEsc(nm.split(' ')[0]||nm)+'</button>';});
+    Object.keys(pilots).forEach(function(uid){var nm=_frPilotLabel(uid);var on=uid===viewUid;h+='<button onclick="S._lbUid=\''+_frJs(uid)+'\';S._lbEditId=null;render()" style="padding:6px 12px;border-radius:8px;border:2px solid '+(on?'#7c3aed':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.14)':'transparent')+';color:'+(on?'#a78bfa':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer">'+_frEsc(nm.split(' ')[0]||nm)+'</button>';});
     h+='</div>';
   }
   // gather this pilot's logged flights
@@ -21705,10 +21734,14 @@ function renderLogbook(){
   var total=rows.reduce(function(s,r){return s+(+r.flightTime||0);},0);
   var ttC=rows.filter(function(r){return _frAcType(r.aircraft)==='C208B';}).reduce(function(s,r){return s+(+r.flightTime||0);},0);
   var ttG=rows.filter(function(r){return _frAcType(r.aircraft)==='GA8';}).reduce(function(s,r){return s+(+r.flightTime||0);},0);
-  var _vn=_frUserName(viewUid);var _title=_vn?(_frEsc(_vn)+(/[sS]$/.test(_vn)?'’':'’s')+' logbook'):'My logbook';
+  var _vn=_frPilotLabel(viewUid);var _title=_vn&&_vn!==viewUid?(_frEsc(_vn)+(/[sS]$/.test(_vn)?'’':'’s')+' logbook'):'My logbook';
+  // Admin viewing a placeholder/imported pilot (no real account) → offer to name the whole logbook.
+  var _canRename=mgr&&_frIsPlaceholderPilot(viewUid);
   h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><div><div style="font-size:17px;font-weight:800">'+_title+'</div>'+
     '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+rows.length+' flights · total '+total.toFixed(1)+'h <span style="color:var(--text2)">(C208B '+ttC.toFixed(1)+'h · GA8 '+ttG.toFixed(1)+'h)</span></div></div>'+
-    '<button onclick="window.frLbAdd()" style="padding:9px 16px;border-radius:10px;border:1px dashed var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">+ Add entry</button></div></div>';
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+    (_canRename?'<button onclick="window.frLbRenamePilot(\''+_frJs(viewUid)+'\')" title="Give this imported/placeholder logbook a name (applies to all its flights)" style="padding:9px 16px;border-radius:10px;border:1px solid rgba(124,58,237,.5);background:rgba(124,58,237,.1);color:#a78bfa;font-size:13px;font-weight:700;cursor:pointer">✎ Name this logbook</button>':'')+
+    '<button onclick="window.frLbAdd()" style="padding:9px 16px;border-radius:10px;border:1px dashed var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">+ Add entry</button></div></div></div>';
   if(S._lbEditId&&(S._frData||{})[S._lbEditId]&&S._frData[S._lbEditId].user_id===viewUid)h+=_lbRenderEdit(S._frData[S._lbEditId]);
   if(!rows.length){h+='<div class="card" style="color:var(--text3);padding:24px;font-size:13px">No flights logged yet. They appear here automatically when you record a flight, or add one manually.</div>';return h;}
   // Group flights by DAY: one summary row per day (total flight time + a route summary that collapses
@@ -21727,8 +21760,18 @@ function renderLogbook(){
     var newMonth=mon!==lastMonth;lastMonth=mon;
     var dayTot=legs.reduce(function(s,r){return s+(+r.flightTime||0);},0);
     var open=!!S._lbDayOpen[d];
-    // route summary — collapse identical routes into "route ×N", in first-seen order
-    var seen={},order=[];legs.forEach(function(r){var rt=_frDetails(r)||r.product||'—';if(order.indexOf(rt)<0)order.push(rt);seen[rt]=(seen[rt]||0)+1;});
+    // route summary — Dep-Dest per leg (ferries → "QN-WF"); pair a one-way A-B with a later B-A into a
+    // return "A-B-A"; then collapse identical routes into "route ×N", in first-seen order.
+    var _toks=legs.map(_frRoute);
+    var _remain={};_toks.forEach(function(t){_remain[t]=(_remain[t]||0)+1;});
+    var _finals=[];
+    _toks.forEach(function(t){
+      if(_remain[t]<=0)return;                       // already consumed (as a return partner)
+      if(_frIsOneWay(t)){var p=t.split('-'),rev=p[1]+'-'+p[0];
+        if(rev!==t&&(_remain[rev]||0)>0){_remain[t]--;_remain[rev]--;_finals.push(p[0]+'-'+p[1]+'-'+p[0]);return;}}
+      _remain[t]--;_finals.push(t);
+    });
+    var seen={},order=[];_finals.forEach(function(rt){if(order.indexOf(rt)<0)order.push(rt);seen[rt]=(seen[rt]||0)+1;});
     var summary=order.map(function(rt){return _frEsc(rt)+(seen[rt]>1?' ×'+seen[rt]:'');}).join(' · ');
     var regs=_frUniq(legs.map(function(r){return _frAcShort(r.aircraft);})).join(', ');
     var types=_frUniq(legs.map(function(r){return _frAcType(r.aircraft);})).filter(Boolean).join('/');
@@ -21750,7 +21793,7 @@ function renderLogbook(){
           '<td style="padding:4px 8px;font-size:11px;color:var(--text3)">'+_frEsc((r.off||'')+(r.on?'–'+r.on:''))+'</td>'+
           '<td style="padding:4px 8px;font-size:11px;font-weight:700;color:'+_frAcCol(r.aircraft)+'">'+_frEsc(_frAcShort(r.aircraft))+'</td>'+
           '<td style="padding:4px 8px;font-size:11px;color:var(--text2)">'+_frEsc(r.copilot?('+ '+r.copilot):'')+'</td>'+
-          '<td style="padding:4px 8px;font-size:11px;color:var(--text2)">'+_frEsc(_frDetails(r))+(r.note?' <span style="color:var(--text3)">— '+_frEsc(r.note)+'</span>':'')+'</td>'+
+          '<td style="padding:4px 8px;font-size:11px;color:var(--text2)">'+_frEsc(_frRoute(r))+(r.note?' <span style="color:var(--text3)">— '+_frEsc(r.note)+'</span>':'')+'</td>'+
           '<td style="padding:4px 8px;text-align:right;font-size:11px;font-weight:700">'+(r.flightTime!=null?(+r.flightTime).toFixed(1):'—')+'</td>'+
         '</tr>';
       });
