@@ -507,8 +507,11 @@ function _rzItemOnDate(it,date){var d=_rzItemDate(it);return !d||!date||d===date
 // When `date` is given, keep only each booking's items for THAT day. A single order can hold items
 // on several dates (e.g. two Branches flights on different days); a day's view must show only that
 // day's items, not every item on the order.
+// Abandoned-cart bookings: Rezdy returns these (status "ABANDONED CART") for half-finished checkouts.
+// They aren't real bookings — they show up as a phantom duplicate of the real order — so drop them.
+function _rzIsAbandoned(b){return /abandon/i.test(String((b&&b.status)||''));}
 function _rzMapBookings(rows,date){
-  var list=(rows||[]).map(_rzRow).filter(Boolean).filter(function(b){return !_rzIsSupplierDup(b);});
+  var list=(rows||[]).map(_rzRow).filter(Boolean).filter(function(b){return !_rzIsSupplierDup(b)&&!_rzIsAbandoned(b);});
   if(date)list=list.map(function(b){if(!Array.isArray(b.items))return b;var f=b.items.filter(function(it){return _rzItemOnDate(it,date);});if(f.length===b.items.length)return b;var nb=Object.assign({},b);nb.items=f;return nb;});  // shallow-copy when filtering so we never mutate a shared booking object
   return list;
 }
