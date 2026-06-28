@@ -725,6 +725,8 @@ function _frBlockStr(r){var blk=_frMins(r.on)-_frMins(r.off);if(blk<0)blk+=1440;
 // Each pilot's personal logbook, auto-built from their flight records. Solid table; tap a
 // row to expand and adjust. Columns: Month · Day · Type · Registration · PIC · Co-Pilot · Details · Flight time.
 function _frUserName(id){var u=(S.users||[]).find(function(x){return x.id===id;});return u?(u.name||''):'';}
+function _frUniq(a){var o=[],s={};(a||[]).forEach(function(x){if(x!=null&&x!==''&&!s[x]){s[x]=1;o.push(x);}});return o;}
+window.frLbDayToggle=function(d){S._lbDayOpen=S._lbDayOpen||{};if(S._lbDayOpen[d])delete S._lbDayOpen[d];else S._lbDayOpen[d]=true;render();};
 function _frPicName(r){return r.picName||_frUserName(r.user_id)||'';}
 function _frDetails(r){return r.details||((r.from||'')+(r.to?'-'+r.to:''))||(r.product||'');}
 function renderLogbook(){
@@ -752,30 +754,54 @@ function renderLogbook(){
     '<button onclick="window.frLbAdd()" style="padding:9px 16px;border-radius:10px;border:1px dashed var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">+ Add entry</button></div></div>';
   if(S._lbEditId&&(S._frData||{})[S._lbEditId]&&S._frData[S._lbEditId].user_id===viewUid)h+=_lbRenderEdit(S._frData[S._lbEditId]);
   if(!rows.length){h+='<div class="card" style="color:var(--text3);padding:24px;font-size:13px">No flights logged yet. They appear here automatically when you record a flight, or add one manually.</div>';return h;}
-  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:720px"><thead><tr style="background:var(--card2)">'+
-    ['Month','Day','Type','Reg','PIC','Co-Pilot','Details','Notes','Flt h'].map(function(t,i){return '<th style="text-align:'+(i>=8?'right':'left')+';padding:8px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+  // Group flights by DAY: one summary row per day (total flight time + a route summary that collapses
+  // repeats, e.g. "QN-MF-QN ×2 · QN-FJ-QN"); tap the day to expand the individual legs (each tappable to
+  // adjust). S._lbDayOpen tracks which days are expanded.
+  S._lbDayOpen=S._lbDayOpen||{};
+  var byDay={};rows.forEach(function(r){(byDay[r.fr_date]=byDay[r.fr_date]||[]).push(r);});
+  var days=Object.keys(byDay).sort(function(a,b){return String(b).localeCompare(String(a));});
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:640px"><thead><tr style="background:var(--card2)">'+
+    ['Month','Day','Type','Reg','PIC','Routes flown','Flt h'].map(function(t,i){return '<th style="text-align:'+(i>=6?'right':'left')+';padding:8px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
   var lastMonth='';
-  rows.forEach(function(r){
-    var dt=new Date(r.fr_date+'T00:00:00');
-    var mon=dt.toLocaleDateString('en-NZ',{month:'short',year:'2-digit'});
-    var day=dt.getDate();
-    var col=_frAcCol(r.aircraft);
+  days.forEach(function(d){
+    var legs=byDay[d].slice().sort(function(a,b){return _frMins(a.off)-_frMins(b.off);});
+    var dt=new Date(d+'T00:00:00');
+    var mon=dt.toLocaleDateString('en-NZ',{month:'short',year:'2-digit'});var day=dt.getDate();
     var newMonth=mon!==lastMonth;lastMonth=mon;
-    h+='<tr onclick="window.frLbEdit(\''+r.id+'\')" style="border-top:1px solid var(--border2);cursor:pointer'+(S._lbEditId===r.id?';background:rgba(124,58,237,.06)':'')+'">'+
-      '<td style="padding:6px 8px;font-weight:700;color:'+(newMonth?'var(--text1)':'var(--text3)')+'">'+(newMonth?_frEsc(mon):'')+'</td>'+
-      '<td style="padding:6px 8px;text-align:center;font-weight:700">'+day+'</td>'+
-      '<td style="padding:6px 8px;color:var(--text2)">'+_frEsc(_frAcType(r.aircraft))+'</td>'+
-      '<td style="padding:6px 8px;font-weight:800;color:'+col+'">'+_frEsc(_frAcShort(r.aircraft))+'</td>'+
-      '<td style="padding:6px 8px">'+_frEsc(_frPicName(r))+'</td>'+
-      '<td style="padding:6px 8px;color:var(--text2)">'+_frEsc(r.copilot||'')+'</td>'+
-      '<td style="padding:6px 8px;color:var(--text2)">'+_frEsc(_frDetails(r))+'</td>'+
-      '<td style="padding:6px 8px;color:var(--text2);max-width:240px;white-space:normal;word-break:break-word;line-height:1.35">'+_frEsc(r.note||'')+'</td>'+
-      '<td style="padding:6px 8px;text-align:right;font-weight:800">'+(r.flightTime!=null?(+r.flightTime).toFixed(1):'—')+'</td>'+
+    var dayTot=legs.reduce(function(s,r){return s+(+r.flightTime||0);},0);
+    var open=!!S._lbDayOpen[d];
+    // route summary — collapse identical routes into "route ×N", in first-seen order
+    var seen={},order=[];legs.forEach(function(r){var rt=_frDetails(r)||r.product||'—';if(order.indexOf(rt)<0)order.push(rt);seen[rt]=(seen[rt]||0)+1;});
+    var summary=order.map(function(rt){return _frEsc(rt)+(seen[rt]>1?' ×'+seen[rt]:'');}).join(' · ');
+    var regs=_frUniq(legs.map(function(r){return _frAcShort(r.aircraft);})).join(', ');
+    var types=_frUniq(legs.map(function(r){return _frAcType(r.aircraft);})).filter(Boolean).join('/');
+    var pics=_frUniq(legs.map(function(r){return _frPicName(r);})).filter(Boolean).join(', ');
+    var col=_frAcCol(legs[0].aircraft);
+    h+='<tr onclick="window.frLbDayToggle(\''+_frJs(d)+'\')" style="border-top:1px solid var(--border2);cursor:pointer"'+(open?' data-on="1"':'')+'>'+
+      '<td style="padding:7px 8px;font-weight:700;color:'+(newMonth?'var(--text1)':'var(--text3)')+'">'+(newMonth?_frEsc(mon):'')+'</td>'+
+      '<td style="padding:7px 8px;text-align:center;font-weight:700">'+day+'</td>'+
+      '<td style="padding:7px 8px;color:var(--text2)">'+_frEsc(types)+'</td>'+
+      '<td style="padding:7px 8px;font-weight:800;color:'+col+'">'+_frEsc(regs)+'</td>'+
+      '<td style="padding:7px 8px">'+_frEsc(pics)+'</td>'+
+      '<td style="padding:7px 8px;color:var(--text2)">'+(legs.length>1?'<span style="color:var(--text3)">'+(open?'▾':'▸')+'</span> ':'')+summary+(legs.length>1?' <span style="font-size:10px;color:var(--text3)">('+legs.length+' flights)</span>':'')+'</td>'+
+      '<td style="padding:7px 8px;text-align:right;font-weight:800">'+dayTot.toFixed(1)+'</td>'+
     '</tr>';
+    if(open){
+      legs.forEach(function(r){
+        h+='<tr onclick="window.frLbEdit(\''+r.id+'\')" style="cursor:pointer;background:rgba(124,58,237,.05)'+(S._lbEditId===r.id?';outline:1px solid rgba(124,58,237,.4)':'')+'">'+
+          '<td></td><td></td>'+
+          '<td style="padding:4px 8px;font-size:11px;color:var(--text3)">'+_frEsc((r.off||'')+(r.on?'–'+r.on:''))+'</td>'+
+          '<td style="padding:4px 8px;font-size:11px;font-weight:700;color:'+_frAcCol(r.aircraft)+'">'+_frEsc(_frAcShort(r.aircraft))+'</td>'+
+          '<td style="padding:4px 8px;font-size:11px;color:var(--text2)">'+_frEsc(r.copilot?('+ '+r.copilot):'')+'</td>'+
+          '<td style="padding:4px 8px;font-size:11px;color:var(--text2)">'+_frEsc(_frDetails(r))+(r.note?' <span style="color:var(--text3)">— '+_frEsc(r.note)+'</span>':'')+'</td>'+
+          '<td style="padding:4px 8px;text-align:right;font-size:11px;font-weight:700">'+(r.flightTime!=null?(+r.flightTime).toFixed(1):'—')+'</td>'+
+        '</tr>';
+      });
+    }
   });
-  h+='<tr style="border-top:2px solid var(--border2);background:var(--card2)"><td colspan="8" style="padding:8px;text-align:right;font-weight:700;color:var(--text2)">Total</td><td style="padding:8px;text-align:right;font-weight:800">'+total.toFixed(1)+'h</td></tr>';
+  h+='<tr style="border-top:2px solid var(--border2);background:var(--card2)"><td colspan="6" style="padding:8px;text-align:right;font-weight:700;color:var(--text2)">Total</td><td style="padding:8px;text-align:right;font-weight:800">'+total.toFixed(1)+'h</td></tr>';
   h+='</tbody></table></div>';
-  h+='<div style="font-size:11px;color:var(--text3);padding:2px 4px 10px">Tap any row to adjust it.</div>';
+  h+='<div style="font-size:11px;color:var(--text3);padding:2px 4px 10px">Tap a day with multiple flights to see each leg; tap a leg to adjust it.</div>';
   return h;
 }
 function _lbRenderEdit(r){
