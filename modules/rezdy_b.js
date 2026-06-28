@@ -853,7 +853,9 @@ window.pickupAckRunAll=function(){
 setInterval(function(){
   try{
     if(typeof S==='undefined'||!S.user||document.visibilityState!=='visible')return;
-    if(S.section==='ground'&&typeof window.rezdyReloadPickupLive==='function')window.rezdyReloadPickupLive();
+    // Weather calls ride in the same pickup blob, so the Weather page needs the same fallback re-pull
+    // (otherwise a missed websocket broadcast leaves another device's tick/status stale).
+    if((S.section==='ground'||S.section==='weather')&&typeof window.rezdyReloadPickupLive==='function')window.rezdyReloadPickupLive();
   }catch(e){}
 },15000);
 // ── Unacknowledged-pickup chime (mobile) ───────────────────────────────────────

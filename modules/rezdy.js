@@ -1538,14 +1538,21 @@ window.wxSubmit=function(status){
   S._wxOpen=null;S._wxDraft=null;
   if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();
   if(typeof auditLog==='function')auditLog('weather_call',{dep:dep,status:status,reasons:reasons.join(',')});
-  // Notify the OTHER PICs flying today + the rostered desk staff that a weather call has been made.
-  try{
-    var _wd=(_wxDepartures(S.rezdyDate)||[]).find(function(x){return x.key===String(dep);});
-    var _wlbl=_wd?(_wd.time+' '+_wxDepLabel(_wd)):String(dep);
-    var _wmsg='Weather call — '+_wxStatusLabel(status)+': '+_wlbl+(reasons.length?' ('+reasons.join(', ')+')':'')+' · by '+((S.user&&(S.user.name||S.user.email))||'a pilot');
-    var _recips=_wxBroadcastRecipients(S.rezdyDate,(S.user&&S.user.id)||null);
-    if(_recips.length&&typeof sbU==='function')sbU('ts_notifications',_recips.map(function(uid){return {user_id:uid,type:'weather_call',message:_wmsg,read:false,created_at:new Date().toISOString()};}));
-  }catch(_e){}
+  // Notify every PIC flying today + everyone rostered on that a weather call has been made.
+  // Recipients are computed from S.roster — which is lazy-loaded — so if this device never opened the
+  // Roster page the roster is empty and almost nobody qualifies. Load it first, THEN send.
+  var _wxNotify=function(){
+    try{
+      var _wd=(_wxDepartures(S.rezdyDate)||[]).find(function(x){return x.key===String(dep);});
+      var _wlbl=_wd?(_wd.time+' '+_wxDepLabel(_wd)):String(dep);
+      var _wmsg='Weather call — '+_wxStatusLabel(status)+': '+_wlbl+(reasons.length?' ('+reasons.join(', ')+')':'')+' · by '+((S.user&&(S.user.name||S.user.email))||'a pilot');
+      var _recips=_wxBroadcastRecipients(S.rezdyDate,(S.user&&S.user.id)||null);
+      if(_recips.length&&typeof sbU==='function')sbU('ts_notifications',_recips.map(function(uid){return {user_id:uid,type:'weather_call',message:_wmsg,read:false,created_at:new Date().toISOString()};}));
+    }catch(_e){}
+  };
+  if((!S.roster||!Object.keys(S.roster).length)&&typeof window.loadRosterFromCloud==='function'){
+    window.loadRosterFromCloud().then(_wxNotify).catch(_wxNotify);
+  } else _wxNotify();
   if(typeof toast==='function')toast('Weather call recorded: '+_wxStatusLabel(status),status==='cancelled'?'warn':'ok');
   render();
 };
