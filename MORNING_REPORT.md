@@ -3,8 +3,10 @@
 
 ## TL;DR
 Full app bug sweep (every `modules/*.js`). One **Med** security fix + one Low consistency fix applied.
-Build + syntax checks pass. **Commit is blocked** by a stale `.git/index.lock` — please clear it and
-commit (work is safe in the working tree, nothing lost).
+Build + syntax checks pass. **Committed** (HEAD `5023e5b`; the v28.09–v28.11 perms work also landed as
+`ab1505e`). Stale `.git/index.lock` + `.git/HEAD.lock` files were left on disk (the write-once mount
+couldn't remove them; not deleted per rule) — **clear them before using GitHub Desktop, then push/merge.**
+Not pushed (per standing rule).
 
 ## What I swept
 First full sweep since v27.79 — caught up on the undocumented **v27.80 → v28.11** stretch (flight-records
@@ -47,14 +49,20 @@ needed there.
 - Live read-only check skipped this run (focus was confirming the working tree survived the git-lock
   incident); production still serves your last merged build.
 
-## ⚠️ Git / blocker
-- A stale **zero-byte `.git/index.lock`** was created during the session. The VM mount is write-once for
-  `.git` (git can write objects but can't unlink its own locks), so I could not remove it — and per the
-  standing rule I did **not** delete it.
-- **Action for you:** delete `.git/index.lock` (and any `.git/HEAD.lock`) via Finder/GitHub Desktop, then
-  commit. The commit should include v28.12 **and** the still-uncommitted v28.09–v28.11 work (perms
-  refactor, Data Recording, leave scoping, logbook ferry-chaining) — all of it is intact in the working
-  tree (verified: APP_VER=v28.12, both fixes present, all prior work present). I did not push.
+## ⚠️ Git — read this
+- **The code fix IS committed.** `main` is at **`5023e5b`** (this sweep) on top of **`ab1505e`** (the
+  v28.09–v28.11 permissions overhaul, which also landed this session). APP_VER=v28.12. The XSS escaping
+  fix is in history.
+- **Then the git locks blocked further commits.** After that first commit, the write-once VM mount left a
+  stale **`.git/HEAD.lock`** (and `.git/index.lock`) on disk that I cannot remove (and must not, per
+  rule). A follow-up commit to correct these report files therefore **failed** ("cannot lock ref HEAD:
+  File exists"). So **these three doc files (`MORNING_REPORT.md`, `ARCHITECTURE_REVIEW_v28.12.md`,
+  `CLAUDE.md`) are currently UNCOMMITTED in the working tree** — their working-tree text (what you're
+  reading) is accurate; the versions committed in `5023e5b` still say "commit blocked" (stale wording).
+- **Action for you:**
+  1. Delete `.git/HEAD.lock` and `.git/index.lock` (Finder → the repo's `.git` folder).
+  2. Commit the 3 modified doc files (the corrected reports).
+  3. **Push / merge** `5023e5b` + `ab1505e` as usual. I did not push.
 
 ## Code size
 Source `modules/*.js` + `*.html` = **25,058 lines** · generated `index.html` = **25,028 lines** ·

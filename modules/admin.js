@@ -5,6 +5,10 @@ function renderAdmin(){
   if(((S.admin||{}).section)==='aerodromes'||((S.admin||{}).section)==='fuels'){
     if(!S.admin)S.admin={};S._opsSettingsTab=S.admin.section;S.admin.section='operations';
   }
+  // Settings ▸ Preferences — personal per-device settings, available to EVERY signed-in user.
+  if(((S.admin||{}).section)==='userprefs'){
+    if(typeof _renderUserPrefs==='function')return _renderUserPrefs();
+  }
   // Settings ▸ Operations (operations-gated, separate from the admin_users/admin_crew tabs).
   if(((S.admin||{}).section)==='operations'){
     if(typeof hasRolePerm==='function'&&hasRolePerm('operations')&&typeof renderAdminOperations==='function')return renderAdminOperations();

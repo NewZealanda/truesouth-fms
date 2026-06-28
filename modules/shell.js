@@ -239,7 +239,7 @@ function _renderHomePicker(){
 }
 // User Preferences page — per-device personal settings: landing page, theme, and sound (master mute,
 // notification-sound toggle, selectable chime with previews). Reachable from the account modal.
-window.goUserPrefs=function(){S.section='userprefs';S.showAccount=false;if(typeof render==='function')render();};
+window.goUserPrefs=function(){S.showAccount=false;if(!S.admin)S.admin={};S.admin.section='userprefs';if(typeof window.setTab==='function')window.setTab('admin');else{S.section='settings';if(typeof render==='function')render();}};
 function _renderUserPrefs(){
   var muted=(typeof _soundMuted==='function')&&_soundMuted();
   var notifOn=(typeof _notifSoundOn==='function')?_notifSoundOn():true;
@@ -542,11 +542,11 @@ function renderLoginInner(){
           <label style="display:block;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase">Email</label>
           <div style="display:flex;align-items:center;width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;box-sizing:border-box;overflow:hidden">
             <input id="li_e" type="text" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
-              oninput="window.updateLoginSuffix&&window.updateLoginSuffix()"
-              style="flex:0 0 auto;width:72px;min-width:40px;padding:0;background:transparent;border:none;color:#fff;font-size:16px;outline:none;-webkit-user-select:text;user-select:text;touch-action:manipulation"
+              oninput="window.updateLoginSuffix&&window.updateLoginSuffix()" onfocus="window.updateLoginSuffix&&window.updateLoginSuffix()" onchange="window.updateLoginSuffix&&window.updateLoginSuffix()" onanimationstart="window.updateLoginSuffix&&window.updateLoginSuffix()"
+              style="flex:0 0 auto;width:54px;min-width:40px;padding:0;background:transparent;border:none;color:#fff;font-size:16px;outline:none;-webkit-user-select:text;user-select:text;touch-action:manipulation"
               onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
             <span id="li_e_sfx" style="color:#fff;font-size:16px;white-space:nowrap;pointer-events:none;user-select:none">@truesouthflights.co.nz</span>
-            <img alt="" src="data:," onerror="window.updateLoginSuffix&&window.updateLoginSuffix()" style="display:none">
+            <img alt="" src="data:," onerror="window.updateLoginSuffix&&(updateLoginSuffix(),setTimeout(updateLoginSuffix,120),setTimeout(updateLoginSuffix,350),setTimeout(updateLoginSuffix,800),setTimeout(updateLoginSuffix,1500))" style="display:none">
           </div>
         </div>
         <div style="margin-bottom:24px">
@@ -812,12 +812,12 @@ function renderDrawer(){
    if(hasRolePerm('settings')){
     h+=_secBtn('Settings','settings','⚙️');
     if(_isExp('settings')){
-      var adSec=(S.admin||{}).section||'people';
+      var adSec=(S.admin||{}).section||(_canCrew?'people':'userprefs');
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
+      h+=_sn('Preferences','userprefs');
       if(_canCrew)h+=_sn('People','people');
       if(_canUsers)h+=_sn('Permissions','perms');
       if(hasRolePerm('operations'))h+=_sn('Operations','operations');
-      if(_isAdminPlus)h+=_sn('Statistics','statistics');
       if(_isSuper)h+=_sn('Drive','gdrive');
       if(hasRolePerm('audit'))h+=_sn('Audit','audit');
     }
@@ -859,13 +859,14 @@ function renderSettingsSubTabs(){
   const _adminPlus=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
   const _isSuper=S.user?.role==='superadmin'||!!(S.user&&S.user.superAdmin);
   const ad=S.admin||{};
-  const cur=ad.section||'people';
+  const cur=ad.section||(_canCrew?'people':'userprefs');
   const sections=[];
+  sections.push({id:'userprefs',lbl:'Preferences'}); // personal settings — available to everyone
   if(_canCrew)sections.push({id:'people',lbl:'People'});
   if(_canUsers)sections.push({id:'perms',lbl:'Permissions'});
   if(hasRolePerm('operations'))sections.push({id:'operations',lbl:'Operations'});
-  // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20. (Reports to moved to Roster.)
-  if(_adminPlus)sections.push({id:'statistics',lbl:'Statistics'});
+  // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20. (Reports to → Roster;
+  // Statistics → Data Recording.)
   if(_isSuper)sections.push({id:'gdrive',lbl:'Drive'});
   if(hasRolePerm('audit'))sections.push({id:'audit',lbl:'Audit'});
   return _tier2(sections.map(function(s){return {lbl:s.lbl,on:cur===s.id,onclick:"if(!S.admin)S.admin={};S.admin.section='"+s.id+"';render()"};}));

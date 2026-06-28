@@ -421,10 +421,12 @@ function renderDataRecording(){
   if(!S._maintLoaded&&typeof window.ensureMaintenance==='function')window.ensureMaintenance();
   var tab=S._drTab||'aircraft';
   var tabs=[{lbl:'Aircraft records',on:tab==='aircraft',onclick:"S._drTab='aircraft';render()"},
-            {lbl:'Statistics',on:tab==='stats',onclick:"S._drTab='stats';render()"},
+            {lbl:'Flight stats',on:tab==='stats',onclick:"S._drTab='stats';render()"},
+            {lbl:'Booking stats',on:tab==='bookingstats',onclick:"S._drTab='bookingstats';render()"},
             {lbl:'Records',on:tab==='records',onclick:"S._drTab='records';render()"}];
   var h=(typeof _tier2==='function')?_tier2(tabs):'';
   if(tab==='stats')return h+_frRenderStats();
+  if(tab==='bookingstats')return h+((typeof renderAdminStatistics==='function')?renderAdminStatistics():'');
   if(tab==='records')return h+_frRenderBrowse();
   return h+_frRenderTodayRecord((S.user&&S.user.id)||'');
 }

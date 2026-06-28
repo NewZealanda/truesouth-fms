@@ -335,6 +335,9 @@ input[type=number] { -moz-appearance: textfield; }
 #loading-overlay .ts-loading-text{margin-top:18px;font-size:13px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.6)}
 /* Keep the login fields their dark style even when the browser autofills / "remembers" them (no yellow/blue recolour). */
 #login-form input:-webkit-autofill,#login-form input:-webkit-autofill:hover,#login-form input:-webkit-autofill:focus,#login-form input:-webkit-autofill:active{-webkit-text-fill-color:#fff!important;caret-color:#fff;-webkit-box-shadow:0 0 0 1000px rgba(255,255,255,.07) inset!important;box-shadow:0 0 0 1000px rgba(255,255,255,.07) inset!important;transition:background-color 99999s ease-in-out 0s}
+/* Fire an animation when the email field is autofilled so onanimationstart can re-measure its width (keeps @suffix tight — no gap). */
+@keyframes liAutofill{from{opacity:1}to{opacity:1}}
+#li_e:-webkit-autofill{animation-name:liAutofill;animation-duration:1ms}
 </style>
 </head>
 <body>
@@ -989,7 +992,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.12';
+const APP_VER='v28.14';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3656,7 +3659,7 @@ function _renderHomePicker(){
 }
 // User Preferences page — per-device personal settings: landing page, theme, and sound (master mute,
 // notification-sound toggle, selectable chime with previews). Reachable from the account modal.
-window.goUserPrefs=function(){S.section='userprefs';S.showAccount=false;if(typeof render==='function')render();};
+window.goUserPrefs=function(){S.showAccount=false;if(!S.admin)S.admin={};S.admin.section='userprefs';if(typeof window.setTab==='function')window.setTab('admin');else{S.section='settings';if(typeof render==='function')render();}};
 function _renderUserPrefs(){
   var muted=(typeof _soundMuted==='function')&&_soundMuted();
   var notifOn=(typeof _notifSoundOn==='function')?_notifSoundOn():true;
@@ -3959,11 +3962,11 @@ function renderLoginInner(){
           <label style="display:block;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase">Email</label>
           <div style="display:flex;align-items:center;width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;box-sizing:border-box;overflow:hidden">
             <input id="li_e" type="text" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourname"
-              oninput="window.updateLoginSuffix&&window.updateLoginSuffix()"
-              style="flex:0 0 auto;width:72px;min-width:40px;padding:0;background:transparent;border:none;color:#fff;font-size:16px;outline:none;-webkit-user-select:text;user-select:text;touch-action:manipulation"
+              oninput="window.updateLoginSuffix&&window.updateLoginSuffix()" onfocus="window.updateLoginSuffix&&window.updateLoginSuffix()" onchange="window.updateLoginSuffix&&window.updateLoginSuffix()" onanimationstart="window.updateLoginSuffix&&window.updateLoginSuffix()"
+              style="flex:0 0 auto;width:54px;min-width:40px;padding:0;background:transparent;border:none;color:#fff;font-size:16px;outline:none;-webkit-user-select:text;user-select:text;touch-action:manipulation"
               onkeydown="if(event.key==='Enter')document.getElementById('li_p')?.focus()">
             <span id="li_e_sfx" style="color:#fff;font-size:16px;white-space:nowrap;pointer-events:none;user-select:none">@truesouthflights.co.nz</span>
-            <img alt="" src="data:," onerror="window.updateLoginSuffix&&window.updateLoginSuffix()" style="display:none">
+            <img alt="" src="data:," onerror="window.updateLoginSuffix&&(updateLoginSuffix(),setTimeout(updateLoginSuffix,120),setTimeout(updateLoginSuffix,350),setTimeout(updateLoginSuffix,800),setTimeout(updateLoginSuffix,1500))" style="display:none">
           </div>
         </div>
         <div style="margin-bottom:24px">
@@ -4229,12 +4232,12 @@ function renderDrawer(){
    if(hasRolePerm('settings')){
     h+=_secBtn('Settings','settings','⚙️');
     if(_isExp('settings')){
-      var adSec=(S.admin||{}).section||'people';
+      var adSec=(S.admin||{}).section||(_canCrew?'people':'userprefs');
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
+      h+=_sn('Preferences','userprefs');
       if(_canCrew)h+=_sn('People','people');
       if(_canUsers)h+=_sn('Permissions','perms');
       if(hasRolePerm('operations'))h+=_sn('Operations','operations');
-      if(_isAdminPlus)h+=_sn('Statistics','statistics');
       if(_isSuper)h+=_sn('Drive','gdrive');
       if(hasRolePerm('audit'))h+=_sn('Audit','audit');
     }
@@ -4276,13 +4279,14 @@ function renderSettingsSubTabs(){
   const _adminPlus=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
   const _isSuper=S.user?.role==='superadmin'||!!(S.user&&S.user.superAdmin);
   const ad=S.admin||{};
-  const cur=ad.section||'people';
+  const cur=ad.section||(_canCrew?'people':'userprefs');
   const sections=[];
+  sections.push({id:'userprefs',lbl:'Preferences'}); // personal settings — available to everyone
   if(_canCrew)sections.push({id:'people',lbl:'People'});
   if(_canUsers)sections.push({id:'perms',lbl:'Permissions'});
   if(hasRolePerm('operations'))sections.push({id:'operations',lbl:'Operations'});
-  // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20. (Reports to moved to Roster.)
-  if(_adminPlus)sections.push({id:'statistics',lbl:'Statistics'});
+  // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20. (Reports to → Roster;
+  // Statistics → Data Recording.)
   if(_isSuper)sections.push({id:'gdrive',lbl:'Drive'});
   if(hasRolePerm('audit'))sections.push({id:'audit',lbl:'Audit'});
   return _tier2(sections.map(function(s){return {lbl:s.lbl,on:cur===s.id,onclick:"if(!S.admin)S.admin={};S.admin.section='"+s.id+"';render()"};}));
@@ -6286,6 +6290,10 @@ function renderAdmin(){
   // deep-link / restored view so it lands on the right tier-3 tab.
   if(((S.admin||{}).section)==='aerodromes'||((S.admin||{}).section)==='fuels'){
     if(!S.admin)S.admin={};S._opsSettingsTab=S.admin.section;S.admin.section='operations';
+  }
+  // Settings ▸ Preferences — personal per-device settings, available to EVERY signed-in user.
+  if(((S.admin||{}).section)==='userprefs'){
+    if(typeof _renderUserPrefs==='function')return _renderUserPrefs();
   }
   // Settings ▸ Operations (operations-gated, separate from the admin_users/admin_crew tabs).
   if(((S.admin||{}).section)==='operations'){
@@ -13190,6 +13198,7 @@ function _notifTargetLabel(n){
     case 'maintenance':     return 'Maintenance';
     case 'leave_submitted': return 'Approvals';
     case 'scheduling':      return 'Calendar';
+    case 'weather_call':    return 'Weather';
     default: return ((n&&n.type)||'').indexOf('leave_')===0 ? 'My Leave' : '';
   }
 }
@@ -15155,18 +15164,18 @@ function _wxCallReasons(c){return (c&&c.reasons&&c.reasons.length)?c.reasons:((c
 window.wxOpenDep=function(dep){if(S._wxOpen===dep){S._wxOpen=null;}else{S._wxOpen=dep;var c=_wxCall(dep)||{};S._wxDraft={dep:dep,reasons:_wxCallReasons(c).slice(),nextDay:c.nextDay||'',comment:c.comment||''};}render();};
 window.wxToggleReason=function(r){S._wxDraft=S._wxDraft||{};var a=S._wxDraft.reasons||(S._wxDraft.reasons=[]);var i=a.indexOf(r);if(i>=0)a.splice(i,1);else a.push(r);render();};   // multi-select, toggleable
 window.wxDraftSet=function(field,val){S._wxDraft=S._wxDraft||{};S._wxDraft[field]=val;if(field!=='comment')render();};   // comment via oninput → no render (keep focus)
-// Everyone who should hear a weather call was made for the day: the OTHER PICs flying today + the
-// rostered desk staff (status desk/admin/called-in, or role 'desk' on a working day). Excludes the
-// person who made the call. Returns user ids.
+// Everyone who should hear a weather call was made for the day: the OTHER PICs flying today + EVERY
+// active user ROSTERED ON for the day (any working status — i.e. NOT RDO/leave/unpaid/sick/unrostered),
+// regardless of role. Excludes the person who made the call. Returns user ids.
 function _wxBroadcastRecipients(date,excludeId){
   var ids={};
   try{(_wxDepartures(date)||[]).forEach(function(dep){(dep.pics||[]).forEach(function(code){var u=(typeof _rzWxUserForPilot==='function')?_rzWxUserForPilot(code):null;if(u&&u.id)ids[u.id]=1;});});}catch(e){}
   try{
-    var roster=S.roster||{},off={rdo:1,leave:1,ul:1,sick:1,'':1},deskSt={desk:1,admin_duty:1,called_in:1};
+    var roster=S.roster||{},off={rdo:1,leave:1,ul:1,sick:1,'':1};
     (S.users||[]).forEach(function(u){
       if(!u||!u.id||u.inactive)return;
       var st=(typeof _rGetStatus==='function')?_rGetStatus(u,date,roster):'';
-      if(deskSt[st]||(u.role==='desk'&&!off[st]))ids[u.id]=1;
+      if(st&&!off[st])ids[u.id]=1;   // any non-off, rostered status → notify
     });
   }catch(e){}
   if(excludeId&&ids[excludeId])delete ids[excludeId];
@@ -21406,10 +21415,12 @@ function renderDataRecording(){
   if(!S._maintLoaded&&typeof window.ensureMaintenance==='function')window.ensureMaintenance();
   var tab=S._drTab||'aircraft';
   var tabs=[{lbl:'Aircraft records',on:tab==='aircraft',onclick:"S._drTab='aircraft';render()"},
-            {lbl:'Statistics',on:tab==='stats',onclick:"S._drTab='stats';render()"},
+            {lbl:'Flight stats',on:tab==='stats',onclick:"S._drTab='stats';render()"},
+            {lbl:'Booking stats',on:tab==='bookingstats',onclick:"S._drTab='bookingstats';render()"},
             {lbl:'Records',on:tab==='records',onclick:"S._drTab='records';render()"}];
   var h=(typeof _tier2==='function')?_tier2(tabs):'';
   if(tab==='stats')return h+_frRenderStats();
+  if(tab==='bookingstats')return h+((typeof renderAdminStatistics==='function')?renderAdminStatistics():'');
   if(tab==='records')return h+_frRenderBrowse();
   return h+_frRenderTodayRecord((S.user&&S.user.id)||'');
 }

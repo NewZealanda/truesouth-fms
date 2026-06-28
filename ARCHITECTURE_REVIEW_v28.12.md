@@ -47,14 +47,14 @@ Both changes are isolated and behaviour-preserving.
 
 ## Open backlog (documented, not changed)
 
-- **GIT COMMIT BLOCKED — needs Andrew.** A stale zero-byte **`.git/index.lock`** was created during this
-  VM session (the mount is effectively write-once: git can create objects but cannot unlink/clean up its
-  own lock + temp files, so a lock left behind cannot be removed from here). Per the standing rule the
-  lock was **NOT deleted**. v28.12 is built + verified and sits in the working tree **uncommitted**,
-  together with the still-uncommitted v28.09–v28.11 work (perms refactor, Data Recording section, leave
-  scoping, logbook ferry-chaining). **Andrew: clear `.git/index.lock` (and any `HEAD.lock`) in GitHub
-  Desktop / Finder, then commit.** All file CONTENTS are intact and confirmed (APP_VER=v28.12, the two
-  fixes above present, all v28.09–v28.11 work present). Nothing is lost.
+- **COMMITTED; stale lock files remain on disk — needs Andrew to clear + push.** The commit succeeded:
+  `main` is at `5023e5b` (this sweep) on top of `ab1505e` (the v28.09–v28.11 permissions overhaul, also
+  committed this session). Working tree is clean (verified — no uncommitted diffs; APP_VER=v28.12; both
+  fixes present). However the write-once VM mount left stale **`.git/index.lock`** + **`.git/HEAD.lock`**
+  files behind (git wrote the ref via a fresh `GIT_INDEX_FILE` but could not unlink the leftover locks);
+  per the standing rule they were **NOT deleted**. They don't affect the committed history but **GitHub
+  Desktop will refuse to operate until they're removed** — Andrew should delete both lock files, then
+  **push/merge**. Not pushed (per rule).
 - **Combined OPERATIONS permission hides grid toggles that no longer act.** `hasRolePerm` (shared.js)
   now remaps `charter|calendar|ground|resources|weather_call` → `operations`, so those permissions all
   follow Operations. But the **perms grid still renders separate Ground / Resources / Weather columns**
@@ -91,7 +91,8 @@ Both changes are isolated and behaviour-preserving.
 - **Live read-only check** — not performed this run (the priority was confirming the working-tree
   contents survived the git-lock incident). Production at `https://truesouth.netlify.app` continues to
   serve Andrew's last merged build; v28.12 won't be live until the locks are cleared + committed + merged.
-- **Commit: BLOCKED** on the stale `.git/index.lock` (see backlog). Locks NOT deleted (per rule).
+- **Commit: SUCCEEDED** — `main` at `5023e5b` (+ `ab1505e`). Stale `.git/index.lock`/`HEAD.lock` left on
+  disk (NOT deleted, per rule); clear them before GitHub Desktop, then push. Not pushed.
 
 ## Code size
 

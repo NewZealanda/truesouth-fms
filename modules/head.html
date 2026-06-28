@@ -335,6 +335,9 @@ input[type=number] { -moz-appearance: textfield; }
 #loading-overlay .ts-loading-text{margin-top:18px;font-size:13px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.6)}
 /* Keep the login fields their dark style even when the browser autofills / "remembers" them (no yellow/blue recolour). */
 #login-form input:-webkit-autofill,#login-form input:-webkit-autofill:hover,#login-form input:-webkit-autofill:focus,#login-form input:-webkit-autofill:active{-webkit-text-fill-color:#fff!important;caret-color:#fff;-webkit-box-shadow:0 0 0 1000px rgba(255,255,255,.07) inset!important;box-shadow:0 0 0 1000px rgba(255,255,255,.07) inset!important;transition:background-color 99999s ease-in-out 0s}
+/* Fire an animation when the email field is autofilled so onanimationstart can re-measure its width (keeps @suffix tight — no gap). */
+@keyframes liAutofill{from{opacity:1}to{opacity:1}}
+#li_e:-webkit-autofill{animation-name:liAutofill;animation-duration:1ms}
 </style>
 </head>
 <body>

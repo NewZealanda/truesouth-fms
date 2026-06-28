@@ -1506,18 +1506,18 @@ function _wxCallReasons(c){return (c&&c.reasons&&c.reasons.length)?c.reasons:((c
 window.wxOpenDep=function(dep){if(S._wxOpen===dep){S._wxOpen=null;}else{S._wxOpen=dep;var c=_wxCall(dep)||{};S._wxDraft={dep:dep,reasons:_wxCallReasons(c).slice(),nextDay:c.nextDay||'',comment:c.comment||''};}render();};
 window.wxToggleReason=function(r){S._wxDraft=S._wxDraft||{};var a=S._wxDraft.reasons||(S._wxDraft.reasons=[]);var i=a.indexOf(r);if(i>=0)a.splice(i,1);else a.push(r);render();};   // multi-select, toggleable
 window.wxDraftSet=function(field,val){S._wxDraft=S._wxDraft||{};S._wxDraft[field]=val;if(field!=='comment')render();};   // comment via oninput → no render (keep focus)
-// Everyone who should hear a weather call was made for the day: the OTHER PICs flying today + the
-// rostered desk staff (status desk/admin/called-in, or role 'desk' on a working day). Excludes the
-// person who made the call. Returns user ids.
+// Everyone who should hear a weather call was made for the day: the OTHER PICs flying today + EVERY
+// active user ROSTERED ON for the day (any working status — i.e. NOT RDO/leave/unpaid/sick/unrostered),
+// regardless of role. Excludes the person who made the call. Returns user ids.
 function _wxBroadcastRecipients(date,excludeId){
   var ids={};
   try{(_wxDepartures(date)||[]).forEach(function(dep){(dep.pics||[]).forEach(function(code){var u=(typeof _rzWxUserForPilot==='function')?_rzWxUserForPilot(code):null;if(u&&u.id)ids[u.id]=1;});});}catch(e){}
   try{
-    var roster=S.roster||{},off={rdo:1,leave:1,ul:1,sick:1,'':1},deskSt={desk:1,admin_duty:1,called_in:1};
+    var roster=S.roster||{},off={rdo:1,leave:1,ul:1,sick:1,'':1};
     (S.users||[]).forEach(function(u){
       if(!u||!u.id||u.inactive)return;
       var st=(typeof _rGetStatus==='function')?_rGetStatus(u,date,roster):'';
-      if(deskSt[st]||(u.role==='desk'&&!off[st]))ids[u.id]=1;
+      if(st&&!off[st])ids[u.id]=1;   // any non-off, rostered status → notify
     });
   }catch(e){}
   if(excludeId&&ids[excludeId])delete ids[excludeId];

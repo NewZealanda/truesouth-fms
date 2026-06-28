@@ -469,6 +469,7 @@ function _notifTargetLabel(n){
     case 'maintenance':     return 'Maintenance';
     case 'leave_submitted': return 'Approvals';
     case 'scheduling':      return 'Calendar';
+    case 'weather_call':    return 'Weather';
     default: return ((n&&n.type)||'').indexOf('leave_')===0 ? 'My Leave' : '';
   }
 }
