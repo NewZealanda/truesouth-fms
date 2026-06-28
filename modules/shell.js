@@ -150,7 +150,7 @@ function _sectionAllowed(sec){
     case 'leave':       return hasRolePerm('leave');
     case 'rezdy':       return hasRolePerm('rezdy');
     case 'calendar':    return hasRolePerm('calendar');
-    case 'settings':    return hasRolePerm('admin_users')||hasRolePerm('admin_crew');
+    case 'settings':    return hasRolePerm('settings');
     case 'operations':  return hasRolePerm('operations');
     case 'startday':    return hasRolePerm('operations'); // Start of Day retired → render dispatch redirects to Today
     case 'today':       return hasRolePerm('operations'); // Today-at-a-glance home rides the operations perm
@@ -165,7 +165,7 @@ function _sectionAllowed(sec){
     case 'ground':      return hasRolePerm('ground')||!!(S.user&&S.user.superAdmin); // tier-2 tabs incl. Vehicle Prestart
     case 'trainingmod': return hasRolePerm('training_mod')||!!(S.user&&S.user.superAdmin);
     case 'logbook':     return !!S.user; // every signed-in pilot has a personal logbook
-    case 'pilotbag':    return _pilotBagTabDefs().length>0; // bundles Flight Record / Logbooks / Flight & Duty
+    case 'pilotbag':    return hasRolePerm('pilotbag')&&_pilotBagTabDefs().length>0; // bundles Flight Record / Logbooks / Flight & Duty
     default:            return true;
   }
 }
@@ -682,6 +682,7 @@ function renderDrawer(){
   const role=S.user?.role||'desk';
   const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
   const _isAdminPlus=role==='superadmin'||role==='admin';
+  const _isSuper=role==='superadmin'||!!(S.user&&S.user.superAdmin);
   // Nav visibility is driven by the permission grid for EVERY role (superadmin is all-true via
   // DEFAULT_ROLE_PERMS; admin follows its grid row). No blanket admin override on perm-backed items.
   const _canOps=hasRolePerm('operations');
@@ -748,7 +749,7 @@ function renderDrawer(){
   }}
   // Pilot Bag (Flight Record / Logbooks / Flight & Duty) — pinned right under Operations.
   {var _pbDefs=_pilotBagTabDefs();
-   if(_pbDefs.length){
+   if(_pbDefs.length&&hasRolePerm('pilotbag')){
     h+=_secBtn('Pilot Bag','pilotbag','🎒');
     if(_isExp('pilotbag')){
       var _pbCur=_pilotBagTab();
@@ -768,6 +769,7 @@ function renderDrawer(){
     if(_canRoster)h+=_subBtn('Roster',sec==='roster',"S._drawerOpen=false;S.section='roster';render()",true);
     if(_canLeave)h+=_subBtn('My Leave',_lvActive&&(!S._leave||S._leave.tab==='my'),"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='my';render()");
     if(_canApproveLeaveNav)h+=_subBtn('Approvals',_lvActive&&S._leave&&S._leave.tab==='approvals',"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='approvals';render()");
+    if(hasRolePerm('reports_to'))h+=_subBtn('Reports to',sec==='settings'&&(S.admin||{}).section==='reportsto',"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='reportsto';window.setTab('admin')");
   }}}
   if(_canMaint){
     h+=_secBtn('Maintenance','maintenance','🔧');
@@ -804,22 +806,19 @@ function renderDrawer(){
      if(hasRolePerm(x.p)||(S.user&&S.user.superAdmin)){var _onPh=sec===x.s;
        h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+x.s+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onPh?'rgba(255,255,255,.12)':'transparent')+';color:'+(_onPh?'#fff':'rgba(255,255,255,.6)')+';font-size:14px;font-weight:'+(_onPh?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+x.i+'</span><span style="flex:1">'+x.l+'</span><span style="font-size:9px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.55);padding:1px 6px;border-radius:8px">soon</span></button>';
      }});}
-  // Settings pinned last (config / admin).
+  // Settings pinned last (config / admin). Settings access is its own permission (default on).
   {var _canUsers=hasRolePerm('admin_users');
    var _canCrew=hasRolePerm('admin_crew');
-   if(_canUsers||_canCrew){
+   if(hasRolePerm('settings')){
     h+=_secBtn('Settings','settings','⚙️');
     if(_isExp('settings')){
       var adSec=(S.admin||{}).section||'people';
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
-      h+=_sn('People','people');
+      if(_canCrew)h+=_sn('People','people');
       if(_canUsers)h+=_sn('Permissions','perms');
-      if(_canUsers)h+=_sn('Reports to','reportsto');
       if(hasRolePerm('operations'))h+=_sn('Operations','operations');
-      if(_isAdminPlus){
-        h+=_sn('Drive','gdrive');
-        h+=_sn('Statistics','statistics');
-      }
+      if(_isAdminPlus)h+=_sn('Statistics','statistics');
+      if(_isSuper)h+=_sn('Drive','gdrive');
       if(hasRolePerm('audit'))h+=_sn('Audit','audit');
     }
    }
@@ -854,19 +853,20 @@ function renderOpsSubTabs(){
 
 function renderSettingsSubTabs(){
   // Settings sub-tabs follow the permission grid for every role (consistent with the drawer).
+  if(!hasRolePerm('settings')) return '';
   const _canUsers=hasRolePerm('admin_users');
   const _canCrew=hasRolePerm('admin_crew');
   const _adminPlus=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
-  if(!_canUsers&&!_canCrew&&!_adminPlus) return '';
+  const _isSuper=S.user?.role==='superadmin'||!!(S.user&&S.user.superAdmin);
   const ad=S.admin||{};
   const cur=ad.section||'people';
   const sections=[];
-  if(_canUsers||_canCrew)sections.push({id:'people',lbl:'People'});
+  if(_canCrew)sections.push({id:'people',lbl:'People'});
   if(_canUsers)sections.push({id:'perms',lbl:'Permissions'});
-  if(_canUsers)sections.push({id:'reportsto',lbl:'Reports to'});
   if(hasRolePerm('operations'))sections.push({id:'operations',lbl:'Operations'});
-  // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20.
-  if(_adminPlus)sections.push({id:'gdrive',lbl:'Drive'},{id:'statistics',lbl:'Statistics'});
+  // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20. (Reports to moved to Roster.)
+  if(_adminPlus)sections.push({id:'statistics',lbl:'Statistics'});
+  if(_isSuper)sections.push({id:'gdrive',lbl:'Drive'});
   if(hasRolePerm('audit'))sections.push({id:'audit',lbl:'Audit'});
   return _tier2(sections.map(function(s){return {lbl:s.lbl,on:cur===s.id,onclick:"if(!S.admin)S.admin={};S.admin.section='"+s.id+"';render()"};}));
 }

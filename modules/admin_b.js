@@ -1497,12 +1497,8 @@ function renderAdminPerms(){
   // Permissions grouped by area so the (wide) grid is easy to scan and find things in.
   var PERM_GROUPS=[
     {cat:'Operations', col:'#2563eb', perms:[
-      {k:'operations',    lbl:'Ops',        tip:'Access to flight operations (Bookings, Seatmap, Loadsheets, Charter)'},
-      {k:'calendar',      lbl:'Calendar',   tip:'Access the Calendar (the first tab in Operations) — needs Ops too'},
-      {k:'ground',        lbl:'Ground',     tip:'Access the Ground section — Transport, Pickups & My Pickups'},
-      {k:'sign_loadsheet',lbl:'Sign',       tip:'Sign off on loadsheets as PIC'},
-      {k:'weather_call',  lbl:'Weather',    tip:'Record per-departure weather calls (any pilot/ops can)'},
-      {k:'resources',     lbl:'Resources',  tip:'Access the Resource board + cost-aware aircraft/pilot allocation'}
+      {k:'operations',    lbl:'Ops',        tip:'Combined operational access: Bookings, Seatmap, Loadsheets, Charter, Calendar, Ground/Transport, Resources board & Weather calls'},
+      {k:'sign_loadsheet',lbl:'Sign',       tip:'Sign off on loadsheets as PIC'}
     ]},
     {cat:'Maintenance', col:'#a78bfa', perms:[
       {k:'maintenance',   lbl:'Maint',      tip:'Access to the maintenance section'},
@@ -1512,9 +1508,11 @@ function renderAdminPerms(){
       {k:'roster_leave',  lbl:'Roster & Leave', tip:'View the roster and submit/view own leave requests'},
       {k:'roster_edit',   lbl:'Roster Edit',    tip:'Edit the roster and build patterns (otherwise view-only)'},
       {k:'leave_approve', lbl:'Approvals',      tip:'Approve or decline leave requests from staff'},
+      {k:'reports_to',    lbl:'Reports to',     tip:'Access the Reports-to org chart (set who reports to whom) under Roster'},
       {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'}
     ]},
     {cat:'Pilot', col:'#22c55e', perms:[
+      {k:'pilotbag',      lbl:'Pilot Bag',   tip:'Access the Pilot Bag section (Flight Record, Logbooks, Flight & Duty)'},
       {k:'flightduty',    lbl:'F&D',         tip:'Access Flight & Duty — own record + team summary'},
       {k:'flightduty_manage',lbl:'F&D Mgr',  tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'},
       {k:'flightrecord',  lbl:'Flt Record',  tip:'Access the Flight Record (log flights, aircraft records)'},
@@ -1522,9 +1520,8 @@ function renderAdminPerms(){
       {k:'data_recording',lbl:'Data Rec',  tip:'Access the Data Recording section — aircraft records, statistics & the full records table'}
     ]},
     {cat:'Admin & System', col:'#ef4444', perms:[
+      {k:'settings',      lbl:'Settings',    tip:'Access the Settings section (sub-pages still gated individually)'},
       {k:'admin_crew',    lbl:'Crew',        tip:'View and edit crew profiles and endorsements'},
-      {k:'admin_users',   lbl:'Users',       tip:'Manage user accounts, roles and passwords'},
-      {k:'audit',         lbl:'Audit',       tip:'View the system audit log'},
       {k:'businessplan',  lbl:'Biz Plan',    tip:'View the confidential TSF Business Plan'}
     ]},
     {cat:'Coming soon', col:'#64748b', perms:[
@@ -1572,6 +1569,9 @@ function renderAdminPerms(){
         var r1=over['roster']!==undefined?over['roster']:base['roster']||false;
         var r2=over['leave']!==undefined?over['leave']:base['leave']||false;
         eff=r1||r2;
+      } else if(col.k==='settings'||col.k==='pilotbag'){
+        // Unlocked by default for every role — show ticked unless explicitly turned off.
+        eff=over[col.k]!==undefined?over[col.k]:(base[col.k]!==undefined?base[col.k]:true);
       } else {
         eff=over[col.k]!==undefined?over[col.k]:base[col.k]||false;
       }

@@ -841,9 +841,9 @@ async function sbMergeSave(key, localVal, applyFn){
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true, data_recording:true},
-  admin:       {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true, data_recording:true},
-  cx_manager:  {operations:true,weather_call:true,resources:true, calendar:true,charter:false,ground:true, maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false, data_recording:true},
+  superadmin:  {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true, data_recording:true, reports_to:true},
+  admin:       {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true, data_recording:true, reports_to:true},
+  cx_manager:  {operations:true,weather_call:true,resources:true, calendar:true,charter:false,ground:true, maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false, data_recording:true, reports_to:true},
   pilot:       {operations:true,weather_call:true,resources:true, calendar:true,charter:false,ground:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true, rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
   desk:        {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
   maint:       {operations:false,calendar:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false,rezdy:false, pay_week:false},
@@ -852,7 +852,17 @@ const DEFAULT_ROLE_PERMS={
   accounts: {operations:false,calendar:false,charter:false,maintenance:false,roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:true},
   marketing: {operations:false,calendar:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false}
 };
-function hasRolePerm(perm){if(perm==='charter')perm='operations'; /* charter access now follows Operations */ const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
+function hasRolePerm(perm){
+  const r=S.user?.role||'desk';const _sa=!!(S.user&&(r==='superadmin'||S.user.superAdmin));
+  // Hardcoded (no longer per-role configurable): user/role/password management = admins; audit = superadmin.
+  if(perm==='admin_users')return r==='admin'||_sa;
+  if(perm==='audit')return _sa;
+  // Settings + Pilot Bag access: unlocked to everyone by default; turn OFF per-role in the grid to lock.
+  if(perm==='settings')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].settings!==undefined)?!!S.rolePerms[r].settings:true;
+  if(perm==='pilotbag')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].pilotbag!==undefined)?!!S.rolePerms[r].pilotbag:true;
+  // Combined OPERATIONS permission: calendar, ground, resources, weather (and charter) all follow Operations.
+  if(perm==='charter'||perm==='calendar'||perm==='ground'||perm==='resources'||perm==='weather_call')perm='operations';
+  const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
 // Flight / PIC eligibility is derived from a crew member's AIRCRAFT APPROVALS (endorsements)
 // in their profile — there is no separate "PIC eligible" flag. Anyone approved on at least
 // one aircraft can fly / act as PIC. Resolves the user's crew record by name/linkedCrew.
@@ -979,7 +989,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.11';
+const APP_VER='v28.12';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3557,7 +3567,7 @@ function _sectionAllowed(sec){
     case 'leave':       return hasRolePerm('leave');
     case 'rezdy':       return hasRolePerm('rezdy');
     case 'calendar':    return hasRolePerm('calendar');
-    case 'settings':    return hasRolePerm('admin_users')||hasRolePerm('admin_crew');
+    case 'settings':    return hasRolePerm('settings');
     case 'operations':  return hasRolePerm('operations');
     case 'startday':    return hasRolePerm('operations'); // Start of Day retired → render dispatch redirects to Today
     case 'today':       return hasRolePerm('operations'); // Today-at-a-glance home rides the operations perm
@@ -3572,7 +3582,7 @@ function _sectionAllowed(sec){
     case 'ground':      return hasRolePerm('ground')||!!(S.user&&S.user.superAdmin); // tier-2 tabs incl. Vehicle Prestart
     case 'trainingmod': return hasRolePerm('training_mod')||!!(S.user&&S.user.superAdmin);
     case 'logbook':     return !!S.user; // every signed-in pilot has a personal logbook
-    case 'pilotbag':    return _pilotBagTabDefs().length>0; // bundles Flight Record / Logbooks / Flight & Duty
+    case 'pilotbag':    return hasRolePerm('pilotbag')&&_pilotBagTabDefs().length>0; // bundles Flight Record / Logbooks / Flight & Duty
     default:            return true;
   }
 }
@@ -4089,6 +4099,7 @@ function renderDrawer(){
   const role=S.user?.role||'desk';
   const _navPerms=S.rolePerms?.[role]||DEFAULT_ROLE_PERMS[role]||{};
   const _isAdminPlus=role==='superadmin'||role==='admin';
+  const _isSuper=role==='superadmin'||!!(S.user&&S.user.superAdmin);
   // Nav visibility is driven by the permission grid for EVERY role (superadmin is all-true via
   // DEFAULT_ROLE_PERMS; admin follows its grid row). No blanket admin override on perm-backed items.
   const _canOps=hasRolePerm('operations');
@@ -4155,7 +4166,7 @@ function renderDrawer(){
   }}
   // Pilot Bag (Flight Record / Logbooks / Flight & Duty) — pinned right under Operations.
   {var _pbDefs=_pilotBagTabDefs();
-   if(_pbDefs.length){
+   if(_pbDefs.length&&hasRolePerm('pilotbag')){
     h+=_secBtn('Pilot Bag','pilotbag','🎒');
     if(_isExp('pilotbag')){
       var _pbCur=_pilotBagTab();
@@ -4175,6 +4186,7 @@ function renderDrawer(){
     if(_canRoster)h+=_subBtn('Roster',sec==='roster',"S._drawerOpen=false;S.section='roster';render()",true);
     if(_canLeave)h+=_subBtn('My Leave',_lvActive&&(!S._leave||S._leave.tab==='my'),"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='my';render()");
     if(_canApproveLeaveNav)h+=_subBtn('Approvals',_lvActive&&S._leave&&S._leave.tab==='approvals',"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='approvals';render()");
+    if(hasRolePerm('reports_to'))h+=_subBtn('Reports to',sec==='settings'&&(S.admin||{}).section==='reportsto',"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='reportsto';window.setTab('admin')");
   }}}
   if(_canMaint){
     h+=_secBtn('Maintenance','maintenance','🔧');
@@ -4211,22 +4223,19 @@ function renderDrawer(){
      if(hasRolePerm(x.p)||(S.user&&S.user.superAdmin)){var _onPh=sec===x.s;
        h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+x.s+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onPh?'rgba(255,255,255,.12)':'transparent')+';color:'+(_onPh?'#fff':'rgba(255,255,255,.6)')+';font-size:14px;font-weight:'+(_onPh?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+x.i+'</span><span style="flex:1">'+x.l+'</span><span style="font-size:9px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.55);padding:1px 6px;border-radius:8px">soon</span></button>';
      }});}
-  // Settings pinned last (config / admin).
+  // Settings pinned last (config / admin). Settings access is its own permission (default on).
   {var _canUsers=hasRolePerm('admin_users');
    var _canCrew=hasRolePerm('admin_crew');
-   if(_canUsers||_canCrew){
+   if(hasRolePerm('settings')){
     h+=_secBtn('Settings','settings','⚙️');
     if(_isExp('settings')){
       var adSec=(S.admin||{}).section||'people';
       var _sn=function(lbl,id){return _subBtn(lbl,sec==='settings'&&adSec===id,"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='"+id+"';window.setTab('admin')");};
-      h+=_sn('People','people');
+      if(_canCrew)h+=_sn('People','people');
       if(_canUsers)h+=_sn('Permissions','perms');
-      if(_canUsers)h+=_sn('Reports to','reportsto');
       if(hasRolePerm('operations'))h+=_sn('Operations','operations');
-      if(_isAdminPlus){
-        h+=_sn('Drive','gdrive');
-        h+=_sn('Statistics','statistics');
-      }
+      if(_isAdminPlus)h+=_sn('Statistics','statistics');
+      if(_isSuper)h+=_sn('Drive','gdrive');
       if(hasRolePerm('audit'))h+=_sn('Audit','audit');
     }
    }
@@ -4261,19 +4270,20 @@ function renderOpsSubTabs(){
 
 function renderSettingsSubTabs(){
   // Settings sub-tabs follow the permission grid for every role (consistent with the drawer).
+  if(!hasRolePerm('settings')) return '';
   const _canUsers=hasRolePerm('admin_users');
   const _canCrew=hasRolePerm('admin_crew');
   const _adminPlus=S.user?.role==='admin'||S.user?.role==='superadmin'||S.user?.superAdmin;
-  if(!_canUsers&&!_canCrew&&!_adminPlus) return '';
+  const _isSuper=S.user?.role==='superadmin'||!!(S.user&&S.user.superAdmin);
   const ad=S.admin||{};
   const cur=ad.section||'people';
   const sections=[];
-  if(_canUsers||_canCrew)sections.push({id:'people',lbl:'People'});
+  if(_canCrew)sections.push({id:'people',lbl:'People'});
   if(_canUsers)sections.push({id:'perms',lbl:'Permissions'});
-  if(_canUsers)sections.push({id:'reportsto',lbl:'Reports to'});
   if(hasRolePerm('operations'))sections.push({id:'operations',lbl:'Operations'});
-  // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20.
-  if(_adminPlus)sections.push({id:'gdrive',lbl:'Drive'},{id:'statistics',lbl:'Statistics'});
+  // Aerodromes + Fuels moved INTO Settings ▸ Operations (tier-3) in v24.20. (Reports to moved to Roster.)
+  if(_adminPlus)sections.push({id:'statistics',lbl:'Statistics'});
+  if(_isSuper)sections.push({id:'gdrive',lbl:'Drive'});
   if(hasRolePerm('audit'))sections.push({id:'audit',lbl:'Audit'});
   return _tier2(sections.map(function(s){return {lbl:s.lbl,on:cur===s.id,onclick:"if(!S.admin)S.admin={};S.admin.section='"+s.id+"';render()"};}));
 }
@@ -6280,6 +6290,12 @@ function renderAdmin(){
   // Settings ▸ Operations (operations-gated, separate from the admin_users/admin_crew tabs).
   if(((S.admin||{}).section)==='operations'){
     if(typeof hasRolePerm==='function'&&hasRolePerm('operations')&&typeof renderAdminOperations==='function')return renderAdminOperations();
+    if(!S.admin)S.admin={};S.admin.section='people';
+  }
+  // Reports-to now lives under the Roster nav — reachable by anyone with the reports_to permission,
+  // independent of admin_users (its own gate).
+  if(((S.admin||{}).section)==='reportsto'){
+    if(typeof hasRolePerm==='function'&&hasRolePerm('reports_to')&&typeof renderReportsTo==='function')return renderReportsTo();
     if(!S.admin)S.admin={};S.admin.section='people';
   }
   // Non-admin: the permission grid governs what they see. admin_users can reach the full
@@ -9709,12 +9725,8 @@ function renderAdminPerms(){
   // Permissions grouped by area so the (wide) grid is easy to scan and find things in.
   var PERM_GROUPS=[
     {cat:'Operations', col:'#2563eb', perms:[
-      {k:'operations',    lbl:'Ops',        tip:'Access to flight operations (Bookings, Seatmap, Loadsheets, Charter)'},
-      {k:'calendar',      lbl:'Calendar',   tip:'Access the Calendar (the first tab in Operations) — needs Ops too'},
-      {k:'ground',        lbl:'Ground',     tip:'Access the Ground section — Transport, Pickups & My Pickups'},
-      {k:'sign_loadsheet',lbl:'Sign',       tip:'Sign off on loadsheets as PIC'},
-      {k:'weather_call',  lbl:'Weather',    tip:'Record per-departure weather calls (any pilot/ops can)'},
-      {k:'resources',     lbl:'Resources',  tip:'Access the Resource board + cost-aware aircraft/pilot allocation'}
+      {k:'operations',    lbl:'Ops',        tip:'Combined operational access: Bookings, Seatmap, Loadsheets, Charter, Calendar, Ground/Transport, Resources board & Weather calls'},
+      {k:'sign_loadsheet',lbl:'Sign',       tip:'Sign off on loadsheets as PIC'}
     ]},
     {cat:'Maintenance', col:'#a78bfa', perms:[
       {k:'maintenance',   lbl:'Maint',      tip:'Access to the maintenance section'},
@@ -9724,9 +9736,11 @@ function renderAdminPerms(){
       {k:'roster_leave',  lbl:'Roster & Leave', tip:'View the roster and submit/view own leave requests'},
       {k:'roster_edit',   lbl:'Roster Edit',    tip:'Edit the roster and build patterns (otherwise view-only)'},
       {k:'leave_approve', lbl:'Approvals',      tip:'Approve or decline leave requests from staff'},
+      {k:'reports_to',    lbl:'Reports to',     tip:'Access the Reports-to org chart (set who reports to whom) under Roster'},
       {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'}
     ]},
     {cat:'Pilot', col:'#22c55e', perms:[
+      {k:'pilotbag',      lbl:'Pilot Bag',   tip:'Access the Pilot Bag section (Flight Record, Logbooks, Flight & Duty)'},
       {k:'flightduty',    lbl:'F&D',         tip:'Access Flight & Duty — own record + team summary'},
       {k:'flightduty_manage',lbl:'F&D Mgr',  tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'},
       {k:'flightrecord',  lbl:'Flt Record',  tip:'Access the Flight Record (log flights, aircraft records)'},
@@ -9734,9 +9748,8 @@ function renderAdminPerms(){
       {k:'data_recording',lbl:'Data Rec',  tip:'Access the Data Recording section — aircraft records, statistics & the full records table'}
     ]},
     {cat:'Admin & System', col:'#ef4444', perms:[
+      {k:'settings',      lbl:'Settings',    tip:'Access the Settings section (sub-pages still gated individually)'},
       {k:'admin_crew',    lbl:'Crew',        tip:'View and edit crew profiles and endorsements'},
-      {k:'admin_users',   lbl:'Users',       tip:'Manage user accounts, roles and passwords'},
-      {k:'audit',         lbl:'Audit',       tip:'View the system audit log'},
       {k:'businessplan',  lbl:'Biz Plan',    tip:'View the confidential TSF Business Plan'}
     ]},
     {cat:'Coming soon', col:'#64748b', perms:[
@@ -9784,6 +9797,9 @@ function renderAdminPerms(){
         var r1=over['roster']!==undefined?over['roster']:base['roster']||false;
         var r2=over['leave']!==undefined?over['leave']:base['leave']||false;
         eff=r1||r2;
+      } else if(col.k==='settings'||col.k==='pilotbag'){
+        // Unlocked by default for every role — show ticked unless explicitly turned off.
+        eff=over[col.k]!==undefined?over[col.k]:(base[col.k]!==undefined?base[col.k]:true);
       } else {
         eff=over[col.k]!==undefined?over[col.k]:base[col.k]||false;
       }
@@ -14386,7 +14402,11 @@ function renderGround(){
 }
 // SETTINGS ▸ OPERATIONS — tier-3 operations settings (Pickup Locations for now; more to come).
 function renderAdminOperations(){
-  var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'vehicles',lbl:'🚐 Vehicles'},{id:'aerodromes',lbl:'🛬 Aerodromes'},{id:'fuels',lbl:'⛽ Fuels'},{id:'flightduty',lbl:'🕓 Flight & Duty'},{id:'scheduling',lbl:'💲 Scheduling'}];
+  // Pickup Locations + Aerodromes follow Operations (anyone with ops); Vehicles, Fuels, Flight & Duty
+  // and Scheduling are admin/superadmin only.
+  var _adminPlus=!!(S.user&&(S.user.role==='admin'||S.user.role==='superadmin'||S.user.superAdmin));
+  var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'aerodromes',lbl:'🛬 Aerodromes'}];
+  if(_adminPlus)tabs=tabs.concat([{id:'vehicles',lbl:'🚐 Vehicles'},{id:'fuels',lbl:'⛽ Fuels'},{id:'flightduty',lbl:'🕓 Flight & Duty'},{id:'scheduling',lbl:'💲 Scheduling'}]);
   var ids=tabs.map(function(t){return t.id;});
   var sub=(ids.indexOf(S._opsSettingsTab)>=0)?S._opsSettingsTab:'pickuplocs';S._opsSettingsTab=sub;
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+

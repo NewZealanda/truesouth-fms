@@ -500,9 +500,9 @@ async function sbMergeSave(key, localVal, applyFn){
 // ── Constants ──
 const AVGAS=0.72,LB=0.453592,JETA=0.8;
 const DEFAULT_ROLE_PERMS={
-  superadmin:  {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true, data_recording:true},
-  admin:       {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true, data_recording:true},
-  cx_manager:  {operations:true,weather_call:true,resources:true, calendar:true,charter:false,ground:true, maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false, data_recording:true},
+  superadmin:  {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:true, maint_bookings:true, sign_loadsheet:true, rezdy:true,  pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true, data_recording:true, reports_to:true},
+  admin:       {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:true, scratchpad:true, audit:false,maint_bookings:true, sign_loadsheet:true, rezdy:false, pay_week:true, flightduty:true, flightduty_manage:true, businessplan:true, flightrecord:true, flightrecord_manage:true, data_recording:true, reports_to:true},
+  cx_manager:  {operations:true,weather_call:true,resources:true, calendar:true,charter:false,ground:true, maintenance:false,roster:true, roster_edit:true, leave:true, leave_approve:true, admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false, data_recording:true, reports_to:true},
   pilot:       {operations:true,weather_call:true,resources:true, calendar:true,charter:false,ground:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:true, rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
   desk:        {operations:true,weather_call:true,resources:true, calendar:true,charter:true, ground:true, maintenance:true, roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:true, audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false, flightduty:true, flightduty_manage:false},
   maint:       {operations:false,calendar:false,charter:false,maintenance:true, roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:true,admin_users:false,scratchpad:false,audit:false,maint_bookings:true, sign_loadsheet:false,rezdy:false, pay_week:false},
@@ -511,7 +511,17 @@ const DEFAULT_ROLE_PERMS={
   accounts: {operations:false,calendar:false,charter:false,maintenance:false,roster:true, roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:true},
   marketing: {operations:false,calendar:false,charter:false,maintenance:false,roster:false,roster_edit:false,leave:true, leave_approve:false,admin_crew:false,admin_users:false,scratchpad:false,audit:false,maint_bookings:false,sign_loadsheet:false,rezdy:false, pay_week:false}
 };
-function hasRolePerm(perm){if(perm==='charter')perm='operations'; /* charter access now follows Operations */ const r=S.user?.role||'desk';const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
+function hasRolePerm(perm){
+  const r=S.user?.role||'desk';const _sa=!!(S.user&&(r==='superadmin'||S.user.superAdmin));
+  // Hardcoded (no longer per-role configurable): user/role/password management = admins; audit = superadmin.
+  if(perm==='admin_users')return r==='admin'||_sa;
+  if(perm==='audit')return _sa;
+  // Settings + Pilot Bag access: unlocked to everyone by default; turn OFF per-role in the grid to lock.
+  if(perm==='settings')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].settings!==undefined)?!!S.rolePerms[r].settings:true;
+  if(perm==='pilotbag')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].pilotbag!==undefined)?!!S.rolePerms[r].pilotbag:true;
+  // Combined OPERATIONS permission: calendar, ground, resources, weather (and charter) all follow Operations.
+  if(perm==='charter'||perm==='calendar'||perm==='ground'||perm==='resources'||perm==='weather_call')perm='operations';
+  const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
 // Flight / PIC eligibility is derived from a crew member's AIRCRAFT APPROVALS (endorsements)
 // in their profile — there is no separate "PIC eligible" flag. Anyone approved on at least
 // one aircraft can fly / act as PIC. Resolves the user's crew record by name/linkedCrew.
@@ -638,7 +648,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.11';
+const APP_VER='v28.12';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

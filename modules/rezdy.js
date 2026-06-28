@@ -753,7 +753,11 @@ function renderGround(){
 }
 // SETTINGS ▸ OPERATIONS — tier-3 operations settings (Pickup Locations for now; more to come).
 function renderAdminOperations(){
-  var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'vehicles',lbl:'🚐 Vehicles'},{id:'aerodromes',lbl:'🛬 Aerodromes'},{id:'fuels',lbl:'⛽ Fuels'},{id:'flightduty',lbl:'🕓 Flight & Duty'},{id:'scheduling',lbl:'💲 Scheduling'}];
+  // Pickup Locations + Aerodromes follow Operations (anyone with ops); Vehicles, Fuels, Flight & Duty
+  // and Scheduling are admin/superadmin only.
+  var _adminPlus=!!(S.user&&(S.user.role==='admin'||S.user.role==='superadmin'||S.user.superAdmin));
+  var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'aerodromes',lbl:'🛬 Aerodromes'}];
+  if(_adminPlus)tabs=tabs.concat([{id:'vehicles',lbl:'🚐 Vehicles'},{id:'fuels',lbl:'⛽ Fuels'},{id:'flightduty',lbl:'🕓 Flight & Duty'},{id:'scheduling',lbl:'💲 Scheduling'}]);
   var ids=tabs.map(function(t){return t.id;});
   var sub=(ids.indexOf(S._opsSettingsTab)>=0)?S._opsSettingsTab:'pickuplocs';S._opsSettingsTab=sub;
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+

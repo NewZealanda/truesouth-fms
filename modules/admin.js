@@ -10,6 +10,12 @@ function renderAdmin(){
     if(typeof hasRolePerm==='function'&&hasRolePerm('operations')&&typeof renderAdminOperations==='function')return renderAdminOperations();
     if(!S.admin)S.admin={};S.admin.section='people';
   }
+  // Reports-to now lives under the Roster nav — reachable by anyone with the reports_to permission,
+  // independent of admin_users (its own gate).
+  if(((S.admin||{}).section)==='reportsto'){
+    if(typeof hasRolePerm==='function'&&hasRolePerm('reports_to')&&typeof renderReportsTo==='function')return renderReportsTo();
+    if(!S.admin)S.admin={};S.admin.section='people';
+  }
   // Non-admin: the permission grid governs what they see. admin_users can reach the full
   // settings area; admin_crew alone gets People. Anything the section-router lands them on
   // that they lack permission for falls back to People (or a no-access note).
