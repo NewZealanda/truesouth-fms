@@ -979,7 +979,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.05';
+const APP_VER='v28.06';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -21036,15 +21036,15 @@ window.loadFlightRecords=async function(){
   try{if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_settings?key=eq.fr_settings&select=value',{headers:SH}).then(function(r){return r.ok?r.json():[];}).then(function(s){try{if(s&&s[0]&&s[0].value){S._frSettings=JSON.parse(s[0].value);if(typeof _sbSetBase==='function')_sbSetBase('fr_settings',S._frSettings);}}catch(e){}if(typeof safeRender==='function')safeRender();}).catch(function(){});}catch(e){}
   if(typeof _sbFetch!=='function'){if(typeof render==='function')render();return;}
   try{
-    // Pull ALL records (not just this pilot) so the per-aircraft Today's Record shows every PIC's
-    // flights. MUST paginate: PostgREST caps a plain select at 1000 rows, and with the legacy import
-    // there are 25k+ records — without paging, whole months/pilots silently vanish (the "gap" bug).
-    // Order by a UNIQUE key (id) so the page boundaries are STABLE: the legacy import gives every row
-    // the same updated_at, and paginating on a non-unique column skips/duplicates rows across pages
-    // (that's why a 2nd leg could go missing). id is the primary key → deterministic paging.
+    // Paginate (PostgREST caps a plain select at 1000) by a UNIQUE key (id) so page boundaries are
+    // STABLE — the legacy import gives every row the same updated_at, so paging on a non-unique column
+    // skips/duplicates rows. By DEFAULT load only the last 12 months (the 25k-row full history made the
+    // Records page slow); 'Load full history' (S._frLoadAll) lifts the window when older data is needed.
+    var _dd=new Date(),_cut=(_dd.getFullYear()-1)+'-'+String(_dd.getMonth()+1).padStart(2,'0')+'-'+String(_dd.getDate()).padStart(2,'0');
+    var _filt=S._frLoadAll?'':('&fr_date=gte.'+_cut);
     var rows=[],_pg=0,_PAGE=1000;
     while(_pg<80){
-      var _rr=await _sbFetch(SB+'/rest/v1/ts_flight_records?select=*&order=id.asc&limit='+_PAGE+'&offset='+(_pg*_PAGE),{headers:{...SH}});
+      var _rr=await _sbFetch(SB+'/rest/v1/ts_flight_records?select=*'+_filt+'&order=id.asc&limit='+_PAGE+'&offset='+(_pg*_PAGE),{headers:{...SH}});
       if(!_rr.ok){if(_pg===0)rows=null;break;}
       var _arr=await _rr.json();
       if(!Array.isArray(_arr)){if(_pg===0)rows=null;break;}
@@ -21057,11 +21057,17 @@ window.loadFlightRecords=async function(){
       // copy (e.g. a shutdown written OFFLINE and not yet synced). Replacing outright dropped that record,
       // which reset the next flight's start TTIS to the maintenance number — the airswitch bug. (v27.66)
       var _local=S._frData||{},_merged=d;
-      Object.keys(_local).forEach(function(id){var lr=_local[id],cr=d[id];if(!lr)return;if(!cr){_merged[id]=lr;}else if((lr.at||'')>(cr.at||'')){_merged[id]=lr;}});
+      Object.keys(_local).forEach(function(id){var lr=_local[id],cr=d[id];if(!lr)return;
+        if(!S._frLoadAll && String(lr.fr_date||'')<_cut)return;   // outside the 12-month window → drop the old cached row (keeps the page fast)
+        if(!cr){_merged[id]=lr;}else if((lr.at||'')>(cr.at||'')){_merged[id]=lr;}});
       S._frData=_merged;try{lsSet&&lsSet('ts_flight_records_cache',_merged);}catch(e){}}
   }catch(e){}
   if(typeof safeRender==='function')safeRender();
 };
+// Full history is NEVER loaded automatically (25k+ rows = slow) — only on this explicit request, e.g.
+// when an admin needs older data for a report. Reverts to the fast 12-month window with frLoad12mo.
+window.frLoadAll=function(){if(S._frLoadAll)return;S._frLoadAll=true;S._frLoaded=true;if(typeof toast==='function')toast('Loading full history… this can take a moment.','info');if(window.loadFlightRecords)window.loadFlightRecords();if(typeof render==='function')render();};
+window.frLoad12mo=function(){S._frLoadAll=false;S._frLoaded=true;if(window.loadFlightRecords)window.loadFlightRecords();if(typeof render==='function')render();};
 function _frSave(rec){
   S._frData=S._frData||{};S._frData[rec.id]=rec;
   try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}
@@ -21416,8 +21422,12 @@ function _frRenderBrowse(){
   all.forEach(function(r){var ftm=+r.flightTime||0;tot+=ftm;ldg+=(+r.landings||0);var ty=_frAcType(r.aircraft);if(ty==='C208B')tc+=ftm;else if(ty==='GA8')tg+=ftm;});
   var h='<div class="card">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><div class="st" style="margin:0">Records — browse &amp; edit</div>'+
-      '<button onclick="window.frbReset()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer">↺ Clear filters</button></div>'+
-    '<div style="font-size:11px;color:var(--text3);margin:4px 0 10px">Edit any cell to correct the database — each change saves immediately (aircraft TTIS totals are not auto-recalculated).</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      (S._frLoadAll
+        ? '<button onclick="window.frLoad12mo()" title="Back to the fast last-12-months view" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(124,58,237,.5);background:rgba(124,58,237,.1);color:#a78bfa;font-size:12px;font-weight:700;cursor:pointer">✓ Full history loaded — back to 12 months</button>'
+        : '<button onclick="window.frLoadAll()" title="Load every record incl. legacy history (slower) — for reports" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer">⤓ Load full history</button>')+
+      '<button onclick="window.frbReset()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer">↺ Clear filters</button></div></div>'+
+    '<div style="font-size:11px;color:var(--text3);margin:4px 0 10px">Edit any cell to correct the database — each change saves immediately (aircraft TTIS totals are not auto-recalculated). '+(S._frLoadAll?'<b style="color:#a78bfa">Showing full history.</b>':'<b>Showing the last 12 months</b> — use “Load full history” for older records.')+'</div>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
       '<input id="frbSearch" type="search" value="'+esc(S._frbQ||'')+'" onchange="window.frbSet(\'Q\',this.value)" placeholder="Search name / route / notes / aircraft…" style="flex:1;min-width:200px;font-size:16px;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--card2);color:var(--text)">'+
       fsel('Pilot',S._frbPilot||'',pilotOpts,'All pilots')+
@@ -21862,8 +21872,11 @@ function renderLogbook(){
   // Admin viewing a placeholder/imported pilot (no real account) → offer to name the whole logbook.
   var _canRename=mgr&&_frIsPlaceholderPilot(viewUid);
   h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><div><div style="font-size:17px;font-weight:800">'+_title+'</div>'+
-    '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+rows.length+' flights · total '+total.toFixed(1)+'h <span style="color:var(--text2)">(C208B '+ttC.toFixed(1)+'h · GA8 '+ttG.toFixed(1)+'h)</span></div></div>'+
+    '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+rows.length+' flights · total '+total.toFixed(1)+'h <span style="color:var(--text2)">(C208B '+ttC.toFixed(1)+'h · GA8 '+ttG.toFixed(1)+'h)</span>'+(S._frLoadAll?'':' · <span style="color:#a78bfa">last 12 months</span>')+'</div></div>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+    (S._frLoadAll
+      ? '<button onclick="window.frLoad12mo()" title="Back to the fast last-12-months view" style="padding:9px 14px;border-radius:10px;border:1px solid rgba(124,58,237,.5);background:rgba(124,58,237,.1);color:#a78bfa;font-size:13px;font-weight:700;cursor:pointer">✓ Full history · back to 12 mo</button>'
+      : '<button onclick="window.frLoadAll()" title="Load this pilot\'s full history (slower) — for a report" style="padding:9px 14px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">⤓ Full history</button>')+
     (_canRename?'<button onclick="window.frLbRenamePilot(\''+_frJs(viewUid)+'\')" title="Give this imported/placeholder logbook a name (applies to all its flights)" style="padding:9px 16px;border-radius:10px;border:1px solid rgba(124,58,237,.5);background:rgba(124,58,237,.1);color:#a78bfa;font-size:13px;font-weight:700;cursor:pointer">✎ Name this logbook</button>':'')+
     '<button onclick="window.frLbAdd()" style="padding:9px 16px;border-radius:10px;border:1px dashed var(--border2);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer">+ Add entry</button></div></div></div>';
   if(S._lbEditId&&(S._frData||{})[S._lbEditId]&&S._frData[S._lbEditId].user_id===viewUid)h+=_lbRenderEdit(S._frData[S._lbEditId]);
