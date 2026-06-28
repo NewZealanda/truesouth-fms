@@ -1,41 +1,43 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- TrueSouth FMS — De-duplicate flight records (legacy import vs app-made)
--- Run in the Supabase SQL editor. The legacy import (ids 'fr_imp_%') was added
--- ALONGSIDE the flight cards already made in the app, so any flight that existed
--- in BOTH sources is now duplicated (only the recent overlap, e.g. 26–27 Jun 2026).
+-- Run in the Supabase SQL editor.
 --
--- Plan: KEEP the app-made records (the pilots' real live entries); REMOVE the
--- imported duplicates that match an app record on date + aircraft + off-blocks.
+-- WHY THE TWO DON'T MATCH 1:1
+--   The legacy FlightTable logged each trip as ONE row (e.g. SDB 09:50→13:46 = a
+--   full out-and-back), while the app logs each LEG separately (09:50→10:24,
+--   13:12→13:47, …). So you can't pair them row-for-row.
+--
+-- APPROACH
+--   For any AIRCRAFT + DAY that the app also recorded, the app's live leg-by-leg
+--   entries are the source of truth — so delete the legacy ('fr_imp_%') rows for
+--   that aircraft+day and keep the app rows. Aircraft/days that ONLY exist in the
+--   legacy import are left untouched.
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- ── STEP 1 — REVIEW: list imported × app records on the same day + aircraft ──
--- Run this first and eyeball it. Rows where imp_off = app_off are clean duplicates
--- the delete below will remove. Rows where the times differ are NOT auto-deleted —
--- check those by hand (they may be the same flight logged with a slightly different
--- off-blocks time, or a genuinely different flight).
+-- ── STEP 1 — REVIEW: which aircraft+days will be cleaned, and the before/after counts ──
+-- imported_to_delete = legacy rows that will be removed; app_kept = app rows that stay.
 select i.fr_date, i.aircraft,
-       i.id  as imp_id,  i.off_blocks as imp_off,  i.on_blocks as imp_on,  i.pic_name as imp_pic,  i.flight_time as imp_h,
-       a.id  as app_id,  a.off_blocks as app_off,  a.on_blocks as app_on,  a.pic_name as app_pic,  a.flight_time as app_h
+       count(distinct i.id) as imported_to_delete,
+       (select count(*) from ts_flight_records a
+          where a.id not like 'fr_imp_%' and a.fr_date = i.fr_date and a.aircraft = i.aircraft) as app_kept
 from ts_flight_records i
-join ts_flight_records a
-  on a.fr_date = i.fr_date and a.aircraft = i.aircraft and a.id not like 'fr_imp_%'
 where i.id like 'fr_imp_%'
-order by i.fr_date desc, i.aircraft, i.off_blocks;
+  and exists (select 1 from ts_flight_records a
+                where a.id not like 'fr_imp_%' and a.fr_date = i.fr_date and a.aircraft = i.aircraft)
+group by i.fr_date, i.aircraft
+order by i.fr_date desc, i.aircraft;
 
--- ── STEP 2 — DELETE the matched imported duplicates (keeps the app records) ──
--- Only removes an imported row when an app-made row exists for the SAME
--- date + aircraft + off-blocks. Safe: a legacy-only flight (no app match) is kept.
+-- ── STEP 2 — DELETE the legacy rows for any aircraft+day the app already covers ──
 -- Uncomment to run:
 --
 -- delete from ts_flight_records i
--- using ts_flight_records a
 -- where i.id like 'fr_imp_%'
---   and a.id not like 'fr_imp_%'
---   and a.fr_date = i.fr_date
---   and a.aircraft = i.aircraft
---   and coalesce(a.off_blocks,'') = coalesce(i.off_blocks,'');
+--   and exists (select 1 from ts_flight_records a
+--                 where a.id not like 'fr_imp_%'
+--                   and a.fr_date = i.fr_date
+--                   and a.aircraft = i.aircraft);
 
--- ── STEP 3 — VERIFY: should now return NO rows (no remaining same-day overlap) ──
+-- ── STEP 3 — VERIFY: should return NO rows (no date still has both sources) ──
 -- select fr_date,
 --        count(*) filter (where id like 'fr_imp_%')     as imported,
 --        count(*) filter (where id not like 'fr_imp_%') as app_made
@@ -44,7 +46,3 @@ order by i.fr_date desc, i.aircraft, i.off_blocks;
 -- having count(*) filter (where id like 'fr_imp_%') > 0
 --    and count(*) filter (where id not like 'fr_imp_%') > 0
 -- order by fr_date desc;
---
--- Any leftover overlap = off-blocks times differ between the two sources. Open the
--- Records tab, filter to that date, and delete the imported ('Imported from legacy…')
--- row by hand with the 🗑 button.
