@@ -954,15 +954,25 @@ function renderLogbook(){
     var newMonth=mon!==lastMonth;lastMonth=mon;
     var dayTot=legs.reduce(function(s,r){return s+(+r.flightTime||0);},0);
     var open=!!S._lbDayOpen[d];
-    // Day summary = how many COMPLETE round trips from base. Count the OUTBOUND legs (QN→destination,
-    // excluding ferries) — each one is a full QN-DEST-QN trip; the return/ferry legs are the back-halves
-    // and are folded in. So a Milford day reads "QN-MF-QN ×4" even when some returns were logged as
-    // ferries (no route to pair with). Ferry-only / training days (no outbound) fall back to leg routes.
-    var _trips={},_torder=[];
-    legs.forEach(function(r){
-      var f=String(r.from||'').trim().toUpperCase(),t=String(r.to||'').trim().toUpperCase();
-      if(f==='QN'&&t&&t!=='QN'&&!/ferry/i.test(r.product||'')){var k='QN-'+t+'-QN';if(_torder.indexOf(k)<0)_torder.push(k);_trips[k]=(_trips[k]||0)+1;}
+    // Infer ferry direction by POSITION CHAINING (per aircraft, starting at base QN): a routed leg moves
+    // from→to; a leg with no route (a ferry) moves the aircraft from where it currently is to wherever
+    // the NEXT routed leg departs (or back to base if none). A complete trip = any leg that DEPARTS base
+    // to a destination (QN→X) — including an inferred empty ferry IN to collect pax. So "went in empty
+    // and picked up the flybacks" now counts as a trip.
+    var _base='QN',_eff={},_byAc={};
+    legs.forEach(function(r){(_byAc[r.aircraft]=_byAc[r.aircraft]||[]).push(r);});
+    Object.keys(_byAc).forEach(function(ac){
+      var ll=_byAc[ac].slice().sort(function(a,b){return _frMins(a.off)-_frMins(b.off);});
+      var pos=_base;
+      for(var i=0;i<ll.length;i++){var r=ll[i];
+        var f=String(r.from||'').trim().toUpperCase(),t=String(r.to||'').trim().toUpperCase();
+        if(f&&t){_eff[r.id]={from:f,to:t};pos=t;continue;}                    // routed leg → trust it
+        var dest=_base;for(var j=i+1;j<ll.length;j++){var nf=String(ll[j].from||'').trim().toUpperCase();if(nf){dest=nf;break;}}
+        _eff[r.id]={from:pos,to:dest,ferry:true};pos=dest;                     // ferry → current pos → next departure point
+      }
     });
+    var _trips={},_torder=[];
+    legs.forEach(function(r){var e=_eff[r.id];if(!e)return;if(e.from===_base&&e.to&&e.to!==_base){var k=_base+'-'+e.to+'-'+_base;if(_torder.indexOf(k)<0)_torder.push(k);_trips[k]=(_trips[k]||0)+1;}});
     var summary;
     if(_torder.length){
       summary=_torder.map(function(k){return _frEsc(k)+(_trips[k]>1?' ×'+_trips[k]:'');}).join(' · ');
@@ -990,7 +1000,7 @@ function renderLogbook(){
           '<td style="padding:4px 8px;font-size:11px;color:var(--text3)">'+_frEsc((r.off||'')+(r.on?'–'+r.on:''))+'</td>'+
           '<td style="padding:4px 8px;font-size:11px;font-weight:700;color:'+_frAcCol(r.aircraft)+'">'+_frEsc(_frAcShort(r.aircraft))+'</td>'+
           '<td style="padding:4px 8px;font-size:11px;color:var(--text2)">'+_frEsc(r.copilot?('+ '+r.copilot):'')+'</td>'+
-          '<td style="padding:4px 8px;font-size:11px;color:var(--text2)">'+_frEsc(_frRoute(r))+(r.note?' <span style="color:var(--text3)">— '+_frEsc(r.note)+'</span>':'')+'</td>'+
+          '<td style="padding:4px 8px;font-size:11px;color:var(--text2)">'+_frEsc((_eff[r.id]&&_eff[r.id].from&&_eff[r.id].to)?(_eff[r.id].from+'-'+_eff[r.id].to+(_eff[r.id].ferry?' (ferry)':'')):_frRoute(r))+(r.note?' <span style="color:var(--text3)">— '+_frEsc(r.note)+'</span>':'')+'</td>'+
           '<td style="padding:4px 8px;text-align:right;font-size:11px;font-weight:700">'+(r.flightTime!=null?(+r.flightTime).toFixed(1):'—')+'</td>'+
         '</tr>';
       });
