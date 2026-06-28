@@ -548,8 +548,25 @@ const _TS_LOGO='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAB7CAYAAACCR3
 function renderLoginInner(){
   return`<div style="width:100%;min-height:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:max(52px,calc(env(safe-area-inset-top) + 20px)) 20px max(40px,env(safe-area-inset-bottom))">
     <div style="width:100%;max-width:400px">
-      <div style="text-align:center;margin-bottom:32px">
+      <div style="text-align:center;margin-bottom:32px;position:relative">
         <img src="${_TS_LOGO}" alt="True South Flights" style="width:240px;max-width:80%;margin-bottom:16px">
+        <svg class="ts-login-plane" viewBox="0 0 70 44" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+          <g fill="currentColor">
+            <path d="M8 24 C12 20 18 19 26 19 L50 19 C58 19 62 21 64 24 C62 27 56 27 50 27 L20 27 C13 27 10 26 8 24 Z"/>
+            <path d="M8 24 L3 23 L3 25 Z"/>
+            <path d="M20 19 C22 15 26 14 32 14 L44 14 C48 14 50 16 51 19 Z"/>
+            <path d="M54 19 L58 7 L61 7 L63 19 Z"/>
+            <path d="M58 19 L69 17 L69 19 Z"/>
+            <rect x="22" y="12" width="30" height="2.4" rx="1.2"/>
+            <circle cx="19" cy="36" r="2.2"/>
+            <circle cx="43" cy="36" r="2.2"/>
+          </g>
+          <g stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round">
+            <path d="M28 14 L25 19"/><path d="M46 14 L49 19"/>
+            <path d="M22 27 L19 34"/><path d="M40 27 L43 34"/>
+            <path d="M3 18 L3 30"/>
+          </g>
+        </svg>
         <div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.45)">Flight Management System</div>
       </div>
       <div style="background:rgba(10,15,25,.92);border-radius:16px;border:1px solid rgba(255,255,255,.12);padding:32px 28px;box-shadow:0 24px 60px rgba(0,0,0,.5)">
