@@ -429,6 +429,27 @@ function _frbChip(on){return 'padding:5px 11px;border-radius:8px;border:1px soli
 var _FRB_IN='font-size:12px;padding:4px 5px;border:1px solid var(--border2);border-radius:5px;background:var(--card2);color:var(--text);text-align:center';
 function _frbInput(id,field,val,type,w){return '<input type="'+(type||'text')+'"'+(type==='number'?' step="0.1"':'')+' value="'+_frEsc(val==null?'':val)+'" onchange="window.frEditField(\''+id+'\',\''+field+'\',this.value)" style="'+_FRB_IN+';width:'+(w||60)+'px">';}
 function _frbSelectCell(id,field,cur,opts){return '<select onchange="window.frEditField(\''+id+'\',\''+field+'\',this.value)" style="'+_FRB_IN+'">'+opts.map(function(o){return '<option value="'+_frEsc(o)+'"'+(String(cur||'')===String(o)?' selected':'')+'>'+_frEsc(String(o).replace('ZK-',''))+'</option>';}).join('')+'</select>';}
+// All assignable pilots: real app accounts first, then any placeholder/imported pilots present in the
+// data (value = user_id). Reassigning a record's PIC re-homes it into that pilot's logbook.
+function _frPilotOptions(){
+  var out=[],seen={};
+  (S.users||[]).filter(function(u){return !u.inactive;}).slice().sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''));}).forEach(function(u){if(u.id&&!seen[u.id]){seen[u.id]=1;out.push({id:u.id,label:u.name||u.id,real:true});}});
+  var ph={};Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.user_id&&!seen[r.user_id])ph[r.user_id]=1;});
+  Object.keys(ph).map(function(id){return {id:id,label:_frPilotLabel(id),real:false};}).sort(function(a,b){return a.label.localeCompare(b.label);}).forEach(function(o){out.push(o);});
+  return out;
+}
+// Re-home a record to another pilot: set user_id, and sync pic_name (blank for a real account so it
+// shows the account name; keep the placeholder's name otherwise). Moves it into that pilot's logbook.
+window.frbSetPic=function(id,uid){var r=(S._frData||{})[id];if(!r)return;r.user_id=uid;var u=(S.users||[]).find(function(x){return x.id===uid;});r.picName=u?'':_frPilotLabel(uid);_frSave(r);if(typeof render==='function')render();};
+function _frbPicCell(r){
+  var opts=_frPilotOptions(),cur=r.user_id;
+  if(!opts.some(function(o){return String(o.id)===String(cur);}))opts=opts.concat([{id:cur,label:_frPilotLabel(cur),real:false}]);
+  var reals=opts.filter(function(o){return o.real;}),phs=opts.filter(function(o){return !o.real;});
+  function optTags(list){return list.map(function(o){return '<option value="'+_frEsc(o.id)+'"'+(String(cur)===String(o.id)?' selected':'')+'>'+_frEsc(o.label)+'</option>';}).join('');}
+  return '<select onchange="window.frbSetPic(\''+r.id+'\',this.value)" style="'+_FRB_IN+';text-align:left;max-width:150px">'+
+    (reals.length?'<optgroup label="Current crew">'+optTags(reals)+'</optgroup>':'')+
+    (phs.length?'<optgroup label="Historical / other">'+optTags(phs)+'</optgroup>':'')+'</select>';
+}
 function _frRenderBrowse(){
   if(!S._frLoaded){S._frLoaded=true;if(window.loadFlightRecords)window.loadFlightRecords();}
   var esc=_frEsc;
@@ -478,7 +499,7 @@ function _frRenderBrowse(){
   shown.forEach(function(r){
     h+='<tr style="border-top:1px solid var(--border2)">'+
       '<td style="padding:3px 6px">'+_frbInput(r.id,'fr_date',r.fr_date,'date',128)+'</td>'+
-      '<td style="padding:3px 6px">'+_frbInput(r.id,'picName',_frPicName(r),'text',110)+'</td>'+
+      '<td style="padding:3px 6px">'+_frbPicCell(r)+'</td>'+
       '<td style="padding:3px 6px">'+_frbSelectCell(r.id,'aircraft',r.aircraft,_frUniq(_frAcList().concat(r.aircraft?[r.aircraft]:[])))+'</td>'+
       '<td style="padding:3px 6px">'+_frbSelectCell(r.id,'product',r.product,_frUniq(_frProducts().concat(r.product?[r.product]:[])))+'</td>'+
       '<td style="padding:3px 6px">'+_frbInput(r.id,'from',r.from,'text',48)+'</td>'+
