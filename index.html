@@ -8950,7 +8950,7 @@ function generatePrintHTML(sheet){
     if(n||parseFloat(w)){
       var m=((parseFloat(w)||0)+(parseFloat(b)||0))*s.arm;
       var _inf=(f.infantNames&&f.infantNames[i])||'';
-      var _dispN=n+(_inf?' + '+_inf:'');
+      var _dispN=esc(n)+(_inf?' + '+esc(_inf):'');
       var isPIC=(i===0);
       var rowBg=isPIC?acFaint:'transparent';
       seatRows+='<tr style="background:'+rowBg+'">'
@@ -9029,8 +9029,8 @@ function generatePrintHTML(sheet){
     +'<table style="width:100%;border-collapse:collapse">'
     +thRow('Flight Details',2)
     +'<tr><td style="'+TD+'color:#666;width:40%">Aircraft</td><td style="'+TD+'"><strong style="color:'+acCol+'">'+f.ac.replace('ZK-','')+' </strong>— '+a.type+'</td></tr>'
-    +'<tr><td style="'+TD+'color:#666">PIC</td><td style="'+TD+'">'+f.pic+'</td></tr>'
-    +'<tr><td style="'+TD+'color:#666">Co-Pilot</td><td style="'+TD+'">'+(f.coPilot||'—')+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">PIC</td><td style="'+TD+'">'+esc(f.pic)+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Co-Pilot</td><td style="'+TD+'">'+esc(f.coPilot||'—')+'</td></tr>'
     +(f.coPilot?'<tr><td colspan="2" style="'+TD+'font-size:10px;color:#888;font-style:italic">A staff member in the co-pilot seat does not automatically qualify as acting crew.</td></tr>':'')
     +'<tr><td style="'+TD+'color:#666">Date</td><td style="'+TD+'">'+f.date+'</td></tr>'
     +'<tr><td style="'+TD+'color:#666">ETD</td><td style="'+TD+'">'+(f.etd||'—')+'</td></tr>'
@@ -9074,7 +9074,7 @@ function generatePrintHTML(sheet){
     +thRow('PIC Certification',2)
     +'<tr><td colspan="2" style="'+TD+'font-style:italic;color:#444">I hereby certify that the particulars recorded on the above load sheet are correct'+(a.type&&a.type.includes('208')?' and Part 125 security measures have been followed':'')+'.</td></tr>'
     +(f.sig?'<tr><td style="'+TD+'color:#666;width:30%">Signature</td><td style="'+TD+'"><img src="'+f.sig+'" style="max-height:55px;border:1px solid #ccc;border-radius:3px;display:block;margin:4px 0"></td></tr>':'<tr><td style="'+TD+'color:#666">Signature</td><td style="'+TD+'padding:22px 8px">___________________________</td></tr>')
-    +'<tr><td style="'+TD+'color:#666">Name</td><td style="'+TD+'">'+f.pic+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Name</td><td style="'+TD+'">'+esc(f.pic)+'</td></tr>'
     +'<tr><td style="'+TD+'color:#666">Date</td><td style="'+TD+'">'+f.date+'</td></tr>'
     +'</table>'
     +'</body></html>';
@@ -9526,7 +9526,7 @@ function generateHalfSheetContent(sheet){
       var pt=(f.paxType&&f.paxType[i])||'A';
       seatRows+='<tr style="background:'+(i===0?acFaint:'transparent')+'">'
         +'<td style="'+TD+'font-weight:'+(i===0?'700':'400')+';color:'+(i===0?acCol:'#111')+'">'+s.lbl+'</td>'
-        +'<td style="'+TD+'">'+n+(inf?' + '+inf:'')+(i>0&&n?' <span style="font-size:8px;color:'+(pt==='C'?'#ea580c':'#16a34a')+';margin-left:3px">'+(pt==='C'?'C':'A')+'</span>':'')+'</td>'
+        +'<td style="'+TD+'">'+esc(n)+(inf?' + '+esc(inf):'')+(i>0&&n?' <span style="font-size:8px;color:'+(pt==='C'?'#ea580c':'#16a34a')+';margin-left:3px">'+(pt==='C'?'C':'A')+'</span>':'')+'</td>'
         +'<td style="'+TD+'text-align:right">'+(w||'—')+'</td>'
         +'<td style="'+TD+'text-align:right">'+(b||'—')+'</td>'
         +'</tr>';
@@ -9547,8 +9547,8 @@ function generateHalfSheetContent(sheet){
     // Two-col: flight info + W&B
     +'<div style="display:flex;gap:8px">'
     +'<table style="flex:1;border-collapse:collapse;font-size:9px"><tr><th colspan="2" style="'+TH+'">FLIGHT</th></tr>'
-    +'<tr><td style="'+TD+'color:#666">PIC</td><td style="'+TD+'font-weight:700">'+f.pic+'</td></tr>'
-    +(f.coPilot?'<tr><td style="'+TD+'color:#666">Co-Pilot</td><td style="'+TD+'">'+f.coPilot+'</td></tr>':'')
+    +'<tr><td style="'+TD+'color:#666">PIC</td><td style="'+TD+'font-weight:700">'+esc(f.pic)+'</td></tr>'
+    +(f.coPilot?'<tr><td style="'+TD+'color:#666">Co-Pilot</td><td style="'+TD+'">'+esc(f.coPilot)+'</td></tr>':'')
     +(r?'<tr><td style="'+TD+'color:#666">TOW</td><td style="'+TD+'font-weight:700;color:'+(r.towOk?'#15803d':'#b91c1c')+'">'+r.tow.toFixed(1)+' / '+a.mtow+' kg</td></tr>':'')
     +(r?'<tr><td style="'+TD+'color:#666">Land Wt</td><td style="'+TD+'font-weight:700;color:'+(r.lwOk?'#15803d':'#b91c1c')+'">'+r.lw.toFixed(1)+' / '+a.mlw+' kg</td></tr>':'')
     +(r?'<tr><td style="'+TD+'color:#666">C of G</td><td style="'+TD+'font-weight:700;color:'+(r.cogOk?'#15803d':'#b91c1c')+'">'+r.towCog.toFixed(2)+'" ('+a.cogMin+'–'+a.cogMax+'")</td></tr>':'')
@@ -9571,7 +9571,7 @@ function generateHalfSheetContent(sheet){
     +'<tr><td colspan="2" style="'+TD+'font-style:italic;color:#555;font-size:8px">I hereby certify the particulars above are correct'+(a.type&&a.type.includes('208')?' and Part 125 security measures followed':'')+'.</td></tr>'
     +(f.sig?'<tr><td style="'+TD+'color:#666;width:25%">Signature</td><td style="'+TD+'"><img src="'+f.sig+'" style="max-height:36px;display:block"></td></tr>'
            :'<tr><td style="'+TD+'color:#666">Signature</td><td style="'+TD+'padding:16px 6px">_____________________________</td></tr>')
-    +'<tr><td style="'+TD+'color:#666">Name / Date</td><td style="'+TD+'">'+f.pic+' &nbsp; '+f.date+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Name / Date</td><td style="'+TD+'">'+esc(f.pic)+' &nbsp; '+f.date+'</td></tr>'
     +'</table></div>'
     +'</div>';
 }
@@ -16577,7 +16577,7 @@ function _rzRenderPickups(){
     var _mergedIn=Object.keys(S._rzTransMerge||{}).filter(function(a){return _rzTransBase(a)===t&&a!==t;});
     timeBar+='<div draggable="true" ondragstart="window.pickupDepDragStart(\''+_tEsc+'\',event)" ondragover="event.preventDefault();this.style.outline=\'2px solid '+_accent+'\';this.style.outlineOffset=\'1px\'" ondragleave="this.style.outline=\'\'" ondrop="this.style.outline=\'\';window.pickupDepDrop(\''+_tEsc+'\',event)" title="Drag onto another run to combine them" style="display:inline-flex;align-items:center;border-radius:12px;background:'+(on?_accent+'33':'var(--card2)')+';border:1px solid '+(on?_accent:'var(--border2)')+';overflow:hidden;cursor:grab">'+
       '<button onclick="window.rzTransMoveDep(\''+_tEsc+'\',-1,\''+_ordJs+'\')" title="Move earlier in the list" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:5px 5px 5px 7px"'+(ti===0?' disabled':'')+'>◀</button>'+
-      '<button onclick="window.pickupSetDepFilter(\''+_tEsc+'\')" title="'+(_drop?'Return drop-off run':'Pickup run')+'" style="background:none;border:none;border-left:3px solid '+_accent+';padding:4px 8px;font-size:11px;color:'+(on?'var(--text1)':'var(--text2)')+';cursor:pointer;font-weight:'+(on?'700':'400')+'"><b>'+_lbl+'</b>'+(_mergedIn.length?' <span style="font-size:9px;color:'+_accent+'" title="Combined with '+_rzEsc(_mergedIn.map(_rzTransDepLabel).join(", "))+'">+'+_mergedIn.length+'</span>':'')+' · '+grp.length+' '+_unit+' / '+pax+' pax</button>'+
+      '<button onclick="window.pickupSetDepFilter(\''+_tEsc+'\')" title="'+(_drop?'Return drop-off run':'Pickup run')+'" style="background:none;border:none;border-left:3px solid '+_accent+';padding:4px 8px;font-size:11px;color:'+(on?'var(--text1)':'var(--text2)')+';cursor:pointer;font-weight:'+(on?'700':'400')+'"><b>'+_rzEsc(_lbl)+'</b>'+(_mergedIn.length?' <span style="font-size:9px;color:'+_accent+'" title="Combined with '+_rzEsc(_mergedIn.map(_rzTransDepLabel).join(", "))+'">+'+_mergedIn.length+'</span>':'')+' · '+grp.length+' '+_unit+' / '+pax+' pax</button>'+
       (_mergedIn.length?'<button onclick="window.pickupUnmergeBase(\''+_tEsc+'\')" title="Separate the combined runs" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:5px 4px">⊗</button>':'')+
       '<button onclick="window.rzTransMoveDep(\''+_tEsc+'\',1,\''+_ordJs+'\')" title="Move later in the list" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:5px 7px 5px 5px"'+(ti===times.length-1?' disabled':'')+'>▶</button>'+
     '</div>';

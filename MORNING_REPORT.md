@@ -1,57 +1,61 @@
-# Morning Report — TrueSouth FMS — Sun 28 Jun 2026
-
-**Version:** v27.79 (built + verified, **NOT committed** — see blocker below)
-**Full detail:** `ARCHITECTURE_REVIEW_v27.79.md`
+# Morning Report — TrueSouth FMS nightly sweep
+**Mon 29 Jun 2026 · v28.12**
 
 ## TL;DR
-Swept the whole app. Found and fixed **one real sync bug** (loadsheet "change aircraft" wasn't saving or
-syncing). Everything else clean. Build + syntax check pass, prod loads with no console errors. **The
-commit is blocked by the stale git locks — you'll need to clear them and commit v27.79 yourself.**
+Full app bug sweep (every `modules/*.js`). One **Med** security fix + one Low consistency fix applied.
+Build + syntax checks pass. **Commit is blocked** by a stale `.git/index.lock` — please clear it and
+commit (work is safe in the working tree, nothing lost).
 
 ## What I swept
-Every `modules/*.js`, focused on the recurring bug classes (per-seat field-map desync, mutate-without-
-broadcast, W&B/NaN guards, XSS, date/UTC off-by-one, duplicate top-level decls) and the undocumented
-**v27.49→v27.78** work: Face ID/WebAuthn (v27.71), the **CoG envelope → signing gate** change
-(v27.74–77), GA8 MLW fix (v27.76), seat-bubble restyle + Passenger list (v27.77), Self-Walk pickups
-(v27.73), transport drag-to-reorder (v27.78).
+First full sweep since v27.79 — caught up on the undocumented **v27.80 → v28.11** stretch (flight-records
+import, Reports-to org + manager-based leave approval, the new Data Recording section, logbook ferry
+position-chaining, mobile calendar drag-lock, allocator route preference). Checked the recurring bug
+classes across the whole codebase: per-seat field-map desync, realtime mutate-without-broadcast, W&B/CoG
+NaN guards, XSS, date/UTC off-by-one, duplicate top-level declarations, focus-clobbering renders.
 
-## Bugs found & fixed (v27.79)
-1. **[Med] Loadsheet "change aircraft" didn't persist or sync.** `window.lsAc` reseats passengers,
-   clears cargo/fuel on a type change and voids the signature — then only called `render()`. No
-   `autoSaveLS()`, so the switch vanished on the next refresh and never reached other devices. Fixed:
-   added `S.formDirty=true;autoSaveLS()` (same pattern as every other loadsheet handler).
-2. **[Low] Stale comment on the CoG signing gate** (`shared.js`) — still claimed the gate uses the old
-   rectangular limits; v27.76 actually moved it to the flight-manual envelope. Corrected the comment
-   (no code change) — it's a safety-critical path, so a wrong note there is a real hazard.
+## Bugs found & fixed
+1. **[Med · XSS] Printed loadsheet didn't escape names.** `admin_b.js` (`generatePrintHTML` + the compact
+   print builder) dropped **passenger names, PIC and Co-Pilot straight into the print/Drive-upload HTML
+   unescaped**. Passenger names come from Rezdy booking data (externally controlled), so a crafted name
+   could inject into the printed doc. The on-screen UI already escapes these — the print path was the gap.
+   Fixed: wrapped every name/PIC/co-pilot in `esc()`. Normal names look identical.
+2. **[Low · consistency] One un-escaped transport label.** `rezdy_b.js` departure-tab label was the lone
+   `_rzTransDepLabel` call not wrapped in `_rzEsc` (its two siblings are). Wrapped it. Not exploitable
+   (config-derived text) — defence-in-depth.
 
-## Verified clean (no change needed)
-- Per-seat maps: all 7 (`names/seats/bags/infantNames/paxGroups/paxType/paxPaymentReq`) move together in
-  every handler, incl. the reseat inside `lsAc`.
-- CoG envelope (the big recent change): finite-point filtering, div-by-zero guards, sane fallback chain,
-  null-guards a corrupt aircraft record. No NaN slips through the gate. GA8 MLW = 1860 consistent.
-- v27.78 transport reorder + driver changes all broadcast via `pickupSave(true)`.
-- v27.77 passenger list / seat bubbles escape names via `esc()`. No XSS found in new code.
-- All `toISOString().slice(0,10)` sites are `_rIso`/`_todayLocal`-guarded. build dup-decl scan clean.
+Version bumped to **v28.12**, rebuilt.
 
-## Left open (why)
-- **Auth/RLS** — migrations are in the repo; still needs you to confirm they're APPLIED live. Server
-  gating is by permission, not row-ownership. (Unchanged — needs your action in Supabase.)
-- Minor carried items: `shell.js` login error via `innerHTML` (constants only), `_fetchSince` UTC bound
-  (harmless over-fetch), breakdown-undo cache (superadmin WIP). All low impact.
+## What I left open (and why)
+- **Combined Operations permission makes 3 grid columns inert.** `hasRolePerm` now folds
+  calendar/ground/resources/weather into `operations`, but the perms grid still shows those toggles —
+  they no longer do anything. Left as-is (it's your v28.x design intent); worth hiding the dead columns
+  or labelling them. Documented.
+- **`settings` now defaults open to every role** (sub-tabs still gated to admins). Intentional per your
+  code comment — flagged so you can confirm it's the posture you want. Not changed.
+- **RLS + new migrations.** Still need confirmation the auth/RLS migrations are live, plus the new
+  `reports_to.sql`, `leave_managers_view_all.sql`, and `flight_records_*` import/dedupe SQL applied.
+- Pre-existing carried items: flight records not realtime-synced (C1), breakdown-undo cache, `shell.js`
+  login `innerHTML`. No new risk.
 
-## Tests
-- `python3 build.py` → clean, collision scan clean. `index.html` = 24,432 lines / 2223 KB.
-- `node --check` on all 4 inline `<script>` blocks → **0 errors**.
-- Live read-only: `truesouth.netlify.app` loads ("True South FMS"), **no console errors** on load.
-  (Prod is your last merged build — v27.79 isn't live yet.)
+Per-seat maps, realtime broadcasts, W&B/CoG guards, and date handling all verified **clean** — no changes
+needed there.
 
-## Total lines of code
-`modules/*.js + modules/*.html + index.html` = **48,894 lines** (source 24,462 + generated 24,432).
+## Test results
+- `python3 build.py` → clean, top-level duplicate-declaration scan clean.
+- Inline `<script>` blocks (4) → `node --check` **0 errors**. Edited modules individually → 0 errors.
+- `index.html` rebuilt: **25,028 lines / 2285 KB**.
+- Live read-only check skipped this run (focus was confirming the working tree survived the git-lock
+  incident); production still serves your last merged build.
 
-## ⚠️ Blocker — needs you
-**Commit is blocked.** The git directory isn't writable from the overnight session, and the stale
-`.git/HEAD.lock` + `.git/index.lock` (from 26–27 Jun) are still there. Per your standing rule I did
-**not** delete them. The v27.79 fix is saved in the working tree (`modules/admin.js`, `modules/shared.js`,
-rebuilt `index.html`). **Please clear the two locks, then commit v27.79.** Suggested message:
+## ⚠️ Git / blocker
+- A stale **zero-byte `.git/index.lock`** was created during the session. The VM mount is write-once for
+  `.git` (git can write objects but can't unlink its own locks), so I could not remove it — and per the
+  standing rule I did **not** delete it.
+- **Action for you:** delete `.git/index.lock` (and any `.git/HEAD.lock`) via Finder/GitHub Desktop, then
+  commit. The commit should include v28.12 **and** the still-uncommitted v28.09–v28.11 work (perms
+  refactor, Data Recording, leave scoping, logbook ferry-chaining) — all of it is intact in the working
+  tree (verified: APP_VER=v28.12, both fixes present, all prior work present). I did not push.
 
-> `v27.79: nightly sweep — lsAc (loadsheet aircraft switch) now persists+broadcasts (was render-only: change/reseat lost on refresh, never synced); corrected stale CoG signing-gate comment`
+## Code size
+Source `modules/*.js` + `*.html` = **25,058 lines** · generated `index.html` = **25,028 lines** ·
+combined **50,086 lines**.

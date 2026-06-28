@@ -722,7 +722,7 @@ function generatePrintHTML(sheet){
     if(n||parseFloat(w)){
       var m=((parseFloat(w)||0)+(parseFloat(b)||0))*s.arm;
       var _inf=(f.infantNames&&f.infantNames[i])||'';
-      var _dispN=n+(_inf?' + '+_inf:'');
+      var _dispN=esc(n)+(_inf?' + '+esc(_inf):'');
       var isPIC=(i===0);
       var rowBg=isPIC?acFaint:'transparent';
       seatRows+='<tr style="background:'+rowBg+'">'
@@ -801,8 +801,8 @@ function generatePrintHTML(sheet){
     +'<table style="width:100%;border-collapse:collapse">'
     +thRow('Flight Details',2)
     +'<tr><td style="'+TD+'color:#666;width:40%">Aircraft</td><td style="'+TD+'"><strong style="color:'+acCol+'">'+f.ac.replace('ZK-','')+' </strong>— '+a.type+'</td></tr>'
-    +'<tr><td style="'+TD+'color:#666">PIC</td><td style="'+TD+'">'+f.pic+'</td></tr>'
-    +'<tr><td style="'+TD+'color:#666">Co-Pilot</td><td style="'+TD+'">'+(f.coPilot||'—')+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">PIC</td><td style="'+TD+'">'+esc(f.pic)+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Co-Pilot</td><td style="'+TD+'">'+esc(f.coPilot||'—')+'</td></tr>'
     +(f.coPilot?'<tr><td colspan="2" style="'+TD+'font-size:10px;color:#888;font-style:italic">A staff member in the co-pilot seat does not automatically qualify as acting crew.</td></tr>':'')
     +'<tr><td style="'+TD+'color:#666">Date</td><td style="'+TD+'">'+f.date+'</td></tr>'
     +'<tr><td style="'+TD+'color:#666">ETD</td><td style="'+TD+'">'+(f.etd||'—')+'</td></tr>'
@@ -846,7 +846,7 @@ function generatePrintHTML(sheet){
     +thRow('PIC Certification',2)
     +'<tr><td colspan="2" style="'+TD+'font-style:italic;color:#444">I hereby certify that the particulars recorded on the above load sheet are correct'+(a.type&&a.type.includes('208')?' and Part 125 security measures have been followed':'')+'.</td></tr>'
     +(f.sig?'<tr><td style="'+TD+'color:#666;width:30%">Signature</td><td style="'+TD+'"><img src="'+f.sig+'" style="max-height:55px;border:1px solid #ccc;border-radius:3px;display:block;margin:4px 0"></td></tr>':'<tr><td style="'+TD+'color:#666">Signature</td><td style="'+TD+'padding:22px 8px">___________________________</td></tr>')
-    +'<tr><td style="'+TD+'color:#666">Name</td><td style="'+TD+'">'+f.pic+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Name</td><td style="'+TD+'">'+esc(f.pic)+'</td></tr>'
     +'<tr><td style="'+TD+'color:#666">Date</td><td style="'+TD+'">'+f.date+'</td></tr>'
     +'</table>'
     +'</body></html>';
@@ -1298,7 +1298,7 @@ function generateHalfSheetContent(sheet){
       var pt=(f.paxType&&f.paxType[i])||'A';
       seatRows+='<tr style="background:'+(i===0?acFaint:'transparent')+'">'
         +'<td style="'+TD+'font-weight:'+(i===0?'700':'400')+';color:'+(i===0?acCol:'#111')+'">'+s.lbl+'</td>'
-        +'<td style="'+TD+'">'+n+(inf?' + '+inf:'')+(i>0&&n?' <span style="font-size:8px;color:'+(pt==='C'?'#ea580c':'#16a34a')+';margin-left:3px">'+(pt==='C'?'C':'A')+'</span>':'')+'</td>'
+        +'<td style="'+TD+'">'+esc(n)+(inf?' + '+esc(inf):'')+(i>0&&n?' <span style="font-size:8px;color:'+(pt==='C'?'#ea580c':'#16a34a')+';margin-left:3px">'+(pt==='C'?'C':'A')+'</span>':'')+'</td>'
         +'<td style="'+TD+'text-align:right">'+(w||'—')+'</td>'
         +'<td style="'+TD+'text-align:right">'+(b||'—')+'</td>'
         +'</tr>';
@@ -1319,8 +1319,8 @@ function generateHalfSheetContent(sheet){
     // Two-col: flight info + W&B
     +'<div style="display:flex;gap:8px">'
     +'<table style="flex:1;border-collapse:collapse;font-size:9px"><tr><th colspan="2" style="'+TH+'">FLIGHT</th></tr>'
-    +'<tr><td style="'+TD+'color:#666">PIC</td><td style="'+TD+'font-weight:700">'+f.pic+'</td></tr>'
-    +(f.coPilot?'<tr><td style="'+TD+'color:#666">Co-Pilot</td><td style="'+TD+'">'+f.coPilot+'</td></tr>':'')
+    +'<tr><td style="'+TD+'color:#666">PIC</td><td style="'+TD+'font-weight:700">'+esc(f.pic)+'</td></tr>'
+    +(f.coPilot?'<tr><td style="'+TD+'color:#666">Co-Pilot</td><td style="'+TD+'">'+esc(f.coPilot)+'</td></tr>':'')
     +(r?'<tr><td style="'+TD+'color:#666">TOW</td><td style="'+TD+'font-weight:700;color:'+(r.towOk?'#15803d':'#b91c1c')+'">'+r.tow.toFixed(1)+' / '+a.mtow+' kg</td></tr>':'')
     +(r?'<tr><td style="'+TD+'color:#666">Land Wt</td><td style="'+TD+'font-weight:700;color:'+(r.lwOk?'#15803d':'#b91c1c')+'">'+r.lw.toFixed(1)+' / '+a.mlw+' kg</td></tr>':'')
     +(r?'<tr><td style="'+TD+'color:#666">C of G</td><td style="'+TD+'font-weight:700;color:'+(r.cogOk?'#15803d':'#b91c1c')+'">'+r.towCog.toFixed(2)+'" ('+a.cogMin+'–'+a.cogMax+'")</td></tr>':'')
@@ -1343,7 +1343,7 @@ function generateHalfSheetContent(sheet){
     +'<tr><td colspan="2" style="'+TD+'font-style:italic;color:#555;font-size:8px">I hereby certify the particulars above are correct'+(a.type&&a.type.includes('208')?' and Part 125 security measures followed':'')+'.</td></tr>'
     +(f.sig?'<tr><td style="'+TD+'color:#666;width:25%">Signature</td><td style="'+TD+'"><img src="'+f.sig+'" style="max-height:36px;display:block"></td></tr>'
            :'<tr><td style="'+TD+'color:#666">Signature</td><td style="'+TD+'padding:16px 6px">_____________________________</td></tr>')
-    +'<tr><td style="'+TD+'color:#666">Name / Date</td><td style="'+TD+'">'+f.pic+' &nbsp; '+f.date+'</td></tr>'
+    +'<tr><td style="'+TD+'color:#666">Name / Date</td><td style="'+TD+'">'+esc(f.pic)+' &nbsp; '+f.date+'</td></tr>'
     +'</table></div>'
     +'</div>';
 }

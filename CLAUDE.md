@@ -90,7 +90,23 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v27.79 (latest) — nightly sweep: loadsheet "change aircraft" now persists+broadcasts.**
+- **v28.12 (latest) — nightly sweep: escape passenger/PIC names in the printed loadsheet (XSS).**
+  `ARCHITECTURE_REVIEW_v28.12.md` is the latest full sweep (first since v27.79; covers the undocumented
+  v27.80→v28.11 cycle — flight-records import, Reports-to org + manager-based leave, Data Recording
+  section, logbook ferry position-chaining, mobile calendar drag-lock, allocator route preference).
+  One real fix: **`admin_b.js generatePrintHTML`** (+ the compact print builder) interpolated Rezdy-
+  sourced **passenger names + PIC + co-pilot UNESCAPED** into the printed/Drive-uploaded loadsheet HTML —
+  a stored-XSS-into-print sink. Wrapped every name in `esc()`. Also wrapped the one un-`_rzEsc`'d
+  transport dep-label in `rezdy_b.js` (consistency). Verified clean: 7-map per-seat moves, realtime
+  broadcast coverage, CoG/reserve NaN guards, date/UTC `_rIso` guards, duplicate-decl scan. build +
+  `node --check` (4 blocks) → 0 errors. ⚠️ **COMMIT BLOCKED:** a stale zero-byte `.git/index.lock` was
+  created this session and the write-once VM mount can't remove it — NOT deleted (per rule). v28.12 +
+  the still-uncommitted v28.09–v28.11 work are intact in the working tree; Andrew must clear the lock and
+  commit. ⚠️ **Perms note:** `hasRolePerm` now folds calendar/ground/resources/weather into `operations`,
+  so the grid's Ground/Resources/Weather columns are inert; and `settings` defaults OPEN to all roles
+  (sub-tabs still gated). New SQL to apply if not yet: `reports_to.sql`, `leave_managers_view_all.sql`,
+  `flight_records_*`.
+- **v27.79 — nightly sweep: loadsheet "change aircraft" now persists+broadcasts.**
   `ARCHITECTURE_REVIEW_v27.79.md` is the latest full sweep (first since v27.48; covers the undocumented
   v27.49→v27.78 cycle). One real fix: **`window.lsAc`** (loadsheet aircraft switch) was render-only — it
   mutates the form heavily (sets `ac`, bumps excess pax to unallocated, clears cargo/fuel on type change,
