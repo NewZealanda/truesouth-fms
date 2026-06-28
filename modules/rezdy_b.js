@@ -436,14 +436,29 @@ function _rzRenderPickups(){
   (function(){var ord=S._rzDepOrder||[];if(ord.length)times.sort(function(a,b){var ia=ord.indexOf(a),ib=ord.indexOf(b);if(ia<0&&ib<0)return _rzTransDepSort(a)-_rzTransDepSort(b);if(ia<0)return 1;if(ib<0)return -1;return ia-ib;});})();
   if((!depFilter||times.indexOf(depFilter)<0)&&times.length){depFilter=_rzDefaultDep(times);}   // first of day, +15-min grace on today
   const _depJs=_rzEsc(depFilter||'').replace(/'/g,"\\'");
-  let driversBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:8px">Drivers <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(drag onto a van)</span></div>';
+  let driversBar='<div class="card" style="padding:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:8px">Drivers <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(tap a driver, then pick a van)</span></div>';
   driversBar+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
   displayDrivers.forEach(function(nm){
     var isAsg=assigned.indexOf(nm)>=0;var isExtra=_extra.indexOf(nm)>=0; // manually added / called in — show the ✕ even while assigned to a van (removing clears the van too)
-    driversBar+='<div draggable="true" ondragstart="window.pickupDriverDragStart(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\',event)" title="Drag onto a van to assign" style="display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:16px;background:'+(isAsg?'rgba(74,222,128,.12)':'rgba(124,58,237,.12)')+';border:1px solid '+(isAsg?'rgba(74,222,128,.5)':'rgba(124,58,237,.45)')+';cursor:grab;font-size:12px;font-weight:700;color:'+(isAsg?'#4ade80':'#c4b5fd')+'">'+(isAsg?'✓ ':'👤 ')+_rzEsc(nm)+((isExtra||isAsg)?'<span onclick="event.stopPropagation();window.pickupRemoveExtraDriver(\''+_rzEsc(nm).replace(/'/g,"\\'")+'\')" style="cursor:pointer;opacity:.55;margin-left:2px" title="Remove driver — clears them off every van they\'re on (and un-calls-in if they were called in)">✕</span>':'')+'</div>';
+    var _nmJs=_rzEsc(nm).replace(/'/g,"\\'");var _picking=(S._pickupDriverAssign===nm);
+    driversBar+='<div draggable="true" ondragstart="window.pickupDriverDragStart(\''+_nmJs+'\',event)" onclick="window.pickupDriverPickVan(\''+_nmJs+'\')" title="Tap to assign to a van (or drag)" style="display:flex;align-items:center;gap:5px;padding:8px 12px;min-height:38px;border-radius:16px;background:'+(_picking?'rgba(96,165,250,.22)':(isAsg?'rgba(74,222,128,.12)':'rgba(124,58,237,.12)'))+';border:1px solid '+(_picking?'var(--acc)':(isAsg?'rgba(74,222,128,.5)':'rgba(124,58,237,.45)'))+';cursor:pointer;font-size:13px;font-weight:700;color:'+(isAsg?'#4ade80':'#c4b5fd')+'">'+(isAsg?'✓ ':'👤 ')+_rzEsc(nm)+((isExtra||isAsg)?'<span onclick="event.stopPropagation();window.pickupRemoveExtraDriver(\''+_nmJs+'\')" style="cursor:pointer;opacity:.55;margin-left:2px;padding:2px 4px" title="Remove driver — clears them off every van they\'re on (and un-calls-in if they were called in)">✕</span>':'')+'</div>';
   });
   driversBar+='<button onclick="window.pickupToggleDriverPicker()" title="Add another driver" style="width:30px;height:30px;border-radius:16px;border:1px dashed var(--border2);background:'+(S._pickupDriverPickerOpen?'rgba(124,58,237,.15)':'transparent')+';color:var(--text2);font-size:18px;cursor:pointer;line-height:1;display:inline-flex;align-items:center;justify-content:center">'+(S._pickupDriverPickerOpen?'×':'+')+'</button>';
   driversBar+='</div>';
+  // Tap-to-assign (iPhone-friendly, no drag): tapping a driver chip sets S._pickupDriverAssign; show the
+  // active vans for THIS departure as big buttons — tap one to assign that driver to it.
+  if(S._pickupDriverAssign&&displayDrivers.indexOf(S._pickupDriverAssign)>=0){
+    var _an=S._pickupDriverAssign,_anJs=_rzEsc(_an).replace(/'/g,"\\'");
+    driversBar+='<div style="margin-top:8px;border:1px solid var(--acc);border-radius:8px;padding:9px;background:var(--card2)">'+
+      '<div style="font-size:11.5px;color:var(--text2);font-weight:700;margin-bottom:7px">Assign 👤 '+_rzEsc(_an)+' to which van? <span style="color:var(--text3);font-weight:600">· '+_rzEsc(_rzDepDisplay(depFilter))+'</span></div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:7px">';
+    var _anyVan=false;
+    (S._pickupVans||[]).forEach(function(vv,vj){if(_rzVanParked(vj,depFilter)||_rzIsTaxiVan(vj))return;_anyVan=true;var vc=_rzVehColor(vj);
+      driversBar+='<button onclick="window.pickupSetVanDriver('+vj+',\''+_depJs+'\',\''+_anJs+'\')" style="padding:10px 14px;min-height:44px;border-radius:12px;border:2px solid '+vc+';background:'+vc+'18;color:'+vc+';font-size:13px;font-weight:800;cursor:pointer">🚐 '+_rzEsc(_rzVehName(vj))+'</button>';});
+    if(!_anyVan)driversBar+='<span style="font-size:12px;color:var(--text3)">No active van for this run — activate a spare vehicle below first.</span>';
+    driversBar+='<button onclick="window.pickupDriverPickVan(\''+_anJs+'\')" style="padding:10px 14px;min-height:44px;border-radius:12px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:13px;font-weight:700;cursor:pointer">Cancel</button>';
+    driversBar+='</div></div>';
+  }
   if(!displayDrivers.length)driversBar+='<div style="font-size:12px;color:var(--text3);margin-top:6px">No ground staff rostered on — use ＋ to add anyone, or a van with no driver goes by taxi.</div>';
   if(S._pickupDriverPickerOpen){
     var _dg=_rzDriverGroups();
@@ -1121,9 +1136,11 @@ window.pickupSetVanDriver=function(vi,dep,name){
     if(next)_rzDriverCalledInSync(next);            // newly driving → call them in (roster)
     if(prev&&prev!==next)_rzDriverCalledInSync(prev); // freed up → revert if no longer driving anything
   }
-  S._pickupVanDriverPick=null;
+  S._pickupVanDriverPick=null;S._pickupDriverAssign=null;
   if(window.pickupSave)window.pickupSave(true);render();
 };
+// Tap a driver chip → choose which van to assign them to (iPhone-friendly alternative to dragging).
+window.pickupDriverPickVan=function(name){name=(name||'').trim();S._pickupDriverAssign=(S._pickupDriverAssign===name?null:name);if(typeof render==='function')render();};
 // Tap-to-move a pickup to another van (the drag-pickup-onto-van path doesn't work on iPhone).
 window.pickupMovePickOpen=function(id){S._pickupMovePick=(S._pickupMovePick===id)?null:id;S._pickupVanDriverPick=null;render();};
 window.pickupMoveToVan=function(id,vi){

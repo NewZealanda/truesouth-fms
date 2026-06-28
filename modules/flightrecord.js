@@ -743,7 +743,8 @@ function _frDetails(r){return r.details||((r.from||'')+(r.to?'-'+r.to:''))||(r.p
 function renderLogbook(){
   if(!S._frLoaded){S._frLoaded=true;if(window.loadFlightRecords)window.loadFlightRecords();}
   if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Sign in to view your logbook.</div>';
-  var mgr=(typeof hasRolePerm==='function'&&hasRolePerm('flightrecord_manage'))||(S.user&&S.user.superAdmin);
+  // Only admin / superadmin can browse every pilot's logbook; everyone else sees only their own.
+  var mgr=!!(S.user&&(S.user.role==='admin'||S.user.role==='superadmin'||S.user.superAdmin));
   var viewUid=(mgr&&S._lbUid)||(S.user&&S.user.id)||'';
   var h='';
   // pilot selector for managers
