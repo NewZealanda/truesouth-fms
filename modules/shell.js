@@ -25,6 +25,9 @@ window.replayHdrPlane=function(){_hdrPlaneDone=false;S._nyStart=null;S._matStars
 // than one applies: BIRTHDAY > Christmas > Easter.
 function _forceDeco(k){try{return localStorage.getItem('ts_deco_'+k)==='1';}catch(e){return false;}}
 window.toggleDeco=function(k){try{localStorage.setItem('ts_deco_'+k,_forceDeco(k)?'0':'1');}catch(e){}if(typeof render==='function')render();};
+// Plane "hats" are mutually exclusive — selecting one clears the others; clicking the active one (or 'None') clears all.
+var _HAT_KEYS=['xmas','easter','bday','halloween','kings'];
+window.setPlaneHat=function(k){try{_HAT_KEYS.forEach(function(x){if(x!==k)localStorage.removeItem('ts_deco_'+x);});if(k){if(_forceDeco(k))localStorage.removeItem('ts_deco_'+k);else localStorage.setItem('ts_deco_'+k,'1');}}catch(e){}if(typeof render==='function')render();};
 function _isXmasDate(){var d=new Date(),m=d.getMonth()+1,day=d.getDate();return m===12||(m===1&&day<=15);}
 // Gregorian Easter Sunday (Anonymous computus).
 function _easterSunday(y){var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,mm=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*mm+114)/31),da=((h+l-7*mm+114)%31)+1;return new Date(y,mo-1,da);}
@@ -359,24 +362,22 @@ function _renderUserPrefs(){
   h+='</div>'+(muted?'<div style="font-size:11px;color:#f59e0b;margin-top:10px">🔇 All sound is muted — unmute above to hear chimes.</div>':'')+'</div>';
   // ── Festive plane decorations (preview toggles — all users) ──
   {
-    var _decoRow=function(lbl,key){var on=(typeof _forceDeco==='function')&&_forceDeco(key);
-      return '<button onclick="window.toggleDeco(\''+key+'\')" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;padding:11px 14px;border:1px solid var(--border2);border-radius:10px;background:var(--card2);cursor:pointer;margin-bottom:8px">'+
-        '<span style="font-size:13px;font-weight:700;color:var(--text)">'+lbl+'</span>'+
-        '<span style="flex-shrink:0;padding:5px 13px;border-radius:20px;font-size:11px;font-weight:800;background:'+(on?'rgba(34,197,94,.15)':'var(--card2)')+';border:1px solid '+(on?'rgba(34,197,94,.55)':'var(--border2)')+';color:'+(on?'#22c55e':'var(--text3)')+'">'+(on?'ON':'OFF')+'</span>'+
-      '</button>';
+    var _chip=function(lbl,on,onclick){
+      return '<button onclick="'+onclick+'" style="padding:7px 13px;border-radius:18px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid '+(on?ACC:'var(--border2)')+';background:'+(on?'rgba(124,58,237,.16)':'var(--card2)')+';color:'+(on?'var(--text)':'var(--text3)')+'">'+(on?'✓ ':'')+lbl+'</button>';
     };
+    var _hatDefs=[['xmas','🎅 Christmas'],['easter','🥚 Easter'],['bday','🎂 Birthday'],['halloween','🎃 Halloween'],['kings','👑 King\'s']];
+    var _anyHat=_hatDefs.some(function(d){return _forceDeco(d[0]);});
+    var _hatChips=_chip('None',!_anyHat,"window.setPlaneHat('')")+_hatDefs.map(function(d){return _chip(d[1],_forceDeco(d[0]),"window.setPlaneHat('"+d[0]+"')");}).join('');
+    var _xtraDefs=[['newyear','🎄 New Year fireworks'],['matariki','✦ Matariki stars'],['waitangi','🇳🇿 Waitangi badge'],['anzac','🌺 Anzac badge']];
+    var _xtraChips=_xtraDefs.map(function(d){return _chip(d[1],_forceDeco(d[0]),"window.toggleDeco('"+d[0]+"')");}).join('');
+    var _lbl=function(t){return '<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:0 0 7px">'+t+'</div>';};
     h+='<div class="card">'+_hd('Festive plane')+
-      '<p style="font-size:12px;color:var(--text3);margin:0 0 10px;line-height:1.5">Preview the seasonal decorations on the header plane. They also appear automatically — 🎅 Christmas (1 Dec–15 Jan), 🥚 Easter (Mon before to Fri after Easter Sunday), and 🎂 birthdays (when a staff member’s profile birthday is today). Birthday takes priority.</p>'+
-      _decoRow('🎅 Christmas hat','xmas')+
-      _decoRow('🎄 New Year fireworks','newyear')+
-      _decoRow('🥚 Easter eggs','easter')+
-      _decoRow('🎂 Birthday','bday')+
-      _decoRow('🎃 Halloween (pumpkin + witch)','halloween')+
-      _decoRow('👑 King\'s Birthday (crown)','kings')+
-      _decoRow('✦ Matariki (header stars)','matariki')+
-      _decoRow('🇳🇿 Waitangi Day (header badge)','waitangi')+
-      _decoRow('🌺 Anzac Day (header badge)','anzac')+
-      '<p style="font-size:11px;color:var(--text3);margin:2px 0 0">Preview is saved on this device only.</p>'+
+      '<p style="font-size:12px;color:var(--text3);margin:0 0 12px;line-height:1.5">Seasons also appear automatically on their dates. Birthday takes priority for the plane.</p>'+
+      _lbl('Plane hat · one at a time')+
+      '<div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:15px">'+_hatChips+'</div>'+
+      _lbl('Header extras · mix freely')+
+      '<div style="display:flex;flex-wrap:wrap;gap:7px">'+_xtraChips+'</div>'+
+      '<p style="font-size:11px;color:var(--text3);margin:12px 0 0">Preview saved on this device only.</p>'+
     '</div>';
   }
   // ── Face ID / Touch ID unlock ──
