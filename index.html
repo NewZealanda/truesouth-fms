@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.53';
+const APP_VER='v28.54';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -4307,9 +4307,9 @@ function renderDrawer(){
   const _isExp=function(k){return !!S._drawerExp[k];};
   const t=S.tab||'bookings';
   const isLs=!!(S.activeTabId||S._newLsTab);
-  function _secBtn(label,section,icon){
-    var isOn=sec===section;
-    var isExp=_isExp(section);
+  function _secBtn(label,section,icon,alsoActive,expandedOverride){
+    var isOn=sec===section||!!alsoActive;
+    var isExp=(expandedOverride!=null)?expandedOverride:_isExp(section);
     return '<button tabindex="-1" onclick="S._drawerExp[\''+section+'\']=!S._drawerExp[\''+section+'\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(isOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(isOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(isOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+icon+'</span><span style="flex:1">'+label+'</span><span style="font-size:10px;opacity:.45">'+(isExp?'▲':'▼')+'</span></button>';
   }
   function _subBtn(label,active,action,noGuard){
@@ -4329,8 +4329,10 @@ function renderDrawer(){
     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'today\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_tdyOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_tdyOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_tdyOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🏠</span><span style="flex:1">Today</span></button>';
   }
   if(_canOps){
-    h+=_secBtn('Operations','operations','✈️');
-    if(_isExp('operations')){
+    var _opsChild=sec==='weather'||sec==='monitoring';
+    var _opsExp=_isExp('operations')||_opsChild;
+    h+=_secBtn('Operations','operations','✈️',_opsChild,_opsExp);
+    if(_opsExp){
       var _isLegacyLs=t==='loadsheet'||String(t||'').indexOf('ls_')===0; // only the legacy editor suppresses highlight (not a stale open-tab id)
       if(hasRolePerm('calendar'))h+=_subBtn('Calendar',t==='calendar'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('calendar')");
       h+=_subBtn('Bookings',t==='bookings'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('bookings')");
@@ -4359,7 +4361,7 @@ function renderDrawer(){
    var _canApproveLeaveNav=hasRolePerm('leave_approve')||(typeof _lvHasReports==='function'&&_lvHasReports());   // org-managers (set in Reports to) approve their reports even without the perm
    if(_pbAvail||_canRoster||_canLeave||_canApproveLeaveNav){
      var _crewOn=sec==='pilotbag'||sec==='roster'||sec==='leave';
-     var _crewExp=_isExp('crew');
+     var _crewExp=_isExp('crew')||_crewOn;
      // Match the Approvals tab: only count pending requests this approver can actually action.
      var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveReq!=='function'||_lvCanApproveReq(r));}).length:0;
      h+='<button tabindex="-1" onclick="S._drawerExp[\'crew\']=!S._drawerExp[\'crew\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_crewOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_crewOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_crewOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">👨‍✈️</span><span style="flex:1">Crew'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_crewExp?'▲':'▼')+'</span></button>';
@@ -4399,7 +4401,7 @@ function renderDrawer(){
    [{s:'sms',p:'sms',l:'SMS'},{s:'trainingmod',p:'training_mod',l:'Training'}].forEach(function(x){if(hasRolePerm(x.p)||(S.user&&S.user.superAdmin))_coItems.push({s:x.s,l:x.l,soon:true});});
    if(_coItems.length){
      var _coOn=_coItems.some(function(it){return sec===it.s;});
-     var _coExp=_isExp('company');
+     var _coExp=_isExp('company')||_coOn;
      h+='<button tabindex="-1" onclick="S._drawerExp[\'company\']=!S._drawerExp[\'company\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_coOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_coOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_coOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🏢</span><span style="flex:1">Company</span><span style="font-size:10px;opacity:.45">'+(_coExp?'▲':'▼')+'</span></button>';
      if(_coExp){_coItems.forEach(function(it){
        h+=_subBtn(it.l+(it.soon?' · soon':''),sec===it.s,"S._drawerOpen=false;"+(it.pre||'')+"S.section='"+it.s+"';render()");
@@ -14163,10 +14165,10 @@ function _notifTargetLabel(n){
     case 'loadsheet_pic':   return 'Loadsheet';
     case 'maintenance':     return 'Maintenance';
     case 'leave_submitted': return 'Approvals';
-    case 'scheduling':      return 'Calendar';
+    case 'scheduling':      return 'Scheduling';
     case 'weather_call':    return 'Weather';
     case 'veh_prestart':    return 'Prestart';
-    case 'ops_notice':      return 'Ops Notice';
+    case 'ops_notice':      return 'Notices';
     case 'equipment':       return 'Equipment';
     case 'monitoring':      return 'Monitoring';
     default: return ((n&&n.type)||'').indexOf('leave_')===0 ? 'My Leave' : '';
@@ -14181,7 +14183,7 @@ function _notifNavigate(n){
     if(t==='noshow'){S.section='operations';S.tab='bookings';S.activeTabId=null;S._newLsTab=false;render();return;}
     if(t==='leave_submitted'){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='approvals';render();return;}
     if(t.indexOf('leave_')===0){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='my';render();return;}
-    if(t==='scheduling'){S.section='calendar';S.rezdyTab='schedule';render();return;}
+    if(t==='scheduling'){S.section='resources';render();return;}   // call-in pilot mgmt lives on the Scheduling (Resources) page
     if(t==='weather_call'){S.section='weather';render();return;}
     if(t==='veh_prestart'){S.section='ground';S._groundSecTab='vehicleprestart';S._vpTab='reports';if(n.reference_id)S._vpOpen=n.reference_id;render();return;}
     if(t==='ops_notice'){S.section='opsnotices';S._onView='list';S._onOpen=n.reference_id||null;render();return;}
@@ -26086,10 +26088,10 @@ var _TRAIN_TIPS=[
   {icon:'🗓',title:'Drag calendar blocks',body:'On the Calendar, drag a flight block\'s TOP edge to set its departure, its BOTTOM edge to set the return, or grab the MIDDLE to move it — drop it on another aircraft\'s column to reassign. A single tap just opens it.'},
   {icon:'🧑‍✈',title:'Hold a pilot on the ground',body:'In Pilot movements, tap a pilot\'s ＋ to add an all-day note/meeting and the allocator will keep them off the aircraft.'},
   {icon:'🏠',title:'Set your start page + sound',body:'Tap your name (top-right) ▸ User settings & preferences. Pick which page the app opens to, switch light/dark, and choose your notification chime (tap ▶ to hear each) or turn notification sounds off.'},
-  {icon:'🌤️',title:'Weather calls',body:'The Weather calls page (top of the menu) lists every departure for the day. Any pilot can record a call — Called ON (green), Cancelled (red, with reason + next best day) or a Final call in the office (amber) — each with a comment. If no call is made, the PIC gets a reminder 15 min before the 1-hour-prior deadline, and the Today page shows each flight\'s status at a glance.'},
+  {icon:'🌤️',title:'Weather calls',body:'The Weather page (under Operations in the menu) lists every departure for the day. Any pilot can record a call — Called ON (green), Cancelled (red, with reason + next best day) or a Final call in the office (amber) — each with a comment. If no call is made, the PIC gets a reminder 15 min before the 1-hour-prior deadline, and the Today page shows each flight\'s status at a glance.'},
   {icon:'🚐',title:'Park all the vans',body:'On Transport you can now park EVERY vehicle for a departure (⊘ Park all) — the run just sits as a list waiting for a van/driver. ▶ Activate all puts them back. Drag a single van on/off a run as usual.'},
   {icon:'📋',title:'One loadsheet per flight',body:'Re-pushing the same flight (same aircraft, date and departure) to a loadsheet now overwrites its existing Active draft instead of stacking up copies. Want a separate version? Use Duplicate — and a signed loadsheet is never overwritten.'},
-  {icon:'🎒',title:'Everything pilot in one place',body:'Flight Record, Logbooks and Flight & Duty all live together under Pilot Bag in the menu.'},
+  {icon:'👨‍✈️',title:'Everything pilot in one place',body:'Flight Record, Logbooks and Flight & Duty all live together under Crew in the menu (along with Roster & Leave).'},
   {icon:'📶',title:'Logs survive no reception',body:'Logs save on your device the instant you tap Off Blocks / On Blocks — whether you start in coverage or already out of range. They upload themselves automatically once you\'re back in range.'},
   {icon:'⏭',title:'Skip the intro',body:'The mountains-and-plane loading animation has a Skip button in the corner when you\'re in a hurry.'}
 ];

@@ -828,9 +828,9 @@ function renderDrawer(){
   const _isExp=function(k){return !!S._drawerExp[k];};
   const t=S.tab||'bookings';
   const isLs=!!(S.activeTabId||S._newLsTab);
-  function _secBtn(label,section,icon){
-    var isOn=sec===section;
-    var isExp=_isExp(section);
+  function _secBtn(label,section,icon,alsoActive,expandedOverride){
+    var isOn=sec===section||!!alsoActive;
+    var isExp=(expandedOverride!=null)?expandedOverride:_isExp(section);
     return '<button tabindex="-1" onclick="S._drawerExp[\''+section+'\']=!S._drawerExp[\''+section+'\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(isOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(isOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(isOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+icon+'</span><span style="flex:1">'+label+'</span><span style="font-size:10px;opacity:.45">'+(isExp?'▲':'▼')+'</span></button>';
   }
   function _subBtn(label,active,action,noGuard){
@@ -850,8 +850,10 @@ function renderDrawer(){
     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'today\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_tdyOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_tdyOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_tdyOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🏠</span><span style="flex:1">Today</span></button>';
   }
   if(_canOps){
-    h+=_secBtn('Operations','operations','✈️');
-    if(_isExp('operations')){
+    var _opsChild=sec==='weather'||sec==='monitoring';
+    var _opsExp=_isExp('operations')||_opsChild;
+    h+=_secBtn('Operations','operations','✈️',_opsChild,_opsExp);
+    if(_opsExp){
       var _isLegacyLs=t==='loadsheet'||String(t||'').indexOf('ls_')===0; // only the legacy editor suppresses highlight (not a stale open-tab id)
       if(hasRolePerm('calendar'))h+=_subBtn('Calendar',t==='calendar'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('calendar')");
       h+=_subBtn('Bookings',t==='bookings'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('bookings')");
@@ -880,7 +882,7 @@ function renderDrawer(){
    var _canApproveLeaveNav=hasRolePerm('leave_approve')||(typeof _lvHasReports==='function'&&_lvHasReports());   // org-managers (set in Reports to) approve their reports even without the perm
    if(_pbAvail||_canRoster||_canLeave||_canApproveLeaveNav){
      var _crewOn=sec==='pilotbag'||sec==='roster'||sec==='leave';
-     var _crewExp=_isExp('crew');
+     var _crewExp=_isExp('crew')||_crewOn;
      // Match the Approvals tab: only count pending requests this approver can actually action.
      var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveReq!=='function'||_lvCanApproveReq(r));}).length:0;
      h+='<button tabindex="-1" onclick="S._drawerExp[\'crew\']=!S._drawerExp[\'crew\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_crewOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_crewOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_crewOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">👨‍✈️</span><span style="flex:1">Crew'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_crewExp?'▲':'▼')+'</span></button>';
@@ -920,7 +922,7 @@ function renderDrawer(){
    [{s:'sms',p:'sms',l:'SMS'},{s:'trainingmod',p:'training_mod',l:'Training'}].forEach(function(x){if(hasRolePerm(x.p)||(S.user&&S.user.superAdmin))_coItems.push({s:x.s,l:x.l,soon:true});});
    if(_coItems.length){
      var _coOn=_coItems.some(function(it){return sec===it.s;});
-     var _coExp=_isExp('company');
+     var _coExp=_isExp('company')||_coOn;
      h+='<button tabindex="-1" onclick="S._drawerExp[\'company\']=!S._drawerExp[\'company\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_coOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_coOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_coOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🏢</span><span style="flex:1">Company</span><span style="font-size:10px;opacity:.45">'+(_coExp?'▲':'▼')+'</span></button>';
      if(_coExp){_coItems.forEach(function(it){
        h+=_subBtn(it.l+(it.soon?' · soon':''),sec===it.s,"S._drawerOpen=false;"+(it.pre||'')+"S.section='"+it.s+"';render()");
