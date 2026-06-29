@@ -338,22 +338,9 @@ input[type=number] { -moz-appearance: textfield; }
 /* Fire an animation when the email field is autofilled so onanimationstart can re-measure its width (keeps @suffix tight — no gap). */
 @keyframes liAutofill{from{opacity:1}to{opacity:1}}
 #li_e:-webkit-autofill{animation-name:liAutofill;animation-duration:1ms}
-/* Login: a little C208B silhouette flies in from the right and lands just past the True South logo. */
-.ts-login-plane{position:absolute;left:2px;top:18px;width:96px;height:auto;pointer-events:none;filter:drop-shadow(0 4px 6px rgba(0,0,0,.5));animation:tsLoginLand 3.2s cubic-bezier(.33,.5,.3,1) .4s both;}
-.ts-login-plane img{display:block;width:100%;height:auto;transform:scaleX(-1);}
-@keyframes tsLoginLand{
-  0%{transform:translate(-150px,-52px) rotate(6deg) scale(.92);opacity:0}
-  14%{opacity:1}
-  55%{transform:translate(-58px,-22px) rotate(6deg) scale(1);opacity:1}
-  78%{transform:translate(-16px,-3px) rotate(-5deg)}
-  90%{transform:translate(-4px,0) rotate(-1.5deg)}
-  100%{transform:translate(0,0) rotate(0)}
-}
-@media (max-width:430px){.ts-login-plane{width:70px;left:0;top:22px}}
-@media (prefers-reduced-motion:reduce){.ts-login-plane{animation:none;opacity:1}}
 /* In-app header: the Caravan flies in from the notifications side (right) and lands just past the logo. */
-.ts-hdr-plane{position:absolute;left:100%;bottom:0;margin-left:12px;width:58px;height:auto;pointer-events:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.55));}
-.ts-hdr-fly{animation:tsHdrFly 2.6s cubic-bezier(.3,.5,.3,1) .35s both;}
+.ts-hdr-plane{position:absolute;left:100%;bottom:0;margin-left:12px;width:87px;height:auto;pointer-events:auto;cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,.55));}
+.ts-hdr-fly{pointer-events:none;animation:tsHdrFly 10s cubic-bezier(.3,.5,.3,1) .35s both;}
 @keyframes tsHdrFly{
   0%{transform:translate(80vw,-18px) rotate(-3deg) scale(.92);opacity:0}
   12%{opacity:1}
@@ -362,7 +349,7 @@ input[type=number] { -moz-appearance: textfield; }
   92%{transform:translate(9px,0) rotate(1.5deg)}
   100%{transform:translate(0,0) rotate(0)}
 }
-@media (max-width:430px){.ts-hdr-plane{width:44px;margin-left:8px}}
+@media (max-width:430px){.ts-hdr-plane{width:66px;margin-left:8px}}
 @media (prefers-reduced-motion:reduce){.ts-hdr-fly{animation:none}}
 </style>
 </head>
@@ -1018,7 +1005,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.22';
+const APP_VER='v28.24';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3452,6 +3439,9 @@ function acLayout(acId){const _a=_acSpec(acId);if(_a?.layout==='ga8')return GA8_
 // Plays the header plane fly-in once per login (reset on logout). Module-scope so it survives
 // the frequent full re-renders (it's set true on the first app render after login).
 var _hdrPlaneDone=false;
+// Click the parked header plane to replay the fly-in: clearing the flag makes the next render re-add the
+// animation class (renderApp re-sets it true), so it flies in once more.
+window.replayHdrPlane=function(){_hdrPlaneDone=false;if(typeof render==='function')render();};
 // Loading animation: a mountain range draws itself left→right, then a little plane takes off and
 // climbs over it. Used on the session-restore and app-load screens.
 function _tsLoadingScene(){
@@ -4004,7 +3994,6 @@ function renderLoginInner(){
     <div style="width:100%;max-width:400px">
       <div style="text-align:center;margin-bottom:32px;position:relative">
         <img src="${_TS_LOGO}" alt="True South Flights" style="width:240px;max-width:80%;margin-bottom:16px">
-        <span class="ts-login-plane" aria-hidden="true"><img src="${_TS_PLANE}" alt=""></span>
         <div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.45)">Flight Management System</div>
       </div>
       <div style="background:rgba(10,15,25,.92);border-radius:16px;border:1px solid rgba(255,255,255,.12);padding:32px 28px;box-shadow:0 24px 60px rgba(0,0,0,.5)">
@@ -4392,7 +4381,7 @@ function renderApp(){
           <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;S._drawerSection=S.section;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;margin-top:5px" title="Menu">☰</button>
           <span style="position:relative;display:inline-flex;align-items:center">
             <img src="${_TS_LOGO}" alt="True South Flights" style="height:${S.mobileView?'28':'38'}px;width:auto;display:block;object-fit:contain">
-            <img class="ts-hdr-plane${_planeAnim?' ts-hdr-fly':''}" src="${_TS_PLANE}" alt="" aria-hidden="true">
+            <img class="ts-hdr-plane${_planeAnim?' ts-hdr-fly':''}" src="${_TS_PLANE}" alt="" title="Replay" onclick="event.stopPropagation();window.replayHdrPlane&&window.replayHdrPlane()">
           </span>
         </div>
         <div style="display:flex;align-items:center;gap:${S.mobileView?'8':'6'}px;flex-shrink:0">

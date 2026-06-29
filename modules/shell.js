@@ -2,6 +2,9 @@
 // Plays the header plane fly-in once per login (reset on logout). Module-scope so it survives
 // the frequent full re-renders (it's set true on the first app render after login).
 var _hdrPlaneDone=false;
+// Click the parked header plane to replay the fly-in: clearing the flag makes the next render re-add the
+// animation class (renderApp re-sets it true), so it flies in once more.
+window.replayHdrPlane=function(){_hdrPlaneDone=false;if(typeof render==='function')render();};
 // Loading animation: a mountain range draws itself left→right, then a little plane takes off and
 // climbs over it. Used on the session-restore and app-load screens.
 function _tsLoadingScene(){
@@ -554,7 +557,6 @@ function renderLoginInner(){
     <div style="width:100%;max-width:400px">
       <div style="text-align:center;margin-bottom:32px;position:relative">
         <img src="${_TS_LOGO}" alt="True South Flights" style="width:240px;max-width:80%;margin-bottom:16px">
-        <span class="ts-login-plane" aria-hidden="true"><img src="${_TS_PLANE}" alt=""></span>
         <div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.45)">Flight Management System</div>
       </div>
       <div style="background:rgba(10,15,25,.92);border-radius:16px;border:1px solid rgba(255,255,255,.12);padding:32px 28px;box-shadow:0 24px 60px rgba(0,0,0,.5)">
@@ -942,7 +944,7 @@ function renderApp(){
           <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;S._drawerSection=S.section;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;margin-top:5px" title="Menu">☰</button>
           <span style="position:relative;display:inline-flex;align-items:center">
             <img src="${_TS_LOGO}" alt="True South Flights" style="height:${S.mobileView?'28':'38'}px;width:auto;display:block;object-fit:contain">
-            <img class="ts-hdr-plane${_planeAnim?' ts-hdr-fly':''}" src="${_TS_PLANE}" alt="" aria-hidden="true">
+            <img class="ts-hdr-plane${_planeAnim?' ts-hdr-fly':''}" src="${_TS_PLANE}" alt="" title="Replay" onclick="event.stopPropagation();window.replayHdrPlane&&window.replayHdrPlane()">
           </span>
         </div>
         <div style="display:flex;align-items:center;gap:${S.mobileView?'8':'6'}px;flex-shrink:0">
