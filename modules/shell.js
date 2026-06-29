@@ -43,18 +43,22 @@ function _isWaitangi(){var d=new Date();return d.getMonth()===1&&d.getDate()===6
 function _isAnzac(){var d=new Date();return d.getMonth()===3&&d.getDate()>=22&&d.getDate()<=28;}            // 25 Apr ±3
 // Active season (priority birthday > new year > halloween > king's birthday > matariki > christmas > easter).
 // New Year overrides Christmas. '' = none.
+// PLANE-IMAGE deco (the "hat" layer) — mutually exclusive, only ONE plane image at a time.
+// Header layers (New Year fireworks, Matariki stars, Waitangi/Anzac badges) are INDEPENDENT and
+// stack freely on top of any plane — see _nyActive/_matActive/_holidayBadge in renderApp.
 function _planeDeco(){
   if(_forceDeco('bday')||_bdayPeople().length>0)return 'bday';
-  if(_forceDeco('newyear')||_isNewYear())return 'newyear';
   if(_forceDeco('halloween')||_isHalloween())return 'halloween';
   if(_forceDeco('kings')||_isKingsBirthday())return 'kings';
-  if(_forceDeco('matariki')||_isMatariki())return 'matariki';
-  if(_forceDeco('waitangi')||_isWaitangi())return 'waitangi';
-  if(_forceDeco('anzac')||_isAnzac())return 'anzac';
   if(_forceDeco('xmas')||_isXmasDate())return 'xmas';
   if(_forceDeco('easter')||_isEasterDate())return 'easter';
   return '';
 }
+// Independent header-effect / badge layers (any combination can be active at once).
+function _nyActive(){return _forceDeco('newyear')||_isNewYear();}
+function _matActive(){return _forceDeco('matariki')||_isMatariki();}
+function _waitangiActive(){return _forceDeco('waitangi')||_isWaitangi();}
+function _anzacActive(){return _forceDeco('anzac')||_isAnzac();}
 // The plane image for the active season (newyear/matariki keep the normal plane — they're header effects).
 function _planeSrc(){var d=_planeDeco();return d==='bday'?_TS_PLANE_BDAY:d==='xmas'?_TS_PLANE_XMAS:d==='easter'?_TS_PLANE_EASTER:d==='halloween'?_TS_PLANE_HALLOWEEN:d==='kings'?_TS_PLANE_KING:_TS_PLANE;}
 // Matariki: scatter the star motif across the header — random positions, cached so they don't jump on re-render.
@@ -1058,11 +1062,13 @@ function renderApp(){
   if(!S._onLoaded&&typeof loadOpsNotices==='function'){S._onLoaded=true;loadOpsNotices();}   // load Ops Notices at login → re-notify unread
   const _deco=_planeDeco();
   const _planeTitle=(_deco==='bday')?('Happy Birthday to '+_bdayGreet()):'Replay';
+  // Header layers are INDEPENDENT — fireworks + stars (+ a badge) can all show together, alongside any plane hat.
   // New Year fireworks run ONCE for ~20s after the app shows; schedule a render to clear them.
-  if(_deco==='newyear'&&!S._nyStart){S._nyStart=Date.now();setTimeout(function(){if(typeof render==='function')render();},21000);}
-  const _nyOn=(_deco==='newyear'&&S._nyStart&&(Date.now()-S._nyStart<21000));
-  const _hdrFx=_nyOn?('<div class="ts-hdr-fx" aria-hidden="true">'+_fireworksHtml()+'</div>'):(_deco==='matariki'?('<div class="ts-hdr-fx" aria-hidden="true">'+_matarikiStarsHtml()+'</div>'):'');
-  const _holidayBadge=(_deco==='waitangi')?_TS_WAITANGI:(_deco==='anzac')?_TS_ANZAC:'';
+  if(_nyActive()&&!S._nyStart){S._nyStart=Date.now();setTimeout(function(){if(typeof render==='function')render();},21000);}
+  const _nyOn=(_nyActive()&&S._nyStart&&(Date.now()-S._nyStart<21000));
+  const _fx=(_matActive()?_matarikiStarsHtml():'')+(_nyOn?_fireworksHtml():'');
+  const _hdrFx=_fx?('<div class="ts-hdr-fx" aria-hidden="true">'+_fx+'</div>'):'';
+  const _holidayBadge=_waitangiActive()?_TS_WAITANGI:(_anzacActive()?_TS_ANZAC:'');
   const _hdrBadge=_holidayBadge?('<img src="'+_holidayBadge+'" alt="" aria-hidden="true" style="position:absolute;left:50%;top:8px;transform:translateX(-50%);height:'+(S.mobileView?'30':'42')+'px;width:auto;z-index:4;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,.5))">'):'';
 
   return`<div style="min-height:100vh;background:var(--bg);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)">
