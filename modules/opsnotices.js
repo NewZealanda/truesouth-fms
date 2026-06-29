@@ -30,7 +30,10 @@ window.loadOpsNotices=async function(){
   try{var c=lsGet&&lsGet('ts_ops_notices_cache');if(c&&c.n)S._onData=c.n;if(c&&c.r)S._onReads=c.r;}catch(e){}
   if(typeof sbF!=='function')return;
   var nn=await sbF('ts_ops_notices','','created_at');
-  if(nn){var d={};nn.forEach(function(r){d[r.id]=_onRow(r);});S._onData=d;}
+  if(nn){var d={};nn.forEach(function(r){d[r.id]=_onRow(r);});
+    // Recover any notices that failed to sync earlier (e.g. the no-as-string bug) — keep + re-push.
+    try{Object.keys(S._onData||{}).forEach(function(k){if(!d[k]&&S._onData[k]){d[k]=S._onData[k];if(typeof sbU==='function')sbU('ts_ops_notices',[_onPayload(S._onData[k])]).catch(function(){});}});}catch(e){}
+    S._onData=d;}
   var rr=await sbF('ts_ops_notice_reads','','read_at');
   if(rr){var m={};rr.forEach(function(r){m[_onReadKey(r.notice_id,r.user_id)]={by:r.user_name,at:r.read_at};});S._onReads=m;}
   try{lsSet&&lsSet('ts_ops_notices_cache',{n:S._onData,r:S._onReads});}catch(e){}
@@ -38,7 +41,7 @@ window.loadOpsNotices=async function(){
   if(typeof safeRender==='function')safeRender();
 };
 function _onRow(r){return {id:r.id,no:r.no,subject:r.subject||'',body:r.body||'',issued_by:r.issued_by||'',issued_by_id:r.issued_by_id||'',date_issued:r.date_issued||'',status:r.status||'active',groups:Array.isArray(r.groups)?r.groups:[],files:Array.isArray(r.files)?r.files:[],created_at:r.created_at};}
-function _onPayload(f){var _no=parseInt(f.no,10);return {id:f.id,no:(isFinite(_no)?_no:null),subject:f.subject,body:f.body,issued_by:f.issued_by||'',issued_by_id:f.issued_by_id||null,date_issued:f.date_issued,status:f.status||'active',groups:f.groups||[],files:f.files||[],created_at:f.created_at||new Date().toISOString()};}
+function _onPayload(f){var _no=parseInt(f.no,10);return {id:f.id,no:(isFinite(_no)?_no:null),subject:f.subject,body:f.body,issued_by:f.issued_by||'',issued_by_id:f.issued_by_id||null,date_issued:f.date_issued||null,status:f.status||'active',groups:f.groups||[],files:f.files||[],created_at:f.created_at||new Date().toISOString()};}
 function _onNextNo(){var mx=ON_START_NO-1;Object.keys(S._onData||{}).forEach(function(k){var n=+(S._onData[k].no);if(!isNaN(n)&&n>mx)mx=n;});return mx+1;}
 function _onList(){return Object.keys(S._onData||{}).map(function(k){return S._onData[k];}).sort(function(a,b){return (+b.no||0)-(+a.no||0);});}
 
