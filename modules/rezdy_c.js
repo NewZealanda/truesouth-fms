@@ -1450,8 +1450,11 @@ function _rzRenderSchedule(){
         '</div>';
     });
     var _acJs=_rzEsc(String(ac)).replace(/'/g,"\\'");
+    // When LOCKED, the column is view-only: no tap-to-add-block, no drop-to-reassign (prevents accidental
+    // aircraft changes on iPad). Unlock first to edit. Block taps still open the detail (handled by rzCalDown).
+    var _colH=_calLk?'':(' onclick="window.rezdySchedColClick(\''+_acJs+'\',event)" ondragover="window.rezdySchedDragOverCol(event)" ondrop="window.rezdySchedDropBlockToAc(\''+_acJs+'\',event)"');
     colsH+='<div style="width:'+_RZ_COL_W+'px;flex-shrink:0;border-right:1px solid var(--border)">'+
-      '<div data-ac="'+_acJs+'" onclick="window.rezdySchedColClick(\''+_acJs+'\',event)" ondragover="window.rezdySchedDragOverCol(event)" ondrop="window.rezdySchedDropBlockToAc(\''+_acJs+'\',event)" style="position:relative;height:'+gridH+'px;cursor:copy">'+rows+blocksH+'</div></div>';
+      '<div data-ac="'+_acJs+'"'+_colH+' style="position:relative;height:'+gridH+'px;cursor:'+(_calLk?'default':'copy')+'">'+rows+blocksH+'</div></div>';
   });
 
   // sticky aircraft-id header row, aligned with columns
@@ -2185,6 +2188,7 @@ function _rzSchedClickTimes(e){
 // Click empty space in an aircraft column (Bookings calendar) → open the add-block form for that
 // aircraft at the clicked time. Clicks on a block/overlay are ignored (target !== the column bg).
 window.rezdySchedColClick=function(ac,e){
+  if(typeof _rzCalLocked==='function'&&_rzCalLocked())return;   // locked = view-only, no accidental new block
   if(!e||e.target!==e.currentTarget)return;
   var t=_rzSchedClickTimes(e);
   if(ac==='__misc__'){S._schedEdit={id:null,aircraft:'__misc__',label:'Meeting',attendees:[],start:t.start,end:t.end,color:'#94a3b8',notes:'',ftype:'Other'};S._schedGroupKey=null;render();return;}

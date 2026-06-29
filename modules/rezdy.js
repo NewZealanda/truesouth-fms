@@ -1755,6 +1755,7 @@ window.rezdySchedDragOverCol=function(e){
 window.rezdySchedDragEnd=function(){var ln=document.getElementById('rzDragLine');if(ln)ln.style.display='none';};
 window.rezdySchedDropBlockToAc=function(ac,e){
   if(e&&e.preventDefault)e.preventDefault();
+  if(typeof _rzCalLocked==='function'&&_rzCalLocked()){S._rzSchedBlockDrag=null;return;}   // locked = no reassign
   var _dl=document.getElementById('rzDragLine');if(_dl)_dl.style.display='none';
   var src=S._rzSchedBlockDrag;S._rzSchedBlockDrag=null;
   if(!src||!ac)return;
