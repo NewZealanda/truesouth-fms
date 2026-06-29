@@ -37,10 +37,14 @@ window.loadVehiclePrestarts=async function(){
   try{var c=lsGet&&lsGet('ts_veh_prestarts_cache');if(c&&typeof c==='object')S._vpData=c;}catch(e){}
   if(typeof sbF!=='function')return;
   var rows=await sbF('ts_vehicle_prestarts','','created_at');
-  if(rows){var d={};rows.forEach(function(r){d[r.id]=_vpRow(r);});S._vpData=d;try{lsSet&&lsSet('ts_veh_prestarts_cache',d);}catch(e){}if(typeof safeRender==='function')safeRender();}
+  if(rows){var d={};rows.forEach(function(r){d[r.id]=_vpRow(r);});
+    // Recover any local-only reports that failed to sync earlier (e.g. the odo-type bug) — keep them and
+    // re-push now that the payload is correct, so they land on the server and show on every device.
+    try{Object.keys(S._vpData||{}).forEach(function(k){if(!d[k]&&S._vpData[k]){d[k]=S._vpData[k];if(typeof sbU==='function')sbU('ts_vehicle_prestarts',[_vpPayload(S._vpData[k])]).catch(function(){});}});}catch(e){}
+    S._vpData=d;try{lsSet&&lsSet('ts_veh_prestarts_cache',d);}catch(e){}if(typeof safeRender==='function')safeRender();}
 };
 function _vpRow(r){return {id:r.id,vehicle:r.vehicle||'',user_id:r.user_id||'',user_name:r.user_name||'',date:r.check_date||r.date||'',time:r.time||'',odo:r.odo,fuel:r.fuel||'',passed:!!r.passed,checklist:(r.checklist&&typeof r.checklist==='object')?r.checklist:{},sig:r.sig||'',notes:r.notes||'',created_at:r.created_at};}
-function _vpPayload(f){return {id:f.id,vehicle:f.vehicle,user_id:f.user_id||null,user_name:f.user_name||'',check_date:f.date,time:f.time||'',odo:(f.odo===''||f.odo==null)?null:f.odo,fuel:f.fuel||'',passed:!!f.passed,checklist:f.checklist||{},sig:f.sig||'',notes:f.notes||'',created_at:f.created_at||new Date().toISOString()};}
+function _vpPayload(f){var _odo=parseInt(f.odo,10);return {id:f.id,vehicle:f.vehicle,user_id:f.user_id||null,user_name:f.user_name||'',check_date:f.date,time:f.time||'',odo:(isFinite(_odo)?_odo:null),fuel:f.fuel||'',passed:!!f.passed,checklist:f.checklist||{},sig:f.sig||'',notes:f.notes||'',created_at:f.created_at||new Date().toISOString()};}
 
 // ── Photo capture (compressed base64 stub — swap to Supabase Storage later via _vpStorePhoto) ──
 function _vpStorePhoto(file,cb){
