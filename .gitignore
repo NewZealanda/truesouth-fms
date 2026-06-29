@@ -3,3 +3,8 @@ index_backup.html
 *.backup.html
 .DS_Store
 auth_settings_maint_perm_fix.sql
+# scratch / generated image assets (baked into shell.js as base64 — not used by the app)
+_*.png
+Screenshot*
+*.alias
+~$*
