@@ -315,7 +315,9 @@ function initRealtime(){
             // gone, so on a RE-open (not the first connect) pull the collaborative tables once.
             if(_rtConnectedOnce){try{
               // ts_settings now also refreshes roster/roster_colors/rz_pickup_locs/fuels/perms.
-              Promise.all([reloadTable('ts_manifests'),reloadTable('ts_loadsheets'),reloadTable('ts_settings'),reloadTable('ts_scratchpads')]).then(function(){safeRender();}).catch(function(){});
+              // ts_aircraft (W&B specs) + ts_flight_records re-pulled too so a dropped-socket gap can't leave
+              // them stale (flight records reload is internally gated on the module being open).
+              Promise.all([reloadTable('ts_manifests'),reloadTable('ts_loadsheets'),reloadTable('ts_settings'),reloadTable('ts_scratchpads'),reloadTable('ts_aircraft'),reloadTable('ts_flight_records')]).then(function(){safeRender();}).catch(function(){});
               // A4: the Rezdy manifest, pickups, shared loadsheet tabs and calendar ride on
               // broadcasts (not postgres_changes), so a dropped socket leaves them stale — re-pull
               // the current date's state explicitly on reconnect.
