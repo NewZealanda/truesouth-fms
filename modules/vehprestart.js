@@ -123,6 +123,15 @@ function _vpSetupSig(){
   c.onmousemove=c.ontouchmove=function(e){if(!drawing)return;e.preventDefault();var x=c.getContext('2d'),p=pos(e);x.lineWidth=2.4;x.lineCap='round';x.strokeStyle='#111';x.lineTo(p.x,p.y);x.stroke();x.beginPath();x.moveTo(p.x,p.y);};
   c.onmouseup=c.onmouseleave=c.ontouchend=function(){if(drawing){drawing=false;if(S._vpDraft)S._vpDraft.sig=c.toDataURL();}};
 }
+// Delete: admins/superadmin can delete any prestart; the creator can delete their own.
+function _vpCanDelete(r){if(!r)return false;var u=S.user||{};var role=u.role||'';return !!u.superAdmin||role==='admin'||role==='superadmin'||(!!r.user_id&&String(r.user_id)===String(u.id||''));}
+window.vpDelete=async function(id){
+  var r=(S._vpData||{})[id];if(!r||!_vpCanDelete(r))return;
+  if(!confirm('Delete this '+(r.vehicle||'')+' prestart from '+(r.date||'')+'? This cannot be undone.'))return;
+  delete S._vpData[id];try{lsSet&&lsSet('ts_veh_prestarts_cache',S._vpData);}catch(e){}
+  if(typeof sbDel==='function')await sbDel('ts_vehicle_prestarts',id);
+  S._vpOpen=null;render();if(typeof toast==='function')toast('Prestart deleted','ok');
+};
 window.vpClearSig=function(){var c=document.getElementById('vp-sig');if(c)c.getContext('2d').clearRect(0,0,c.width,c.height);if(S._vpDraft)S._vpDraft.sig='';render();};
 
 // ── Render ────────────────────────────────────────────────────────────────────────
@@ -201,7 +210,9 @@ function _vpRenderReports(){
 }
 function _vpRenderReport(id){
   var r=(S._vpData||{})[id];if(!r){S._vpOpen=null;return _vpRenderReports();}
-  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="st" style="margin:0">'+_vpEsc(r.vehicle)+' prestart</div><button onclick="S._vpOpen=null;render()" style="font-size:12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:5px 12px;cursor:pointer;color:var(--text2)">← Back</button></div>'+
+  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="st" style="margin:0">'+_vpEsc(r.vehicle)+' prestart</div><div style="display:flex;gap:6px">'+
+    (_vpCanDelete(r)?'<button onclick="window.vpDelete(\''+r.id+'\')" style="font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid rgba(239,68,68,.4);background:none;color:#f87171;cursor:pointer">Delete</button>':'')+
+    '<button onclick="S._vpOpen=null;render()" style="font-size:12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:5px 12px;cursor:pointer;color:var(--text2)">← Back</button></div></div>'+
     '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--text2);margin:8px 0 14px">'+
       '<span><b>'+(r.passed?'<span style="color:#16a34a">Passed</span>':'<span style="color:#dc2626">Issues found</span>')+'</b></span>'+
       '<span>'+_vpEsc(r.date)+(r.time?' '+_vpEsc(r.time):'')+'</span><span>By '+_vpEsc(r.user_name)+'</span>'+
