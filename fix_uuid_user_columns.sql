@@ -1,21 +1,34 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- TrueSouth FMS — REAL fix for the "Upload rejected (HTTP 400)" on Prestart + Ops Notices
--- Server error was:  22P02  invalid input syntax for type uuid: "u_admin"
+-- TrueSouth FMS — REAL fix for "Upload rejected (HTTP 400)" on Prestart + Ops Notices
+-- Server error:  22P02  invalid input syntax for type uuid: "u_admin"
 --
--- CAUSE: TrueSouth user ids are TEXT (e.g. 'u_admin', crew codes), but these
--- columns were mistakenly declared `uuid`. Postgres rejects the insert.
--- This is the same issue already fixed for ts_notifications.user_id earlier.
+-- CAUSE: TrueSouth user ids are TEXT (e.g. 'u_admin'), but these columns were
+-- declared `uuid`, so Postgres rejects every insert.
 --
--- FIX: change the three offending columns to text. RLS policies use
--- `user_id::text = app_id()`, which keeps working after the change.
+-- Postgres won't alter a column that an RLS policy references, so we DROP the
+-- dependent policies, change the column to text, then RECREATE the policies
+-- (identical logic — the ::text cast is a no-op once the column is text).
 --
--- Safe + idempotent. Run in the Supabase SQL editor.
--- (You do NOT need fix_feature_table_grants.sql — this is the actual fix.)
+-- Safe + idempotent. Run the whole script in the Supabase SQL editor.
+-- (You do NOT need fix_feature_table_grants.sql.)
 -- ═══════════════════════════════════════════════════════════════════════════
 
-alter table public.ts_vehicle_prestarts alter column user_id      type text using user_id::text;
-alter table public.ts_ops_notices        alter column issued_by_id type text using issued_by_id::text;
-alter table public.ts_ops_notice_reads   alter column user_id      type text using user_id::text;
+-- ── ts_vehicle_prestarts.user_id ──────────────────────────────────────────────
+drop policy if exists veh_prestart_update on public.ts_vehicle_prestarts;
+alter table public.ts_vehicle_prestarts alter column user_id type text using user_id::text;
+create policy veh_prestart_update on public.ts_vehicle_prestarts for update to authenticated
+  using      (public.app_role() in ('admin','superadmin') or user_id::text = public.app_id())
+  with check (public.app_role() in ('admin','superadmin') or user_id::text = public.app_id());
+
+-- ── ts_ops_notices.issued_by_id (no policy references it) ─────────────────────
+alter table public.ts_ops_notices alter column issued_by_id type text using issued_by_id::text;
+
+-- ── ts_ops_notice_reads.user_id ──────────────────────────────────────────────
+drop policy if exists ops_reads_write on public.ts_ops_notice_reads;
+alter table public.ts_ops_notice_reads alter column user_id type text using user_id::text;
+create policy ops_reads_write on public.ts_ops_notice_reads for all to authenticated
+  using      (user_id::text = public.app_id() or public.app_role() in ('admin','superadmin'))
+  with check (user_id::text = public.app_id() or public.app_role() in ('admin','superadmin'));
 
 -- Verify (should all read 'text'):
 select table_name, column_name, data_type
