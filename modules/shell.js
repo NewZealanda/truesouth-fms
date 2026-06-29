@@ -489,6 +489,7 @@ function render(){
   if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')||(S._rzLsActiveId&&S.activeTabId&&S.tab==='rloadsheets')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest&&S._lsMapOpen)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
   if(S._fdSign&&typeof _fdSetupSig==='function')_fdSetupSig(); // wire the Flight & Duty certify signature pad
   if(S._mfView==='editor'&&typeof _mfSetupSigs==='function')_mfSetupSigs(); // wire the Work Order signature pads
+  if(S.section==='ground'&&S._groundSecTab==='vehicleprestart'&&S._vpDraft&&typeof _vpSetupSig==='function')_vpSetupSig(); // vehicle prestart signature pad
   // ── Restore focus after re-render ──
   // Force-focus (set by Tab handler) takes priority over activeElement detection
   if(_ffRow!==null){
@@ -1101,7 +1102,7 @@ function renderApp(){
         if(_sec==='ground'){
           if(!hasRolePerm('ground')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           var _gst=S._groundSecTab||'transport';
-          if(_gst==='vehicleprestart'&&(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin)))return _placeholderPage('Vehicle Prestart','Daily vehicle prestart checks');
+          if(_gst==='vehicleprestart'&&(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin)))return '<div id="flash-vp">'+((typeof renderVehiclePrestart==='function')?renderVehiclePrestart():'')+'</div>';
           return '<div id="flash-ground">'+renderGround()+'</div>';
         }
         if(_sec==='trainingmod'){if(!hasRolePerm('training_mod')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('Training','Training records');}

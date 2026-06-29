@@ -470,6 +470,7 @@ function _notifTargetLabel(n){
     case 'leave_submitted': return 'Approvals';
     case 'scheduling':      return 'Calendar';
     case 'weather_call':    return 'Weather';
+    case 'veh_prestart':    return 'Prestart';
     default: return ((n&&n.type)||'').indexOf('leave_')===0 ? 'My Leave' : '';
   }
 }
@@ -484,6 +485,7 @@ function _notifNavigate(n){
     if(t.indexOf('leave_')===0){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='my';render();return;}
     if(t==='scheduling'){S.section='calendar';S.rezdyTab='schedule';render();return;}
     if(t==='weather_call'){S.section='weather';render();return;}
+    if(t==='veh_prestart'){S.section='ground';S._groundSecTab='vehicleprestart';S._vpTab='reports';if(n.reference_id)S._vpOpen=n.reference_id;render();return;}
   }catch(e){}
   render();
 }
