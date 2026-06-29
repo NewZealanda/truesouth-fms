@@ -908,7 +908,7 @@ function renderDrawer(){
       var _mn=function(lbl,id){return _subBtn(lbl,sec==='maintenance'&&msub===id,"S._drawerOpen=false;S.maintTab='"+id+"';window.setTab('maintenance')");};
       h+=_mn('Overview','overview');
       h+=_mn('Logs','log');
-      h+=_mn('Aircraft','aircraft');
+      h+=_mn('W&B Settings','aircraft');
       // Observations + Bookings live in the Logs document hub now.
       if(hasRolePerm('maint_bookings'))h+=_mn('Estimator','estimator');
       h+=_mn('Search','search');
@@ -1016,7 +1016,7 @@ function renderSettingsSubTabs(){
   if(hasRolePerm('audit'))sections.push({id:'audit',lbl:'Audit'});
   return _tier2(sections.map(function(s){return {lbl:s.lbl,on:cur===s.id,onclick:"if(!S.admin)S.admin={};S.admin.section='"+s.id+"';render()"};}));
 }
-var _MAINT_TAB_LBL={overview:'Overview',log:'Logs',aircraft:'Aircraft',observations:'Observations',bookings:'Bookings',estimator:'Estimator',search:'Search'};
+var _MAINT_TAB_LBL={overview:'Overview',log:'Logs',aircraft:'W&B Settings',observations:'Observations',bookings:'Bookings',estimator:'Estimator',search:'Search'};
 // Ordered maintenance tier-2 tab ids (permission-aware). Single source of truth for the tab bar
 // AND the ←/→ arrow-key cycling.
 function _maintTabIds(){
