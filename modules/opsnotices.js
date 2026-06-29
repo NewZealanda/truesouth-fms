@@ -75,7 +75,7 @@ window.onSave=async function(issue){
   S._onData=S._onData||{};S._onData[f.id]=JSON.parse(JSON.stringify(f));
   try{lsSet&&lsSet('ts_ops_notices_cache',{n:S._onData,r:S._onReads});}catch(e){}
   var r=(typeof sbU==='function')?await sbU('ts_ops_notices',[_onPayload(f)]):true;
-  if(typeof toast==='function')toast(r?(issue?'Notice issued ✓':'Notice saved ✓'):'Saved on device — will sync','ok');
+  if(typeof toast==='function')toast(r?(issue?'Notice issued ✓':'Notice saved ✓'):(typeof _lsUploadFailMsg==='function'?_lsUploadFailMsg():'Saved on device — will sync'),r?'ok':'warn');
   if(issue)_onNotifyRecipients(f);
   S._onDraft=null;S._onView='list';render();
 };

@@ -98,7 +98,7 @@ window.vpSubmit=async function(){
   try{lsSet&&lsSet('ts_veh_prestarts_cache',S._vpData);}catch(e){}
   var r=(typeof sbU==='function')?await sbU('ts_vehicle_prestarts',[_vpPayload(f)]):true;
   if(r){if(typeof toast==='function')toast(f.passed?'Prestart submitted ✓':'Prestart submitted — issues flagged to management','ok');}
-  else{if(typeof toast==='function')toast('Saved on this device — will sync when back online','warn');}
+  else{if(typeof toast==='function')toast(typeof _lsUploadFailMsg==='function'?_lsUploadFailMsg():'Saved on this device — will sync when back online','warn');}
   if(!f.passed)_vpNotifyAdmins(f);
   S._vpDraft=null;S._vpTab='reports';render();
 };
