@@ -201,6 +201,9 @@ function _sectionAllowed(sec){
     case 'businessplan':return (hasRolePerm('businessplan'))||!!(S.user&&S.user.superAdmin);
     case 'flightrecord':return (hasRolePerm('flightrecord'))||!!(S.user&&S.user.superAdmin);
     case 'datarecording':return (hasRolePerm('data_recording'))||!!(S.user&&S.user.superAdmin);
+    case 'opsnotices':  return hasRolePerm('ops_notices')||!!(S.user&&S.user.superAdmin);
+    case 'visitors':    return hasRolePerm('visitors')||!!(S.user&&S.user.superAdmin);
+    case 'monitoring':  return hasRolePerm('monitoring')||!!(S.user&&S.user.superAdmin);
     case 'resources':   return hasRolePerm('resources'); // gated further by the feature toggle in nav
     case 'training':    return !!S.user; // training is available to every signed-in user
     case 'weather':     return hasRolePerm('weather_call')||hasRolePerm('operations')||!!(S.user&&S.user.superAdmin); // any pilot/ops can record a weather call
@@ -257,6 +260,9 @@ var HOME_OPTIONS=[
   {id:'flightduty',label:'Flight & Duty',section:'pilotbag',tab:'flightduty'},
   {id:'resources',label:'Resource board',section:'resources'},
   {id:'datarecording',label:'Data Recording',section:'datarecording'},
+  {id:'opsnotices',label:'Ops Notices',section:'opsnotices'},
+  {id:'visitors',label:'Visitors',section:'visitors'},
+  {id:'monitoring',label:'Monitoring',section:'monitoring'},
   {id:'businessplan',label:'Business Plan',section:'businessplan'},
   {id:'settings',label:'Settings',section:'settings',tab:'admin'},
   {id:'training',label:'Training',section:'training'}
@@ -825,6 +831,7 @@ function renderDrawer(){
       h+=_subBtn('Transport',sec==='ground'&&_gSec==='transport',"S._drawerOpen=false;S.section='ground';S._groundSecTab='transport';render()");
       h+=_subBtn('My Pickups',sec==='ground'&&_gSec==='mypickups',"S._drawerOpen=false;S.section='ground';S._groundSecTab='mypickups';render()");
       if(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin))h+=_subBtn('Vehicle Prestart',sec==='ground'&&_gSec==='vehicleprestart',"S._drawerOpen=false;S.section='ground';S._groundSecTab='vehicleprestart';render()");
+      if(hasRolePerm('ground')||hasRolePerm('maintenance')||(S.user&&S.user.superAdmin))h+=_subBtn('Equipment',sec==='ground'&&_gSec==='equipment',"S._drawerOpen=false;S.section='ground';S._groundSecTab='equipment';render()");
     }
   }}
   // Pilot Bag (Flight Record / Logbooks / Flight & Duty) — pinned right under Operations.
@@ -868,6 +875,21 @@ function renderDrawer(){
   {var _canDR=hasRolePerm('data_recording')||(S.user&&S.user.superAdmin);
    if(_canDR){var _onDR=sec==='datarecording';
      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'datarecording\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onDR?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onDR?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onDR?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📊</span><span style="flex:1">Data Recording</span></button>';
+   }}
+  // Operations Notices (SMS) — everyone sees notices applicable to them; admins/CX issue + see receipts.
+  {var _canON=hasRolePerm('ops_notices')||(S.user&&S.user.superAdmin);
+   if(_canON){var _onON=sec==='opsnotices';
+     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'opsnotices\';S._onView=\'list\';S._onOpen=null;render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onON?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onON?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onON?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📋</span><span style="flex:1">Ops Notices</span></button>';
+   }}
+  // Monitoring — live flight-following status board.
+  {var _canMON=hasRolePerm('monitoring')||(S.user&&S.user.superAdmin);
+   if(_canMON){var _onMON=sec==='monitoring';
+     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'monitoring\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onMON?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onMON?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onMON?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📡</span><span style="flex:1">Monitoring</span></button>';
+   }}
+  // Visitors — sign-in kiosk + on-site dashboard + history.
+  {var _canVI=hasRolePerm('visitors')||(S.user&&S.user.superAdmin);
+   if(_canVI){var _onVI=sec==='visitors';
+     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'visitors\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onVI?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onVI?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onVI?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🪪</span><span style="flex:1">Visitors</span></button>';
    }}
   // TSF Business Plan.
   {var _canBP=hasRolePerm('businessplan')||(S.user&&S.user.superAdmin);
@@ -976,6 +998,7 @@ function renderGroundSubTabs(){
   var sub=S._groundSecTab||'transport';
   var tabs=[{id:'transport',lbl:'Transport'},{id:'mypickups',lbl:'My Pickups'}];
   if(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin))tabs.push({id:'vehicleprestart',lbl:'Vehicle Prestart'});
+  if(hasRolePerm('ground')||hasRolePerm('maintenance')||(S.user&&S.user.superAdmin))tabs.push({id:'equipment',lbl:'Equipment'});
   return _tier2(tabs.map(function(t){return {lbl:t.lbl,on:sub===t.id,onclick:"S._groundSecTab='"+t.id+"';render()"};}));
 }
 function renderPilotBagSubTabs(){
@@ -994,6 +1017,7 @@ function renderApp(){
   // login. Mark done on the first app render so re-renders show it parked (no replay); reset on logout.
   const _planeAnim=!_hdrPlaneDone; if(_planeAnim)_hdrPlaneDone=true;
   if(typeof _ensureBdayCrew==='function')_ensureBdayCrew();   // bulletproof birthdays (crew DOBs loaded)
+  if(!S._onLoaded&&typeof loadOpsNotices==='function'){S._onLoaded=true;loadOpsNotices();}   // load Ops Notices at login → re-notify unread
   const _planeTitle=(_planeDeco()==='bday')?('Happy Birthday to '+_bdayGreet()):'Replay';
 
   return`<div style="min-height:100vh;background:var(--bg);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)">
@@ -1088,6 +1112,18 @@ function renderApp(){
           if(!(hasRolePerm('data_recording')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-datarecording">'+renderDataRecording()+'</div>';
         }
+        if(_sec==='opsnotices'){
+          if(!(hasRolePerm('ops_notices')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-opsnotices">'+((typeof renderOpsNotices==='function')?renderOpsNotices():'')+'</div>';
+        }
+        if(_sec==='visitors'){
+          if(!(hasRolePerm('visitors')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-visitors">'+((typeof renderVisitors==='function')?renderVisitors():'')+'</div>';
+        }
+        if(_sec==='monitoring'){
+          if(!(hasRolePerm('monitoring')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-monitoring">'+((typeof renderMonitoring==='function')?renderMonitoring():'')+'</div>';
+        }
         if(_sec==='logbook'){
           if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-logbook">'+renderLogbook()+'</div>';
@@ -1103,6 +1139,7 @@ function renderApp(){
           if(!hasRolePerm('ground')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           var _gst=S._groundSecTab||'transport';
           if(_gst==='vehicleprestart'&&(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin)))return '<div id="flash-vp">'+((typeof renderVehiclePrestart==='function')?renderVehiclePrestart():'')+'</div>';
+          if(_gst==='equipment'&&(hasRolePerm('ground')||hasRolePerm('maintenance')||(S.user&&S.user.superAdmin)))return '<div id="flash-eq">'+((typeof renderEquipment==='function')?renderEquipment():'')+'</div>';
           return '<div id="flash-ground">'+renderGround()+'</div>';
         }
         if(_sec==='trainingmod'){if(!hasRolePerm('training_mod')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('Training','Training records');}

@@ -521,6 +521,14 @@ function hasRolePerm(perm){
   if(perm==='pilotbag')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].pilotbag!==undefined)?!!S.rolePerms[r].pilotbag:true;
   // Vehicle prestart: defaults to whoever has Operations (i.e. the people who drive the vans); grid can override.
   if(perm==='vehicle_prestart'){var _vpo=S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].vehicle_prestart;if(_vpo!==undefined)return !!_vpo;return _sa||hasRolePerm('operations');}
+  // Operations Notices: everyone can view notices applicable to them (default on); managing/issuing is admins+CX.
+  if(perm==='ops_notices')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].ops_notices!==undefined)?!!S.rolePerms[r].ops_notices:true;
+  if(perm==='ops_notices_manage'){var _onm=S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].ops_notices_manage;if(_onm!==undefined)return !!_onm;return r==='admin'||r==='cx_manager'||_sa;}
+  // Visitor sign-in: reception tool — visible to all staff by default; edit/delete history = admins+CX.
+  if(perm==='visitors')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].visitors!==undefined)?!!S.rolePerms[r].visitors:true;
+  if(perm==='visitors_manage'){var _vm=S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].visitors_manage;if(_vm!==undefined)return !!_vm;return r==='admin'||r==='cx_manager'||_sa;}
+  // Flight following / Monitoring: status board for all staff by default.
+  if(perm==='monitoring')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].monitoring!==undefined)?!!S.rolePerms[r].monitoring:true;
   // Combined OPERATIONS permission: calendar, ground, resources, weather (and charter) all follow Operations.
   if(perm==='charter'||perm==='calendar'||perm==='ground'||perm==='resources'||perm==='weather_call')perm='operations';
   const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
@@ -650,7 +658,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.32';
+const APP_VER='v28.36';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

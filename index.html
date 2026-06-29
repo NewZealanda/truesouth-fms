@@ -877,6 +877,14 @@ function hasRolePerm(perm){
   if(perm==='pilotbag')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].pilotbag!==undefined)?!!S.rolePerms[r].pilotbag:true;
   // Vehicle prestart: defaults to whoever has Operations (i.e. the people who drive the vans); grid can override.
   if(perm==='vehicle_prestart'){var _vpo=S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].vehicle_prestart;if(_vpo!==undefined)return !!_vpo;return _sa||hasRolePerm('operations');}
+  // Operations Notices: everyone can view notices applicable to them (default on); managing/issuing is admins+CX.
+  if(perm==='ops_notices')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].ops_notices!==undefined)?!!S.rolePerms[r].ops_notices:true;
+  if(perm==='ops_notices_manage'){var _onm=S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].ops_notices_manage;if(_onm!==undefined)return !!_onm;return r==='admin'||r==='cx_manager'||_sa;}
+  // Visitor sign-in: reception tool — visible to all staff by default; edit/delete history = admins+CX.
+  if(perm==='visitors')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].visitors!==undefined)?!!S.rolePerms[r].visitors:true;
+  if(perm==='visitors_manage'){var _vm=S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].visitors_manage;if(_vm!==undefined)return !!_vm;return r==='admin'||r==='cx_manager'||_sa;}
+  // Flight following / Monitoring: status board for all staff by default.
+  if(perm==='monitoring')return (S.rolePerms&&S.rolePerms[r]&&S.rolePerms[r].monitoring!==undefined)?!!S.rolePerms[r].monitoring:true;
   // Combined OPERATIONS permission: calendar, ground, resources, weather (and charter) all follow Operations.
   if(perm==='charter'||perm==='calendar'||perm==='ground'||perm==='resources'||perm==='weather_call')perm='operations';
   const rp=S.rolePerms?.[r];return rp&&rp[perm]!==undefined?rp[perm]:(DEFAULT_ROLE_PERMS[r]||{})[perm]||false;}
@@ -1006,7 +1014,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.32';
+const APP_VER='v28.36';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3639,6 +3647,9 @@ function _sectionAllowed(sec){
     case 'businessplan':return (hasRolePerm('businessplan'))||!!(S.user&&S.user.superAdmin);
     case 'flightrecord':return (hasRolePerm('flightrecord'))||!!(S.user&&S.user.superAdmin);
     case 'datarecording':return (hasRolePerm('data_recording'))||!!(S.user&&S.user.superAdmin);
+    case 'opsnotices':  return hasRolePerm('ops_notices')||!!(S.user&&S.user.superAdmin);
+    case 'visitors':    return hasRolePerm('visitors')||!!(S.user&&S.user.superAdmin);
+    case 'monitoring':  return hasRolePerm('monitoring')||!!(S.user&&S.user.superAdmin);
     case 'resources':   return hasRolePerm('resources'); // gated further by the feature toggle in nav
     case 'training':    return !!S.user; // training is available to every signed-in user
     case 'weather':     return hasRolePerm('weather_call')||hasRolePerm('operations')||!!(S.user&&S.user.superAdmin); // any pilot/ops can record a weather call
@@ -3695,6 +3706,9 @@ var HOME_OPTIONS=[
   {id:'flightduty',label:'Flight & Duty',section:'pilotbag',tab:'flightduty'},
   {id:'resources',label:'Resource board',section:'resources'},
   {id:'datarecording',label:'Data Recording',section:'datarecording'},
+  {id:'opsnotices',label:'Ops Notices',section:'opsnotices'},
+  {id:'visitors',label:'Visitors',section:'visitors'},
+  {id:'monitoring',label:'Monitoring',section:'monitoring'},
   {id:'businessplan',label:'Business Plan',section:'businessplan'},
   {id:'settings',label:'Settings',section:'settings',tab:'admin'},
   {id:'training',label:'Training',section:'training'}
@@ -4263,6 +4277,7 @@ function renderDrawer(){
       h+=_subBtn('Transport',sec==='ground'&&_gSec==='transport',"S._drawerOpen=false;S.section='ground';S._groundSecTab='transport';render()");
       h+=_subBtn('My Pickups',sec==='ground'&&_gSec==='mypickups',"S._drawerOpen=false;S.section='ground';S._groundSecTab='mypickups';render()");
       if(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin))h+=_subBtn('Vehicle Prestart',sec==='ground'&&_gSec==='vehicleprestart',"S._drawerOpen=false;S.section='ground';S._groundSecTab='vehicleprestart';render()");
+      if(hasRolePerm('ground')||hasRolePerm('maintenance')||(S.user&&S.user.superAdmin))h+=_subBtn('Equipment',sec==='ground'&&_gSec==='equipment',"S._drawerOpen=false;S.section='ground';S._groundSecTab='equipment';render()");
     }
   }}
   // Pilot Bag (Flight Record / Logbooks / Flight & Duty) — pinned right under Operations.
@@ -4306,6 +4321,21 @@ function renderDrawer(){
   {var _canDR=hasRolePerm('data_recording')||(S.user&&S.user.superAdmin);
    if(_canDR){var _onDR=sec==='datarecording';
      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'datarecording\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onDR?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onDR?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onDR?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📊</span><span style="flex:1">Data Recording</span></button>';
+   }}
+  // Operations Notices (SMS) — everyone sees notices applicable to them; admins/CX issue + see receipts.
+  {var _canON=hasRolePerm('ops_notices')||(S.user&&S.user.superAdmin);
+   if(_canON){var _onON=sec==='opsnotices';
+     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'opsnotices\';S._onView=\'list\';S._onOpen=null;render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onON?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onON?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onON?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📋</span><span style="flex:1">Ops Notices</span></button>';
+   }}
+  // Monitoring — live flight-following status board.
+  {var _canMON=hasRolePerm('monitoring')||(S.user&&S.user.superAdmin);
+   if(_canMON){var _onMON=sec==='monitoring';
+     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'monitoring\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onMON?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onMON?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onMON?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📡</span><span style="flex:1">Monitoring</span></button>';
+   }}
+  // Visitors — sign-in kiosk + on-site dashboard + history.
+  {var _canVI=hasRolePerm('visitors')||(S.user&&S.user.superAdmin);
+   if(_canVI){var _onVI=sec==='visitors';
+     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'visitors\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onVI?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onVI?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onVI?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🪪</span><span style="flex:1">Visitors</span></button>';
    }}
   // TSF Business Plan.
   {var _canBP=hasRolePerm('businessplan')||(S.user&&S.user.superAdmin);
@@ -4414,6 +4444,7 @@ function renderGroundSubTabs(){
   var sub=S._groundSecTab||'transport';
   var tabs=[{id:'transport',lbl:'Transport'},{id:'mypickups',lbl:'My Pickups'}];
   if(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin))tabs.push({id:'vehicleprestart',lbl:'Vehicle Prestart'});
+  if(hasRolePerm('ground')||hasRolePerm('maintenance')||(S.user&&S.user.superAdmin))tabs.push({id:'equipment',lbl:'Equipment'});
   return _tier2(tabs.map(function(t){return {lbl:t.lbl,on:sub===t.id,onclick:"S._groundSecTab='"+t.id+"';render()"};}));
 }
 function renderPilotBagSubTabs(){
@@ -4432,6 +4463,7 @@ function renderApp(){
   // login. Mark done on the first app render so re-renders show it parked (no replay); reset on logout.
   const _planeAnim=!_hdrPlaneDone; if(_planeAnim)_hdrPlaneDone=true;
   if(typeof _ensureBdayCrew==='function')_ensureBdayCrew();   // bulletproof birthdays (crew DOBs loaded)
+  if(!S._onLoaded&&typeof loadOpsNotices==='function'){S._onLoaded=true;loadOpsNotices();}   // load Ops Notices at login → re-notify unread
   const _planeTitle=(_planeDeco()==='bday')?('Happy Birthday to '+_bdayGreet()):'Replay';
 
   return`<div style="min-height:100vh;background:var(--bg);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)">
@@ -4526,6 +4558,18 @@ function renderApp(){
           if(!(hasRolePerm('data_recording')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-datarecording">'+renderDataRecording()+'</div>';
         }
+        if(_sec==='opsnotices'){
+          if(!(hasRolePerm('ops_notices')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-opsnotices">'+((typeof renderOpsNotices==='function')?renderOpsNotices():'')+'</div>';
+        }
+        if(_sec==='visitors'){
+          if(!(hasRolePerm('visitors')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-visitors">'+((typeof renderVisitors==='function')?renderVisitors():'')+'</div>';
+        }
+        if(_sec==='monitoring'){
+          if(!(hasRolePerm('monitoring')||(S.user&&S.user.superAdmin)))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
+          return '<div id="flash-monitoring">'+((typeof renderMonitoring==='function')?renderMonitoring():'')+'</div>';
+        }
         if(_sec==='logbook'){
           if(!S.user)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           return '<div id="flash-logbook">'+renderLogbook()+'</div>';
@@ -4541,6 +4585,7 @@ function renderApp(){
           if(!hasRolePerm('ground')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';
           var _gst=S._groundSecTab||'transport';
           if(_gst==='vehicleprestart'&&(hasRolePerm('vehicle_prestart')||(S.user&&S.user.superAdmin)))return '<div id="flash-vp">'+((typeof renderVehiclePrestart==='function')?renderVehiclePrestart():'')+'</div>';
+          if(_gst==='equipment'&&(hasRolePerm('ground')||hasRolePerm('maintenance')||(S.user&&S.user.superAdmin)))return '<div id="flash-eq">'+((typeof renderEquipment==='function')?renderEquipment():'')+'</div>';
           return '<div id="flash-ground">'+renderGround()+'</div>';
         }
         if(_sec==='trainingmod'){if(!hasRolePerm('training_mod')&&!(S.user&&S.user.superAdmin))return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div>';return _placeholderPage('Training','Training records');}
@@ -9888,6 +9933,7 @@ function renderAdminPerms(){
     ]},
     {cat:'Admin & System', col:'#ef4444', perms:[
       {k:'settings',      lbl:'Settings',    tip:'Access the Settings section (sub-pages still gated individually)'},
+      {k:'ops_notices_manage',lbl:'Ops Notices',tip:'Create & issue Operations Notices and see read receipts (everyone can read notices applicable to them)'},
       {k:'admin_crew',    lbl:'Crew',        tip:'View and edit crew profiles and endorsements'},
       {k:'businessplan',  lbl:'Biz Plan',    tip:'View the confidential TSF Business Plan'}
     ]},
@@ -12137,6 +12183,445 @@ function _vpRenderReport(id){
   h+='</div>';
   return h;
 }
+// Operations Notices (SMS). Admins create/issue notices to selected staff groups; recipients get a
+// notification, open the notice, and Mark as read (recorded). Admins/superadmin/CX see who has / hasn't
+// read. Unsigned notices re-notify the user on each login. Files (PDF/photo) stored as data-URIs for now
+// (Supabase Storage is the planned upgrade — all uploads go through _onStoreFile). Numbering starts at 175.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+var ON_START_NO=175;
+var ON_GROUPS=[
+  {k:'pilots',lbl:'Pilots',roles:['pilot']},
+  {k:'desk',  lbl:'Desk',  roles:['desk']},
+  {k:'ground',lbl:'Ground Staff',roles:['ground_staff']},
+  {k:'admin', lbl:'Admin', roles:['admin','superadmin','cx_manager']},
+  {k:'other', lbl:'Other Staff',roles:['maint','maintenance','accounts','marketing']},
+  {k:'everyone',lbl:'Everyone',roles:'*'}
+];
+var ON_STATUS=[['active','Active'],['ongoing','Ongoing'],['closed','Closed']];
+function _onEsc(s){return (typeof esc==='function')?esc(s):String(s==null?'':s);}
+function _onCanManage(){return (typeof hasRolePerm==='function'&&hasRolePerm('ops_notices_manage'))||!!(S.user&&S.user.superAdmin);}
+function _onToday(){return (typeof _todayLocal==='function')?_todayLocal():new Date().toISOString().slice(0,10);}
+function _onFmt(d){if(!d)return '';try{var p=String(d).split('-');return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):d;}catch(e){return d;}}
+// roles a notice's selected groups resolve to (null = everyone)
+function _onRolesFor(groups){groups=groups||[];if(groups.indexOf('everyone')>=0)return null;var set={};ON_GROUPS.forEach(function(g){if(groups.indexOf(g.k)>=0&&Array.isArray(g.roles))g.roles.forEach(function(r){set[r]=1;});});return Object.keys(set);}
+function _onApplToRole(n,role){var roles=_onRolesFor(n.groups);return roles===null||roles.indexOf(role)>=0;}
+function _onApplToMe(n){return S.user&&_onApplToRole(n,S.user.role);}
+function _onReadKey(nid,uid){return String(nid)+'|'+String(uid);}
+function _onHasRead(nid,uid){return !!(S._onReads&&S._onReads[_onReadKey(nid,uid)]);}
+
+// ── Data ──────────────────────────────────────────────────────────────────────────
+window.loadOpsNotices=async function(){
+  try{var c=lsGet&&lsGet('ts_ops_notices_cache');if(c&&c.n)S._onData=c.n;if(c&&c.r)S._onReads=c.r;}catch(e){}
+  if(typeof sbF!=='function')return;
+  var nn=await sbF('ts_ops_notices','','created_at');
+  if(nn){var d={};nn.forEach(function(r){d[r.id]=_onRow(r);});S._onData=d;}
+  var rr=await sbF('ts_ops_notice_reads','','read_at');
+  if(rr){var m={};rr.forEach(function(r){m[_onReadKey(r.notice_id,r.user_id)]={by:r.user_name,at:r.read_at};});S._onReads=m;}
+  try{lsSet&&lsSet('ts_ops_notices_cache',{n:S._onData,r:S._onReads});}catch(e){}
+  if(!S._onResent&&S.user){S._onResent=true;if(window.onResendUnreadOnLogin)window.onResendUnreadOnLogin();}
+  if(typeof safeRender==='function')safeRender();
+};
+function _onRow(r){return {id:r.id,no:r.no,subject:r.subject||'',body:r.body||'',issued_by:r.issued_by||'',issued_by_id:r.issued_by_id||'',date_issued:r.date_issued||'',status:r.status||'active',groups:Array.isArray(r.groups)?r.groups:[],files:Array.isArray(r.files)?r.files:[],created_at:r.created_at};}
+function _onPayload(f){return {id:f.id,no:f.no,subject:f.subject,body:f.body,issued_by:f.issued_by||'',issued_by_id:f.issued_by_id||null,date_issued:f.date_issued,status:f.status||'active',groups:f.groups||[],files:f.files||[],created_at:f.created_at||new Date().toISOString()};}
+function _onNextNo(){var mx=ON_START_NO-1;Object.keys(S._onData||{}).forEach(function(k){var n=+(S._onData[k].no);if(!isNaN(n)&&n>mx)mx=n;});return mx+1;}
+function _onList(){return Object.keys(S._onData||{}).map(function(k){return S._onData[k];}).sort(function(a,b){return (+b.no||0)-(+a.no||0);});}
+
+// ── File upload (data-URI stub) ─────────────────────────────────────────────────────
+function _onStoreFile(file,cb){
+  if(file.size>6*1024*1024){if(typeof toast==='function')toast('File too big (max ~6MB for now).','warn');cb(null);return;}
+  var rd=new FileReader();rd.onload=function(){cb({name:file.name,type:file.type,data:rd.result});};rd.onerror=function(){cb(null);};rd.readAsDataURL(file);
+}
+window.onAddFile=function(input){var f=input&&input.files&&input.files[0];if(!f||!S._onDraft)return;_onStoreFile(f,function(rec){if(rec&&S._onDraft){S._onDraft.files=S._onDraft.files||[];S._onDraft.files.push(rec);render();}});};
+window.onDelFile=function(i){if(S._onDraft&&S._onDraft.files){S._onDraft.files.splice(i,1);render();}};
+
+// ── Draft / create / issue ──────────────────────────────────────────────────────────
+window.onNew=function(){S._onDraft={id:'on_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),no:_onNextNo(),subject:'',body:'',issued_by:(S.user&&S.user.name)||'',issued_by_id:(S.user&&S.user.id)||'',date_issued:_onToday(),status:'active',groups:[],files:[]};S._onView='edit';S._onOpen=null;render();};
+window.onEdit=function(id){var n=(S._onData||{})[id];if(!n)return;S._onDraft=JSON.parse(JSON.stringify(n));S._onView='edit';S._onOpen=null;render();};
+window.onDraftField=function(k,v){if(S._onDraft)S._onDraft[k]=v;};            // no render (keep focus)
+window.onDraftStatus=function(v){if(S._onDraft){S._onDraft.status=v;render();}};
+window.onToggleGroup=function(k){if(!S._onDraft)return;var g=S._onDraft.groups||[];var i=g.indexOf(k);if(i>=0)g.splice(i,1);else g.push(k);S._onDraft.groups=g;render();};
+window.onCancelEdit=function(){S._onDraft=null;S._onView='list';render();};
+window.onSave=async function(issue){
+  var f=S._onDraft;if(!f)return;
+  if(!f.subject||!f.subject.trim()){if(typeof toast==='function')toast('Enter a subject.','warn');return;}
+  if(!f.body||!f.body.trim()){if(typeof toast==='function')toast('Enter the notice text.','warn');return;}
+  if(!f.groups||!f.groups.length){if(typeof toast==='function')toast('Pick at least one group under "Applicable to".','warn');return;}
+  S._onData=S._onData||{};S._onData[f.id]=JSON.parse(JSON.stringify(f));
+  try{lsSet&&lsSet('ts_ops_notices_cache',{n:S._onData,r:S._onReads});}catch(e){}
+  var r=(typeof sbU==='function')?await sbU('ts_ops_notices',[_onPayload(f)]):true;
+  if(typeof toast==='function')toast(r?(issue?'Notice issued ✓':'Notice saved ✓'):'Saved on device — will sync','ok');
+  if(issue)_onNotifyRecipients(f);
+  S._onDraft=null;S._onView='list';render();
+};
+function _onNotifyRecipients(n){
+  try{
+    var roles=_onRolesFor(n.groups);
+    var ids=(S.users||[]).filter(function(u){return u&&!u.inactive&&String(u.id)!==String(S.user&&S.user.id)&&(roles===null||roles.indexOf(u.role)>=0);}).map(function(u){return String(u.id);});
+    if(!ids.length||typeof sbU!=='function')return;
+    var msg='📋 Ops Notice #'+n.no+': '+n.subject;
+    sbU('ts_notifications',ids.map(function(uid){return {user_id:uid,type:'ops_notice',reference_id:n.id,message:msg,read:false,created_at:new Date().toISOString()};})).catch(function(){});
+    if(typeof window.loadNotifications==='function')window.loadNotifications();
+  }catch(e){}
+}
+window.onDelete=async function(id){var n=(S._onData||{})[id];if(!n)return;if(!confirm('Delete Ops Notice #'+n.no+'?'))return;delete S._onData[id];try{lsSet&&lsSet('ts_ops_notices_cache',{n:S._onData,r:S._onReads});}catch(e){}if(typeof sbU==='function')await sbU('ts_ops_notices',[{id:id,no:n.no,subject:n.subject,body:n.body,status:'deleted',date_issued:n.date_issued,groups:n.groups,created_at:n.created_at}]).catch(function(){});S._onOpen=null;render();};
+
+// ── Mark as read ────────────────────────────────────────────────────────────────────
+window.onMarkRead=async function(id){
+  var uid=(S.user&&S.user.id)||'';if(!uid)return;
+  S._onReads=S._onReads||{};S._onReads[_onReadKey(id,uid)]={by:(S.user&&S.user.name)||'',at:new Date().toISOString()};
+  try{lsSet&&lsSet('ts_ops_notices_cache',{n:S._onData,r:S._onReads});}catch(e){}
+  if(typeof sbU==='function')await sbU('ts_ops_notice_reads',[{id:_onReadKey(id,uid),notice_id:id,user_id:uid,user_name:(S.user&&S.user.name)||'',read_at:new Date().toISOString()}]).catch(function(){});
+  if(typeof toast==='function')toast('Marked as read ✓','ok');render();
+};
+// On login: re-notify the user of any ACTIVE notice applicable to them that they haven't read yet.
+window.onResendUnreadOnLogin=function(){
+  try{
+    if(!S.user||typeof sbU!=='function')return;var uid=String(S.user.id);
+    var unread=_onList().filter(function(n){return n.status!=='closed'&&n.status!=='deleted'&&_onApplToMe(n)&&!_onHasRead(n.id,uid);});
+    if(!unread.length)return;
+    sbU('ts_notifications',unread.map(function(n){return {user_id:uid,type:'ops_notice',reference_id:n.id,message:'📋 Unread Ops Notice #'+n.no+': '+n.subject,read:false,created_at:new Date().toISOString()};})).catch(function(){});
+  }catch(e){}
+};
+
+// ── Render ────────────────────────────────────────────────────────────────────────
+function renderOpsNotices(){
+  if(!S._onLoaded){S._onLoaded=true;if(window.loadOpsNotices)window.loadOpsNotices();}
+  if(S._onView==='edit'&&_onCanManage())return _onRenderEdit();
+  if(S._onOpen)return _onRenderView(S._onOpen);
+  return _onRenderList();
+}
+function _onRenderList(){
+  var mine=!_onCanManage();
+  var rows=_onList().filter(function(n){return n.status!=='deleted'&&(!mine||_onApplToMe(n));});
+  var q=(S._onSearch||'').trim().toLowerCase();
+  if(q)rows=rows.filter(function(n){return (n.subject+' '+n.body+' '+n.no).toLowerCase().indexOf(q)>=0;});
+  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="st" style="margin:0">Operations Notices</div>'+
+    (_onCanManage()?'<button onclick="window.onNew()" style="padding:8px 14px;border-radius:8px;border:none;background:var(--accent,#7c3aed);color:#fff;font-weight:700;font-size:13px;cursor:pointer">＋ New notice</button>':'')+'</div>'+
+    '<input type="text" placeholder="Search notices…" value="'+_onEsc(S._onSearch||'')+'" oninput="S._onSearch=this.value;render()" style="width:100%;box-sizing:border-box;margin:12px 0;padding:9px 12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px">';
+  if(!rows.length)return h+'<p style="color:var(--text3)">No notices'+(q?' match.':' yet.')+'</p></div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em"><th style="padding:6px 8px">#</th><th style="padding:6px 8px">Date</th><th style="padding:6px 8px">Subject</th><th style="padding:6px 8px">Status</th><th style="padding:6px 8px">Applicable to</th>'+(_onCanManage()?'<th style="padding:6px 8px">Read</th>':'<th style="padding:6px 8px"></th>')+'</tr></thead><tbody>';
+  rows.forEach(function(n){
+    var st=ON_STATUS.find(function(s){return s[0]===n.status;});
+    var read=_onHasRead(n.id,(S.user&&S.user.id)||'');
+    var applLbls=(n.groups||[]).map(function(k){var g=ON_GROUPS.find(function(x){return x.k===k;});return g?g.lbl:k;}).join(', ');
+    var readInfo='';
+    if(_onCanManage()){var rec=_onRecipients(n);var rc=rec.filter(function(u){return _onHasRead(n.id,u.id);}).length;readInfo='<span style="font-size:12px;color:'+(rc>=rec.length&&rec.length?'#16a34a':'#f59e0b')+';font-weight:700">'+rc+'/'+rec.length+'</span>';}
+    else readInfo=read?'<span style="font-size:11px;color:#16a34a;font-weight:700">✓ read</span>':'<span style="font-size:11px;color:#f59e0b;font-weight:700">unread</span>';
+    h+='<tr onclick="S._onOpen=\''+n.id+'\';render()" style="cursor:pointer;border-top:1px solid var(--border2)'+(!read&&!_onCanManage()?';background:rgba(124,58,237,.05)':'')+'">'+
+      '<td style="padding:8px;font-weight:800">'+_onEsc(n.no)+'</td>'+
+      '<td style="padding:8px;white-space:nowrap">'+_onEsc(_onFmt(n.date_issued))+'</td>'+
+      '<td style="padding:8px;font-weight:600;max-width:280px">'+_onEsc(n.subject)+'</td>'+
+      '<td style="padding:8px"><span style="padding:2px 9px;border-radius:20px;font-size:11px;font-weight:800;background:rgba(0,0,0,.06);color:'+(n.status==='active'?'#16a34a':n.status==='ongoing'?'#f59e0b':'var(--text3)')+'">'+_onEsc(st?st[1]:n.status)+'</span></td>'+
+      '<td style="padding:8px;font-size:12px;color:var(--text2)">'+_onEsc(applLbls)+'</td>'+
+      '<td style="padding:8px">'+readInfo+'</td></tr>';
+  });
+  h+='</tbody></table></div></div>';
+  return h;
+}
+function _onRecipients(n){var roles=_onRolesFor(n.groups);return (S.users||[]).filter(function(u){return u&&!u.inactive&&(roles===null||roles.indexOf(u.role)>=0);}).map(function(u){return {id:String(u.id),name:u.name||u.email||''};});}
+function _onRenderView(id){
+  var n=(S._onData||{})[id];if(!n){S._onOpen=null;return _onRenderList();}
+  var read=_onHasRead(n.id,(S.user&&S.user.id)||'');
+  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><button onclick="S._onOpen=null;render()" style="font-size:12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:5px 12px;cursor:pointer;color:var(--text2)">← Back</button>'+
+    (_onCanManage()?'<div style="display:flex;gap:6px"><button onclick="window.onEdit(\''+n.id+'\')" style="font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);cursor:pointer;color:var(--text2)">Edit</button><button onclick="window.onDelete(\''+n.id+'\')" style="font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid rgba(239,68,68,.4);background:none;color:#f87171;cursor:pointer">Delete</button></div>':'')+'</div>'+
+    '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 2px">Ops Notice #'+_onEsc(n.no)+'</div>'+
+    '<div class="st" style="margin:0 0 6px">'+_onEsc(n.subject)+'</div>'+
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text3);margin-bottom:14px"><span>Issued '+_onEsc(_onFmt(n.date_issued))+'</span>'+(n.issued_by?'<span>By '+_onEsc(n.issued_by)+'</span>':'')+'<span>Status: '+_onEsc((ON_STATUS.find(function(s){return s[0]===n.status;})||[])[1]||n.status)+'</span><span>To: '+_onEsc((n.groups||[]).map(function(k){var g=ON_GROUPS.find(function(x){return x.k===k;});return g?g.lbl:k;}).join(', '))+'</span></div>'+
+    '<div style="font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap;border-top:1px solid var(--border2);padding-top:14px">'+_onEsc(n.body)+'</div>';
+  if(n.files&&n.files.length){
+    h+='<div style="margin-top:14px"><div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Attachments</div>';
+    n.files.forEach(function(fl,i){
+      if(fl.type&&fl.type.indexOf('image')===0)h+='<img src="'+fl.data+'" style="max-width:100%;border-radius:8px;border:1px solid var(--border2);margin-bottom:8px">';
+      else h+='<a href="'+fl.data+'" download="'+_onEsc(fl.name)+'" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--card2);color:var(--text2);font-size:13px;text-decoration:none;margin:0 8px 8px 0">📎 '+_onEsc(fl.name)+'</a>';
+    });
+    h+='</div>';
+  }
+  // Mark-as-read (recipients) or read-status (managers)
+  if(_onApplToMe(n)){
+    h+='<div style="margin-top:18px;border-top:1px solid var(--border2);padding-top:14px">'+
+      (read?'<div style="display:inline-flex;align-items:center;gap:8px;color:#16a34a;font-weight:700;font-size:14px">✅ You have read &amp; acknowledged this notice</div>'
+            :'<button onclick="window.onMarkRead(\''+n.id+'\')" style="width:100%;padding:13px;background:#16a34a;border:none;border-radius:10px;color:#fff;font-size:15px;font-weight:800;cursor:pointer">✓ I have read &amp; understood this notice</button>')+
+    '</div>';
+  }
+  if(_onCanManage()){
+    var rec=_onRecipients(n);var readers=rec.filter(function(u){return _onHasRead(n.id,u.id);});var pend=rec.filter(function(u){return !_onHasRead(n.id,u.id);});
+    h+='<div style="margin-top:18px;border-top:1px solid var(--border2);padding-top:14px"><div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:8px">Read receipts — '+readers.length+'/'+rec.length+'</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
+        '<div><div style="font-size:11px;color:#16a34a;font-weight:700;margin-bottom:4px">Read ('+readers.length+')</div>'+(readers.map(function(u){return '<div style="font-size:12px;color:var(--text2);padding:2px 0">✓ '+_onEsc(u.name)+'</div>';}).join('')||'<div style="font-size:12px;color:var(--text3)">—</div>')+'</div>'+
+        '<div><div style="font-size:11px;color:#f59e0b;font-weight:700;margin-bottom:4px">Not yet ('+pend.length+')</div>'+(pend.map(function(u){return '<div style="font-size:12px;color:var(--text2);padding:2px 0">• '+_onEsc(u.name)+'</div>';}).join('')||'<div style="font-size:12px;color:var(--text3)">everyone has read ✓</div>')+'</div>'+
+      '</div></div>';
+  }
+  h+='</div>';
+  return h;
+}
+function _onRenderEdit(){
+  var f=S._onDraft;if(!f)return _onRenderList();
+  var _i='width:100%;box-sizing:border-box;padding:9px 11px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px';
+  var staff=(S.users||[]).filter(function(u){return u&&!u.inactive;}).map(function(u){return u.name||u.email;}).filter(Boolean).sort();
+  var h='<div class="card"><div class="st">'+(((S._onData||{})[f.id])?'Edit':'New')+' Operations Notice</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-top:12px">'+
+      '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Notice number *</label><input type="number" value="'+_onEsc(f.no)+'" oninput="window.onDraftField(\'no\',this.value)" style="'+_i+'"></div>'+
+      '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Subject *</label><input value="'+_onEsc(f.subject)+'" oninput="window.onDraftField(\'subject\',this.value)" style="'+_i+'"></div>'+
+      '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Date issued</label><input type="date" value="'+_onEsc(f.date_issued)+'" onchange="window.onDraftField(\'date_issued\',this.value)" style="'+_i+'"></div>'+
+      '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Issued by</label><input value="'+_onEsc(f.issued_by)+'" oninput="window.onDraftField(\'issued_by\',this.value)" list="on_staff" style="'+_i+'"><datalist id="on_staff">'+staff.map(function(s){return '<option value="'+_onEsc(s)+'">';}).join('')+'</datalist></div>'+
+      '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Status</label><select onchange="window.onDraftStatus(this.value)" style="'+_i+'">'+ON_STATUS.map(function(s){return '<option value="'+s[0]+'"'+(f.status===s[0]?' selected':'')+'>'+s[1]+'</option>';}).join('')+'</select></div>'+
+    '</div>'+
+    '<div style="margin-top:14px"><label style="font-size:11px;font-weight:700;color:var(--text3)">Applicable to *</label><div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:5px">'+
+      ON_GROUPS.map(function(g){var on=(f.groups||[]).indexOf(g.k)>=0;return '<button onclick="window.onToggleGroup(\''+g.k+'\')" style="padding:6px 13px;border-radius:20px;border:1px solid '+(on?'var(--accent,#7c3aed)':'var(--border2)')+';background:'+(on?'var(--accent,#7c3aed)':'var(--card2)')+';color:'+(on?'#fff':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer">'+g.lbl+'</button>';}).join('')+
+    '</div></div>'+
+    '<div style="margin-top:14px"><label style="font-size:11px;font-weight:700;color:var(--text3)">Operations Notice text *</label><textarea oninput="window.onDraftField(\'body\',this.value)" placeholder="Type the notice…" style="'+_i+';min-height:180px;resize:vertical;line-height:1.5">'+_onEsc(f.body)+'</textarea></div>'+
+    // attachments
+    '<div style="margin-top:14px"><label style="font-size:11px;font-weight:700;color:var(--text3)">Attachments (PDF / photos)</label><div style="margin-top:5px">'+
+      (f.files||[]).map(function(fl,i){return '<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--card2);font-size:12px;color:var(--text2);margin:0 8px 8px 0">📎 '+_onEsc(fl.name)+' <button onclick="window.onDelFile('+i+')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px">×</button></span>';}).join('')+
+      '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--accent,#7c3aed);cursor:pointer">＋ Add file<input type="file" accept="application/pdf,image/*" onchange="window.onAddFile(this)" style="display:none"></label>'+
+    '</div></div>'+
+    '<div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">'+
+      '<button onclick="window.onSave(true)" style="flex:1;min-width:160px;padding:13px;background:var(--accent,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:15px;font-weight:800;cursor:pointer">Issue notice &amp; notify</button>'+
+      '<button onclick="window.onSave(false)" style="padding:13px 18px;background:var(--card2);border:1px solid var(--border2);border-radius:10px;color:var(--text2);font-size:14px;font-weight:700;cursor:pointer">Save only</button>'+
+      '<button onclick="window.onCancelEdit()" style="padding:13px 18px;background:none;border:1px solid var(--border2);border-radius:10px;color:var(--text3);font-size:14px;cursor:pointer">Cancel</button>'+
+    '</div>'+
+  '</div>';
+  return h;
+}
+// Ground equipment & vehicle servicing tracker (Ground ▸ Equipment). Add an item (e.g. "Air Compressor"),
+// add one or more checks to it (e.g. "Empty & Drain") each with a frequency; when a check falls due, on
+// that day ground staff rostered on get a reminder notification. Every completion is kept in the item's
+// service log. Persists to ts_equipment.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+var EQ_FREQ=[['weekly','Weekly',7],['fortnightly','Fortnightly',14],['monthly','Monthly',null],['quarterly','Quarterly',null],['6monthly','6-monthly',null],['annual','Annual',null]];
+function _eqEsc(s){return (typeof esc==='function')?esc(s):String(s==null?'':s);}
+function _eqToday(){return (typeof _todayLocal==='function')?_todayLocal():new Date().toISOString().slice(0,10);}
+function _eqFmt(d){if(!d)return '—';var p=String(d).split('-');return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):d;}
+function _eqCanManage(){return (typeof hasRolePerm==='function'&&(hasRolePerm('ground')||hasRolePerm('maintenance')))||!!(S.user&&S.user.superAdmin);}
+function _eqAddFreq(dateStr,freq){
+  var d=dateStr?new Date(String(dateStr)+'T00:00:00'):new Date();
+  if(freq==='weekly')d.setDate(d.getDate()+7);
+  else if(freq==='fortnightly')d.setDate(d.getDate()+14);
+  else if(freq==='monthly')d.setMonth(d.getMonth()+1);
+  else if(freq==='quarterly')d.setMonth(d.getMonth()+3);
+  else if(freq==='6monthly')d.setMonth(d.getMonth()+6);
+  else if(freq==='annual')d.setFullYear(d.getFullYear()+1);
+  else d.setMonth(d.getMonth()+1);
+  return (typeof _rIso==='function')?_rIso(d):d.toISOString().slice(0,10);
+}
+function _eqFreqLbl(f){var x=EQ_FREQ.find(function(e){return e[0]===f;});return x?x[1]:f;}
+
+// ── Data ──────────────────────────────────────────────────────────────────────────
+window.loadEquipment=async function(){
+  try{var c=lsGet&&lsGet('ts_equipment_cache');if(c&&typeof c==='object')S._eqData=c;}catch(e){}
+  if(typeof sbF!=='function')return;
+  var rows=await sbF('ts_equipment','','created_at');
+  if(rows){var d={};rows.forEach(function(r){if(r.active!==false)d[r.id]=_eqRow(r);});S._eqData=d;try{lsSet&&lsSet('ts_equipment_cache',d);}catch(e){}}
+  if(!S._eqRemindDone&&S.user){S._eqRemindDone=true;_eqRemind();}
+  if(typeof safeRender==='function')safeRender();
+};
+function _eqRow(r){return {id:r.id,name:r.name||'',category:r.category||'',notes:r.notes||'',checks:Array.isArray(r.checks)?r.checks:[],log:Array.isArray(r.log)?r.log:[],created_at:r.created_at};}
+function _eqSave(item){
+  if(!item)return;S._eqData=S._eqData||{};S._eqData[item.id]=item;
+  try{lsSet&&lsSet('ts_equipment_cache',S._eqData);}catch(e){}
+  if(typeof sbU==='function')sbU('ts_equipment',[{id:item.id,name:item.name,category:item.category||'',notes:item.notes||'',checks:item.checks||[],log:item.log||[],active:true,created_at:item.created_at||new Date().toISOString()}]).catch(function(){});
+}
+function _eqList(){return Object.keys(S._eqData||{}).map(function(k){return S._eqData[k];}).sort(function(a,b){return String(a.name).localeCompare(String(b.name));});}
+function _eqDueChecks(item){var t=_eqToday();return (item.checks||[]).filter(function(c){return c.next&&c.next<=t;});}
+function _eqItemDue(item){return _eqDueChecks(item).length>0;}
+
+// ── Reminders (notify rostered ground staff on the day a check is due) ──────────────
+function _eqGroundStaffToday(){
+  var ds=_eqToday(),roster=S.roster||{},off={rdo:1,off:1,leave:1,ul:1,sick:1,'':1};
+  return (S.users||[]).filter(function(u){if(!u||u.inactive||u.role!=='ground_staff')return false;var st=(typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):'';return !off[st];}).map(function(u){return String(u.id);});
+}
+function _eqRemind(){
+  try{
+    if(typeof sbU!=='function')return;var t=_eqToday();var ids=_eqGroundStaffToday();if(!ids.length)return;
+    _eqList().forEach(function(item){
+      (item.checks||[]).forEach(function(c){
+        if(c.next&&c.next<=t&&c._notified!==t){
+          c._notified=t;
+          sbU('ts_notifications',ids.map(function(uid){return {user_id:uid,type:'equipment',reference_id:item.id,message:'🔧 '+item.name+' — "'+c.label+'" is due today',read:false,created_at:new Date().toISOString()};})).catch(function(){});
+          _eqSave(item);
+        }
+      });
+    });
+  }catch(e){}
+}
+
+// ── Handlers ────────────────────────────────────────────────────────────────────────
+window.eqAddItem=function(){var name=prompt('Equipment / vehicle name (e.g. Air Compressor):');if(!name||!name.trim())return;var item={id:'eq_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),name:name.trim(),category:'',notes:'',checks:[],log:[],created_at:new Date().toISOString()};_eqSave(item);S._eqOpen=item.id;render();};
+window.eqDelItem=function(id){var it=(S._eqData||{})[id];if(!it)return;if(!confirm('Delete "'+it.name+'" and its checks/log?'))return;delete S._eqData[id];try{lsSet&&lsSet('ts_equipment_cache',S._eqData);}catch(e){}if(typeof sbU==='function')sbU('ts_equipment',[{id:id,name:it.name,active:false,checks:it.checks,log:it.log,created_at:it.created_at}]).catch(function(){});S._eqOpen=null;render();};
+window.eqAddCheck=function(id){var it=(S._eqData||{})[id];if(!it)return;var label=prompt('Check to add (e.g. Empty & Drain):');if(!label||!label.trim())return;it.checks=it.checks||[];it.checks.push({id:'c_'+Date.now().toString(36),label:label.trim(),freq:'monthly',last:'',next:_eqToday()});_eqSave(it);render();};
+window.eqCheckFreq=function(id,cid,freq){var it=(S._eqData||{})[id];if(!it)return;var c=(it.checks||[]).find(function(x){return x.id===cid;});if(c){c.freq=freq;if(c.last)c.next=_eqAddFreq(c.last,freq);_eqSave(it);render();}};
+window.eqCheckDel=function(id,cid){var it=(S._eqData||{})[id];if(!it)return;it.checks=(it.checks||[]).filter(function(x){return x.id!==cid;});_eqSave(it);render();};
+window.eqMarkDone=function(id,cid){
+  var it=(S._eqData||{})[id];if(!it)return;var c=(it.checks||[]).find(function(x){return x.id===cid;});if(!c)return;
+  var t=_eqToday();c.last=t;c.next=_eqAddFreq(t,c.freq);c._notified='';
+  it.log=it.log||[];it.log.unshift({date:t,by:(S.user&&S.user.name)||'',check:c.label,ts:new Date().toISOString()});
+  if(it.log.length>200)it.log=it.log.slice(0,200);
+  _eqSave(it);if(typeof toast==='function')toast('Logged: '+c.label+' ✓','ok');render();
+};
+window.eqItemNotes=function(id,v){var it=(S._eqData||{})[id];if(it)it.notes=v;};
+window.eqSaveNotes=function(id){var it=(S._eqData||{})[id];if(it)_eqSave(it);};
+
+// ── Render ────────────────────────────────────────────────────────────────────────
+function renderEquipment(){
+  if(!S._eqLoaded){S._eqLoaded=true;if(window.loadEquipment)window.loadEquipment();}
+  if(S._eqOpen)return _eqRenderItem(S._eqOpen);
+  return _eqRenderList();
+}
+function _eqRenderList(){
+  var items=_eqList();
+  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="st" style="margin:0">Equipment & servicing</div>'+
+    (_eqCanManage()?'<button onclick="window.eqAddItem()" style="padding:8px 14px;border-radius:8px;border:none;background:var(--accent,#7c3aed);color:#fff;font-weight:700;font-size:13px;cursor:pointer">＋ Add item</button>':'')+'</div>';
+  if(!items.length)return h+'<p style="color:var(--text3);margin-top:12px">No equipment yet. Add an item to start tracking its servicing.</p></div>';
+  h+='<div style="margin-top:12px">';
+  items.forEach(function(it){
+    var due=_eqDueChecks(it);var nextChk=(it.checks||[]).slice().filter(function(c){return c.next;}).sort(function(a,b){return String(a.next).localeCompare(String(b.next));})[0];
+    h+='<button onclick="S._eqOpen=\''+it.id+'\';render()" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px 15px;border:1px solid '+(due.length?'rgba(239,68,68,.4)':'var(--border2)')+';border-radius:10px;background:'+(due.length?'rgba(239,68,68,.06)':'var(--card2)')+';cursor:pointer;margin-bottom:8px">'+
+      '<span style="font-size:18px">🔧</span><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;color:var(--text)">'+_eqEsc(it.name)+'</div>'+
+      '<div style="font-size:12px;color:var(--text3)">'+(it.checks||[]).length+' check'+((it.checks||[]).length===1?'':'s')+(nextChk?(' · next: '+_eqEsc(nextChk.label)+' '+_eqFmt(nextChk.next)):'')+'</div></div>'+
+      (due.length?'<span style="flex-shrink:0;padding:3px 10px;border-radius:20px;background:rgba(239,68,68,.15);color:#dc2626;font-size:11px;font-weight:800">'+due.length+' due</span>':'<span style="flex-shrink:0;color:var(--text3);font-size:12px">→</span>')+
+    '</button>';
+  });
+  h+='</div></div>';
+  return h;
+}
+function _eqRenderItem(id){
+  var it=(S._eqData||{})[id];if(!it){S._eqOpen=null;return _eqRenderList();}
+  var t=_eqToday();
+  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><button onclick="S._eqOpen=null;render()" style="font-size:12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:5px 12px;cursor:pointer;color:var(--text2)">← Back</button>'+
+    (_eqCanManage()?'<button onclick="window.eqDelItem(\''+it.id+'\')" style="font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid rgba(239,68,68,.4);background:none;color:#f87171;cursor:pointer">Delete</button>':'')+'</div>'+
+    '<div class="st" style="margin:12px 0 4px">🔧 '+_eqEsc(it.name)+'</div>';
+  // checks
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px"><div style="font-size:12px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Checks</div>'+(_eqCanManage()?'<button onclick="window.eqAddCheck(\''+it.id+'\')" style="font-size:12px;color:var(--accent,#7c3aed);background:none;border:none;cursor:pointer;font-weight:700">＋ Add check</button>':'')+'</div>';
+  if(!(it.checks||[]).length)h+='<p style="color:var(--text3);font-size:13px">No checks yet.</p>';
+  (it.checks||[]).forEach(function(c){
+    var overdue=c.next&&c.next<t,duetoday=c.next===t;
+    h+='<div style="border:1px solid '+(overdue||duetoday?'rgba(239,68,68,.4)':'var(--border2)')+';border-radius:9px;padding:11px;margin-bottom:8px;background:var(--card2)">'+
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="flex:1;font-size:14px;font-weight:700;color:var(--text);min-width:120px">'+_eqEsc(c.label)+'</span>'+
+        (_eqCanManage()?'<select onchange="window.eqCheckFreq(\''+it.id+'\',\''+c.id+'\',this.value)" style="padding:5px 8px;background:var(--card);border:1px solid var(--border2);border-radius:7px;color:var(--text2);font-size:12px">'+EQ_FREQ.map(function(e){return '<option value="'+e[0]+'"'+(c.freq===e[0]?' selected':'')+'>'+e[1]+'</option>';}).join('')+'</select>':'<span style="font-size:12px;color:var(--text3)">'+_eqFreqLbl(c.freq)+'</span>')+
+        '<button onclick="window.eqMarkDone(\''+it.id+'\',\''+c.id+'\')" style="padding:6px 13px;border-radius:8px;border:none;background:#16a34a;color:#fff;font-size:12px;font-weight:800;cursor:pointer">Mark done</button>'+
+        (_eqCanManage()?'<button onclick="window.eqCheckDel(\''+it.id+'\',\''+c.id+'\')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px">×</button>':'')+
+      '</div>'+
+      '<div style="font-size:12px;margin-top:5px;color:'+(overdue?'#dc2626':duetoday?'#b45309':'var(--text3)')+'">Last: '+_eqFmt(c.last)+' · Next due: '+_eqFmt(c.next)+(overdue?' (overdue)':duetoday?' (today)':'')+'</div>'+
+    '</div>';
+  });
+  // notes
+  h+='<div style="margin-top:14px"><label style="font-size:11px;font-weight:700;color:var(--text3)">Notes</label><textarea oninput="window.eqItemNotes(\''+it.id+'\',this.value)" onblur="window.eqSaveNotes(\''+it.id+'\')" style="width:100%;box-sizing:border-box;padding:8px 10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;min-height:46px;resize:vertical">'+_eqEsc(it.notes)+'</textarea></div>';
+  // service log
+  h+='<div style="margin-top:16px"><div style="font-size:12px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Service log</div>';
+  if(!(it.log||[]).length)h+='<p style="color:var(--text3);font-size:13px">No servicing logged yet.</p>';
+  else{h+='<table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>';(it.log||[]).forEach(function(l){h+='<tr style="border-top:1px solid var(--border2)"><td style="padding:6px 8px;white-space:nowrap;color:var(--text2)">'+_eqFmt(l.date)+'</td><td style="padding:6px 8px;font-weight:600">'+_eqEsc(l.check)+'</td><td style="padding:6px 8px;color:var(--text3)">'+_eqEsc(l.by)+'</td></tr>';});h+='</tbody></table>';}
+  h+='</div></div>';
+  return h;
+}
+// Visitor sign-in system (Visitors section). Touch-friendly kiosk sign-in with a H&S acknowledgement,
+// a live on-site dashboard, sign-out (by name search), and a permanent filterable history with CSV export.
+// Persists to ts_visitors. (Public QR / unauthenticated kiosk route is a planned follow-up — for now the
+// iPad runs it from a signed-in reception account.)
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+function _viEsc(s){return (typeof esc==='function')?esc(s):String(s==null?'':s);}
+function _viNow(){return new Date().toISOString();}
+function _viDateStr(iso){if(!iso)return '';try{return new Date(iso).toLocaleDateString('en-NZ');}catch(e){return '';}}
+function _viTimeStr(iso){if(!iso)return '';try{return new Date(iso).toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+function _viDur(a,b){if(!a)return '';var s=(new Date(b||Date.now())-new Date(a))/1000;if(s<0)s=0;var h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return (h?h+'h ':'')+m+'m';}
+function _viCanManage(){return (typeof hasRolePerm==='function'&&hasRolePerm('visitors_manage'))||!!(S.user&&(S.user.role==='admin'||S.user.role==='cx_manager'||S.user.superAdmin));}
+
+window.loadVisitors=async function(){
+  try{var c=lsGet&&lsGet('ts_visitors_cache');if(c&&typeof c==='object')S._visData=c;}catch(e){}
+  if(typeof sbF!=='function')return;
+  var rows=await sbF('ts_visitors','','sign_in');
+  if(rows){var d={};rows.forEach(function(r){if(r.status!=='deleted')d[r.id]=_viRow(r);});S._visData=d;try{lsSet&&lsSet('ts_visitors_cache',d);}catch(e){}if(typeof safeRender==='function')safeRender();}
+};
+function _viRow(r){return {id:r.id,name:r.name||'',company:r.company||'',mobile:r.mobile||'',visiting:r.visiting||'',reason:r.reason||'',vehicle_reg:r.vehicle_reg||'',sign_in:r.sign_in,sign_out:r.sign_out||null,status:r.status||'onsite'};}
+function _viPayload(v){return {id:v.id,name:v.name,company:v.company||'',mobile:v.mobile||'',visiting:v.visiting||'',reason:v.reason||'',vehicle_reg:v.vehicle_reg||'',sign_in:v.sign_in,sign_out:v.sign_out||null,status:v.status||'onsite'};}
+function _viList(){return Object.keys(S._visData||{}).map(function(k){return S._visData[k];}).sort(function(a,b){return String(b.sign_in||'').localeCompare(String(a.sign_in||''));});}
+function _viSave(v){S._visData=S._visData||{};S._visData[v.id]=v;try{lsSet&&lsSet('ts_visitors_cache',S._visData);}catch(e){}if(typeof sbU==='function')sbU('ts_visitors',[_viPayload(v)]).catch(function(){});}
+
+// ── Sign-in draft ────────────────────────────────────────────────────────────────
+function _viDraft(){if(!S._visDraft)S._visDraft={name:'',company:'',mobile:'',visiting:'',reason:'',vehicle_reg:'',ack:false};return S._visDraft;}
+window.viField=function(k,v){_viDraft()[k]=v;};
+window.viAck=function(){_viDraft().ack=!_viDraft().ack;render();};
+window.viSignIn=function(){
+  var d=_viDraft();
+  if(!d.name||!d.name.trim()){if(typeof toast==='function')toast('Please enter the visitor\'s full name.','warn');return;}
+  if(!d.ack){if(typeof toast==='function')toast('Please tick the Health & Safety acknowledgement.','warn');return;}
+  var v={id:'vis_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),name:d.name.trim(),company:d.company||'',mobile:d.mobile||'',visiting:d.visiting||'',reason:d.reason||'',vehicle_reg:d.vehicle_reg||'',sign_in:_viNow(),sign_out:null,status:'onsite'};
+  _viSave(v);S._visDraft=null;S._visDone=v.name;S._visTab='signin';render();
+  setTimeout(function(){if(S._visDone){S._visDone=null;if(typeof render==='function')render();}},4500);
+};
+window.viSignOut=function(id){var v=(S._visData||{})[id];if(!v)return;v.sign_out=_viNow();v.status='out';_viSave(v);if(typeof toast==='function')toast(v.name+' signed out ✓','ok');render();};
+window.viDelete=function(id){var v=(S._visData||{})[id];if(!v||!_viCanManage())return;if(!confirm('Delete visitor record for '+v.name+'?'))return;v.status='deleted';if(typeof sbU==='function')sbU('ts_visitors',[_viPayload(v)]).catch(function(){});delete S._visData[id];try{lsSet&&lsSet('ts_visitors_cache',S._visData);}catch(e){}render();};
+window.viExportCsv=function(){
+  var rows=_viFiltered();var head=['Name','Company','Mobile','Visiting','Reason','Vehicle','Date','Time In','Time Out','Duration','Status'];
+  var csv=[head.join(',')].concat(rows.map(function(v){return [v.name,v.company,v.mobile,v.visiting,v.reason,v.vehicle_reg,_viDateStr(v.sign_in),_viTimeStr(v.sign_in),_viTimeStr(v.sign_out),_viDur(v.sign_in,v.sign_out),v.status].map(function(x){x=String(x==null?'':x);return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x;}).join(',');})).join('\n');
+  try{var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='visitors_'+_viDateStr(_viNow()).replace(/\//g,'-')+'.csv';a.click();}catch(e){}
+};
+
+// ── Render ────────────────────────────────────────────────────────────────────────
+function renderVisitors(){
+  if(!S._visLoaded){S._visLoaded=true;if(window.loadVisitors)window.loadVisitors();}
+  var tab=S._visTab||'signin';
+  var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
+    '<button class="sub-tab '+(tab==='signin'?'on':'')+'" onclick="S._visTab=\'signin\';render()">Sign in</button>'+
+    '<button class="sub-tab '+(tab==='onsite'?'on':'')+'" onclick="S._visTab=\'onsite\';render()">On site</button>'+
+    '<button class="sub-tab '+(tab==='history'?'on':'')+'" onclick="S._visTab=\'history\';render()">History</button></div>';
+  if(tab==='onsite')return bar+_viRenderOnsite();
+  if(tab==='history')return bar+_viRenderHistory();
+  return bar+_viRenderSignin();
+}
+function _viRenderSignin(){
+  if(S._visDone){
+    return '<div class="card" style="text-align:center;padding:48px 20px"><div style="font-size:48px">✅</div><div style="font-size:22px;font-weight:800;color:var(--text);margin-top:10px">Thank you, '+_viEsc(S._visDone)+'</div><div style="font-size:15px;color:var(--text3);margin-top:6px">You have successfully signed in.</div><div style="font-size:13px;color:var(--text3);margin-top:14px">Please follow all staff instructions while on site.</div><button onclick="S._visDone=null;render()" style="margin-top:22px;padding:12px 26px;border-radius:10px;border:none;background:var(--accent,#7c3aed);color:#fff;font-size:15px;font-weight:700;cursor:pointer">Done</button></div>';
+  }
+  var d=_viDraft();
+  var staff=[];try{(S.users||[]).forEach(function(u){if(u&&!u.inactive&&u.name)staff.push(u.name);});(S.crew||[]).forEach(function(c){var n=c&&(c.n||c.name);if(n&&staff.indexOf(n)<0)staff.push(n);});}catch(e){}staff.sort();
+  var _i='width:100%;box-sizing:border-box;padding:13px 14px;background:var(--card2);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-size:16px';
+  var _lab='font-size:12px;font-weight:700;color:var(--text3);display:block;margin-bottom:4px';
+  var h='<div style="max-width:560px;margin:0 auto"><div class="card"><div class="st" style="text-align:center;font-size:20px">Visitor sign-in</div><p style="text-align:center;font-size:13px;color:var(--text3);margin:2px 0 18px">Welcome — please sign in below.</p>'+
+    '<div style="display:grid;gap:13px">'+
+      '<div><label style="'+_lab+'">Full name *</label><input value="'+_viEsc(d.name)+'" oninput="window.viField(\'name\',this.value)" style="'+_i+'"></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:13px"><div><label style="'+_lab+'">Company</label><input value="'+_viEsc(d.company)+'" oninput="window.viField(\'company\',this.value)" style="'+_i+'"></div><div><label style="'+_lab+'">Mobile</label><input value="'+_viEsc(d.mobile)+'" inputmode="tel" oninput="window.viField(\'mobile\',this.value)" style="'+_i+'"></div></div>'+
+      '<div><label style="'+_lab+'">Person visiting</label><input value="'+_viEsc(d.visiting)+'" list="vi_staff" placeholder="Search staff, or type a name" oninput="window.viField(\'visiting\',this.value)" style="'+_i+'"><datalist id="vi_staff">'+staff.map(function(s){return '<option value="'+_viEsc(s)+'">';}).join('')+'<option value="Other"></datalist></div>'+
+      '<div><label style="'+_lab+'">Reason for visit</label><input value="'+_viEsc(d.reason)+'" oninput="window.viField(\'reason\',this.value)" style="'+_i+'"></div>'+
+      '<div><label style="'+_lab+'">Vehicle registration</label><input value="'+_viEsc(d.vehicle_reg)+'" oninput="window.viField(\'vehicle_reg\',this.value)" style="'+_i+'"></div>'+
+    '</div>'+
+    // H&S acknowledgement
+    '<div style="margin-top:16px;border:1px solid var(--border2);border-radius:10px;padding:14px;background:var(--card2)">'+
+      '<div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px">Visitor Health &amp; Safety acknowledgement</div>'+
+      '<div style="font-size:13px;color:var(--text2);line-height:1.6">Welcome to our premises. Your safety is important to us. While on site you agree to:<br>• Follow all instructions given by staff.<br>• Remain in authorised visitor areas unless accompanied by a staff member.<br>• Report any hazards or incidents immediately.<br>• Follow all emergency evacuation procedures if instructed.<br>• Wear any required PPE where directed.<br>• Do not interfere with aircraft, equipment or vehicles unless authorised.</div>'+
+      '<label style="display:flex;align-items:center;gap:10px;margin-top:12px;cursor:pointer"><input type="checkbox" '+(d.ack?'checked':'')+' onchange="window.viAck()" style="width:22px;height:22px;accent-color:#16a34a;flex-shrink:0"><span style="font-size:14px;font-weight:700;color:var(--text)">I have read and agree to the Health &amp; Safety requirements.</span></label>'+
+    '</div>'+
+    '<button onclick="window.viSignIn()" style="width:100%;margin-top:16px;padding:16px;background:var(--accent,#7c3aed);border:none;border-radius:12px;color:#fff;font-size:18px;font-weight:800;cursor:pointer">Sign in</button>'+
+  '</div></div>';
+  return h;
+}
+function _viRenderOnsite(){
+  var rows=_viList().filter(function(v){return v.status==='onsite';});
+  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between"><div class="st" style="margin:0">On site now</div><span style="font-size:13px;color:var(--text3)">'+rows.length+' visitor'+(rows.length===1?'':'s')+'</span></div>';
+  if(!rows.length)return h+'<p style="color:var(--text3);margin-top:12px">No visitors currently on site.</p></div>';
+  h+='<div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em"><th style="padding:6px 8px">Name</th><th style="padding:6px 8px">Company</th><th style="padding:6px 8px">Visiting</th><th style="padding:6px 8px">Time in</th><th style="padding:6px 8px">On site</th><th style="padding:6px 8px"></th></tr></thead><tbody>';
+  rows.forEach(function(v){h+='<tr style="border-top:1px solid var(--border2)"><td style="padding:8px;font-weight:700">'+_viEsc(v.name)+'</td><td style="padding:8px">'+_viEsc(v.company)+'</td><td style="padding:8px">'+_viEsc(v.visiting)+'</td><td style="padding:8px;white-space:nowrap">'+_viTimeStr(v.sign_in)+'</td><td style="padding:8px;white-space:nowrap">'+_viDur(v.sign_in)+'</td><td style="padding:8px"><button onclick="window.viSignOut(\''+v.id+'\')" style="padding:6px 13px;border-radius:8px;border:none;background:#16a34a;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Sign out</button></td></tr>';});
+  h+='</tbody></table></div></div>';
+  return h;
+}
+function _viFiltered(){
+  var rows=_viList().filter(function(v){return v.status!=='deleted';});
+  var q=(S._visQ||'').trim().toLowerCase(),co=(S._visCo||'').trim().toLowerCase(),dt=(S._visDate||'');
+  if(q)rows=rows.filter(function(v){return (v.name+' '+v.visiting).toLowerCase().indexOf(q)>=0;});
+  if(co)rows=rows.filter(function(v){return (v.company||'').toLowerCase().indexOf(co)>=0;});
+  if(dt)rows=rows.filter(function(v){return (v.sign_in||'').slice(0,10)===dt;});
+  return rows;
+}
+function _viRenderHistory(){
+  var rows=_viFiltered();
+  var _f='padding:8px 11px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px';
+  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="st" style="margin:0">Visitor history</div><button onclick="window.viExportCsv()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-weight:700;font-size:13px;cursor:pointer">⬇ Export CSV</button></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><input placeholder="Name / staff…" value="'+_viEsc(S._visQ||'')+'" oninput="S._visQ=this.value;render()" style="'+_f+'"><input placeholder="Company…" value="'+_viEsc(S._visCo||'')+'" oninput="S._visCo=this.value;render()" style="'+_f+'"><input type="date" value="'+_viEsc(S._visDate||'')+'" onchange="S._visDate=this.value;render()" style="'+_f+'">'+((S._visQ||S._visCo||S._visDate)?'<button onclick="S._visQ=\'\';S._visCo=\'\';S._visDate=\'\';render()" style="'+_f+';cursor:pointer">Clear</button>':'')+'</div>';
+  if(!rows.length)return h+'<p style="color:var(--text3)">No records.</p></div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em"><th style="padding:6px 8px">Name</th><th style="padding:6px 8px">Company</th><th style="padding:6px 8px">Visiting</th><th style="padding:6px 8px">Date</th><th style="padding:6px 8px">In</th><th style="padding:6px 8px">Out</th><th style="padding:6px 8px">Dur</th>'+(_viCanManage()?'<th></th>':'')+'</tr></thead><tbody>';
+  rows.forEach(function(v){h+='<tr style="border-top:1px solid var(--border2)"><td style="padding:8px;font-weight:600">'+_viEsc(v.name)+'</td><td style="padding:8px">'+_viEsc(v.company)+'</td><td style="padding:8px">'+_viEsc(v.visiting)+'</td><td style="padding:8px;white-space:nowrap">'+_viDateStr(v.sign_in)+'</td><td style="padding:8px;white-space:nowrap">'+_viTimeStr(v.sign_in)+'</td><td style="padding:8px;white-space:nowrap">'+(v.sign_out?_viTimeStr(v.sign_out):'<span style="color:#16a34a;font-weight:700">on site</span>')+'</td><td style="padding:8px;white-space:nowrap">'+_viDur(v.sign_in,v.sign_out)+'</td>'+(_viCanManage()?'<td style="padding:8px"><button onclick="window.viDelete(\''+v.id+'\')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">×</button></td>':'')+'</tr>';});
+  h+='</tbody></table></div></div>';
+  return h;
+}
 
 // ── Status config ──
 var ROSTER_SC={
@@ -13550,6 +14035,9 @@ function _notifTargetLabel(n){
     case 'scheduling':      return 'Calendar';
     case 'weather_call':    return 'Weather';
     case 'veh_prestart':    return 'Prestart';
+    case 'ops_notice':      return 'Ops Notice';
+    case 'equipment':       return 'Equipment';
+    case 'monitoring':      return 'Monitoring';
     default: return ((n&&n.type)||'').indexOf('leave_')===0 ? 'My Leave' : '';
   }
 }
@@ -13565,6 +14053,9 @@ function _notifNavigate(n){
     if(t==='scheduling'){S.section='calendar';S.rezdyTab='schedule';render();return;}
     if(t==='weather_call'){S.section='weather';render();return;}
     if(t==='veh_prestart'){S.section='ground';S._groundSecTab='vehicleprestart';S._vpTab='reports';if(n.reference_id)S._vpOpen=n.reference_id;render();return;}
+    if(t==='ops_notice'){S.section='opsnotices';S._onView='list';S._onOpen=n.reference_id||null;render();return;}
+    if(t==='equipment'){S.section='ground';S._groundSecTab='equipment';if(n.reference_id)S._eqOpen=n.reference_id;render();return;}
+    if(t==='monitoring'){S.section='monitoring';render();return;}
   }catch(e){}
   render();
 }
@@ -21589,7 +22080,9 @@ window.frUseFlight=function(ac,prod,from,to,pob,manual){
   // Co-pilot auto-fills from the calendar (kept if the same aircraft is re-selected so an edit survives).
   var co=(prev.ac===ac&&prev.copilot!=null)?prev.copilot:_frCoPilotForAc(ac);
   var nt=(prev.ac===ac&&prev.note!=null)?prev.note:'';
-  S._frDraft={ac:ac||'',product:prod||'',from:from||'',to:to||'',pob:(pob!=null?+pob:1),startHours:(hrs!=null?hrs:''),copilot:co||'',note:nt||'',manual:!!manual};
+  var et=(prev.ac===ac&&prev.eta_type)?prev.eta_type:'ams';
+  var etm=(prev.ac===ac&&prev.eta_time!=null)?prev.eta_time:'';
+  S._frDraft={ac:ac||'',product:prod||'',from:from||'',to:to||'',pob:(pob!=null?+pob:1),startHours:(hrs!=null?hrs:''),copilot:co||'',note:nt||'',manual:!!manual,eta_type:et,eta_time:etm};
   render();
 };
 window.frDraftSet=function(field,value){S._frDraft=S._frDraft||{};S._frDraft[field]=(field==='pob')?Math.max(0,Math.round(+value)||0):value;render();};
@@ -21600,7 +22093,9 @@ window.frOffBlocks=function(){
   if(!d.ac){if(typeof toast==='function')toast('Pick an aircraft first.','warn');return;}
   if(d.startHours===''||d.startHours==null){if(typeof toast==='function')toast('Confirm the aircraft hours first.','warn');return;}
   var rec={id:_frNewId(),user_id:(S.user&&S.user.id)||'',fr_date:_frToday(),aircraft:d.ac,type:_frAcType(d.ac),product:d.product||'',from:d.from||'',to:d.to||'',pob:+d.pob||0,off:_frNowHM(),on:'',startHours:Math.round((+d.startHours)*10)/10,endHours:null,flightTime:null,tacho:null,landings:1,starts:1,copilot:d.copilot||'',manual:!!d.manual,note:d.note||'',done:false,submitted:false,at:new Date().toISOString()};
-  _frSave(rec);S._frDraft=null;if(typeof toast==='function')toast('Off blocks '+rec.off+' ✓','ok');render();
+  _frSave(rec);
+  if(typeof window._ffOffBlocks==='function')window._ffOffBlocks(rec,d.eta_type||'ams',d.eta_time||'');   // flight following + desk notify
+  S._frDraft=null;if(typeof toast==='function')toast('Off blocks '+rec.off+' ✓','ok');render();
 };
 window.frOnBlocks=function(id){
   var r=(S._frData||{})[id];if(!r)return;
@@ -21612,7 +22107,9 @@ window.frOnBlocks=function(id){
   r.flightTime=Math.round(blockTenths*0.1*10)/10;
   r.tacho=Math.round(Math.max(0,blockTenths-_frAdj())*0.1*10)/10;
   r.endHours=Math.round(((+r.startHours||0)+r.tacho)*10)/10;
-  _frSave(r);if(typeof toast==='function')toast('On blocks '+r.on+' ✓','ok');render();
+  _frSave(r);
+  if(typeof window._ffOnBlocks==='function')window._ffOnBlocks(r);   // flight following: landed → on ground, ETA cancelled
+  if(typeof toast==='function')toast('On blocks '+r.on+' ✓','ok');render();
 };
 window.frSetEndHours=function(id,val){var r=(S._frData||{})[id];if(!r)return;if(val===''){r.endHours=null;}else{var v=Math.round((+val)*10)/10;if(v<(+r.startHours||0))v=(+r.startHours||0);r.endHours=v;r.tacho=Math.round((v-(+r.startHours||0))*10)/10;}_frSave(r);if(typeof safeRender==='function')safeRender();};
 window.frAdjEndHours=function(id,delta){var r=(S._frData||{})[id];if(!r)return;var v=(parseFloat(r.endHours)||(+r.startHours||0))+delta;v=Math.round(v*10)/10;if(v<(+r.startHours||0))v=(+r.startHours||0);r.endHours=v;r.tacho=Math.round((v-(+r.startHours||0))*10)/10;_frSave(r);render();};
@@ -22164,6 +22661,14 @@ function _frRenderDraftForm(d,manual){
   // Notes — captured on the card and carried straight into the logbook row.
   h+='<div style="margin-top:14px"><div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Notes</div>'+
     '<textarea rows="2" placeholder="Anything to record for this flight…" onchange="window.frDraftSet(\'note\',this.value)" style="width:100%;box-sizing:border-box;font-size:15px;padding:10px;border:2px solid var(--border2);border-radius:11px;background:var(--card);color:var(--text);resize:vertical">'+_frEsc(d.note||'')+'</textarea></div>';
+  // ETA for the Monitoring board — AMS (default, used for most flights) or a manual "Other" time.
+  var _et=(d.eta_type||'ams');
+  h+='<div style="margin-top:14px"><div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">ETA (shown on Monitoring)</div>'+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+      '<button onclick="window.frDraftSet(\'eta_type\',\'ams\')" style="padding:11px 18px;border-radius:11px;border:2px solid '+(_et==='ams'?'#16a34a':'var(--border2)')+';background:'+(_et==='ams'?'rgba(34,197,94,.14)':'var(--card2)')+';color:var(--text1);font-size:15px;font-weight:800;cursor:pointer">AMS</button>'+
+      '<button onclick="window.frDraftSet(\'eta_type\',\'other\')" style="padding:11px 18px;border-radius:11px;border:2px solid '+(_et==='other'?'#7c3aed':'var(--border2)')+';background:'+(_et==='other'?'rgba(124,58,237,.14)':'var(--card2)')+';color:var(--text1);font-size:15px;font-weight:800;cursor:pointer">Other</button>'+
+      (_et==='other'?'<input type="time" value="'+_frEsc(d.eta_time||'')+'" onchange="window.frDraftSet(\'eta_time\',this.value)" style="height:48px;font-size:16px;padding:0 12px;border:2px solid var(--border2);border-radius:11px;background:var(--card);color:var(--text)">':'')+
+    '</div></div>';
   // OFF BLOCKS — the one big action
   h+='<button onclick="window.frOffBlocks()" style="width:100%;margin-top:18px;min-height:74px;border-radius:16px;border:none;background:#16a34a;color:#fff;font-size:22px;font-weight:800;cursor:pointer;letter-spacing:.02em">🛫 OFF BLOCKS · '+_frNowHM()+'</button>';
   h+='<div style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">Records the time now. GPS location will come with the app.</div>';
@@ -22418,6 +22923,93 @@ window.frLbField=function(id,field,val){var r=(S._frData||{})[id];if(!r)return;
   _frSave(r);if(typeof safeRender==='function')safeRender();};
 window.frLbAdd=function(){var uid=((typeof hasRolePerm==='function'&&hasRolePerm('flightrecord_manage')||(S.user&&S.user.superAdmin))&&S._lbUid)||(S.user&&S.user.id)||'';var ac=_frAcList()[0]||'';var rec={id:_frNewId(),user_id:uid,fr_date:_frToday(),aircraft:ac,type:_frAcType(ac),product:'',from:'',to:'',pob:1,off:'',on:'',startHours:null,endHours:null,flightTime:null,tacho:null,landings:1,starts:1,picName:'',copilot:_frCoPilotForAc(ac)||'',details:'',manual:true,note:'',done:true,submitted:false,at:new Date().toISOString()};_frSave(rec);S._lbEditId=rec.id;render();};
 window.frLbDelete=function(id){var r=(S._frData||{})[id];if(!r||!r.manual)return;if(typeof confirm==='function'&&!confirm('Delete this manual logbook entry?'))return;delete S._frData[id];try{lsSet&&lsSet('ts_flight_records_cache',S._frData);}catch(e){}if(typeof sbDel==='function')sbDel('ts_flight_records',id);else if(typeof SB!=='undefined')fetch(SB+'/rest/v1/ts_flight_records?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SH}).catch(function(){});S._lbEditId=null;render();};
+// Flight following / Monitoring. Shows the live status of every fleet aircraft — on the ground at a
+// location, or airborne on a leg with POB and an ETA (via AMS, or a manual time). Driven by the flight
+// card: OFF BLOCKS marks the aircraft airborne (and notifies rostered desk staff); ON BLOCKS lands it
+// (on the ground at the destination, ETA cancelled). State lives in ts_flight_following (one row per
+// aircraft) so it never touches the flight-record schema.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+function _ffEsc(s){return (typeof esc==='function')?esc(s):String(s==null?'':s);}
+function _ffAcShort(ac){return String(ac||'').replace('ZK-','');}
+function _ffApt(code){if(!code)return '';try{return (typeof APTS!=='undefined'&&APTS[code])?code:code;}catch(e){return code;}}
+function _ffFleet(){var a=S.aircraft||{};var ks=Object.keys(a);if(ks.length)return ks;return ['ZK-SLA','ZK-SLB','ZK-SDB','ZK-SLD','ZK-SLQ'];}
+function _ffCol(ac){try{return (typeof AC_COL!=='undefined'&&AC_COL[ac])||'#2563eb';}catch(e){return '#2563eb';}}
+
+// ── Data (per-aircraft current status) ──────────────────────────────────────────────
+window.loadFlightFollowing=async function(){
+  try{var c=lsGet&&lsGet('ts_flight_following_cache');if(c&&typeof c==='object')S._ffData=c;}catch(e){}
+  if(typeof sbF!=='function')return;
+  var rows=await sbF('ts_flight_following','','updated_at');
+  if(rows){var d={};rows.forEach(function(r){d[r.id]=r;});S._ffData=d;try{lsSet&&lsSet('ts_flight_following_cache',d);}catch(e){}if(typeof safeRender==='function')safeRender();}
+};
+function _ffSet(ac,patch){
+  S._ffData=S._ffData||{};var cur=S._ffData[ac]||{id:ac,aircraft:ac};
+  var row=Object.assign({},cur,patch,{id:ac,aircraft:ac,updated_at:new Date().toISOString()});
+  S._ffData[ac]=row;try{lsSet&&lsSet('ts_flight_following_cache',S._ffData);}catch(e){}
+  if(typeof sbU==='function')sbU('ts_flight_following',[row]).catch(function(){});
+  return row;
+}
+// Called from the flight card on OFF BLOCKS (rec = the new flight record).
+window._ffOffBlocks=function(rec,etaType,etaTime){
+  if(!rec||!rec.aircraft)return;
+  _ffSet(rec.aircraft,{status:'air',flight_id:rec.id,frm:rec.from||'QN',to:rec.to||'',pob:+rec.pob||0,off_time:rec.off||'',eta_type:(etaType||'ams'),eta_time:etaTime||'',location:''});
+  _ffNotifyDesk('🛫 '+_ffAcShort(rec.aircraft)+' OFF BLOCKS '+(rec.from||'QN')+'→'+(rec.to||'?')+' · POB '+(+rec.pob||0)+(etaType==='other'&&etaTime?(' · ETA '+etaTime):' · ETA via AMS'));
+};
+// Called from the flight card on ON BLOCKS (lands → on the ground at the destination, ETA cancelled).
+window._ffOnBlocks=function(rec){
+  if(!rec||!rec.aircraft)return;
+  _ffSet(rec.aircraft,{status:'ground',flight_id:'',frm:'',to:'',pob:0,off_time:'',eta_type:'',eta_time:'',location:(rec.to||'QN')});
+};
+function _ffNotifyDesk(msg){
+  try{
+    if(typeof sbU!=='function')return;var ds=(typeof _todayLocal==='function')?_todayLocal():new Date().toISOString().slice(0,10);
+    var roster=S.roster||{},off={rdo:1,off:1,leave:1,ul:1,sick:1,'':1};
+    var ids=(S.users||[]).filter(function(u){if(!u||u.inactive)return false;if(u.role!=='desk'&&u.role!=='cx_manager')return false;var st=(typeof _rGetStatus==='function')?_rGetStatus(u,ds,roster):'';return !off[st];}).map(function(u){return String(u.id);});
+    if(!ids.length)return;
+    sbU('ts_notifications',ids.map(function(uid){return {user_id:uid,type:'monitoring',message:msg,read:false,created_at:new Date().toISOString()};})).catch(function(){});
+  }catch(e){}
+};
+// Manual override on the monitoring page (e.g. set an aircraft on the ground somewhere).
+window.ffSetGround=function(ac){var loc=prompt('On the ground at (e.g. Queenstown, Wanaka, Milford):','Queenstown');if(loc==null)return;_ffSet(ac,{status:'ground',location:loc||'Queenstown',flight_id:'',to:'',pob:0,eta_type:'',eta_time:''});render();};
+
+function _ffStatusOf(ac){
+  var r=(S._ffData||{})[ac];
+  if(r&&r.status==='air')return r;
+  if(r&&r.status==='ground')return r;
+  // fall back to today's flight records if no following row yet
+  try{
+    var today=(typeof _frToday==='function')?_frToday():'';
+    var recs=Object.keys(S._frData||{}).map(function(k){return S._frData[k];}).filter(function(x){return x&&x.aircraft===ac&&x.fr_date===today;}).sort(function(a,b){return String(a.off).localeCompare(String(b.off));});
+    var last=recs[recs.length-1];
+    if(last){if(last.off&&!last.on)return {status:'air',frm:last.from,to:last.to,pob:last.pob,off_time:last.off,eta_type:'ams',eta_time:''};if(last.on)return {status:'ground',location:last.to||'QN'};}
+  }catch(e){}
+  return {status:'ground',location:'Queenstown'};
+}
+
+function renderMonitoring(){
+  if(!S._ffLoaded){S._ffLoaded=true;if(window.loadFlightFollowing)window.loadFlightFollowing();}
+  var fleet=_ffFleet();
+  var h='<div class="card"><div class="st">Aircraft monitoring</div><p style="font-size:12px;color:var(--text3);margin:2px 0 14px">Live fleet status — set from the flight card (Off Blocks / On Blocks). Airborne aircraft show POB and ETA.</p>';
+  fleet.forEach(function(ac){
+    var s=_ffStatusOf(ac);var air=s.status==='air';var col=_ffCol(ac);
+    var line2;
+    if(air){
+      var eta=(s.eta_type==='other'&&s.eta_time)?('ETA '+_ffEsc(s.eta_time)):'ETA via AMS';
+      line2='<span style="color:#2563eb;font-weight:700">✈ '+_ffEsc((s.frm||'QN'))+' → '+_ffEsc(s.to||'?')+'</span> · POB '+_ffEsc(+s.pob||0)+' · '+eta+(s.off_time?(' · off '+_ffEsc(s.off_time)):'');
+    } else {
+      line2='<span style="color:#16a34a;font-weight:700">● On ground</span> · '+_ffEsc(s.location||'Queenstown');
+    }
+    h+='<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border2)">'+
+      '<span style="width:14px;height:14px;border-radius:50%;background:'+col+';flex-shrink:0"></span>'+
+      '<div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:800;color:var(--text)">'+_ffEsc(_ffAcShort(ac))+'</div>'+
+        '<div style="font-size:13px;color:var(--text2);margin-top:2px">'+line2+'</div></div>'+
+      (air?'<span style="flex-shrink:0;padding:4px 11px;border-radius:20px;background:rgba(37,99,235,.14);color:#2563eb;font-size:11px;font-weight:800">AIRBORNE</span>'
+          :'<button onclick="window.ffSetGround(\''+ac+'\')" style="flex-shrink:0;font-size:11px;color:var(--text3);background:none;border:1px solid var(--border2);border-radius:8px;padding:5px 10px;cursor:pointer">Set location</button>')+
+    '</div>';
+  });
+  h+='</div>';
+  return h;
+}
 // ─────────────────────────────────────────────────────────────────────────────
 //  TSF BUSINESS PLAN  (admin / superadmin — gated by the 'businessplan' permission)
 //  v1: the "Main Plan" acquisition-finance model, fully interactive (edit inputs → interest,

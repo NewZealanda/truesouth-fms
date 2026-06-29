@@ -1540,6 +1540,7 @@ function renderAdminPerms(){
     ]},
     {cat:'Admin & System', col:'#ef4444', perms:[
       {k:'settings',      lbl:'Settings',    tip:'Access the Settings section (sub-pages still gated individually)'},
+      {k:'ops_notices_manage',lbl:'Ops Notices',tip:'Create & issue Operations Notices and see read receipts (everyone can read notices applicable to them)'},
       {k:'admin_crew',    lbl:'Crew',        tip:'View and edit crew profiles and endorsements'},
       {k:'businessplan',  lbl:'Biz Plan',    tip:'View the confidential TSF Business Plan'}
     ]},

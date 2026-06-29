@@ -225,7 +225,9 @@ window.frUseFlight=function(ac,prod,from,to,pob,manual){
   // Co-pilot auto-fills from the calendar (kept if the same aircraft is re-selected so an edit survives).
   var co=(prev.ac===ac&&prev.copilot!=null)?prev.copilot:_frCoPilotForAc(ac);
   var nt=(prev.ac===ac&&prev.note!=null)?prev.note:'';
-  S._frDraft={ac:ac||'',product:prod||'',from:from||'',to:to||'',pob:(pob!=null?+pob:1),startHours:(hrs!=null?hrs:''),copilot:co||'',note:nt||'',manual:!!manual};
+  var et=(prev.ac===ac&&prev.eta_type)?prev.eta_type:'ams';
+  var etm=(prev.ac===ac&&prev.eta_time!=null)?prev.eta_time:'';
+  S._frDraft={ac:ac||'',product:prod||'',from:from||'',to:to||'',pob:(pob!=null?+pob:1),startHours:(hrs!=null?hrs:''),copilot:co||'',note:nt||'',manual:!!manual,eta_type:et,eta_time:etm};
   render();
 };
 window.frDraftSet=function(field,value){S._frDraft=S._frDraft||{};S._frDraft[field]=(field==='pob')?Math.max(0,Math.round(+value)||0):value;render();};
@@ -236,7 +238,9 @@ window.frOffBlocks=function(){
   if(!d.ac){if(typeof toast==='function')toast('Pick an aircraft first.','warn');return;}
   if(d.startHours===''||d.startHours==null){if(typeof toast==='function')toast('Confirm the aircraft hours first.','warn');return;}
   var rec={id:_frNewId(),user_id:(S.user&&S.user.id)||'',fr_date:_frToday(),aircraft:d.ac,type:_frAcType(d.ac),product:d.product||'',from:d.from||'',to:d.to||'',pob:+d.pob||0,off:_frNowHM(),on:'',startHours:Math.round((+d.startHours)*10)/10,endHours:null,flightTime:null,tacho:null,landings:1,starts:1,copilot:d.copilot||'',manual:!!d.manual,note:d.note||'',done:false,submitted:false,at:new Date().toISOString()};
-  _frSave(rec);S._frDraft=null;if(typeof toast==='function')toast('Off blocks '+rec.off+' ✓','ok');render();
+  _frSave(rec);
+  if(typeof window._ffOffBlocks==='function')window._ffOffBlocks(rec,d.eta_type||'ams',d.eta_time||'');   // flight following + desk notify
+  S._frDraft=null;if(typeof toast==='function')toast('Off blocks '+rec.off+' ✓','ok');render();
 };
 window.frOnBlocks=function(id){
   var r=(S._frData||{})[id];if(!r)return;
@@ -248,7 +252,9 @@ window.frOnBlocks=function(id){
   r.flightTime=Math.round(blockTenths*0.1*10)/10;
   r.tacho=Math.round(Math.max(0,blockTenths-_frAdj())*0.1*10)/10;
   r.endHours=Math.round(((+r.startHours||0)+r.tacho)*10)/10;
-  _frSave(r);if(typeof toast==='function')toast('On blocks '+r.on+' ✓','ok');render();
+  _frSave(r);
+  if(typeof window._ffOnBlocks==='function')window._ffOnBlocks(r);   // flight following: landed → on ground, ETA cancelled
+  if(typeof toast==='function')toast('On blocks '+r.on+' ✓','ok');render();
 };
 window.frSetEndHours=function(id,val){var r=(S._frData||{})[id];if(!r)return;if(val===''){r.endHours=null;}else{var v=Math.round((+val)*10)/10;if(v<(+r.startHours||0))v=(+r.startHours||0);r.endHours=v;r.tacho=Math.round((v-(+r.startHours||0))*10)/10;}_frSave(r);if(typeof safeRender==='function')safeRender();};
 window.frAdjEndHours=function(id,delta){var r=(S._frData||{})[id];if(!r)return;var v=(parseFloat(r.endHours)||(+r.startHours||0))+delta;v=Math.round(v*10)/10;if(v<(+r.startHours||0))v=(+r.startHours||0);r.endHours=v;r.tacho=Math.round((v-(+r.startHours||0))*10)/10;_frSave(r);render();};
@@ -800,6 +806,14 @@ function _frRenderDraftForm(d,manual){
   // Notes — captured on the card and carried straight into the logbook row.
   h+='<div style="margin-top:14px"><div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Notes</div>'+
     '<textarea rows="2" placeholder="Anything to record for this flight…" onchange="window.frDraftSet(\'note\',this.value)" style="width:100%;box-sizing:border-box;font-size:15px;padding:10px;border:2px solid var(--border2);border-radius:11px;background:var(--card);color:var(--text);resize:vertical">'+_frEsc(d.note||'')+'</textarea></div>';
+  // ETA for the Monitoring board — AMS (default, used for most flights) or a manual "Other" time.
+  var _et=(d.eta_type||'ams');
+  h+='<div style="margin-top:14px"><div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">ETA (shown on Monitoring)</div>'+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+      '<button onclick="window.frDraftSet(\'eta_type\',\'ams\')" style="padding:11px 18px;border-radius:11px;border:2px solid '+(_et==='ams'?'#16a34a':'var(--border2)')+';background:'+(_et==='ams'?'rgba(34,197,94,.14)':'var(--card2)')+';color:var(--text1);font-size:15px;font-weight:800;cursor:pointer">AMS</button>'+
+      '<button onclick="window.frDraftSet(\'eta_type\',\'other\')" style="padding:11px 18px;border-radius:11px;border:2px solid '+(_et==='other'?'#7c3aed':'var(--border2)')+';background:'+(_et==='other'?'rgba(124,58,237,.14)':'var(--card2)')+';color:var(--text1);font-size:15px;font-weight:800;cursor:pointer">Other</button>'+
+      (_et==='other'?'<input type="time" value="'+_frEsc(d.eta_time||'')+'" onchange="window.frDraftSet(\'eta_time\',this.value)" style="height:48px;font-size:16px;padding:0 12px;border:2px solid var(--border2);border-radius:11px;background:var(--card);color:var(--text)">':'')+
+    '</div></div>';
   // OFF BLOCKS — the one big action
   h+='<button onclick="window.frOffBlocks()" style="width:100%;margin-top:18px;min-height:74px;border-radius:16px;border:none;background:#16a34a;color:#fff;font-size:22px;font-weight:800;cursor:pointer;letter-spacing:.02em">🛫 OFF BLOCKS · '+_frNowHM()+'</button>';
   h+='<div style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">Records the time now. GPS location will come with the app.</div>';

@@ -31,8 +31,8 @@ create policy veh_prestart_insert on public.ts_vehicle_prestarts for insert to a
 
 drop policy if exists veh_prestart_update on public.ts_vehicle_prestarts;
 create policy veh_prestart_update on public.ts_vehicle_prestarts for update to authenticated
-  using (public.app_role() in ('admin','superadmin') or user_id = public.app_id())
-  with check (public.app_role() in ('admin','superadmin') or user_id = public.app_id());
+  using (public.app_role() in ('admin','superadmin') or user_id::text = public.app_id())
+  with check (public.app_role() in ('admin','superadmin') or user_id::text = public.app_id());
 
 drop policy if exists veh_prestart_delete on public.ts_vehicle_prestarts;
 create policy veh_prestart_delete on public.ts_vehicle_prestarts for delete to authenticated
