@@ -175,7 +175,7 @@ function _vpRenderNew(){
       if(st==='no'){
         h+='<div style="margin-top:8px"><textarea oninput="window.vpComment(\''+key+'\',this.value)" placeholder="What\'s the issue?" style="width:100%;box-sizing:border-box;padding:8px 10px;background:var(--card);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:13px;min-height:42px;resize:vertical">'+_vpEsc(c.c||'')+'</textarea>'+
           '<div style="display:flex;align-items:center;gap:10px;margin-top:6px">'+
-            (c.p?'<img src="'+c.p+'" style="height:54px;border-radius:6px;border:1px solid var(--border2)"><button onclick="window.vpDelPhoto(\''+key+'\')" style="font-size:11px;color:#f87171;background:none;border:none;cursor:pointer">remove photo</button>'
+            (c.p?'<img src="'+_vpEsc(c.p)+'" style="height:54px;border-radius:6px;border:1px solid var(--border2)"><button onclick="window.vpDelPhoto(\''+key+'\')" style="font-size:11px;color:#f87171;background:none;border:none;cursor:pointer">remove photo</button>'
                 :'<label style="font-size:12px;font-weight:700;color:var(--accent,#7c3aed);cursor:pointer;display:inline-flex;align-items:center;gap:6px">📷 Add photo<input type="file" accept="image/*" capture="environment" onchange="window.vpAddPhoto(\''+key+'\',this)" style="display:none"></label>')+
           '</div></div>';
       }
@@ -224,7 +224,7 @@ function _vpRenderReport(id){
         '<span style="flex-shrink:0;width:54px;font-size:11px;font-weight:800;color:'+(st==='no'?'#dc2626':st==='ok'?'#16a34a':'var(--text3)')+'">'+(st==='no'?'NOT OK':st==='ok'?'OK':'—')+'</span>'+
         '<div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--text)">'+_vpEsc(it[1])+'</div>'+
           (c.c?'<div style="font-size:12px;color:#b45309;margin-top:2px">'+_vpEsc(c.c)+'</div>':'')+
-          (c.p?'<img src="'+c.p+'" style="max-width:220px;width:100%;border-radius:8px;border:1px solid var(--border2);margin-top:6px">':'')+
+          (c.p?'<img src="'+_vpEsc(c.p)+'" style="max-width:220px;width:100%;border-radius:8px;border:1px solid var(--border2);margin-top:6px">':'')+
         '</div></div>';
     });
   });

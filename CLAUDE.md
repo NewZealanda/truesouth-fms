@@ -90,7 +90,29 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v28.12 (latest) — nightly sweep: escape passenger/PIC names in the printed loadsheet (XSS).**
+- **v28.55 (latest) — nightly sweep: focus-clobber + escaping fixes on the new ground/ops modules.**
+  `ARCHITECTURE_REVIEW_v28.55.md` is the latest full sweep — first since v28.15; covers the big
+  undocumented **v28.16→v28.54** cycle (the 5 new modules `vehprestart`/`opsnotices`/`equipment`/
+  `visitors`/`monitoring`, Supabase Storage uploads, the Operations/Crew/Company menu restructure,
+  festive header/loading decorations, the uuid→text user-id fix). Two real fixes: (1) **focus clobber** —
+  `render()` only restores focus to inputs with a stable `id`, but the `opsnotices` list search and the
+  `visitors` History name/company filters called `render()` on `oninput` with NO id, so each keystroke
+  dropped focus. Gave them ids (`onSearchBox`, `viSearchName`, `viSearchCo`). (2) **escaping consistency** —
+  wrapped the uploaded-file URL/data-URI in `_onEsc(fl.data)` (opsnotices attachment img/href, which the
+  edit view already escaped) and `_vpEsc(c.p)` (vehprestart Not-OK photo thumbnails). Verified clean by two
+  parallel deep-audit reviewers + my own read: rezdy×3 (per-seat maps, broadcasts, XSS, dates), scheduling/
+  flightrecord/leave/training (NaN guards, leave merge-before-write, perm scoping, leave-day RDO-exclusion,
+  dates), new-module routing + perm gates in shell.js. build + `node --check` (4 blocks) → 0 errors; live
+  truesouth.netlify.app loads with no console errors (read-only). ⚠️ **COMMIT BLOCKED:** this VM session
+  can't write to `.git` (`fatal: unable to write new index file`) and stale `.git/index.lock` + `.git/HEAD.lock`
+  are present — NOT deleted (per rule). v28.55 is built + in the working tree but **UNCOMMITTED**; the tree
+  also still holds a pre-existing mid-refactor changeset (staged SQL-file deletions, `.gitignore`/`build.py`
+  edits). Andrew must clear the locks, review in GitHub Desktop, commit, then push/merge. ⚠️ **New-table SQL**
+  to apply if not yet: `vehicle_prestarts.sql`, `ops_notices.sql`, `equipment.sql`, `visitors.sql`,
+  `flight_following.sql`, `vp_delete_own.sql`, `fix_feature_table_grants.sql`, `fix_uuid_user_columns.sql`.
+  OPEN backlog: the 5 new modules write to Supabase + cache but are NOT realtime-subscribed (second device
+  sees changes on reload / 30s poll only) — obvious next upgrade.
+- **v28.12 — nightly sweep: escape passenger/PIC names in the printed loadsheet (XSS).**
   `ARCHITECTURE_REVIEW_v28.12.md` is the latest full sweep (first since v27.79; covers the undocumented
   v27.80→v28.11 cycle — flight-records import, Reports-to org + manager-based leave, Data Recording
   section, logbook ferry position-chaining, mobile calendar drag-lock, allocator route preference).

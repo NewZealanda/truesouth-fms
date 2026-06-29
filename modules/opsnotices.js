@@ -126,7 +126,7 @@ function _onRenderList(){
   if(q)rows=rows.filter(function(n){return (n.subject+' '+n.body+' '+n.no).toLowerCase().indexOf(q)>=0;});
   var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="st" style="margin:0">Operations Notices</div>'+
     (_onCanManage()?'<button onclick="window.onNew()" style="padding:8px 14px;border-radius:8px;border:none;background:var(--accent,#7c3aed);color:#fff;font-weight:700;font-size:13px;cursor:pointer">＋ New notice</button>':'')+'</div>'+
-    '<input type="text" placeholder="Search notices…" value="'+_onEsc(S._onSearch||'')+'" oninput="S._onSearch=this.value;render()" style="width:100%;box-sizing:border-box;margin:12px 0;padding:9px 12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px">';
+    '<input id="onSearchBox" type="text" placeholder="Search notices…" value="'+_onEsc(S._onSearch||'')+'" oninput="S._onSearch=this.value;render()" style="width:100%;box-sizing:border-box;margin:12px 0;padding:9px 12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px">';
   if(!rows.length)return h+'<p style="color:var(--text3)">No notices'+(q?' match.':' yet.')+'</p></div>';
   h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em"><th style="padding:6px 8px">#</th><th style="padding:6px 8px">Date</th><th style="padding:6px 8px">Subject</th><th style="padding:6px 8px">Status</th><th style="padding:6px 8px">Applicable to</th>'+(_onCanManage()?'<th style="padding:6px 8px">Read</th>':'<th style="padding:6px 8px"></th>')+'</tr></thead><tbody>';
   rows.forEach(function(n){
@@ -160,8 +160,8 @@ function _onRenderView(id){
   if(n.files&&n.files.length){
     h+='<div style="margin-top:14px"><div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Attachments</div>';
     n.files.forEach(function(fl,i){
-      if(fl.type&&fl.type.indexOf('image')===0)h+='<img src="'+fl.data+'" style="max-width:100%;border-radius:8px;border:1px solid var(--border2);margin-bottom:8px">';
-      else h+='<a href="'+fl.data+'" download="'+_onEsc(fl.name)+'" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--card2);color:var(--text2);font-size:13px;text-decoration:none;margin:0 8px 8px 0">📎 '+_onEsc(fl.name)+'</a>';
+      if(fl.type&&fl.type.indexOf('image')===0)h+='<img src="'+_onEsc(fl.data)+'" style="max-width:100%;border-radius:8px;border:1px solid var(--border2);margin-bottom:8px">';
+      else h+='<a href="'+_onEsc(fl.data)+'" download="'+_onEsc(fl.name)+'" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--card2);color:var(--text2);font-size:13px;text-decoration:none;margin:0 8px 8px 0">📎 '+_onEsc(fl.name)+'</a>';
     });
     h+='</div>';
   }

@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.54';
+const APP_VER='v28.55';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -12209,7 +12209,7 @@ function _vpRenderNew(){
       if(st==='no'){
         h+='<div style="margin-top:8px"><textarea oninput="window.vpComment(\''+key+'\',this.value)" placeholder="What\'s the issue?" style="width:100%;box-sizing:border-box;padding:8px 10px;background:var(--card);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:13px;min-height:42px;resize:vertical">'+_vpEsc(c.c||'')+'</textarea>'+
           '<div style="display:flex;align-items:center;gap:10px;margin-top:6px">'+
-            (c.p?'<img src="'+c.p+'" style="height:54px;border-radius:6px;border:1px solid var(--border2)"><button onclick="window.vpDelPhoto(\''+key+'\')" style="font-size:11px;color:#f87171;background:none;border:none;cursor:pointer">remove photo</button>'
+            (c.p?'<img src="'+_vpEsc(c.p)+'" style="height:54px;border-radius:6px;border:1px solid var(--border2)"><button onclick="window.vpDelPhoto(\''+key+'\')" style="font-size:11px;color:#f87171;background:none;border:none;cursor:pointer">remove photo</button>'
                 :'<label style="font-size:12px;font-weight:700;color:var(--accent,#7c3aed);cursor:pointer;display:inline-flex;align-items:center;gap:6px">📷 Add photo<input type="file" accept="image/*" capture="environment" onchange="window.vpAddPhoto(\''+key+'\',this)" style="display:none"></label>')+
           '</div></div>';
       }
@@ -12258,7 +12258,7 @@ function _vpRenderReport(id){
         '<span style="flex-shrink:0;width:54px;font-size:11px;font-weight:800;color:'+(st==='no'?'#dc2626':st==='ok'?'#16a34a':'var(--text3)')+'">'+(st==='no'?'NOT OK':st==='ok'?'OK':'—')+'</span>'+
         '<div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--text)">'+_vpEsc(it[1])+'</div>'+
           (c.c?'<div style="font-size:12px;color:#b45309;margin-top:2px">'+_vpEsc(c.c)+'</div>':'')+
-          (c.p?'<img src="'+c.p+'" style="max-width:220px;width:100%;border-radius:8px;border:1px solid var(--border2);margin-top:6px">':'')+
+          (c.p?'<img src="'+_vpEsc(c.p)+'" style="max-width:220px;width:100%;border-radius:8px;border:1px solid var(--border2);margin-top:6px">':'')+
         '</div></div>';
     });
   });
@@ -12394,7 +12394,7 @@ function _onRenderList(){
   if(q)rows=rows.filter(function(n){return (n.subject+' '+n.body+' '+n.no).toLowerCase().indexOf(q)>=0;});
   var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="st" style="margin:0">Operations Notices</div>'+
     (_onCanManage()?'<button onclick="window.onNew()" style="padding:8px 14px;border-radius:8px;border:none;background:var(--accent,#7c3aed);color:#fff;font-weight:700;font-size:13px;cursor:pointer">＋ New notice</button>':'')+'</div>'+
-    '<input type="text" placeholder="Search notices…" value="'+_onEsc(S._onSearch||'')+'" oninput="S._onSearch=this.value;render()" style="width:100%;box-sizing:border-box;margin:12px 0;padding:9px 12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px">';
+    '<input id="onSearchBox" type="text" placeholder="Search notices…" value="'+_onEsc(S._onSearch||'')+'" oninput="S._onSearch=this.value;render()" style="width:100%;box-sizing:border-box;margin:12px 0;padding:9px 12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px">';
   if(!rows.length)return h+'<p style="color:var(--text3)">No notices'+(q?' match.':' yet.')+'</p></div>';
   h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em"><th style="padding:6px 8px">#</th><th style="padding:6px 8px">Date</th><th style="padding:6px 8px">Subject</th><th style="padding:6px 8px">Status</th><th style="padding:6px 8px">Applicable to</th>'+(_onCanManage()?'<th style="padding:6px 8px">Read</th>':'<th style="padding:6px 8px"></th>')+'</tr></thead><tbody>';
   rows.forEach(function(n){
@@ -12428,8 +12428,8 @@ function _onRenderView(id){
   if(n.files&&n.files.length){
     h+='<div style="margin-top:14px"><div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Attachments</div>';
     n.files.forEach(function(fl,i){
-      if(fl.type&&fl.type.indexOf('image')===0)h+='<img src="'+fl.data+'" style="max-width:100%;border-radius:8px;border:1px solid var(--border2);margin-bottom:8px">';
-      else h+='<a href="'+fl.data+'" download="'+_onEsc(fl.name)+'" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--card2);color:var(--text2);font-size:13px;text-decoration:none;margin:0 8px 8px 0">📎 '+_onEsc(fl.name)+'</a>';
+      if(fl.type&&fl.type.indexOf('image')===0)h+='<img src="'+_onEsc(fl.data)+'" style="max-width:100%;border-radius:8px;border:1px solid var(--border2);margin-bottom:8px">';
+      else h+='<a href="'+_onEsc(fl.data)+'" download="'+_onEsc(fl.name)+'" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--card2);color:var(--text2);font-size:13px;text-decoration:none;margin:0 8px 8px 0">📎 '+_onEsc(fl.name)+'</a>';
     });
     h+='</div>';
   }
@@ -12748,7 +12748,7 @@ function _viRenderHistory(){
   var rows=_viFiltered();
   var _f='padding:8px 11px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px';
   var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="st" style="margin:0">Visitor history</div><button onclick="window.viExportCsv()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-weight:700;font-size:13px;cursor:pointer">⬇ Export CSV</button></div>'+
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><input placeholder="Name / staff…" value="'+_viEsc(S._visQ||'')+'" oninput="S._visQ=this.value;render()" style="'+_f+'"><input placeholder="Company…" value="'+_viEsc(S._visCo||'')+'" oninput="S._visCo=this.value;render()" style="'+_f+'"><input type="date" value="'+_viEsc(S._visDate||'')+'" onchange="S._visDate=this.value;render()" style="'+_f+'">'+((S._visQ||S._visCo||S._visDate)?'<button onclick="S._visQ=\'\';S._visCo=\'\';S._visDate=\'\';render()" style="'+_f+';cursor:pointer">Clear</button>':'')+'</div>';
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><input id="viSearchName" placeholder="Name / staff…" value="'+_viEsc(S._visQ||'')+'" oninput="S._visQ=this.value;render()" style="'+_f+'"><input id="viSearchCo" placeholder="Company…" value="'+_viEsc(S._visCo||'')+'" oninput="S._visCo=this.value;render()" style="'+_f+'"><input type="date" value="'+_viEsc(S._visDate||'')+'" onchange="S._visDate=this.value;render()" style="'+_f+'">'+((S._visQ||S._visCo||S._visDate)?'<button onclick="S._visQ=\'\';S._visCo=\'\';S._visDate=\'\';render()" style="'+_f+';cursor:pointer">Clear</button>':'')+'</div>';
   if(!rows.length)return h+'<p style="color:var(--text3)">No records.</p></div>';
   h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em"><th style="padding:6px 8px">Name</th><th style="padding:6px 8px">Company</th><th style="padding:6px 8px">Visiting</th><th style="padding:6px 8px">Date</th><th style="padding:6px 8px">In</th><th style="padding:6px 8px">Out</th><th style="padding:6px 8px">Dur</th>'+(_viCanManage()?'<th></th>':'')+'</tr></thead><tbody>';
   rows.forEach(function(v){h+='<tr style="border-top:1px solid var(--border2)"><td style="padding:8px;font-weight:600">'+_viEsc(v.name)+'</td><td style="padding:8px">'+_viEsc(v.company)+'</td><td style="padding:8px">'+_viEsc(v.visiting)+'</td><td style="padding:8px;white-space:nowrap">'+_viDateStr(v.sign_in)+'</td><td style="padding:8px;white-space:nowrap">'+_viTimeStr(v.sign_in)+'</td><td style="padding:8px;white-space:nowrap">'+(v.sign_out?_viTimeStr(v.sign_out):'<span style="color:#16a34a;font-weight:700">on site</span>')+'</td><td style="padding:8px;white-space:nowrap">'+_viDur(v.sign_in,v.sign_out)+'</td>'+(_viCanManage()?'<td style="padding:8px"><button onclick="window.viDelete(\''+v.id+'\')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">×</button></td>':'')+'</tr>';});
