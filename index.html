@@ -1004,7 +1004,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.29';
+const APP_VER='v28.30';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -9136,7 +9136,7 @@ function generatePrintHTML(sheet){
     }
   }
 
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>True South Flights — Loadsheet</title></head><body style="font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;margin:0;padding:20px;background:#fff">'
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+esc((f.ac||'')+' Loadsheet')+'</title></head><body style="font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;margin:0;padding:20px;background:#fff">'
 
     // Header
     +'<div style="border-left:5px solid '+acCol+';padding:6px 14px;margin-bottom:14px">'
@@ -9718,8 +9718,10 @@ function _openPrintWindow(sheets){
       +(contents[i+1]?'<div class="lsh brd">'+contents[i+1]+'</div>':'<div class="lsh"></div>')
       +'</div>');
   }
+  var _acs=[];sheets.forEach(function(s){var a=s&&s.form&&s.form.ac;if(a&&_acs.indexOf(a)<0)_acs.push(a);});
+  var _ptitle=(_acs.length===1)?(_acs[0]+' Loadsheet'):(sheets.length>1?'Loadsheets':'Loadsheet');
   var w=window.open('','_blank','width=900,height=750');
-  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Loadsheet</title>'
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+esc(_ptitle)+'</title>'
     +'<style>'
     +'*{box-sizing:border-box;margin:0;padding:0}'
     +'body{background:#fff;font-family:Arial,sans-serif}'
@@ -9733,7 +9735,7 @@ function _openPrintWindow(sheets){
     +'</head><body>'+pairs.join('')
     +'<script>window.onload=function(){window.print();}<\/script>'
     +'</body></html>');
-  w.document.close();
+  w.document.close();try{w.document.title=_ptitle;}catch(e){}
 }
 window.printSingleSheet=function(id){
   var sheet=S.saved.find(function(s){return s.id===id;});
@@ -11621,7 +11623,7 @@ function _mfWorkOrderHtml(f){
   var cl=d.checklist||{};
   function ck(c){c=c||{};var mark=c.done?'✓':(c.na?'N/A':'');return '<span class="box">'+mark+'</span>';}
   function ckRow(item,t){var c=cl[item]||{};return '<div class="ck">'+ck(c)+' '+t+(c.by?' <span style="color:#888;font-size:9px">— '+_mfEsc(c.by)+'</span>':'')+'</div>';}
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Work Order '+_mfEsc(d.woNo)+' '+_mfEsc(f.aircraft)+'</title><style>'+
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Southern Lakes Aviation Form 13 - Work Order</title><style>'+
     '*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:12mm;font-size:12px}'+
     'h1{font-size:17px;margin-bottom:2px}.sub{color:#555;font-size:11px;margin-bottom:10px}'+
     'table{width:100%;border-collapse:collapse;margin-bottom:10px}th,td{border:1px solid #999;padding:4px 6px;font-size:11px;vertical-align:top}th{background:#eee;text-align:left}'+
@@ -11666,7 +11668,7 @@ function _mfWorkOrderHtml(f){
     '<div class="note">Retention Period — Two years post completion. Effective 06/08/24.</div>'+
     '<script>window.onload=function(){window.print();}<\/script></body></html>';
 }
-window.maintFormPrint=function(id){var f=(S._mfData||{})[id];if(!f)return;var w=window.open('','_blank','width=860,height=950');if(!w){if(typeof toast==='function')toast('Allow pop-ups to print.','warn');return;}w.document.write(_mfWorkOrderHtml(f));w.document.close();};
+window.maintFormPrint=function(id){var f=(S._mfData||{})[id];if(!f)return;var w=window.open('','_blank','width=860,height=950');if(!w){if(typeof toast==='function')toast('Allow pop-ups to print.','warn');return;}w.document.write(_mfWorkOrderHtml(f));w.document.close();try{w.document.title='Southern Lakes Aviation Form 13 - Work Order';}catch(e){}};
 
 window.maintFormUpload=async function(id){
   var f=(S._mfData||{})[id];if(!f)return;
@@ -11820,9 +11822,13 @@ function renderMaintFormEditor(id){
   _mfMigrate(f);var d=f.data||{};
   var _in='width:100%;padding:8px 10px;background:var(--card2);border:1px solid var(--border2);border-radius:7px;color:var(--text1);font-size:13px;box-sizing:border-box;font-family:inherit';
   var _ta=_in+';resize:vertical;min-height:46px';
-  function fld(label,path,val,ph){return '<div><label style="font-size:11px;color:var(--text3);font-weight:600">'+label+'</label><input value="'+_mfEsc(val)+'" placeholder="'+(ph||'')+'" oninput="window.mfField(\''+id+'\',\''+path+'\',this.value)" style="'+_in+'"></div>';}
+  // Stable element ids so focus+caret survive a re-render (safeRender force-renders after 3s even while
+  // an input is focused; without an id the global focus-restore can't recover it → "can't type"). v28.x
+  var _fid=String(id).replace(/[^a-z0-9]/gi,'_');
+  function _mfId(path){return 'mf_'+_fid+'_'+String(path).replace(/[^a-z0-9]/gi,'_');}
+  function fld(label,path,val,ph){return '<div><label style="font-size:11px;color:var(--text3);font-weight:600">'+label+'</label><input id="'+_mfId(path)+'" value="'+_mfEsc(val)+'" placeholder="'+(ph||'')+'" oninput="window.mfField(\''+id+'\',\''+path+'\',this.value)" style="'+_in+'"></div>';}
   function dt(label,path,val){return '<div><label style="font-size:11px;color:var(--text3);font-weight:600">'+label+'</label><input type="date" value="'+_mfEsc(val)+'" onchange="window.mfField(\''+id+'\',\''+path+'\',this.value)" style="'+_in+'"></div>';}
-  function ta(label,path,val){return '<div style="flex:1 1 100%"><label style="font-size:11px;color:var(--text3);font-weight:600">'+label+'</label><textarea oninput="window.mfField(\''+id+'\',\''+path+'\',this.value)" style="'+_ta+'">'+_mfEsc(val)+'</textarea></div>';}
+  function ta(label,path,val){return '<div style="flex:1 1 100%"><label style="font-size:11px;color:var(--text3);font-weight:600">'+label+'</label><textarea id="'+_mfId(path)+'" oninput="window.mfField(\''+id+'\',\''+path+'\',this.value)" style="'+_ta+'">'+_mfEsc(val)+'</textarea></div>';}
   function ynSel(label,path,val){return '<div><label style="font-size:11px;color:var(--text3);font-weight:600">'+label+'</label><select onchange="window.mfSetYN(\''+id+'\',\''+path+'\',this.value)" style="'+_in+'"><option value=""'+(!val?' selected':'')+'>—</option><option value="Y"'+(val==='Y'?' selected':'')+'>Y</option><option value="N"'+(val==='N'?' selected':'')+'>N</option></select></div>';}
   // A line-item section (6/7/8): existing items + a new-item input.
   function section(no,label,key){
@@ -11831,10 +11837,10 @@ function renderMaintFormEditor(id){
       var done=it.status==='completed',def=it.status==='deferred';
       return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">'+
         (it.obsId?'<span title="Pulled from Observations — ticking Completed resolves it there" style="flex-shrink:0;font-size:9px;font-weight:800;letter-spacing:.03em;color:#06b6d4;background:rgba(6,182,212,.14);border:1px solid rgba(6,182,212,.4);padding:2px 5px;border-radius:5px">OBS</span>':'')+
-        '<input value="'+_mfEsc(it.text)+'" oninput="window.mfItemText(\''+id+'\',\''+key+'\','+i+',this.value)" style="flex:1;min-width:0;padding:6px 8px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;color:var(--text1);font-size:13px">'+
+        '<input id="'+_mfId(key+'_'+i+'_t')+'" value="'+_mfEsc(it.text)+'" oninput="window.mfItemText(\''+id+'\',\''+key+'\','+i+',this.value)" style="flex:1;min-width:0;padding:6px 8px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;color:var(--text1);font-size:13px">'+
         '<button onclick="window.mfItemStatus(\''+id+'\',\''+key+'\','+i+',\'completed\')" title="Completed" style="width:30px;height:30px;border-radius:6px;border:1px solid '+(done?'#22c55e':'var(--border2)')+';background:'+(done?'rgba(34,197,94,.2)':'transparent')+';color:'+(done?'#22c55e':'var(--text3)')+';font-weight:800;cursor:pointer">✓</button>'+
         '<button onclick="window.mfItemStatus(\''+id+'\',\''+key+'\','+i+',\'deferred\')" title="Deferred" style="width:30px;height:30px;border-radius:6px;border:1px solid '+(def?'#ef4444':'var(--border2)')+';background:'+(def?'rgba(239,68,68,.2)':'transparent')+';color:'+(def?'#ef4444':'var(--text3)')+';font-weight:800;cursor:pointer">✗</button>'+
-        '<input value="'+_mfEsc(it.initial)+'" placeholder="Init" oninput="window.mfItemInitial(\''+id+'\',\''+key+'\','+i+',this.value)" title="Engineer initial" style="width:48px;padding:6px 4px;text-align:center;background:var(--card2);border:1px solid var(--border2);border-radius:6px;color:var(--text1);font-size:12px">'+
+        '<input id="'+_mfId(key+'_'+i+'_i')+'" value="'+_mfEsc(it.initial)+'" placeholder="Init" oninput="window.mfItemInitial(\''+id+'\',\''+key+'\','+i+',this.value)" title="Engineer initial" style="width:48px;padding:6px 4px;text-align:center;background:var(--card2);border:1px solid var(--border2);border-radius:6px;color:var(--text1);font-size:12px">'+
         '<button onclick="window.mfItemDel(\''+id+'\',\''+key+'\','+i+')" title="Remove" style="width:26px;height:30px;border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:15px">×</button>'+
       '</div>';
     }).join('');
@@ -11863,7 +11869,7 @@ function renderMaintFormEditor(id){
         '<input type="checkbox" '+((d.oil&&d.oil.updateChange)?'checked':'')+' onchange="window.mfOilUpdateToggle(\''+id+'\')" style="width:20px;height:20px;accent-color:#f59e0b;flex-shrink:0">'+
         '<span style="font-size:14px;font-weight:800;color:var(--text1)">Reset oil tracker this check?</span>'+
         '<span style="font-size:11px;color:var(--text3);margin-left:auto;text-align:right">resets the next check’s start date to '+_mfEsc(d.onDate)+'</span></label>'+
-      '<input value="'+_mfEsc(d.oil&&d.oil.note)+'" placeholder="Oil note (optional)" oninput="window.mfField(\''+id+'\',\'oil.note\',this.value)" style="'+_in+';margin-top:8px">'+
+      '<input id="'+_mfId('oil.note')+'" value="'+_mfEsc(d.oil&&d.oil.note)+'" placeholder="Oil note (optional)" oninput="window.mfField(\''+id+'\',\'oil.note\',this.value)" style="'+_in+';margin-top:8px">'+
     '</div>';
   }
   // Checklist (Done / N/A + who).

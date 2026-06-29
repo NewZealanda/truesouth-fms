@@ -791,7 +791,7 @@ function generatePrintHTML(sheet){
     }
   }
 
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>True South Flights — Loadsheet</title></head><body style="font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;margin:0;padding:20px;background:#fff">'
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+esc((f.ac||'')+' Loadsheet')+'</title></head><body style="font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;margin:0;padding:20px;background:#fff">'
 
     // Header
     +'<div style="border-left:5px solid '+acCol+';padding:6px 14px;margin-bottom:14px">'
@@ -1373,8 +1373,10 @@ function _openPrintWindow(sheets){
       +(contents[i+1]?'<div class="lsh brd">'+contents[i+1]+'</div>':'<div class="lsh"></div>')
       +'</div>');
   }
+  var _acs=[];sheets.forEach(function(s){var a=s&&s.form&&s.form.ac;if(a&&_acs.indexOf(a)<0)_acs.push(a);});
+  var _ptitle=(_acs.length===1)?(_acs[0]+' Loadsheet'):(sheets.length>1?'Loadsheets':'Loadsheet');
   var w=window.open('','_blank','width=900,height=750');
-  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Loadsheet</title>'
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+esc(_ptitle)+'</title>'
     +'<style>'
     +'*{box-sizing:border-box;margin:0;padding:0}'
     +'body{background:#fff;font-family:Arial,sans-serif}'
@@ -1388,7 +1390,7 @@ function _openPrintWindow(sheets){
     +'</head><body>'+pairs.join('')
     +'<script>window.onload=function(){window.print();}<\/script>'
     +'</body></html>');
-  w.document.close();
+  w.document.close();try{w.document.title=_ptitle;}catch(e){}
 }
 window.printSingleSheet=function(id){
   var sheet=S.saved.find(function(s){return s.id===id;});
