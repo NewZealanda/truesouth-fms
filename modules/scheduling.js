@@ -57,13 +57,16 @@ function _schedNum(v){v=parseFloat(v);return isFinite(v)?v:null;}
 // ── Aircraft↔route preference (operator rule) ──────────────────────────────────
 // Standing rule: keep the CARAVANS (SLA/SLB/SDB) on the Milford run so big-plane seats stay open for
 // last-minute Milford bookings, and send the AIRVANS (SLD/SLQ) to Mt Cook / Franz / anywhere else. It's
-// a COST-BOUNDED preference: a "mismatch" (caravan off Milford, or airvan on Milford) adds W dollars to
-// the optimiser's OBJECTIVE only (not the reported $ cost), so the allocator honours the rule UNLESS
-// doing so would cost more than W extra per mismatched aircraft. W is operator-set (default $100; 0 off).
+// a COST-BOUNDED preference: a "mismatch" = a CARAVAN on a non-Milford run (Mt Cook / Franz Josef / etc.),
+// which should prefer the AIRVAN. It adds W dollars to the optimiser's OBJECTIVE only (not the reported $
+// cost), so the airvan is used on those routes UNLESS a caravan is needed (capacity) or costs ≤ W less.
+// Airvans are never penalised — a light Milford load just takes the cheaper airvan. W default $100 (0 off).
 var SCHED_ROUTE_PREF_W=100;
 function _schedRoutePrefW(){var v=_schedNum(_schedCfg().routePrefW);return v==null?SCHED_ROUTE_PREF_W:Math.max(0,v);}
-// 1 if this aircraft↔destination pairing goes against the rule, else 0. Blank dest = Milford (FCF).
-function _schedAcRouteMismatch(ac,dest){var mf=(!dest||dest==='MF');var av=_schedIsAirvan(ac);return ((av&&mf)||(!av&&!mf))?1:0;}
+// 1 only when a CARAVAN is on a non-Milford run (Mt Cook / Franz Josef / etc.) — those routes should
+// prefer the AIRVAN. Airvans are NEVER penalised (incl. on Milford), so a light Milford load takes the
+// cheaper airvan. Blank dest = Milford (FCF).
+function _schedAcRouteMismatch(ac,dest){var mf=(!dest||dest==='MF');var av=_schedIsAirvan(ac);return (!av&&!mf)?1:0;}
 window.schedSetRoutePrefW=function(v){var c=_schedCfg();var n=_schedNum(v);c.routePrefW=(n==null?'':Math.max(0,n));_schedSave();render();};
 // ── Calculated costs (run/hr × hours + landings) ───────────────────────────────
 // Per TYPE (averaged owned Airvan / Caravan, plus the SDB lease) we hold a running cost $/hr and a
@@ -1142,8 +1145,8 @@ function _schedDayPlan(date,opts){
   var candCache={};unlocked.forEach(function(d){candCache[d.key]=_schedDepCandidateSets(date,d);});
   var _sk=function(arr){return arr.slice().sort().join(',');};
   var best=base,forced={};
-  // Compare on the OBJECTIVE = real $ cost + W×route-preference mismatches (keeps caravans on Milford /
-  // airvans on landing tours unless honouring it costs more than W per mismatch). cost stays the pure $.
+  // Compare on the OBJECTIVE = real $ cost + W×route-preference mismatches (prefers airvans on the
+  // Mt Cook / Franz landing tours unless honouring it costs more than W per aircraft). cost stays pure $.
   var _W=_schedRoutePrefW();var _obj=function(p){return (p.cost||0)+_W*(p.mis||0);};
   // Hill-climb over the WHOLE day. Each round tries every improving reassignment — SINGLE departures and
   // PAIRS of departures together — re-costs the entire day via _schedSimulate, and keeps the cheapest
