@@ -1004,7 +1004,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.27';
+const APP_VER='v28.29';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3439,6 +3439,19 @@ function acLayout(acId){const _a=_acSpec(acId);if(_a?.layout==='ga8')return GA8_
 // the frequent full re-renders (it's set true on the first app render after login).
 var _hdrPlaneDone=false;
 var _bdayCrewLoaded=false;   // one-time guard: make sure crew DOBs are loaded so birthdays are detected
+// Preload crew (with DOBs) once so birthdays are detected everywhere — including the loading screen.
+// When crew arrives, update the loading plane's image in place (no animation restart) and re-render.
+function _ensureBdayCrew(){
+  if(_bdayCrewLoaded)return; _bdayCrewLoaded=true;
+  if((!S.crew||!S.crew.length)&&typeof reloadTable==='function'){
+    try{var _cp=reloadTable('ts_crew');
+      if(_cp&&_cp.then)_cp.then(function(){
+        var lp=document.getElementById('ts-load-plane'); if(lp&&typeof _planeSrc==='function')lp.src=_planeSrc();
+        if(typeof render==='function')render();
+      }).catch(function(){});
+    }catch(e){}
+  }
+}
 // Click the parked header plane to replay the fly-in: clearing the flag makes the next render re-add the
 // animation class (renderApp re-sets it true), so it flies in once more.
 window.replayHdrPlane=function(){_hdrPlaneDone=false;if(typeof render==='function')render();};
@@ -3467,13 +3480,14 @@ function _planeSrc(){var d=_planeDeco();return d==='bday'?_TS_PLANE_BDAY:d==='xm
 // Loading animation: a mountain range draws itself left→right, then a little plane takes off and
 // climbs over it. Used on the session-restore and app-load screens.
 function _tsLoadingScene(){
+  if(typeof _ensureBdayCrew==='function')_ensureBdayCrew();   // so a birthday catches on the loading plane too
   return '<div class="ts-scene">'
     +'<svg class="ts-mtns" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" aria-hidden="true">'
       +'<defs><filter id="tsBrush" x="-25%" y="-25%" width="150%" height="150%"><feTurbulence type="fractalNoise" baseFrequency="0.014" numOctaves="2" seed="4" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="6" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap></filter></defs>'
       +'<path class="ts-mtn-path" filter="url(#tsBrush)" pathLength="1" fill="none" stroke="rgba(255,255,255,.95)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" d="M4 158 L66 104 L118 132 L176 58 L232 128 L288 96 L316 152"></path>'
     +'</svg>'
     +'<div class="ts-runway2"></div>'
-    +'<div class="ts-plane2"><img src="'+_TS_PLANE+'" alt="" style="width:78px;height:auto;display:block;transform:scaleX(-1)"></div>'
+    +'<div class="ts-plane2"><img id="ts-load-plane" src="'+((typeof _planeSrc==='function')?_planeSrc():_TS_PLANE)+'" alt="" style="width:78px;height:auto;display:block;transform:scaleX(-1)"></div>'
     +'</div>'
     +'<div class="ts-loading-text">Loading...</div>'
     +'<button onclick="window.tsSkipLoad()" style="margin-top:16px;padding:8px 22px;border-radius:20px;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.08);color:#fff;font-size:13px;font-weight:700;letter-spacing:.03em;cursor:pointer">Skip →</button>';
@@ -4414,9 +4428,7 @@ function renderApp(){
   // Header plane: fly in from the right (the notifications side) and land just past the logo — ONCE per
   // login. Mark done on the first app render so re-renders show it parked (no replay); reset on logout.
   const _planeAnim=!_hdrPlaneDone; if(_planeAnim)_hdrPlaneDone=true;
-  // Birthdays are bulletproof: make sure crew (with DOBs) is loaded once, then re-render so the
-  // birthday plane + greeting appear even if the user lands here before crew finished loading.
-  if(!_bdayCrewLoaded){_bdayCrewLoaded=true;if((!S.crew||!S.crew.length)&&typeof reloadTable==='function'){try{var _cp=reloadTable('ts_crew');if(_cp&&_cp.then)_cp.then(function(){if(typeof render==='function')render();}).catch(function(){});}catch(e){}}}
+  if(typeof _ensureBdayCrew==='function')_ensureBdayCrew();   // bulletproof birthdays (crew DOBs loaded)
   const _planeTitle=(_planeDeco()==='bday')?('Happy Birthday to '+_bdayGreet()):'Replay';
 
   return`<div style="min-height:100vh;background:var(--bg);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)">
