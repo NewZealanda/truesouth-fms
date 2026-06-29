@@ -284,7 +284,7 @@ function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
   // Under Phase A, ts_users SELECT is revoked so it can't be subscribed — drop it.
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs','ts_maint_forms'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs','ts_maint_forms','ts_vehicle_prestarts','ts_ops_notices','ts_ops_notice_reads','ts_equipment','ts_visitors','ts_flight_following'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
     var _rtThisWs=_rtWs;   // guard: a reconnect/refresh may replace _rtWs before this socket opens
@@ -325,6 +325,12 @@ function initRealtime(){
                 if(typeof window.rezdyReloadLsTabsLive==='function')window.rezdyReloadLsTabsLive();
                 if(S.section==='calendar'&&typeof window.rezdyReloadScheduleLive==='function')window.rezdyReloadScheduleLive();
               }
+              // New ground/ops modules: re-pull any that are open so a dropped socket doesn't leave them stale.
+              if(S._vpLoaded&&window.loadVehiclePrestarts)window.loadVehiclePrestarts();
+              if(S._onLoaded&&window.loadOpsNotices)window.loadOpsNotices();
+              if(S._eqLoaded&&window.loadEquipment)window.loadEquipment();
+              if(S._visLoaded&&window.loadVisitors)window.loadVisitors();
+              if(S._ffLoaded&&window.loadFlightFollowing)window.loadFlightFollowing();
             }catch(e){}}
             _rtConnectedOnce=true;
             safeRender();
@@ -632,6 +638,23 @@ async function reloadTable(table){
     // Live-sync maintenance forms across devices — but skip while THIS device is editing a form (its
     // local copy is authoritative; its own debounced save pushes to the DB), so an echo can't clobber.
     if(S._mfLoaded&&S._mfView!=='editor'&&typeof window.loadMaintForms==='function'){window.loadMaintForms();}
+    return false;
+  } else if(table==='ts_vehicle_prestarts'){
+    // Live-sync Vehicle Prestart reports (loader re-pulls + safeRenders; the local edit DRAFT is separate state).
+    if(S._vpLoaded&&typeof window.loadVehiclePrestarts==='function')window.loadVehiclePrestarts();
+    return false;
+  } else if(table==='ts_ops_notices'||table==='ts_ops_notice_reads'){
+    // Notices + read receipts — loadOpsNotices pulls both; the in-progress draft (S._onDraft) is untouched.
+    if(S._onLoaded&&typeof window.loadOpsNotices==='function')window.loadOpsNotices();
+    return false;
+  } else if(table==='ts_equipment'){
+    if(S._eqLoaded&&typeof window.loadEquipment==='function')window.loadEquipment();
+    return false;
+  } else if(table==='ts_visitors'){
+    if(S._visLoaded&&typeof window.loadVisitors==='function')window.loadVisitors();
+    return false;
+  } else if(table==='ts_flight_following'){
+    if(S._ffLoaded&&typeof window.loadFlightFollowing==='function')window.loadFlightFollowing();
     return false;
   } else if(table==='ts_scratchpads'){
     const ps=await sbF('ts_scratchpads','','saved_at');
