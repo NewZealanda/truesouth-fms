@@ -53,7 +53,11 @@ function _vpStorePhoto(file,cb){
         if(w>h&&w>max){h=Math.round(h*max/w);w=max;}else if(h>max){w=Math.round(w*max/h);h=max;}
         var cv=document.createElement('canvas');cv.width=w;cv.height=h;
         cv.getContext('2d').drawImage(img,0,0,w,h);
-        cb(cv.toDataURL('image/jpeg',0.6));
+        var fallback=function(){cb(cv.toDataURL('image/jpeg',0.6));};
+        // Upload the compressed JPEG to Supabase Storage; fall back to an inline data-URI if it fails.
+        if(typeof window._tsUploadFile==='function'&&cv.toBlob){
+          cv.toBlob(function(blob){ if(!blob){fallback();return;} window._tsUploadFile(blob,'prestart','photo.jpg').then(function(url){cb(url||cv.toDataURL('image/jpeg',0.6));}); },'image/jpeg',0.6);
+        } else fallback();
       };
       img.onerror=function(){cb('');};img.src=rd.result;
     };

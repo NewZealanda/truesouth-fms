@@ -87,6 +87,20 @@ async function _sbFetch(url, opts){
   }
   return r;
 }
+// Upload a File/Blob to Supabase Storage (bucket "ts-uploads"), returning its public URL — or null on
+// failure (caller falls back to an inline data-URI). Random unguessable path per file. Carries the user
+// JWT via _sbFetch so Storage RLS (authenticated insert) is satisfied.
+window._tsUploadFile=async function(file,prefix,name){
+  try{
+    if(typeof fetch!=='function'||!file)return null;
+    name=name||file.name||'file';
+    var ext=(String(name).split('.').pop()||'bin').replace(/[^a-z0-9]/gi,'').toLowerCase()||'bin';
+    var path=(prefix||'misc')+'/'+Date.now()+'_'+Math.random().toString(36).slice(2,9)+'.'+ext;
+    var r=await _sbFetch(SB+'/storage/v1/object/ts-uploads/'+path,{method:'POST',headers:{'apikey':SK,'Authorization':SH['Authorization'],'Content-Type':file.type||'application/octet-stream','x-upsert':'true'},body:file});
+    if(!r||!r.ok)return null;
+    return SB+'/storage/v1/object/public/ts-uploads/'+path;
+  }catch(e){return null;}
+};
 const sbF=async(t,q='',order='created_at')=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?select=*${q}&order=${order}.desc`,{headers:{...SH}});if(!r.ok){console.error('[sbF]',t,'status:',r.status,await r.text());return null;}return r.json();}catch(e){console.error('[sbF]',t,'exception:',e);return null;}};
 // Intro animation: the mountains-draw + plane-takeoff plays once (3.5s) on boot before the app is
 // revealed, unless the Skip button is pressed. INTRO_MS = how long the intro is held.
@@ -658,7 +672,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.36';
+const APP_VER='v28.37';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };

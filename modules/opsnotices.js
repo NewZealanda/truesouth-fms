@@ -44,8 +44,15 @@ function _onList(){return Object.keys(S._onData||{}).map(function(k){return S._o
 
 // ── File upload (data-URI stub) ─────────────────────────────────────────────────────
 function _onStoreFile(file,cb){
-  if(file.size>6*1024*1024){if(typeof toast==='function')toast('File too big (max ~6MB for now).','warn');cb(null);return;}
-  var rd=new FileReader();rd.onload=function(){cb({name:file.name,type:file.type,data:rd.result});};rd.onerror=function(){cb(null);};rd.readAsDataURL(file);
+  if(file.size>25*1024*1024){if(typeof toast==='function')toast('File too big (max 25MB).','warn');cb(null);return;}
+  var asBase64=function(){
+    if(file.size>6*1024*1024){if(typeof toast==='function')toast('Upload failed and file too big to embed.','warn');cb(null);return;}
+    var rd=new FileReader();rd.onload=function(){cb({name:file.name,type:file.type,data:rd.result});};rd.onerror=function(){cb(null);};rd.readAsDataURL(file);
+  };
+  // Upload to Supabase Storage → store the public URL; fall back to an inline data-URI on failure.
+  if(typeof window._tsUploadFile==='function'){
+    window._tsUploadFile(file,'opsnotice',file.name).then(function(url){ if(url)cb({name:file.name,type:file.type,data:url}); else asBase64(); });
+  } else asBase64();
 }
 window.onAddFile=function(input){var f=input&&input.files&&input.files[0];if(!f||!S._onDraft)return;_onStoreFile(f,function(rec){if(rec&&S._onDraft){S._onDraft.files=S._onDraft.files||[];S._onDraft.files.push(rec);render();}});};
 window.onDelFile=function(i){if(S._onDraft&&S._onDraft.files){S._onDraft.files.splice(i,1);render();}};

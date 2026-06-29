@@ -443,6 +443,20 @@ async function _sbFetch(url, opts){
   }
   return r;
 }
+// Upload a File/Blob to Supabase Storage (bucket "ts-uploads"), returning its public URL — or null on
+// failure (caller falls back to an inline data-URI). Random unguessable path per file. Carries the user
+// JWT via _sbFetch so Storage RLS (authenticated insert) is satisfied.
+window._tsUploadFile=async function(file,prefix,name){
+  try{
+    if(typeof fetch!=='function'||!file)return null;
+    name=name||file.name||'file';
+    var ext=(String(name).split('.').pop()||'bin').replace(/[^a-z0-9]/gi,'').toLowerCase()||'bin';
+    var path=(prefix||'misc')+'/'+Date.now()+'_'+Math.random().toString(36).slice(2,9)+'.'+ext;
+    var r=await _sbFetch(SB+'/storage/v1/object/ts-uploads/'+path,{method:'POST',headers:{'apikey':SK,'Authorization':SH['Authorization'],'Content-Type':file.type||'application/octet-stream','x-upsert':'true'},body:file});
+    if(!r||!r.ok)return null;
+    return SB+'/storage/v1/object/public/ts-uploads/'+path;
+  }catch(e){return null;}
+};
 const sbF=async(t,q='',order='created_at')=>{try{const r=await _sbFetch(`${SB}/rest/v1/${t}?select=*${q}&order=${order}.desc`,{headers:{...SH}});if(!r.ok){console.error('[sbF]',t,'status:',r.status,await r.text());return null;}return r.json();}catch(e){console.error('[sbF]',t,'exception:',e);return null;}};
 // Intro animation: the mountains-draw + plane-takeoff plays once (3.5s) on boot before the app is
 // revealed, unless the Skip button is pressed. INTRO_MS = how long the intro is held.
@@ -1014,7 +1028,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.36';
+const APP_VER='v28.37';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -12022,7 +12036,11 @@ function _vpStorePhoto(file,cb){
         if(w>h&&w>max){h=Math.round(h*max/w);w=max;}else if(h>max){w=Math.round(w*max/h);h=max;}
         var cv=document.createElement('canvas');cv.width=w;cv.height=h;
         cv.getContext('2d').drawImage(img,0,0,w,h);
-        cb(cv.toDataURL('image/jpeg',0.6));
+        var fallback=function(){cb(cv.toDataURL('image/jpeg',0.6));};
+        // Upload the compressed JPEG to Supabase Storage; fall back to an inline data-URI if it fails.
+        if(typeof window._tsUploadFile==='function'&&cv.toBlob){
+          cv.toBlob(function(blob){ if(!blob){fallback();return;} window._tsUploadFile(blob,'prestart','photo.jpg').then(function(url){cb(url||cv.toDataURL('image/jpeg',0.6));}); },'image/jpeg',0.6);
+        } else fallback();
       };
       img.onerror=function(){cb('');};img.src=rd.result;
     };
@@ -12228,8 +12246,15 @@ function _onList(){return Object.keys(S._onData||{}).map(function(k){return S._o
 
 // ── File upload (data-URI stub) ─────────────────────────────────────────────────────
 function _onStoreFile(file,cb){
-  if(file.size>6*1024*1024){if(typeof toast==='function')toast('File too big (max ~6MB for now).','warn');cb(null);return;}
-  var rd=new FileReader();rd.onload=function(){cb({name:file.name,type:file.type,data:rd.result});};rd.onerror=function(){cb(null);};rd.readAsDataURL(file);
+  if(file.size>25*1024*1024){if(typeof toast==='function')toast('File too big (max 25MB).','warn');cb(null);return;}
+  var asBase64=function(){
+    if(file.size>6*1024*1024){if(typeof toast==='function')toast('Upload failed and file too big to embed.','warn');cb(null);return;}
+    var rd=new FileReader();rd.onload=function(){cb({name:file.name,type:file.type,data:rd.result});};rd.onerror=function(){cb(null);};rd.readAsDataURL(file);
+  };
+  // Upload to Supabase Storage → store the public URL; fall back to an inline data-URI on failure.
+  if(typeof window._tsUploadFile==='function'){
+    window._tsUploadFile(file,'opsnotice',file.name).then(function(url){ if(url)cb({name:file.name,type:file.type,data:url}); else asBase64(); });
+  } else asBase64();
 }
 window.onAddFile=function(input){var f=input&&input.files&&input.files[0];if(!f||!S._onDraft)return;_onStoreFile(f,function(rec){if(rec&&S._onDraft){S._onDraft.files=S._onDraft.files||[];S._onDraft.files.push(rec);render();}});};
 window.onDelFile=function(i){if(S._onDraft&&S._onDraft.files){S._onDraft.files.splice(i,1);render();}};
