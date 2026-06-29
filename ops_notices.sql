@@ -8,8 +8,10 @@ create table if not exists public.ts_ops_notices (
   subject       text,
   body          text,
   issued_by     text,
-  issued_by_id  uuid,
+  issued_by_id  text,
   date_issued   date,
+  start_date    date,
+  end_date      date,
   status        text default 'active',        -- active | ongoing | closed | deleted
   groups        jsonb default '[]'::jsonb,    -- ['pilots','desk','ground','admin','other'] or ['everyone']
   files         jsonb default '[]'::jsonb,    -- [{name,type,data}]  (data-URI for now)
@@ -20,7 +22,7 @@ create index if not exists ts_ops_notices_no_idx on public.ts_ops_notices (no de
 create table if not exists public.ts_ops_notice_reads (
   id          text primary key,               -- "<noticeId>|<userId>"
   notice_id   text,
-  user_id     uuid,
+  user_id     text,
   user_name   text,
   read_at     timestamptz default now()
 );

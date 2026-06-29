@@ -5,7 +5,7 @@
 create table if not exists public.ts_vehicle_prestarts (
   id          text primary key,
   vehicle     text,
-  user_id     uuid,
+  user_id     text,
   user_name   text,
   check_date  date,
   time        text,

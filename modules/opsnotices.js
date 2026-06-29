@@ -18,6 +18,9 @@ function _onEsc(s){return (typeof esc==='function')?esc(s):String(s==null?'':s);
 function _onCanManage(){return (typeof hasRolePerm==='function'&&hasRolePerm('ops_notices_manage'))||!!(S.user&&S.user.superAdmin);}
 function _onToday(){return (typeof _todayLocal==='function')?_todayLocal():new Date().toISOString().slice(0,10);}
 function _onFmt(d){if(!d)return '';try{var p=String(d).split('-');return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):d;}catch(e){return d;}}
+// Active notices show a start–end range; ongoing/closed show the issue date.
+function _onDateLabel(n){if(n.status==='active'&&(n.start_date||n.end_date))return _onFmt(n.start_date)+' – '+(n.end_date?_onFmt(n.end_date):'ongoing');return 'Issued '+_onFmt(n.date_issued);}
+function _onDateShort(n){if(n.status==='active'&&n.start_date)return _onFmt(n.start_date)+(n.end_date?'–'+_onFmt(n.end_date):'');return _onFmt(n.date_issued);}
 // roles a notice's selected groups resolve to (null = everyone)
 function _onRolesFor(groups){groups=groups||[];if(groups.indexOf('everyone')>=0)return null;var set={};ON_GROUPS.forEach(function(g){if(groups.indexOf(g.k)>=0&&Array.isArray(g.roles))g.roles.forEach(function(r){set[r]=1;});});return Object.keys(set);}
 function _onApplToRole(n,role){var roles=_onRolesFor(n.groups);return roles===null||roles.indexOf(role)>=0;}
@@ -40,8 +43,8 @@ window.loadOpsNotices=async function(){
   if(!S._onResent&&S.user){S._onResent=true;if(window.onResendUnreadOnLogin)window.onResendUnreadOnLogin();}
   if(typeof safeRender==='function')safeRender();
 };
-function _onRow(r){return {id:r.id,no:r.no,subject:r.subject||'',body:r.body||'',issued_by:r.issued_by||'',issued_by_id:r.issued_by_id||'',date_issued:r.date_issued||'',status:r.status||'active',groups:Array.isArray(r.groups)?r.groups:[],files:Array.isArray(r.files)?r.files:[],created_at:r.created_at};}
-function _onPayload(f){var _no=parseInt(f.no,10);return {id:f.id,no:(isFinite(_no)?_no:null),subject:f.subject,body:f.body,issued_by:f.issued_by||'',issued_by_id:f.issued_by_id||null,date_issued:f.date_issued||null,status:f.status||'active',groups:f.groups||[],files:f.files||[],created_at:f.created_at||new Date().toISOString()};}
+function _onRow(r){return {id:r.id,no:r.no,subject:r.subject||'',body:r.body||'',issued_by:r.issued_by||'',issued_by_id:r.issued_by_id||'',date_issued:r.date_issued||'',start_date:r.start_date||'',end_date:r.end_date||'',status:r.status||'active',groups:Array.isArray(r.groups)?r.groups:[],files:Array.isArray(r.files)?r.files:[],created_at:r.created_at};}
+function _onPayload(f){var _no=parseInt(f.no,10);return {id:f.id,no:(isFinite(_no)?_no:null),subject:f.subject,body:f.body,issued_by:f.issued_by||'',issued_by_id:f.issued_by_id||null,date_issued:f.date_issued||null,start_date:f.start_date||null,end_date:f.end_date||null,status:f.status||'active',groups:f.groups||[],files:f.files||[],created_at:f.created_at||new Date().toISOString()};}
 function _onNextNo(){var mx=ON_START_NO-1;Object.keys(S._onData||{}).forEach(function(k){var n=+(S._onData[k].no);if(!isNaN(n)&&n>mx)mx=n;});return mx+1;}
 function _onList(){return Object.keys(S._onData||{}).map(function(k){return S._onData[k];}).sort(function(a,b){return (+b.no||0)-(+a.no||0);});}
 
@@ -61,7 +64,7 @@ window.onAddFile=function(input){var f=input&&input.files&&input.files[0];if(!f|
 window.onDelFile=function(i){if(S._onDraft&&S._onDraft.files){S._onDraft.files.splice(i,1);render();}};
 
 // ── Draft / create / issue ──────────────────────────────────────────────────────────
-window.onNew=function(){S._onDraft={id:'on_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),no:_onNextNo(),subject:'',body:'',issued_by:(S.user&&S.user.name)||'',issued_by_id:(S.user&&S.user.id)||'',date_issued:_onToday(),status:'active',groups:[],files:[]};S._onView='edit';S._onOpen=null;render();};
+window.onNew=function(){S._onDraft={id:'on_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),no:_onNextNo(),subject:'',body:'',issued_by:(S.user&&S.user.name)||'',issued_by_id:(S.user&&S.user.id)||'',date_issued:_onToday(),start_date:_onToday(),end_date:'',status:'active',groups:[],files:[]};S._onView='edit';S._onOpen=null;render();};
 window.onEdit=function(id){var n=(S._onData||{})[id];if(!n)return;S._onDraft=JSON.parse(JSON.stringify(n));S._onView='edit';S._onOpen=null;render();};
 window.onDraftField=function(k,v){if(S._onDraft)S._onDraft[k]=v;};            // no render (keep focus)
 window.onDraftStatus=function(v){if(S._onDraft){S._onDraft.status=v;render();}};
@@ -135,7 +138,7 @@ function _onRenderList(){
     else readInfo=read?'<span style="font-size:11px;color:#16a34a;font-weight:700">✓ read</span>':'<span style="font-size:11px;color:#f59e0b;font-weight:700">unread</span>';
     h+='<tr onclick="S._onOpen=\''+n.id+'\';render()" style="cursor:pointer;border-top:1px solid var(--border2)'+(!read&&!_onCanManage()?';background:rgba(124,58,237,.05)':'')+'">'+
       '<td style="padding:8px;font-weight:800">'+_onEsc(n.no)+'</td>'+
-      '<td style="padding:8px;white-space:nowrap">'+_onEsc(_onFmt(n.date_issued))+'</td>'+
+      '<td style="padding:8px;white-space:nowrap">'+_onEsc(_onDateShort(n))+'</td>'+
       '<td style="padding:8px;font-weight:600;max-width:280px">'+_onEsc(n.subject)+'</td>'+
       '<td style="padding:8px"><span style="padding:2px 9px;border-radius:20px;font-size:11px;font-weight:800;background:rgba(0,0,0,.06);color:'+(n.status==='active'?'#16a34a':n.status==='ongoing'?'#f59e0b':'var(--text3)')+'">'+_onEsc(st?st[1]:n.status)+'</span></td>'+
       '<td style="padding:8px;font-size:12px;color:var(--text2)">'+_onEsc(applLbls)+'</td>'+
@@ -152,7 +155,7 @@ function _onRenderView(id){
     (_onCanManage()?'<div style="display:flex;gap:6px"><button onclick="window.onEdit(\''+n.id+'\')" style="font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);cursor:pointer;color:var(--text2)">Edit</button><button onclick="window.onDelete(\''+n.id+'\')" style="font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid rgba(239,68,68,.4);background:none;color:#f87171;cursor:pointer">Delete</button></div>':'')+'</div>'+
     '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 2px">Ops Notice #'+_onEsc(n.no)+'</div>'+
     '<div class="st" style="margin:0 0 6px">'+_onEsc(n.subject)+'</div>'+
-    '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text3);margin-bottom:14px"><span>Issued '+_onEsc(_onFmt(n.date_issued))+'</span>'+(n.issued_by?'<span>By '+_onEsc(n.issued_by)+'</span>':'')+'<span>Status: '+_onEsc((ON_STATUS.find(function(s){return s[0]===n.status;})||[])[1]||n.status)+'</span><span>To: '+_onEsc((n.groups||[]).map(function(k){var g=ON_GROUPS.find(function(x){return x.k===k;});return g?g.lbl:k;}).join(', '))+'</span></div>'+
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text3);margin-bottom:14px"><span>'+_onEsc(_onDateLabel(n))+'</span>'+(n.issued_by?'<span>By '+_onEsc(n.issued_by)+'</span>':'')+'<span>Status: '+_onEsc((ON_STATUS.find(function(s){return s[0]===n.status;})||[])[1]||n.status)+'</span><span>To: '+_onEsc((n.groups||[]).map(function(k){var g=ON_GROUPS.find(function(x){return x.k===k;});return g?g.lbl:k;}).join(', '))+'</span></div>'+
     '<div style="font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap;border-top:1px solid var(--border2);padding-top:14px">'+_onEsc(n.body)+'</div>';
   if(n.files&&n.files.length){
     h+='<div style="margin-top:14px"><div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Attachments</div>';
@@ -188,18 +191,25 @@ function _onRenderEdit(){
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-top:12px">'+
       '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Notice number *</label><input type="number" value="'+_onEsc(f.no)+'" oninput="window.onDraftField(\'no\',this.value)" style="'+_i+'"></div>'+
       '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Subject *</label><input value="'+_onEsc(f.subject)+'" oninput="window.onDraftField(\'subject\',this.value)" style="'+_i+'"></div>'+
-      '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Date issued</label><input type="date" value="'+_onEsc(f.date_issued)+'" onchange="window.onDraftField(\'date_issued\',this.value)" style="'+_i+'"></div>'+
       '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Issued by</label><input value="'+_onEsc(f.issued_by)+'" oninput="window.onDraftField(\'issued_by\',this.value)" list="on_staff" style="'+_i+'"><datalist id="on_staff">'+staff.map(function(s){return '<option value="'+_onEsc(s)+'">';}).join('')+'</datalist></div>'+
       '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Status</label><select onchange="window.onDraftStatus(this.value)" style="'+_i+'">'+ON_STATUS.map(function(s){return '<option value="'+s[0]+'"'+(f.status===s[0]?' selected':'')+'>'+s[1]+'</option>';}).join('')+'</select></div>'+
+      // Active notices have a start + end date; ongoing/closed just an issue date.
+      (f.status==='active'
+        ? '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Start date</label><input type="date" value="'+_onEsc(f.start_date)+'" onchange="window.onDraftField(\'start_date\',this.value)" style="'+_i+'"></div>'+
+          '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">End date</label><input type="date" value="'+_onEsc(f.end_date)+'" onchange="window.onDraftField(\'end_date\',this.value)" style="'+_i+'"></div>'
+        : '<div><label style="font-size:11px;font-weight:700;color:var(--text3)">Issue date</label><input type="date" value="'+_onEsc(f.date_issued)+'" onchange="window.onDraftField(\'date_issued\',this.value)" style="'+_i+'"></div>')+
     '</div>'+
     '<div style="margin-top:14px"><label style="font-size:11px;font-weight:700;color:var(--text3)">Applicable to *</label><div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:5px">'+
       ON_GROUPS.map(function(g){var on=(f.groups||[]).indexOf(g.k)>=0;return '<button onclick="window.onToggleGroup(\''+g.k+'\')" style="padding:6px 13px;border-radius:20px;border:1px solid '+(on?'var(--accent,#7c3aed)':'var(--border2)')+';background:'+(on?'var(--accent,#7c3aed)':'var(--card2)')+';color:'+(on?'#fff':'var(--text2)')+';font-size:12px;font-weight:700;cursor:pointer">'+g.lbl+'</button>';}).join('')+
     '</div></div>'+
     '<div style="margin-top:14px"><label style="font-size:11px;font-weight:700;color:var(--text3)">Operations Notice text *</label><textarea oninput="window.onDraftField(\'body\',this.value)" placeholder="Type the notice…" style="'+_i+';min-height:180px;resize:vertical;line-height:1.5">'+_onEsc(f.body)+'</textarea></div>'+
     // attachments
-    '<div style="margin-top:14px"><label style="font-size:11px;font-weight:700;color:var(--text3)">Attachments (PDF / photos)</label><div style="margin-top:5px">'+
-      (f.files||[]).map(function(fl,i){return '<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--card2);font-size:12px;color:var(--text2);margin:0 8px 8px 0">📎 '+_onEsc(fl.name)+' <button onclick="window.onDelFile('+i+')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px">×</button></span>';}).join('')+
-      '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--accent,#7c3aed);cursor:pointer">＋ Add file<input type="file" accept="application/pdf,image/*" onchange="window.onAddFile(this)" style="display:none"></label>'+
+    '<div style="margin-top:14px"><label style="font-size:11px;font-weight:700;color:var(--text3)">Attachments (PDF / photos)</label><div style="margin-top:7px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start">'+
+      (f.files||[]).map(function(fl,i){
+        var del='<button onclick="window.onDelFile('+i+')" style="position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:13px;line-height:1">×</button>';
+        if(fl.type&&fl.type.indexOf('image')===0)return '<div style="position:relative"><img src="'+_onEsc(fl.data)+'" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border2)">'+del+'</div>';
+        return '<div style="position:relative;display:inline-flex;align-items:center;gap:6px;padding:5px 26px 5px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--card2);font-size:12px;color:var(--text2)">📎 '+_onEsc(fl.name)+del+'</div>';}).join('')+
+      '<label style="display:inline-flex;align-items:center;justify-content:center;gap:6px;width:96px;height:96px;border:1px dashed var(--border2);border-radius:8px;font-size:12px;font-weight:700;color:var(--accent,#7c3aed);cursor:pointer;text-align:center">＋ Add file<input type="file" accept="application/pdf,image/*" onchange="window.onAddFile(this)" style="display:none"></label>'+
     '</div></div>'+
     '<div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">'+
       '<button onclick="window.onSave(true)" style="flex:1;min-width:160px;padding:13px;background:var(--accent,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:15px;font-weight:800;cursor:pointer">Issue notice &amp; notify</button>'+

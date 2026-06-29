@@ -9,6 +9,7 @@ create table if not exists public.ts_equipment (
   notes       text,
   checks      jsonb default '[]'::jsonb,   -- [{id,label,freq,last,next,_notified}]
   log         jsonb default '[]'::jsonb,   -- [{date,by,check,ts}]
+  photos      jsonb default '[]'::jsonb,   -- [{name,type,data}]
   active      boolean default true,
   created_at  timestamptz default now()
 );
