@@ -1638,7 +1638,7 @@ function _rzRenderWeatherCalls(){
     '<button class="btn btn-ghost" style="font-size:12px;padding:6px 12px'+(date===_today?';opacity:.45':'')+'" title="Jump to today" onclick="window.rezdySetDate(\''+_today+'\')">Today</button>'+
   '</div>';
   var deps=loading?[]:_wxDepartures(date);
-  var h=nav+'<div class="card"><div class="st" style="margin-bottom:8px">Weather calls</div>';
+  var h=nav+'<div class="card"><div class="st" style="margin-bottom:8px">Weather</div>';
   if(loading){h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Loading…</div></div>';return h;}
   if(!deps.length){h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No departures scheduled for this day.</div></div>';return h;}
   var nd=_wxNextDays(date);var draft=S._wxDraft||{};

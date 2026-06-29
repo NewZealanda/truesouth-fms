@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.52';
+const APP_VER='v28.53';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -3770,9 +3770,9 @@ var HOME_OPTIONS=[
   {id:'flightrecord',label:'Flight Record',section:'pilotbag',tab:'flightrecord'},
   {id:'logbook',label:'Logbook',section:'pilotbag',tab:'logbook'},
   {id:'flightduty',label:'Flight & Duty',section:'pilotbag',tab:'flightduty'},
-  {id:'resources',label:'Resource board',section:'resources'},
-  {id:'datarecording',label:'Data Recording',section:'datarecording'},
-  {id:'opsnotices',label:'Ops Notices',section:'opsnotices'},
+  {id:'resources',label:'Scheduling',section:'resources'},
+  {id:'datarecording',label:'Records',section:'datarecording'},
+  {id:'opsnotices',label:'Notices',section:'opsnotices'},
   {id:'visitors',label:'Visitors',section:'visitors'},
   {id:'monitoring',label:'Monitoring',section:'monitoring'},
   {id:'businessplan',label:'Business Plan',section:'businessplan'},
@@ -4328,11 +4328,6 @@ function renderDrawer(){
     var _tdyOn=sec==='today';
     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'today\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_tdyOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_tdyOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_tdyOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🏠</span><span style="flex:1">Today</span></button>';
   }
-  // Weather calls — pinned under Today (any pilot/ops can record a per-departure call).
-  if(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin)){
-    var _wxOn=sec==='weather';
-    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'weather\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_wxOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_wxOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_wxOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🌤️</span><span style="flex:1">Weather calls</span></button>';
-  }
   if(_canOps){
     h+=_secBtn('Operations','operations','✈️');
     if(_isExp('operations')){
@@ -4343,6 +4338,8 @@ function renderDrawer(){
       h+=_subBtn('Loadsheets',t==='rloadsheets'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('rloadsheets')");
       h+=_subBtn('Saved',t==='saved'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('saved')");
       if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
+      if(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin))h+=_subBtn('Weather',sec==='weather',"S._drawerOpen=false;S.section='weather';render()");
+      if(hasRolePerm('monitoring')||(S.user&&S.user.superAdmin))h+=_subBtn('Monitoring',sec==='monitoring',"S._drawerOpen=false;S.section='monitoring';render()");
     }
   }
   // Ground — Transport / My Pickups (+ Vehicle Prestart). Tier-1 section, pinned under Operations.
@@ -4356,30 +4353,24 @@ function renderDrawer(){
       if(hasRolePerm('ground')||hasRolePerm('maintenance')||(S.user&&S.user.superAdmin))h+=_subBtn('Equipment',sec==='ground'&&_gSec==='equipment',"S._drawerOpen=false;S.section='ground';S._groundSecTab='equipment';render()");
     }
   }}
-  // Pilot Bag (Flight Record / Logbooks / Flight & Duty) — pinned right under Operations.
+  // Crew — personal flying (Flight Record / Logbooks / Flight & Duty) + Roster & Leave, in one group.
   {var _pbDefs=_pilotBagTabDefs();
-   if(_pbDefs.length&&hasRolePerm('pilotbag')){
-    h+=_secBtn('Pilot Bag','pilotbag','🎒');
-    if(_isExp('pilotbag')){
-      var _pbCur=_pilotBagTab();
-      _pbDefs.forEach(function(d){h+=_subBtn(d.lbl,sec==='pilotbag'&&_pbCur===d.id,"S._drawerOpen=false;window.setPilotBagTab('"+d.id+"')");});
-    }
+   var _pbAvail=_pbDefs.length&&hasRolePerm('pilotbag');
+   var _canApproveLeaveNav=hasRolePerm('leave_approve')||(typeof _lvHasReports==='function'&&_lvHasReports());   // org-managers (set in Reports to) approve their reports even without the perm
+   if(_pbAvail||_canRoster||_canLeave||_canApproveLeaveNav){
+     var _crewOn=sec==='pilotbag'||sec==='roster'||sec==='leave';
+     var _crewExp=_isExp('crew');
+     // Match the Approvals tab: only count pending requests this approver can actually action.
+     var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveReq!=='function'||_lvCanApproveReq(r));}).length:0;
+     h+='<button tabindex="-1" onclick="S._drawerExp[\'crew\']=!S._drawerExp[\'crew\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_crewOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_crewOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_crewOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">👨‍✈️</span><span style="flex:1">Crew'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_crewExp?'▲':'▼')+'</span></button>';
+     if(_crewExp){
+       if(_pbAvail){var _pbCur=_pilotBagTab();_pbDefs.forEach(function(d){h+=_subBtn(d.lbl,sec==='pilotbag'&&_pbCur===d.id,"S._drawerOpen=false;window.setPilotBagTab('"+d.id+"')");});}
+       if(_canRoster)h+=_subBtn('Roster',sec==='roster',"S._drawerOpen=false;S.section='roster';render()",true);
+       if(_canLeave)h+=_subBtn('My Leave',sec==='leave'&&(!S._leave||S._leave.tab==='my'),"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='my';render()");
+       if(_canApproveLeaveNav)h+=_subBtn('Approvals',sec==='leave'&&S._leave&&S._leave.tab==='approvals',"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='approvals';render()");
+       if(hasRolePerm('reports_to'))h+=_subBtn('Reports to',sec==='settings'&&(S.admin||{}).section==='reportsto',"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='reportsto';window.setTab('admin')");
+     }
    }}
-  // Roster & Leave combined — show the group only if the user can reach at least one item.
-  {var _canApproveLeaveNav=hasRolePerm('leave_approve')||(typeof _lvHasReports==='function'&&_lvHasReports());   // org-managers (set in Reports to) approve their reports even without the perm
-  if(_canRoster||_canLeave||_canApproveLeaveNav){
-  var _lvActive=sec==='leave';
-  // Match the Approvals tab: only count pending requests this approver can actually action.
-  var _lvPendingCt=_canApproveLeaveNav&&S._leave&&S._leave.allReqs?S._leave.allReqs.filter(function(r){return r.status==='pending'&&(typeof _lvCanApproveReq!=='function'||_lvCanApproveReq(r));}).length:0;
-  var _rlOn=sec==='roster'||sec==='leave';
-  var _rlExp=_isExp('roster');
-  h+='<button tabindex="-1" onclick="S._drawerExp[\'roster\']=!S._drawerExp[\'roster\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_rlOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_rlOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_rlOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🗓️</span><span style="flex:1">Roster'+(_lvPendingCt>0?' ('+_lvPendingCt+')':'')+'</span><span style="font-size:10px;opacity:.45">'+(_rlExp?'▲':'▼')+'</span></button>';
-  if(_rlExp){
-    if(_canRoster)h+=_subBtn('Roster',sec==='roster',"S._drawerOpen=false;S.section='roster';render()",true);
-    if(_canLeave)h+=_subBtn('My Leave',_lvActive&&(!S._leave||S._leave.tab==='my'),"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='my';render()");
-    if(_canApproveLeaveNav)h+=_subBtn('Approvals',_lvActive&&S._leave&&S._leave.tab==='approvals',"S._drawerOpen=false;S.section='leave';if(!S._leave)S._leave={};S._leave.tab='approvals';render()");
-    if(hasRolePerm('reports_to'))h+=_subBtn('Reports to',sec==='settings'&&(S.admin||{}).section==='reportsto',"S._drawerOpen=false;if(!S.admin)S.admin={};S.admin.section='reportsto';window.setTab('admin')");
-  }}}
   if(_canMaint){
     h+=_secBtn('Maintenance','maintenance','🔧');
     if(_isExp('maintenance')){
@@ -4393,43 +4384,27 @@ function renderDrawer(){
       h+=_mn('Search','search');
     }
   }
-  // Data Recording — aircraft records / statistics / full records table (admin / cx_manager / superadmin).
-  {var _canDR=hasRolePerm('data_recording')||(S.user&&S.user.superAdmin);
-   if(_canDR){var _onDR=sec==='datarecording';
-     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'datarecording\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onDR?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onDR?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onDR?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📊</span><span style="flex:1">Data Recording</span></button>';
-   }}
-  // Operations Notices (SMS) — everyone sees notices applicable to them; admins/CX issue + see receipts.
-  {var _canON=hasRolePerm('ops_notices')||(S.user&&S.user.superAdmin);
-   if(_canON){var _onON=sec==='opsnotices';
-     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'opsnotices\';S._onView=\'list\';S._onOpen=null;render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onON?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onON?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onON?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📋</span><span style="flex:1">Ops Notices</span></button>';
-   }}
-  // Monitoring — live flight-following status board.
-  {var _canMON=hasRolePerm('monitoring')||(S.user&&S.user.superAdmin);
-   if(_canMON){var _onMON=sec==='monitoring';
-     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'monitoring\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onMON?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onMON?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onMON?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📡</span><span style="flex:1">Monitoring</span></button>';
-   }}
-  // Visitors — sign-in kiosk + on-site dashboard + history.
+  // Visitors — front-desk sign-in (kept standalone for now).
   {var _canVI=hasRolePerm('visitors')||(S.user&&S.user.superAdmin);
    if(_canVI){var _onVI=sec==='visitors';
      h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'visitors\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onVI?'rgba(124,58,237,.22)':'transparent')+';color:'+(_onVI?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onVI?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🪪</span><span style="flex:1">Visitors</span></button>';
    }}
-  // TSF Business Plan.
-  {var _canBP=hasRolePerm('businessplan')||(S.user&&S.user.superAdmin);
-   if(_canBP){
-    var on=sec==='businessplan';
-    h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'businessplan\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(on?'rgba(124,58,237,.22)':'transparent')+';color:'+(on?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(on?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">📈</span><span style="flex:1">Business Plan</span></button>';
-   }}
-  // Resource board — only when the cost-scheduling feature is toggled ON (snaps in/out during testing).
+  // Company — back-office hub: Notices, Records, Business Plan, Scheduling + placeholders.
   {if(S.user&&!S._schedLoaded){S._schedLoaded=true;if(window.loadScheduling)window.loadScheduling();}
-   if(typeof _schedEnabled==='function'&&_schedEnabled()&&hasRolePerm('resources')){
-     var _onRes=sec==='resources';
-     h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\'resources\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onRes?'rgba(34,197,94,.18)':'transparent')+';color:'+(_onRes?'#22c55e':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_onRes?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🚦</span><span style="flex:1">Resources</span></button>';
+   var _coItems=[];
+   if(hasRolePerm('ops_notices')||(S.user&&S.user.superAdmin))_coItems.push({s:'opsnotices',l:'Notices',pre:"S._onView='list';S._onOpen=null;"});
+   if(hasRolePerm('data_recording')||(S.user&&S.user.superAdmin))_coItems.push({s:'datarecording',l:'Records'});
+   if(hasRolePerm('businessplan')||(S.user&&S.user.superAdmin))_coItems.push({s:'businessplan',l:'Business Plan'});
+   if(typeof _schedEnabled==='function'&&_schedEnabled()&&hasRolePerm('resources'))_coItems.push({s:'resources',l:'Scheduling'});
+   [{s:'sms',p:'sms',l:'SMS'},{s:'trainingmod',p:'training_mod',l:'Training'}].forEach(function(x){if(hasRolePerm(x.p)||(S.user&&S.user.superAdmin))_coItems.push({s:x.s,l:x.l,soon:true});});
+   if(_coItems.length){
+     var _coOn=_coItems.some(function(it){return sec===it.s;});
+     var _coExp=_isExp('company');
+     h+='<button tabindex="-1" onclick="S._drawerExp[\'company\']=!S._drawerExp[\'company\'];render()" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_coOn?'rgba(124,58,237,.22)':'transparent')+';color:'+(_coOn?'#c084fc':'rgba(255,255,255,.95)')+';font-size:14px;font-weight:'+(_coOn?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🏢</span><span style="flex:1">Company</span><span style="font-size:10px;opacity:.45">'+(_coExp?'▲':'▼')+'</span></button>';
+     if(_coExp){_coItems.forEach(function(it){
+       h+=_subBtn(it.l+(it.soon?' · soon':''),sec===it.s,"S._drawerOpen=false;"+(it.pre||'')+"S.section='"+it.s+"';render()");
+     });}
    }}
-  // Coming-soon placeholders (visible to superadmin for now; enable per-role in Permissions later).
-  {[{s:'sms',p:'sms',l:'SMS',i:'🛡️'},{s:'trainingmod',p:'training_mod',l:'Training',i:'📚'}].forEach(function(x){
-     if(hasRolePerm(x.p)||(S.user&&S.user.superAdmin)){var _onPh=sec===x.s;
-       h+='<button tabindex="-1" onclick="S._drawerOpen=false;window._navAway(function(){S.section=\''+x.s+'\';render();})" style="width:100%;text-align:left;padding:10px 14px;border-radius:10px;border:none;background:'+(_onPh?'rgba(255,255,255,.12)':'transparent')+';color:'+(_onPh?'#fff':'rgba(255,255,255,.6)')+';font-size:14px;font-weight:'+(_onPh?'700':'600')+';cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:2px"><span style="width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:15px">'+x.i+'</span><span style="flex:1">'+x.l+'</span><span style="font-size:9px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.55);padding:1px 6px;border-radius:8px">soon</span></button>';
-     }});}
   // Settings pinned last (config / admin). Settings access is its own permission (default on).
   {var _canUsers=hasRolePerm('admin_users');
    var _canCrew=hasRolePerm('admin_crew');
@@ -16295,7 +16270,7 @@ function _rzRenderWeatherCalls(){
     '<button class="btn btn-ghost" style="font-size:12px;padding:6px 12px'+(date===_today?';opacity:.45':'')+'" title="Jump to today" onclick="window.rezdySetDate(\''+_today+'\')">Today</button>'+
   '</div>';
   var deps=loading?[]:_wxDepartures(date);
-  var h=nav+'<div class="card"><div class="st" style="margin-bottom:8px">Weather calls</div>';
+  var h=nav+'<div class="card"><div class="st" style="margin-bottom:8px">Weather</div>';
   if(loading){h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Loading…</div></div>';return h;}
   if(!deps.length){h+='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No departures scheduled for this day.</div></div>';return h;}
   var nd=_wxNextDays(date);var draft=S._wxDraft||{};
