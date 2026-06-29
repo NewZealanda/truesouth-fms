@@ -1220,6 +1220,7 @@ function logout(){
     try{localStorage.removeItem('ts_sb_session');}catch(e){}
     clearTimeout(_sbRefreshTimer);_applySession(null);  // restores the anon key on SH
   }
+  try{_hdrPlaneDone=false;}catch(e){}   // replay the header plane fly-in on next login
   S.user=null;sessionStorage.removeItem('ts_user');localStorage.removeItem('ts_remembered_user');S._notifications=[];S.__notifStr='';S._notifOpen=false;broadcastPresence(null);if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}S.rtStatus='offline';S.rtPresence={};S._presSection=null;clearInterval(_presInterval);render();}
 // ── Biometric (Face ID / Touch ID) app-unlock handlers ──
 window.bioUnlockApp=async function(silent){

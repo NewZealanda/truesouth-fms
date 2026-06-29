@@ -1,4 +1,7 @@
 // === MODULE: shell === v1.0 ===
+// Plays the header plane fly-in once per login (reset on logout). Module-scope so it survives
+// the frequent full re-renders (it's set true on the first app render after login).
+var _hdrPlaneDone=false;
 // Loading animation: a mountain range draws itself left→right, then a little plane takes off and
 // climbs over it. Used on the session-restore and app-load screens.
 function _tsLoadingScene(){
@@ -928,13 +931,19 @@ function renderMaintenanceSubTabs(){
 function renderApp(){
   const sh={connecting:`<span class="sync-dot dot-spin"></span>Connecting`,ok:`<span class="sync-dot dot-ok"></span>Synced`,error:`<span class="sync-dot dot-err"></span>Offline`}[S.syncStatus]||'';
   const role=S.user?.role||'desk';
+  // Header plane: fly in from the right (the notifications side) and land just past the logo — ONCE per
+  // login. Mark done on the first app render so re-renders show it parked (no replay); reset on logout.
+  const _planeAnim=!_hdrPlaneDone; if(_planeAnim)_hdrPlaneDone=true;
 
   return`<div style="min-height:100vh;background:var(--bg);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)">
     <div style="background:linear-gradient(135deg,#0a0e1a,#0f172a);border-bottom:1px solid var(--border);padding:max(14px,env(safe-area-inset-top)) 14px 0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:10px">
           <button tabindex="-1" onclick="event.stopPropagation();S._drawerOpen=true;S._drawerSection=S.section;render()" style="background:rgba(255,255,255,.08);border:none;width:34px;height:34px;border-radius:8px;font-size:18px;color:rgba(255,255,255,.8);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;margin-top:5px" title="Menu">☰</button>
-          <img src="${_TS_LOGO}" alt="True South Flights" style="height:${S.mobileView?'28':'38'}px;width:auto;display:block;object-fit:contain">
+          <span style="position:relative;display:inline-flex;align-items:center">
+            <img src="${_TS_LOGO}" alt="True South Flights" style="height:${S.mobileView?'28':'38'}px;width:auto;display:block;object-fit:contain">
+            <img class="ts-hdr-plane${_planeAnim?' ts-hdr-fly':''}" src="${_TS_PLANE}" alt="" aria-hidden="true">
+          </span>
         </div>
         <div style="display:flex;align-items:center;gap:${S.mobileView?'8':'6'}px;flex-shrink:0">
           <div style="display:flex;align-items:center;gap:5px;${S.mobileView?'':'padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)'}" title="${(S._sessionExpired?'Session expired — sign out and back in to keep saving':S.rtStatus==='live'?'Live — synced':S.rtStatus==='connecting'?'Connecting...':'Offline')+' · '+APP_VER}">
