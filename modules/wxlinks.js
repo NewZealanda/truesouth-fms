@@ -31,8 +31,9 @@ function _wxProcessActions(){
     var links=S._wxLinks||{};var dirty=false;var toNotify=[];
     Object.keys(links).forEach(function(order){var r=links[order];if(!r)return;var a=r.action||'';
       if(a==='self_drive'){S._rzSelfDrive=S._rzSelfDrive||{};if(!S._rzSelfDrive[order]){S._rzSelfDrive[order]=true;dirty=true;}}
-      // Notify on a genuine change/request — self-drive only counts if they HAD a pickup booked.
-      var _notable=(a==='change_pickup'||a==='refund'||a==='contact'||(a==='self_drive'&&!!(r.snapshot&&String(r.snapshot.pickup_loc||'').trim())));
+      // Only ping the desk when a human is actually needed: change-pickup (fix it / call them), or a
+      // refund / contact request. A switch to self-drive needs no action — it just shows visually (amber).
+      var _notable=(a==='change_pickup'||a==='refund'||a==='contact');
       if(_notable){
         var ev=Array.isArray(r.events)?r.events:[];var key='notified_'+a;
         if(!ev.some(function(e){return e.t===key;}))toNotify.push({order:order,row:r,action:a,key:key});
