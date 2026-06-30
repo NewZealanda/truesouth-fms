@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.83';
+const APP_VER='v28.85';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -16351,7 +16351,7 @@ function _wxSnapFor(b,ono){
   return {pax_name:b.customerName||'',dep_key:depKey,dep_time:depTime,dep_label:prodName||destName||'',aircraft:acLbl,fr_date_label:dlab,
           wx_status:(c&&c.status)||'',wx_reasons:reasons,wx_comment:(c&&c.comment)||'',next_day:(c&&c.nextDay)||'',
           pickup_loc:loc,pickup_time:ptime,
-          is_self_drive:(!!(S._rzSelfDrive&&S._rzSelfDrive[ono])||/self.?drive|walk.?in|own (transport|car|vehicle)/i.test(loc||''))};
+          is_self_drive:(/self.?drive|walk.?in|own (transport|car|vehicle)/i.test(loc||''))};
 }
 function _wxStatusColor(st){return st==='on'?'#22c55e':st==='cancelled'?'#ef4444':st==='final'?'#f59e0b':'#94a3b8';}
 function _wxStatusLabel(st){return st==='on'?'Called ON':st==='cancelled'?'Cancelled':st==='final'?'Final call (office)':'No call yet';}
@@ -17243,9 +17243,10 @@ function _rzBookingCard(b){
   // Pickup location + phone (with tap-to-mark-called) — shown right-aligned under the Wx/Checked-in row.
   var _pkPhoneH=(function(){
     var _wxAct=(typeof _wxLinkAction==='function')?_wxLinkAction(ono):'';
-    var locs=[],ov=S._pickupLocOverride||{};(b.items||[]).forEach(function(it,ii){if(!it.pickup)return;var pid=ono+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;var l=(ov[pid]!=null&&ov[pid]!=='')?ov[pid]:it.pickup;l=String(l||'').trim();if(l&&locs.indexOf(l)<0)locs.push(l);});
-    var locStr=(_wxAct==='self_drive')?'Self drive':locs.join(', ');     // customer chose self-drive → show Self drive
-    var locH=locStr?'<span title="Pickup">📍 '+_rzEsc(locStr)+'</span>':'';
+    var locs=[],ov=S._pickupLocOverride||{},tov=S._pickupTimeOverride||{},ptime='';(b.items||[]).forEach(function(it,ii){if(!it.pickup)return;var pid=ono+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;var l=(ov[pid]!=null&&ov[pid]!=='')?ov[pid]:it.pickup;l=String(l||'').trim();if(l&&locs.indexOf(l)<0)locs.push(l);if(!ptime){var tt=(tov[pid]!=null&&tov[pid]!=='')?tov[pid]:((typeof _rzDepTime==='function')?_rzDepTime(it.pickupTime||''):'');ptime=tt?((typeof _rzHHMMcolon==='function')?_rzHHMMcolon(tt):tt):'';}});
+    var isSelf=(_wxAct==='self_drive');
+    var locStr=isSelf?'Self drive':locs.join(', ');     // customer chose self-drive → show Self drive
+    var locH=locStr?'<span title="Pickup">📍 '+_rzEsc(locStr)+((!isSelf&&ptime)?' · '+_rzEsc(ptime):'')+'</span>':'';
     var ph=String(b.phone||'').trim();var called=!!(S._rzBkCalled||{})[ono];
     var phH=ph?'<span onclick="event.stopPropagation();window.rezdyToggleCalled(\''+oE+'\')" title="'+(called?'Marked: called — no answer (tap to clear)':'Tap if you called and got no answer')+'" style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;color:'+(called?'#f59e0b':'var(--text3)')+';font-weight:'+(called?'700':'400')+'">📞 '+_rzEsc(ph)+(called?' <span style="display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;padding:0 2px;background:#f59e0b;color:#3a2c06;font-weight:900;font-size:9px;border-radius:3px;line-height:1">C</span>':'')+'</span>':'';
     var wxPk=(typeof _wxPickupBadge==='function')?_wxPickupBadge(ono):'';

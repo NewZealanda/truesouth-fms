@@ -171,11 +171,14 @@
          '<button class="sec" onclick="act(\'refund\')">'+t('btn_refund')+'</button></div>';
     } else if(st){
       if(pickup){
+        // "Already self-drive" is derived from the pickup location actually shown (so a real pickup
+        // like "Driftaway Queenstown" keeps the make-my-own-way option), not a possibly-stale flag.
+        var selfAlready=/self.?drive|walk.?in|own (transport|car|vehicle)/i.test(String(s.pickup_loc||''));
         h+='<div class="card"><div class="row" style="border:none;padding-bottom:4px"><span class="k" style="font-weight:700;color:var(--tx)">'+t('yourpickup')+'</span></div>';
         if(s.pickup_loc)h+='<div class="row"><span class="k">'+t('r_location')+'</span><span class="v">'+esc(s.pickup_loc)+'</span></div>';
         if(s.pickup_time)h+='<div class="row"><span class="k">'+t('r_pickuptime')+'</span><span class="v">'+esc(s.pickup_time)+'</span></div>';
         h+='<button class="go" style="margin-top:14px;background:var(--ok)" onclick="act(\'confirmed\')">'+t('btn_confirm_pickup')+'</button>'+
-           (s.is_self_drive?'':'<button class="sec" onclick="act(\'self_drive\')">'+t('btn_selfdrive')+'</button>')+
+           (selfAlready?'':'<button class="sec" onclick="act(\'self_drive\')">'+t('btn_selfdrive')+'</button>')+
            '<button class="sec" onclick="act(\'change_pickup\')">'+t('btn_changepickup')+'</button></div>';
       } else {
         h+='<div class="card"><button class="go" style="background:var(--ok)" onclick="act(\'confirmed\')">'+t('btn_confirm_got')+'</button>'+
