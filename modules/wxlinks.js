@@ -10,6 +10,47 @@ function _wxLinkUrl(token){var o=(typeof location!=='undefined'&&location.origin
 function _wxLinkRow(order){return (S._wxLinks||{})[String(order)]||null;}
 function _wxLinkExists(order){return !!_wxLinkRow(order);}
 function _wxLinkAcked(order){var r=_wxLinkRow(order);return !!(r&&r.ack_at);}   // customer opened/acknowledged → auto-Wx
+function _wxLinkAction(order){var r=_wxLinkRow(order);return (r&&r.action)||'';}
+// Pickup status badge for a booking, from the customer's link action.
+function _wxPickupBadge(order){
+  var a=_wxLinkAction(order);if(!a)return '';
+  if(a==='confirmed')return '<span title="Customer confirmed their pickup via the weather link" style="display:inline-flex;align-items:center;gap:3px;color:#16a34a;font-weight:800">✓ Confirmed</span>';
+  if(a==='self_drive')return '<span title="Customer changed to self-drive via the weather link — no pickup needed" style="display:inline-flex;align-items:center;gap:3px;color:#d97706;font-weight:800">⚠ Self drive</span>';
+  if(a==='change_pickup')return '<span title="Customer asked to change their pickup via the weather link — please contact them" style="display:inline-flex;align-items:center;gap:3px;color:#d97706;font-weight:800">⚠ Change pickup</span>';
+  return '';
+}
+// On each links load: auto-flag self-drive bookings + notify the desk of pickup changes (deduped).
+function _wxProcessActions(){
+  try{
+    var links=S._wxLinks||{};var dirty=false;var toNotify=[];
+    Object.keys(links).forEach(function(order){var r=links[order];if(!r)return;var a=r.action||'';
+      if(a==='self_drive'){S._rzSelfDrive=S._rzSelfDrive||{};if(!S._rzSelfDrive[order]){S._rzSelfDrive[order]=true;dirty=true;}}
+      if(a==='change_pickup'||a==='self_drive'||a==='refund'||a==='contact'){
+        var ev=Array.isArray(r.events)?r.events:[];var key='notified_'+a;
+        if(!ev.some(function(e){return e.t===key;}))toNotify.push({order:order,row:r,action:a,key:key});
+      }
+    });
+    if(dirty&&typeof window.pickupSave==='function')window.pickupSave(true);
+    if(toNotify.length)_wxSendActionNotifs(toNotify);
+  }catch(e){}
+}
+function _wxSendActionNotifs(list){
+  try{
+    if(typeof sbU!=='function')return;
+    var recips=(typeof _wxBroadcastRecipients==='function')?_wxBroadcastRecipients(S.rezdyDate,null):[];
+    var ACT={change_pickup:'wants to CHANGE their pickup',self_drive:'switched to SELF-DRIVE (no pickup needed)',refund:'requested a REFUND',contact:'asked to be contacted'};
+    list.forEach(function(n){
+      var snap=(n.row&&n.row.snapshot)||{};
+      if(recips.length){
+        var msg='🔔 '+(snap.pax_name||'#'+n.order)+' '+(ACT[n.action]||n.action)+(snap.dep_time?' · '+snap.dep_time:'')+(snap.dep_label?' · '+snap.dep_label:'')+' (via weather link)';
+        sbU('ts_notifications',recips.map(function(uid){return {user_id:uid,type:'wx_pickup',reference_id:n.order,message:msg,read:false,created_at:new Date().toISOString()};})).catch(function(){});
+      }
+      n.row.events=(Array.isArray(n.row.events)?n.row.events:[]);n.row.events.push({t:n.key,at:new Date().toISOString(),src:'system'});
+      n.row.updated_at=new Date().toISOString();
+      sbU('ts_wx_links',[n.row]).catch(function(){});
+    });
+  }catch(e){}
+}
 
 window.loadWxLinks=async function(date){
   date=date||S.rezdyDate;if(!date||typeof _sbFetch!=='function')return;
@@ -18,6 +59,7 @@ window.loadWxLinks=async function(date){
     if(!r||!r.ok)return;
     var rows=await r.json();var d={};(rows||[]).forEach(function(x){if(x&&x.order_number)d[String(x.order_number)]=x;});
     S._wxLinks=d;S._wxLinksDate=date;
+    try{_wxProcessActions();}catch(e){}
     if(typeof safeRender==='function')safeRender();
   }catch(e){}
 };
@@ -71,6 +113,21 @@ window.wxResetLink=function(order){
 };
 window.wxLinkOpen=function(order){_wxLinksEnsure();S._wxLinkOpen=String(order);render();};
 window.wxLinkClose=function(){S._wxLinkOpen=null;render();};
+// When a pilot makes/changes/clears a weather call, refresh the wx fields on every link for that
+// departure so the customer page shows the latest automatically (no re-copy needed).
+window.wxSyncDep=function(dep){
+  try{
+    dep=String(dep);var links=S._wxLinks||{};var c=(typeof _wxCall==='function')?_wxCall(dep):null;
+    var REA={cloud:'Cloud',rain:'Rain',wind:'Wind',snow:'Snow',visibility:'Visibility',vis:'Visibility',fog:'Fog'};
+    var reasons=((c&&c.reasons)||[]).map(function(r){return REA[String(r).toLowerCase()]||r;});
+    Object.keys(links).forEach(function(order){var r=links[order];if(!r||String(r.dep_key||'')!==dep)return;
+      r.snapshot=r.snapshot||{};
+      r.snapshot.wx_status=(c&&c.status)||'';r.snapshot.wx_reasons=reasons;r.snapshot.wx_comment=(c&&c.comment)||'';r.snapshot.next_day=(c&&c.nextDay)||'';
+      r.updated_at=new Date().toISOString();
+      if(typeof sbU==='function')sbU('ts_wx_links',[r]).catch(function(){});
+    });
+  }catch(e){}
+};
 
 function _wxLinkStatus(order){
   var r=_wxLinkRow(order);

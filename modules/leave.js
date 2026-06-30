@@ -474,6 +474,7 @@ function _notifTargetLabel(n){
     case 'ops_notice':      return 'Notices';
     case 'equipment':       return 'Equipment';
     case 'monitoring':      return 'Monitoring';
+    case 'wx_pickup':       return 'Bookings';
     default: return ((n&&n.type)||'').indexOf('leave_')===0 ? 'My Leave' : '';
   }
 }
@@ -492,6 +493,7 @@ function _notifNavigate(n){
     if(t==='ops_notice'){S.section='opsnotices';S._onView='list';S._onOpen=n.reference_id||null;render();return;}
     if(t==='equipment'){S.section='ground';S._groundSecTab='equipment';if(n.reference_id)S._eqOpen=n.reference_id;render();return;}
     if(t==='monitoring'){S.section='monitoring';render();return;}
+    if(t==='wx_pickup'){S.section='operations';S.tab='bookings';S.activeTabId=null;S._newLsTab=false;render();return;}
   }catch(e){}
   render();
 }

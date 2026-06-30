@@ -1479,7 +1479,7 @@ function _wxSnapFor(b,ono){
     if(!ptime){var t=(tov[pid]!=null&&tov[pid]!=='')?tov[pid]:((typeof _rzDepTime==='function')?_rzDepTime(it.pickupTime||''):'');ptime=t?((typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t):'';}
   });
   var dlab='';try{var dd=new Date((S.rezdyDate||'')+'T00:00:00');if(!isNaN(dd.getTime()))dlab=dd.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'});}catch(e){}
-  return {pax_name:b.customerName||'',dep_time:depTime,dep_label:prodName||destName||'',aircraft:acLbl,fr_date_label:dlab,
+  return {pax_name:b.customerName||'',dep_key:dep,dep_time:depTime,dep_label:prodName||destName||'',aircraft:acLbl,fr_date_label:dlab,
           wx_status:(c&&c.status)||'',wx_reasons:reasons,wx_comment:(c&&c.comment)||'',next_day:(c&&c.nextDay)||'',
           pickup_loc:loc,pickup_time:ptime};
 }
@@ -1604,10 +1604,11 @@ window.wxSubmit=function(status){
   if((!S.roster||!Object.keys(S.roster).length)&&typeof window.loadRosterFromCloud==='function'){
     window.loadRosterFromCloud().then(_wxNotify).catch(_wxNotify);
   } else _wxNotify();
+  if(typeof window.wxSyncDep==='function')window.wxSyncDep(dep);          // refresh the customer link snapshots
   if(typeof toast==='function')toast('Weather call recorded: '+_wxStatusLabel(status),status==='cancelled'?'warn':'ok');
   render();
 };
-window.wxClear=function(dep){if(S._rzWxCalls)delete S._rzWxCalls[String(dep)];S._wxOpen=null;if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();if(typeof auditLog==='function')auditLog('weather_call_clear',{dep:dep});render();};
+window.wxClear=function(dep){if(S._rzWxCalls)delete S._rzWxCalls[String(dep)];S._wxOpen=null;if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();if(typeof window.wxSyncDep==='function')window.wxSyncDep(dep);if(typeof auditLog==='function')auditLog('weather_call_clear',{dep:dep});render();};
 // Reminder check (runs each minute): for every departure with no call yet, notify each PIC at 10, 5 and
 // 1 minute before the deadline (deadline = depart − 1h, i.e. when the weather call is due). Each milestone
 // fires ONCE; the sent set rides in the synced blob (rec._remind) so other devices don't re-send. Once a
@@ -2370,12 +2371,15 @@ function _rzBookingCard(b){
   var wx=wxManual;   // the Wx pill is reserved for a STAFF manual tick; customer link acks show on the 🔗 Wx-link button
   // Pickup location + phone (with tap-to-mark-called) — shown right-aligned under the Wx/Checked-in row.
   var _pkPhoneH=(function(){
+    var _wxAct=(typeof _wxLinkAction==='function')?_wxLinkAction(ono):'';
     var locs=[],ov=S._pickupLocOverride||{};(b.items||[]).forEach(function(it,ii){if(!it.pickup)return;var pid=ono+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;var l=(ov[pid]!=null&&ov[pid]!=='')?ov[pid]:it.pickup;l=String(l||'').trim();if(l&&locs.indexOf(l)<0)locs.push(l);});
-    var locH=locs.length?'<span title="Pickup">📍 '+_rzEsc(locs.join(', '))+'</span>':'';
+    var locStr=(_wxAct==='self_drive')?'Self drive':locs.join(', ');     // customer chose self-drive → show Self drive
+    var locH=locStr?'<span title="Pickup">📍 '+_rzEsc(locStr)+'</span>':'';
     var ph=String(b.phone||'').trim();var called=!!(S._rzBkCalled||{})[ono];
     var phH=ph?'<span onclick="event.stopPropagation();window.rezdyToggleCalled(\''+oE+'\')" title="'+(called?'Marked: called — no answer (tap to clear)':'Tap if you called and got no answer')+'" style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;color:'+(called?'#f59e0b':'var(--text3)')+';font-weight:'+(called?'700':'400')+'">📞 '+_rzEsc(ph)+(called?' <span style="display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;padding:0 2px;background:#f59e0b;color:#3a2c06;font-weight:900;font-size:9px;border-radius:3px;line-height:1">C</span>':'')+'</span>':'';
-    if(!locH&&!phH)return '';
-    return '<div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">'+locH+phH+'</div>';
+    var wxPk=(typeof _wxPickupBadge==='function')?_wxPickupBadge(ono):'';
+    if(!locH&&!phH&&!wxPk)return '';
+    return '<div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">'+locH+phH+wxPk+'</div>';
   })();
   var h='<div class="card" style="padding:12px 14px;margin-bottom:12px'+(cancelled?';opacity:.6':(noShow?';border:1px solid #ef4444;background:rgba(239,68,68,.10)':(ci?';border:1px solid #15803d;background:rgba(34,197,94,.08)':'')))+'">';
   // header
