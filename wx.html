@@ -162,7 +162,8 @@
     if(st==='cancelled'&&s.next_day)h+='<div class="row"><span class="k">'+t('r_nextday')+'</span><span class="v">'+esc(s.next_day)+'</span></div>';
     if(!st)h+='<div class="note">'+t('note_pending').replace('{x}',(s.dep_time?' ('+esc(s.dep_time)+')':''))+'</div>';
     if(st==='final')h+='<div class="note">'+t('note_final')+(s.wx_reasons&&s.wx_reasons.length?' ('+t('because_of')+' '+esc(s.wx_reasons.join(', ').toLowerCase())+')':'')+'</div>';
-    if(s.wx_comment)h+='<div class="note">'+esc(s.wx_comment)+'</div>';
+    // NOTE: the weather-call comment is INTERNAL and intentionally not shown to the customer.
+    // (A separate customer-facing "manual comment" may be added later.)
     h+='</div>';
 
     if(st==='cancelled'){
