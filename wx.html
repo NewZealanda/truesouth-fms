@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Weather update · True South Flights</title>
+<style>
+  :root{--bg:#0b1220;--card:#121c2f;--card2:#0e1626;--bd:#24344f;--tx:#eaf0fb;--tx2:#aab8d0;--tx3:#6f819e;--acc:#7c3aed;--ok:#16a34a;--no:#ef4444;--amb:#f59e0b}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:linear-gradient(160deg,#0a0e1a,#0f172a);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;min-height:100vh;padding:max(20px,env(safe-area-inset-top)) 16px max(20px,env(safe-area-inset-bottom))}
+  .wrap{max-width:520px;margin:0 auto}
+  .head{text-align:center;margin:6px 0 18px}
+  .logo{font-size:13px;font-weight:800;letter-spacing:3px;color:var(--tx2);text-transform:uppercase}
+  .head h1{font-size:21px;margin:9px 0 2px;font-weight:800}
+  .head p{margin:0;color:var(--tx3);font-size:13px}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:20px;margin-bottom:14px}
+  .reveal{text-align:center;padding:30px 18px}
+  .reveal p{color:var(--tx2);font-size:15px;line-height:1.5;margin:0 0 20px}
+  button.go{width:100%;padding:16px;background:var(--acc);border:none;border-radius:12px;color:#fff;font-size:17px;font-weight:800;cursor:pointer}
+  button.go:disabled{opacity:.55}
+  button.sec{width:100%;padding:14px;background:transparent;border:1px solid var(--bd);border-radius:11px;color:var(--tx2);font-size:15px;font-weight:700;cursor:pointer;margin-top:10px}
+  .banner{border-radius:13px;padding:16px 18px;margin-bottom:16px;text-align:center}
+  .banner .t{font-size:20px;font-weight:800}
+  .banner .s{font-size:13px;margin-top:3px;opacity:.9}
+  .b-on{background:rgba(22,163,74,.16);border:1px solid rgba(22,163,74,.5)}
+  .b-on .t{color:#4ade80}
+  .b-no{background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.5)}
+  .b-no .t{color:#f87171}
+  .b-am{background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.5)}
+  .b-am .t{color:#fbbf24}
+  .row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--bd);font-size:14px}
+  .row:first-child{border-top:none}
+  .row .k{color:var(--tx3)}
+  .row .v{color:var(--tx);font-weight:700;text-align:right}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+  .tag{background:var(--card2);border:1px solid var(--bd);border-radius:14px;padding:2px 10px;font-size:12px;color:var(--tx2)}
+  .note{font-size:13px;color:var(--tx2);background:var(--card2);border:1px solid var(--bd);border-radius:10px;padding:11px 13px;line-height:1.5;margin-top:12px}
+  .done{text-align:center;padding:22px 8px}
+  .done .tick{width:66px;height:66px;border-radius:50%;background:rgba(124,58,237,.16);border:2px solid var(--acc);color:#c4b5fd;font-size:34px;line-height:62px;margin:0 auto 12px}
+  .done h2{margin:0 0 6px;font-size:20px}
+  .done p{color:var(--tx2);font-size:14px;margin:0;line-height:1.5}
+  .foot{text-align:center;color:var(--tx3);font-size:11px;margin-top:10px}
+  .hide{display:none}
+  .err{text-align:center;color:var(--tx2);padding:30px 12px;font-size:15px;line-height:1.5}
+  a.call{display:inline-block;margin-top:10px;color:#93c5fd;font-weight:700;text-decoration:none;font-size:15px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="logo">True South Flights</div>
+    <h1>Weather update</h1>
+    <p id="sub">for your scenic flight</p>
+  </div>
+
+  <div id="loading" class="card err">Loading…</div>
+
+  <div id="revealCard" class="card reveal hide">
+    <p>We've made a weather call for your flight. Tap below to see the latest.</p>
+    <button class="go" id="revealBtn" onclick="reveal()">Reveal your weather call</button>
+  </div>
+
+  <div id="detail" class="hide"></div>
+
+  <div id="doneCard" class="card done hide">
+    <div class="tick">✓</div>
+    <h2 id="doneTitle">Thank you</h2>
+    <p id="doneMsg"></p>
+  </div>
+
+  <div class="foot">True South Flights · this link is just for your booking.</div>
+</div>
+
+<script>
+  var SB='https://wgycephyuwwfogggcbye.supabase.co';
+  var SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndneWNlcGh5dXd3Zm9nZ2djYnllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NjEzNzAsImV4cCI6MjA5NjQzNzM3MH0.6ac1fI7NxOJla_cI6P2bMwBXr3qkBTaHoyipcG9r95Q';
+  var token=new URLSearchParams(location.search).get('t')||'';
+  var SNAP=null, ACTED=null;
+  function $(id){return document.getElementById(id);}
+  function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  async function rpc(fn,body){
+    var r=await fetch(SB+'/rest/v1/rpc/'+fn,{method:'POST',headers:{'apikey':SK,'Authorization':'Bearer '+SK,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    var t=await r.text();return t?JSON.parse(t):null;
+  }
+  async function load(){
+    if(!token){$('loading').textContent='This link is missing its code. Please use the link exactly as we sent it.';return;}
+    try{
+      var d=await rpc('wx_link_get',{p_token:token});
+      if(!d||!d.snapshot){$('loading').innerHTML='<div class="err">We couldn\'t find this weather update.<br>It may have expired. Please contact True South Flights.</div>';return;}
+      SNAP=d.snapshot; ACTED=d.action||null;
+      if(SNAP.pax_name)$('sub').textContent='Hi '+esc(String(SNAP.pax_name).split(' ')[0])+' — here\'s your flight';
+      $('loading').classList.add('hide');
+      $('revealCard').classList.remove('hide');
+    }catch(e){$('loading').innerHTML='<div class="err">Something went wrong loading your update.<br>Please try again, or contact True South Flights.</div>';}
+  }
+  function ack(action,note){try{rpc('wx_link_ack',{p_token:token,p_action:action,p_note:note||null});}catch(e){}}
+  function reveal(){
+    ack('view');
+    $('revealCard').classList.add('hide');
+    renderDetail();
+  }
+  function renderDetail(){
+    var s=SNAP||{}, st=s.wx_status||'on';
+    var pickup=(s.pickup_loc||s.pickup_time);
+    var b = st==='cancelled' ? {c:'b-no',t:'Flight cancelled',s:'Weather isn\'t safe for today\'s flight'}
+          : st==='final'     ? {c:'b-am',t:'Final call shortly',s:'We\'re making a final decision in the office'}
+          :                    {c:'b-on',t:'Your flight is on ✈',s:'Weather looks good — see you soon'};
+    var h='<div class="card">';
+    h+='<div class="banner '+b.c+'"><div class="t">'+b.t+'</div><div class="s">'+esc(b.s)+'</div></div>';
+    if(s.dep_label)h+='<div class="row"><span class="k">Flight</span><span class="v">'+esc(s.dep_label)+'</span></div>';
+    if(s.dep_time)h+='<div class="row"><span class="k">Departure</span><span class="v">'+esc(s.dep_time)+(s.fr_date_label?' · '+esc(s.fr_date_label):'')+'</span></div>';
+    if(s.wx_reasons&&s.wx_reasons.length)h+='<div class="row"><span class="k">Conditions</span><span class="v"><span class="tags">'+s.wx_reasons.map(function(r){return '<span class="tag">'+esc(r)+'</span>';}).join('')+'</span></span></div>';
+    if(st==='cancelled'&&s.next_day)h+='<div class="row"><span class="k">Next best day</span><span class="v">'+esc(s.next_day)+'</span></div>';
+    if(s.wx_comment)h+='<div class="note">'+esc(s.wx_comment)+'</div>';
+    h+='</div>';
+
+    if(st==='cancelled'){
+      h+='<div class="card"><div class="row" style="border:none;padding-bottom:10px"><span class="k" style="font-weight:700;color:var(--tx)">What would you like to do?</span></div>'+
+         '<button class="go" style="background:var(--no)" onclick="act(\'refund\')">Request a refund</button>'+
+         '<button class="sec" onclick="act(\'contact\')">Ask us to reschedule / contact me</button></div>';
+    } else {
+      if(pickup){
+        h+='<div class="card"><div class="row" style="border:none;padding-bottom:4px"><span class="k" style="font-weight:700;color:var(--tx)">Your pickup</span></div>';
+        if(s.pickup_loc)h+='<div class="row"><span class="k">Location</span><span class="v">'+esc(s.pickup_loc)+'</span></div>';
+        if(s.pickup_time)h+='<div class="row"><span class="k">Pickup time</span><span class="v">'+esc(s.pickup_time)+'</span></div>';
+        h+='<button class="go" style="margin-top:14px;background:var(--ok)" onclick="act(\'confirmed\')">Confirm — I\'ll be there</button></div>';
+      } else {
+        h+='<div class="card"><button class="go" style="background:var(--ok)" onclick="act(\'confirmed\')">Confirm — got it</button></div>';
+      }
+      if(st==='final')h+='<div class="card"><button class="sec" onclick="act(\'contact\')">Please contact me</button></div>';
+    }
+    if(s.op_phone)h+='<div style="text-align:center"><a class="call" href="tel:'+esc(s.op_phone)+'">Call True South · '+esc(s.op_phone)+'</a></div>';
+    $('detail').innerHTML=h;
+    $('detail').classList.remove('hide');
+  }
+  function act(a){
+    ack(a);
+    $('detail').classList.add('hide');
+    var map={confirmed:['See you soon!','Thanks for confirming — we\'ll see you at your pickup.'],
+             refund:['Refund requested','Thanks — our team will process your refund and be in touch.'],
+             contact:['We\'ll be in touch','Thanks — someone from True South will contact you shortly.']};
+    var m=map[a]||['Thank you',''];
+    $('doneTitle').textContent=m[0];$('doneMsg').textContent=m[1];
+    $('doneCard').classList.remove('hide');
+    window.scrollTo(0,0);
+  }
+  load();
+</script>
+</body>
+</html>
