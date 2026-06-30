@@ -1464,13 +1464,15 @@ function _wxSnapFor(b,ono){
   ono=String(ono||(b&&b.orderNumber)||'');
   var prodCode=(((b.items||[])[0]||{}).product)||'';
   var dep=(typeof _rzBookingDep==='function')?_rzBookingDep(b):'';
+  // Weather calls are keyed by the calendar departure time in HH:MM (with colon); the booking's dep is HHMM.
+  var depKey=(dep===RZ_FLYBACK_DEP)?dep:((typeof _rzHHMMcolon==='function')?_rzHHMMcolon(dep):dep);
   var depTime=(dep===RZ_FLYBACK_DEP)?'Flyback':((typeof _rzHHMMcolon==='function')?_rzHHMMcolon(_rzDepDisplay(dep)):_rzDepDisplay(dep));
   var destShort=(typeof _rzGroupDest==='function')?_rzGroupDest(prodCode):'';
   var destName=(typeof _RZ_DEST_NAMES!=='undefined'&&_RZ_DEST_NAMES[destShort])||destShort||'';
   var prodName=(typeof _rzProductName==='function')?_rzProductName(prodCode):((typeof _rzProduct==='function')?_rzProduct(prodCode):prodCode);
   var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,ono):'';
   var acLbl=(ac&&ac!=='__none__')?((typeof acDisp==='function')?acDisp(ac):String(ac).replace('ZK-','')):'';
-  var c=(typeof _wxCall==='function')?_wxCall(dep):null;
+  var c=(typeof _wxCall==='function')?_wxCall(depKey):null;
   var REA={cloud:'Cloud',rain:'Rain',wind:'Wind',snow:'Snow',visibility:'Visibility',vis:'Visibility',fog:'Fog'};
   var reasons=((c&&c.reasons)||[]).map(function(r){return REA[String(r).toLowerCase()]||r;});
   var ov=S._pickupLocOverride||{},tov=S._pickupTimeOverride||{},loc='',ptime='';
@@ -1479,7 +1481,7 @@ function _wxSnapFor(b,ono){
     if(!ptime){var t=(tov[pid]!=null&&tov[pid]!=='')?tov[pid]:((typeof _rzDepTime==='function')?_rzDepTime(it.pickupTime||''):'');ptime=t?((typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t):'';}
   });
   var dlab='';try{var dd=new Date((S.rezdyDate||'')+'T00:00:00');if(!isNaN(dd.getTime()))dlab=dd.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'});}catch(e){}
-  return {pax_name:b.customerName||'',dep_key:dep,dep_time:depTime,dep_label:prodName||destName||'',aircraft:acLbl,fr_date_label:dlab,
+  return {pax_name:b.customerName||'',dep_key:depKey,dep_time:depTime,dep_label:prodName||destName||'',aircraft:acLbl,fr_date_label:dlab,
           wx_status:(c&&c.status)||'',wx_reasons:reasons,wx_comment:(c&&c.comment)||'',next_day:(c&&c.nextDay)||'',
           pickup_loc:loc,pickup_time:ptime};
 }
