@@ -79,8 +79,8 @@ function _ffShutdownLabel(at){
   var mins=Math.max(0,Math.floor((now-at)/60000));
   if(mins<60)return 'Shutdown '+mins+' minute'+(mins===1?'':'s')+' ago at '+hm;
   var h=Math.floor(mins/60),m=mins%60;
-  if(mins<300)return 'Shutdown '+h+' hour'+(h===1?'':'s')+' '+m+' min'+(m===1?'':'s')+' ago';
-  return 'Shutdown '+Math.round(mins/60)+' hours ago';
+  if(mins<300)return 'Shutdown '+h+' hour'+(h===1?'':'s')+' '+m+' min'+(m===1?'':'s')+' ago at '+hm;
+  return 'Shutdown '+Math.round(mins/60)+' hours ago at '+hm;
 }
 function _ffStatusOf(ac){
   var ff=(S._ffData||{})[ac]||null;

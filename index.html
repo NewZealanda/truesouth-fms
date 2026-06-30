@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.64';
+const APP_VER='v28.65';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -23261,8 +23261,8 @@ function _ffShutdownLabel(at){
   var mins=Math.max(0,Math.floor((now-at)/60000));
   if(mins<60)return 'Shutdown '+mins+' minute'+(mins===1?'':'s')+' ago at '+hm;
   var h=Math.floor(mins/60),m=mins%60;
-  if(mins<300)return 'Shutdown '+h+' hour'+(h===1?'':'s')+' '+m+' min'+(m===1?'':'s')+' ago';
-  return 'Shutdown '+Math.round(mins/60)+' hours ago';
+  if(mins<300)return 'Shutdown '+h+' hour'+(h===1?'':'s')+' '+m+' min'+(m===1?'':'s')+' ago at '+hm;
+  return 'Shutdown '+Math.round(mins/60)+' hours ago at '+hm;
 }
 function _ffStatusOf(ac){
   var ff=(S._ffData||{})[ac]||null;
