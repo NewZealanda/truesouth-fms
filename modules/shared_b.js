@@ -284,7 +284,7 @@ function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
   // Under Phase A, ts_users SELECT is revoked so it can't be subscribed — drop it.
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs','ts_maint_forms','ts_vehicle_prestarts','ts_ops_notices','ts_ops_notice_reads','ts_equipment','ts_visitors','ts_flight_following'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs','ts_maint_forms','ts_vehicle_prestarts','ts_ops_notices','ts_ops_notice_reads','ts_equipment','ts_visitors','ts_flight_following','ts_wx_links'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
     var _rtThisWs=_rtWs;   // guard: a reconnect/refresh may replace _rtWs before this socket opens
@@ -657,6 +657,10 @@ async function reloadTable(table){
     return false;
   } else if(table==='ts_flight_following'){
     if(S._ffLoaded&&typeof window.loadFlightFollowing==='function')window.loadFlightFollowing();
+    return false;
+  } else if(table==='ts_wx_links'){
+    // Customer weather links — refresh so the desk sees acknowledgements (auto-Wx) live.
+    if(S._wxLinksDate&&typeof window.loadWxLinks==='function')window.loadWxLinks(S.rezdyDate);
     return false;
   } else if(table==='ts_scratchpads'){
     const ps=await sbF('ts_scratchpads','','saved_at');

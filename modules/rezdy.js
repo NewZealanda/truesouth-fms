@@ -1437,6 +1437,31 @@ var _WX_REASONS=['Cloud','Rain','Wind','Snow','Visibility'];
 function _wxLeadMin(){return 60;}                       // call due this many minutes before departure
 var _WX_REMIND_MINS=[10,5,1];                           // escalating reminders this many min before the deadline
 function _wxCall(depKey){return (S._rzWxCalls||{})[String(depKey)]||null;}
+// Snapshot of a booking's customer-facing details for the weather-call link (wx.html reads this).
+// Built here (booking object in scope) and stashed in S._wxSnap[order] for the wxlinks module to send.
+function _wxSnapFor(b,ono){
+  ono=String(ono||(b&&b.orderNumber)||'');
+  var prodCode=(((b.items||[])[0]||{}).product)||'';
+  var dep=(typeof _rzBookingDep==='function')?_rzBookingDep(b):'';
+  var depTime=(dep===RZ_FLYBACK_DEP)?'Flyback':((typeof _rzHHMMcolon==='function')?_rzHHMMcolon(_rzDepDisplay(dep)):_rzDepDisplay(dep));
+  var destShort=(typeof _rzGroupDest==='function')?_rzGroupDest(prodCode):'';
+  var destName=(typeof _RZ_DEST_NAMES!=='undefined'&&_RZ_DEST_NAMES[destShort])||destShort||'';
+  var prodName=(typeof _rzProduct==='function')?_rzProduct(prodCode):prodCode;
+  var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,ono):'';
+  var acLbl=(ac&&ac!=='__none__')?((typeof acDisp==='function')?acDisp(ac):String(ac).replace('ZK-','')):'';
+  var c=(typeof _wxCall==='function')?_wxCall(dep):null;
+  var REA={cloud:'Cloud',rain:'Rain',wind:'Wind',snow:'Snow',visibility:'Visibility',vis:'Visibility',fog:'Fog'};
+  var reasons=((c&&c.reasons)||[]).map(function(r){return REA[String(r).toLowerCase()]||r;});
+  var ov=S._pickupLocOverride||{},tov=S._pickupTimeOverride||{},loc='',ptime='';
+  (b.items||[]).forEach(function(it,ii){if(!it||!it.pickup)return;var pid=ono+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;
+    if(!loc){var l=(ov[pid]!=null&&ov[pid]!=='')?ov[pid]:it.pickup;loc=String(l||'').trim();}
+    if(!ptime){var t=(tov[pid]!=null&&tov[pid]!=='')?tov[pid]:((typeof _rzDepTime==='function')?_rzDepTime(it.pickupTime||''):'');ptime=t?((typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t):'';}
+  });
+  var dlab='';try{var dd=new Date((S.rezdyDate||'')+'T00:00:00');if(!isNaN(dd.getTime()))dlab=dd.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'});}catch(e){}
+  return {pax_name:b.customerName||'',dep_time:depTime,dep_label:destName||prodName||'',aircraft:acLbl,fr_date_label:dlab,
+          wx_status:(c&&c.status)||'',wx_reasons:reasons,wx_comment:(c&&c.comment)||'',next_day:(c&&c.nextDay)||'',
+          pickup_loc:loc,pickup_time:ptime};
+}
 function _wxStatusColor(st){return st==='on'?'#22c55e':st==='cancelled'?'#ef4444':st==='final'?'#f59e0b':'#94a3b8';}
 function _wxStatusLabel(st){return st==='on'?'Called ON':st==='cancelled'?'Cancelled':st==='final'?'Final call (office)':'No call yet';}
 // Subject label for a departure, e.g. "MF FCF" (dest + product) or "MF FLB" (flyback). Time is shown separately.
@@ -2317,7 +2342,11 @@ function _rzBookingCard(b){
   var bd=_rzEffBreakdown(b);
   var prod=_rzProduct((((b.items||[])[0]||{}).product)||'');
   var stCol=cancelled?'#ef4444':(/confirm/i.test(b.status||'')?'#86efac':'var(--text2)');
-  var wx=!!(S._rzBookingWx||{})[ono],ci=!!(S._rzBookingCheckedIn||{})[ono];
+  var wxManual=!!(S._rzBookingWx||{})[ono],ci=!!(S._rzBookingCheckedIn||{})[ono];
+  try{(S._wxSnap=S._wxSnap||{})[ono]=_wxSnapFor(b,ono);}catch(_we){}                 // stash snapshot for the wx link
+  if(typeof _wxLinksEnsure==='function')_wxLinksEnsure();                            // lazy-load the day's links
+  var wxAuto=(typeof _wxLinkAcked==='function')&&_wxLinkAcked(ono);                  // customer confirmed via their link
+  var wx=wxManual||wxAuto;
   // Pickup location + phone (with tap-to-mark-called) — shown right-aligned under the Wx/Checked-in row.
   var _pkPhoneH=(function(){
     var locs=[],ov=S._pickupLocOverride||{};(b.items||[]).forEach(function(it,ii){if(!it.pickup)return;var pid=ono+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;var l=(ov[pid]!=null&&ov[pid]!=='')?ov[pid]:it.pickup;l=String(l||'').trim();if(l&&locs.indexOf(l)<0)locs.push(l);});
@@ -2345,6 +2374,8 @@ function _rzBookingCard(b){
      '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">';
   if(!cancelled){
     h+=_rzCheckBtn('Wx',wx,'window.rezdyBookingToggleWx(\''+oE+'\')','Weather check called by passenger');
+    if(wxAuto)h+='<span title="Confirmed by the customer via their weather link" style="display:inline-flex;align-items:center;font-size:9px;font-weight:800;color:#3b82f6;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);border-radius:10px;padding:1px 6px;margin-left:-3px">AUTO</span>';
+    h+='<button onclick="event.stopPropagation();window.wxLinkOpen(\''+oE+'\')" title="Customer weather link — copy, status &amp; history" style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid var(--border2);background:transparent;color:'+((typeof _wxLinkExists==='function'&&_wxLinkExists(ono))?'#60a5fa':'var(--text3)')+'">🔗 Wx link</button>';
     h+=_rzCheckBtn('Checked in',ci,'window.rezdyCheckinClick(\''+oE+'\')','Check in: enter names + actual weights');
     // No-show toggle (red when on) — shows red + excluded from the seatmap push.
     h+='<button onclick="window.rezdyBookingNoShow(\''+oE+'\')" title="No-show — shows red, excluded from pickups AND the seatmap push, and notifies the desk" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid '+(noShow?'#ef4444':'var(--border2)')+';background:'+(noShow?'rgba(239,68,68,.15)':'transparent')+';color:'+(noShow?'#f87171':'var(--text3)')+'">'+(noShow?'✕':'○')+' No-show</button>';

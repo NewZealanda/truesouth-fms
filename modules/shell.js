@@ -1211,7 +1211,7 @@ function renderApp(){
         return renderOperations();
       }catch(e){return'<div style="padding:40px 20px;text-align:center;color:var(--err-text)"><div style="font-size:28px;margin-bottom:8px">⚠</div><div style="font-size:14px;margin-bottom:12px">Something went wrong rendering this tab.</div><div style="font-size:11px;color:var(--text3);font-family:monospace">'+String(e)+'</div><button onclick="S.tab=\'loadsheet\';render()" style="margin-top:16px;padding:8px 18px;background:var(--acc);border:none;border-radius:7px;color:#fff;font-size:13px;cursor:pointer">Go to Loadsheet</button></div>';}})()}
     </div>
-  </div>${(typeof renderTrainCoach==='function')?renderTrainCoach():''}${(typeof _fdSignModal==='function')?_fdSignModal():''}`;
+  </div>${(typeof renderTrainCoach==='function')?renderTrainCoach():''}${(typeof _fdSignModal==='function')?_fdSignModal():''}${(typeof _wxLinkModal==='function')?_wxLinkModal():''}`;
 }
 
 
