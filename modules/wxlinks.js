@@ -72,8 +72,20 @@ window.loadWxLinks=async function(date){
     if(typeof safeRender==='function')safeRender();
   }catch(e){}
 };
-// Keep the day's links loaded (called from the bookings render).
-function _wxLinksEnsure(){if(S._wxLinksDate!==S.rezdyDate&&!S._wxLinksLoading){S._wxLinksLoading=true;Promise.resolve(window.loadWxLinks(S.rezdyDate)).finally(function(){S._wxLinksLoading=false;});}}
+// Keep the day's links loaded (called from the bookings render) + a light poll so customer actions
+// show without a manual refresh even if the realtime push is delayed.
+function _wxLinksEnsure(){
+  if(S._wxLinksDate!==S.rezdyDate&&!S._wxLinksLoading){S._wxLinksLoading=true;Promise.resolve(window.loadWxLinks(S.rezdyDate)).finally(function(){S._wxLinksLoading=false;});}
+  _wxStartPoll();
+}
+function _wxStartPoll(){
+  if(S._wxPoll)return;
+  S._wxPoll=setInterval(function(){try{
+    if(S.section!=='operations')return;                                  // only while on the bookings/ops pages
+    if(typeof document!=='undefined'&&document.visibilityState!=='visible')return;
+    if(S._wxLinksDate&&typeof window.loadWxLinks==='function')window.loadWxLinks(S.rezdyDate);
+  }catch(e){}},10000);
+}
 
 function _wxClipboard(text){
   try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text);return true;}}catch(e){}
@@ -122,6 +134,17 @@ window.wxResetLink=function(order){
 };
 window.wxLinkOpen=function(order){_wxLinksEnsure();S._wxLinkOpen=String(order);render();};
 window.wxLinkClose=function(){S._wxLinkOpen=null;render();};
+// Clear the visible activity history (admin/superadmin only). Keeps the link, status, ack + the internal
+// notified-markers (so it won't re-ping the desk), just wipes the displayed log.
+function _wxIsAdmin(){var u=S.user||{};var r=u.role||'';return !!(u.superAdmin||r==='admin'||r==='superadmin');}
+window.wxClearHistory=function(order){
+  order=String(order);if(!_wxIsAdmin())return;var ex=_wxLinkRow(order);if(!ex)return;
+  if(typeof confirm==='function'&&!confirm('Clear the activity history for this weather link?\nThe link, status and acknowledgement stay — only the history log is wiped.'))return;
+  ex.events=(Array.isArray(ex.events)?ex.events:[]).filter(function(e){return String(e.t||'').indexOf('notified_')===0;});
+  ex.updated_at=new Date().toISOString();
+  if(typeof sbU==='function')sbU('ts_wx_links',[ex]).catch(function(){});
+  if(typeof toast==='function')toast('History cleared','ok');render();
+};
 // When a pilot makes/changes/clears a weather call, refresh the wx fields on every link for that
 // departure so the customer page shows the latest automatically (no re-copy needed).
 window.wxSyncDep=function(dep){
@@ -163,7 +186,7 @@ function _wxLinkModal(){
   var r=_wxLinkRow(order);var snap=(S._wxSnap||{})[order]||(r&&r.snapshot)||{};
   var st=_wxLinkStatus(order);
   var url=r?_wxLinkUrl(r.token):'';
-  var ev=(r&&Array.isArray(r.events))?r.events.slice().reverse():[];
+  var ev=(r&&Array.isArray(r.events))?r.events.filter(function(e){return String(e.t||'').indexOf('notified_')!==0;}).slice().reverse():[];
   var h='<div onclick="window.wxLinkClose()" style="position:fixed;inset:0;z-index:11000;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto">'+
     '<div onclick="event.stopPropagation()" style="background:var(--card);border:1px solid var(--border2);border-radius:16px;max-width:460px;width:100%;padding:18px">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px"><div class="st" style="margin:0">Weather link · #'+_wxEsc(order)+'</div>'+
@@ -182,7 +205,9 @@ function _wxLinkModal(){
        (r.ack_at?'<button onclick="window.wxResetLink(\''+order+'\')" style="font-size:11px;padding:5px 11px;border-radius:8px;border:1px solid rgba(245,158,11,.45);background:transparent;color:#f59e0b;cursor:pointer;font-weight:700">↺ Reset to live</button>':'')+
      '</div>';
     // history
-    h+='<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">History</div>';
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">History</span>'+
+      ((_wxIsAdmin()&&ev.length)?'<button onclick="window.wxClearHistory(\''+order+'\')" style="font-size:10px;color:#ef4444;background:none;border:1px solid rgba(239,68,68,.4);border-radius:7px;padding:3px 8px;cursor:pointer">Clear history</button>':'')+
+    '</div>';
     if(!ev.length)h+='<div style="font-size:12px;color:var(--text3)">No activity yet.</div>';
     else{h+='<div style="display:flex;flex-direction:column;gap:0">';ev.forEach(function(e){
       var isCust=e.src==='customer';
