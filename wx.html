@@ -178,7 +178,8 @@
            (s.is_self_drive?'':'<button class="sec" onclick="act(\'self_drive\')">'+t('btn_selfdrive')+'</button>')+
            '<button class="sec" onclick="act(\'change_pickup\')">'+t('btn_changepickup')+'</button></div>';
       } else {
-        h+='<div class="card"><button class="go" style="background:var(--ok)" onclick="act(\'confirmed\')">'+t('btn_confirm_got')+'</button></div>';
+        h+='<div class="card"><button class="go" style="background:var(--ok)" onclick="act(\'confirmed\')">'+t('btn_confirm_got')+'</button>'+
+           '<button class="sec" onclick="act(\'change_pickup\')">'+t('btn_changepickup')+'</button></div>';
       }
       if(st==='final')h+='<div class="card"><button class="sec" onclick="act(\'contact\')">'+t('btn_contactme')+'</button></div>';
     }
