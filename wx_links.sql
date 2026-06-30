@@ -53,7 +53,7 @@ declare r public.ts_wx_links; v_act boolean; v_first boolean;
 begin
   select * into r from public.ts_wx_links where token = p_token;
   if not found then return null; end if;
-  v_act   := p_action in ('confirmed','refund','contact');
+  v_act   := p_action in ('confirmed','refund','contact','self_drive','change_pickup');
   v_first := (r.ack_at is null and p_action = 'view');
   update public.ts_wx_links set
     ack_at      = coalesce(ack_at, now()),

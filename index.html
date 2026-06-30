@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.70';
+const APP_VER='v28.71';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -14929,6 +14929,16 @@ var _RZ_PROD_MAP=[
   [/^charter/i,'CHT']
 ];
 function _rzProduct(p){var s=String(p||'');for(var i=0;i<_RZ_PROD_MAP.length;i++){if(_RZ_PROD_MAP[i][0].test(s))return _RZ_PROD_MAP[i][1];}return _rzEsc(s);}
+// Short product code → full customer-facing flight-type name (shown on the weather link / wx.html).
+var _RZ_PROD_NAME={
+  FLB:'Milford Sound One-Way Flight', CCF:'Milford Sound Coach-Cruise-Fly', CCC:'Milford Sound Coach-Cruise-Coach',
+  FCF:'Milford Sound Fly-Cruise-Fly', FEF:'Milford Sound Fly-Explore-Fly', MFOH:'Milford Sound Scenic Flight',
+  MCEXP:'Aoraki / Mount Cook Expedition', MCGL:'Mount Cook Helicopter Glacier Landing', MCOH:'Mount Cook Scenic Flight',
+  MCHS:'Mount Cook Heli-Ski', STT:'Ski the Tasman', THH:'Tasman Heli Hike',
+  FJHH:'Franz Josef Glacier Heli-Hike', FJGL:'Franz Josef Helicopter Glacier Landing', FJOH:'Franz Josef Scenic Flight',
+  ASP:'Mount Aspiring Scenic Flight', QNLS:'Queenstown Local Scenic Flight', BRA:'Branches Station', CHT:'Charter Flight'
+};
+function _rzProductName(p){var code=_rzProduct(p);return _RZ_PROD_NAME[code]||code||'';}
 // Flyback products ride the return leg, so they combine onto an aircraft's flight block.
 function _rzIsFlyback(code){return code==='FLB'||code==='CCF';}
 // ── Per-product flight config ─────────────────────────────────────────────────
@@ -16216,7 +16226,7 @@ function _wxSnapFor(b,ono){
   var depTime=(dep===RZ_FLYBACK_DEP)?'Flyback':((typeof _rzHHMMcolon==='function')?_rzHHMMcolon(_rzDepDisplay(dep)):_rzDepDisplay(dep));
   var destShort=(typeof _rzGroupDest==='function')?_rzGroupDest(prodCode):'';
   var destName=(typeof _RZ_DEST_NAMES!=='undefined'&&_RZ_DEST_NAMES[destShort])||destShort||'';
-  var prodName=(typeof _rzProduct==='function')?_rzProduct(prodCode):prodCode;
+  var prodName=(typeof _rzProductName==='function')?_rzProductName(prodCode):((typeof _rzProduct==='function')?_rzProduct(prodCode):prodCode);
   var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,ono):'';
   var acLbl=(ac&&ac!=='__none__')?((typeof acDisp==='function')?acDisp(ac):String(ac).replace('ZK-','')):'';
   var c=(typeof _wxCall==='function')?_wxCall(dep):null;
@@ -16228,7 +16238,7 @@ function _wxSnapFor(b,ono){
     if(!ptime){var t=(tov[pid]!=null&&tov[pid]!=='')?tov[pid]:((typeof _rzDepTime==='function')?_rzDepTime(it.pickupTime||''):'');ptime=t?((typeof _rzHHMMcolon==='function')?_rzHHMMcolon(t):t):'';}
   });
   var dlab='';try{var dd=new Date((S.rezdyDate||'')+'T00:00:00');if(!isNaN(dd.getTime()))dlab=dd.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'});}catch(e){}
-  return {pax_name:b.customerName||'',dep_time:depTime,dep_label:destName||prodName||'',aircraft:acLbl,fr_date_label:dlab,
+  return {pax_name:b.customerName||'',dep_time:depTime,dep_label:prodName||destName||'',aircraft:acLbl,fr_date_label:dlab,
           wx_status:(c&&c.status)||'',wx_reasons:reasons,wx_comment:(c&&c.comment)||'',next_day:(c&&c.nextDay)||'',
           pickup_loc:loc,pickup_time:ptime};
 }
@@ -17115,8 +17125,8 @@ function _rzBookingCard(b){
   var wxManual=!!(S._rzBookingWx||{})[ono],ci=!!(S._rzBookingCheckedIn||{})[ono];
   try{(S._wxSnap=S._wxSnap||{})[ono]=_wxSnapFor(b,ono);}catch(_we){}                 // stash snapshot for the wx link
   if(typeof _wxLinksEnsure==='function')_wxLinksEnsure();                            // lazy-load the day's links
-  var wxAuto=(typeof _wxLinkAcked==='function')&&_wxLinkAcked(ono);                  // customer confirmed via their link
-  var wx=wxManual||wxAuto;
+  var wxAuto=(typeof _wxLinkAcked==='function')&&_wxLinkAcked(ono);                  // customer acknowledged via their link (shown on the 🔗 button)
+  var wx=wxManual;   // the Wx pill is reserved for a STAFF manual tick; customer link acks show on the 🔗 Wx-link button
   // Pickup location + phone (with tap-to-mark-called) — shown right-aligned under the Wx/Checked-in row.
   var _pkPhoneH=(function(){
     var locs=[],ov=S._pickupLocOverride||{};(b.items||[]).forEach(function(it,ii){if(!it.pickup)return;var pid=ono+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;var l=(ov[pid]!=null&&ov[pid]!=='')?ov[pid]:it.pickup;l=String(l||'').trim();if(l&&locs.indexOf(l)<0)locs.push(l);});
@@ -17143,8 +17153,7 @@ function _rzBookingCard(b){
   h+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'+   // right column: buttons row, then pickup/phone under them
      '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">';
   if(!cancelled){
-    h+=_rzCheckBtn('Wx',wx,'window.rezdyBookingToggleWx(\''+oE+'\')','Weather check called by passenger');
-    if(wxAuto)h+='<span title="Confirmed by the customer via their weather link" style="display:inline-flex;align-items:center;font-size:9px;font-weight:800;color:#3b82f6;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);border-radius:10px;padding:1px 6px;margin-left:-3px">AUTO</span>';
+    h+=_rzCheckBtn('Wx',wx,'window.rezdyBookingToggleWx(\''+oE+'\')','Weather check — manual staff tick');
     var _wxEx=(typeof _wxLinkExists==='function')&&_wxLinkExists(ono);
     h+='<button onclick="event.stopPropagation();window.wxLinkOpen(\''+oE+'\')" title="Customer weather link — copy, status &amp; history" style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid '+(wxAuto?'#22c55e':(_wxEx?'#60a5fa':'var(--border2)'))+';background:'+(wxAuto?'rgba(34,197,94,.12)':'transparent')+';color:'+(wxAuto?'#16a34a':(_wxEx?'#60a5fa':'var(--text3)'))+'">🔗 Wx link</button>';
     h+=_rzCheckBtn('Checked in',ci,'window.rezdyCheckinClick(\''+oE+'\')','Check in: enter names + actual weights');
@@ -21602,6 +21611,8 @@ function _wxLinkStatus(order){
   if(!r)return {label:'Not created',col:'var(--text3)'};
   if(r.action==='refund')return {label:'Customer requested refund',col:'#f87171'};
   if(r.action==='contact')return {label:'Customer asked to be contacted',col:'#f59e0b'};
+  if(r.action==='change_pickup')return {label:'Customer wants to change pickup',col:'#f59e0b'};
+  if(r.action==='self_drive')return {label:'Customer will make own way (no pickup)',col:'#60a5fa'};
   if(r.action==='confirmed')return {label:'Customer confirmed ✓',col:'#4ade80'};
   if(r.ack_at)return {label:'Customer opened the link',col:'#60a5fa'};
   var ev=Array.isArray(r.events)?r.events:[];
@@ -21609,7 +21620,8 @@ function _wxLinkStatus(order){
   return {label:'Created — not sent yet',col:'var(--text3)'};
 }
 var _WX_EV_LBL={copied:'Link copied',sent_manual:'Marked sent',sent_whatsapp:'Sent via WhatsApp',sent_email:'Sent via email',
-  view:'Customer opened the link',confirmed:'Customer confirmed',refund:'Customer requested refund',contact:'Customer asked to be contacted',reset:'Reset to live (staff)'};
+  view:'Customer opened the link',confirmed:'Customer confirmed',refund:'Customer requested refund',contact:'Customer asked to be contacted',
+  self_drive:'Customer will make own way (no pickup)',change_pickup:'Customer wants to change pickup',reset:'Reset to live (staff)'};
 function _wxEvLabel(t){return _WX_EV_LBL[t]||t;}
 function _wxEvTime(iso){try{var d=new Date(iso);if(isNaN(d.getTime()))return '';return d.toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
 

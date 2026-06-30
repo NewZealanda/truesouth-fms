@@ -77,6 +77,8 @@ function _wxLinkStatus(order){
   if(!r)return {label:'Not created',col:'var(--text3)'};
   if(r.action==='refund')return {label:'Customer requested refund',col:'#f87171'};
   if(r.action==='contact')return {label:'Customer asked to be contacted',col:'#f59e0b'};
+  if(r.action==='change_pickup')return {label:'Customer wants to change pickup',col:'#f59e0b'};
+  if(r.action==='self_drive')return {label:'Customer will make own way (no pickup)',col:'#60a5fa'};
   if(r.action==='confirmed')return {label:'Customer confirmed ✓',col:'#4ade80'};
   if(r.ack_at)return {label:'Customer opened the link',col:'#60a5fa'};
   var ev=Array.isArray(r.events)?r.events:[];
@@ -84,7 +86,8 @@ function _wxLinkStatus(order){
   return {label:'Created — not sent yet',col:'var(--text3)'};
 }
 var _WX_EV_LBL={copied:'Link copied',sent_manual:'Marked sent',sent_whatsapp:'Sent via WhatsApp',sent_email:'Sent via email',
-  view:'Customer opened the link',confirmed:'Customer confirmed',refund:'Customer requested refund',contact:'Customer asked to be contacted',reset:'Reset to live (staff)'};
+  view:'Customer opened the link',confirmed:'Customer confirmed',refund:'Customer requested refund',contact:'Customer asked to be contacted',
+  self_drive:'Customer will make own way (no pickup)',change_pickup:'Customer wants to change pickup',reset:'Reset to live (staff)'};
 function _wxEvLabel(t){return _WX_EV_LBL[t]||t;}
 function _wxEvTime(iso){try{var d=new Date(iso);if(isNaN(d.getTime()))return '';return d.toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
 

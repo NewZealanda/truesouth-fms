@@ -130,7 +130,9 @@
         h+='<div class="card"><div class="row" style="border:none;padding-bottom:4px"><span class="k" style="font-weight:700;color:var(--tx)">Your pickup</span></div>';
         if(s.pickup_loc)h+='<div class="row"><span class="k">Location</span><span class="v">'+esc(s.pickup_loc)+'</span></div>';
         if(s.pickup_time)h+='<div class="row"><span class="k">Pickup time</span><span class="v">'+esc(s.pickup_time)+'</span></div>';
-        h+='<button class="go" style="margin-top:14px;background:var(--ok)" onclick="act(\'confirmed\')">Confirm — I\'ll be there</button></div>';
+        h+='<button class="go" style="margin-top:14px;background:var(--ok)" onclick="act(\'confirmed\')">Confirm — I\'ll be there</button>'+
+           '<button class="sec" onclick="act(\'self_drive\')">No pickup — I\'ll make my own way</button>'+
+           '<button class="sec" onclick="act(\'change_pickup\')">I need to change my pickup</button></div>';
       } else {
         h+='<div class="card"><button class="go" style="background:var(--ok)" onclick="act(\'confirmed\')">Confirm — got it</button></div>';
       }
@@ -145,7 +147,9 @@
     $('detail').classList.add('hide');
     var map={confirmed:['See you soon!','Thanks for confirming — we\'ll see you at your pickup.'],
              refund:['Refund requested','Thanks — our team will process your refund and be in touch.'],
-             contact:['We\'ll be in touch','Thanks — someone from True South will contact you shortly.']};
+             contact:['We\'ll be in touch','Thanks — someone from True South will contact you shortly.'],
+             self_drive:['No pickup needed','Thanks — we\'ve noted you\'ll make your own way. See you at the airport!'],
+             change_pickup:['Pickup change requested','Thanks — we\'ll be in touch to sort out your pickup.']};
     var m=map[a]||['Thank you',''];
     $('doneTitle').textContent=m[0];$('doneMsg').textContent=m[1];
     $('doneCard').classList.remove('hide');
