@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.60';
+const APP_VER='v28.61';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -4360,13 +4360,13 @@ function renderDrawer(){
     if(_opsExp){
       var _isLegacyLs=t==='loadsheet'||String(t||'').indexOf('ls_')===0; // only the legacy editor suppresses highlight (not a stale open-tab id)
       if(hasRolePerm('calendar'))h+=_subBtn('Calendar',t==='calendar'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('calendar')");
+      if(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin))h+=_subBtn('Weather',sec==='weather',"S._drawerOpen=false;S.section='weather';render()");
       h+=_subBtn('Bookings',t==='bookings'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('bookings')");
       h+=_subBtn('Seatmap',t==='rseatmap'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('rseatmap')");
       h+=_subBtn('Loadsheets',t==='rloadsheets'&&sec==='operations',"S._drawerOpen=false;window.switchOpsTab('rloadsheets')");
       h+=_subBtn('Saved',t==='saved'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('saved')");
-      if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
-      if(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin))h+=_subBtn('Weather',sec==='weather',"S._drawerOpen=false;S.section='weather';render()");
       if(hasRolePerm('monitoring')||(S.user&&S.user.superAdmin))h+=_subBtn('Monitoring',sec==='monitoring',"S._drawerOpen=false;S.section='monitoring';render()");
+      if(_canCharter)h+=_subBtn('Charter',t==='charter'&&sec==='operations'&&!_isLegacyLs,"S._drawerOpen=false;window.switchOpsTab('charter')");
     }
   }
   // Ground — Transport / My Pickups (+ Vehicle Prestart). Tier-1 section, pinned under Operations.
@@ -4467,12 +4467,14 @@ function renderOpsSubTabs(){
   const savedCount=(S.saved||[]).filter(function(s){return s.status!=='deleted';}).length;
   var tabs=[];
   if(hasRolePerm('calendar'))tabs.push({lbl:'Calendar',on:opsTab==='calendar',onclick:"window.switchOpsTab('calendar')"});
+  if(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin))tabs.push({lbl:'Weather',on:false,onclick:"S.section='weather';render()"});
   tabs.push(
     {lbl:'Bookings',on:opsTab==='bookings'&&!isLegacyLs,onclick:"window.switchOpsTab('bookings')"},
     {lbl:'Seatmap',on:opsTab==='rseatmap'&&!isLegacyLs,onclick:"window.switchOpsTab('rseatmap')"},
     {lbl:'Loadsheets',on:opsTab==='rloadsheets',onclick:"window.switchOpsTab('rloadsheets')"},
     {lbl:'Saved ('+savedCount+')',on:opsTab==='saved'&&!isLegacyLs,onclick:"window.switchOpsTab('saved')"}
   );
+  if(hasRolePerm('monitoring')||(S.user&&S.user.superAdmin))tabs.push({lbl:'Monitoring',on:false,onclick:"S.section='monitoring';render()"});
   if(hasRolePerm('charter'))tabs.push({lbl:'Charter',on:opsTab==='charter'&&!isLegacyLs,onclick:"window.switchOpsTab('charter')"});
   return _tier2(tabs);
 }
