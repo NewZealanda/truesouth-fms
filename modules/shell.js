@@ -163,22 +163,44 @@ document.addEventListener('keydown',function(e){
       var _mn=_mc+_dir;if(_mn<0)_mn=_mt.length-1;if(_mn>=_mt.length)_mn=0;
       e.preventDefault();S.maintTab=_mt[_mn];render();return;
     }
-    if(S.section!=='operations')return;
-    // Plain ←/→ cycle the Operations tier-2 tabs (Calendar ↔ Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved ↔ Charter).
-    // Day switching is Cmd/Ctrl + ←/→ (handled above).
-    var _tabs=[];if(typeof hasRolePerm==='function'&&hasRolePerm('calendar'))_tabs.push('calendar');_tabs.push('bookings','rseatmap','rloadsheets','saved');if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))_tabs.push('charter');
-    var _cur=_tabs.indexOf(S.tab);if(_cur<0)_cur=0;
+    // Plain ←/→ cycle the Operations tier-2 tabs (Calendar ↔ Weather ↔ Bookings ↔ Seatmap ↔ Loadsheets ↔ Saved
+    // ↔ Monitoring ↔ Charter), including from the Weather / Monitoring pages which ride the same strip.
+    if(S.section!=='operations'&&S.section!=='weather'&&S.section!=='monitoring')return;
+    var _tabs=(typeof _opsTabSeq==='function')?_opsTabSeq():[];if(!_tabs.length)return;
+    var _cur=_tabs.indexOf((typeof _opsTabCur==='function')?_opsTabCur():S.tab);if(_cur<0)_cur=0;
     var _next=_cur+_dir;if(_next<0)_next=_tabs.length-1;if(_next>=_tabs.length)_next=0;
-    e.preventDefault();if(typeof window.switchOpsTab==='function')window.switchOpsTab(_tabs[_next]);
+    e.preventDefault();if(typeof _opsGoTab==='function')_opsGoTab(_tabs[_next]);
   }
 });
+// Unified Operations tier-2 tab sequence (Calendar · Weather · Bookings · Seatmap · Loadsheets · Saved ·
+// Monitoring · Charter). Weather + Monitoring are their own sections but ride this same strip + arrow/swipe.
+function _opsTabSeq(){
+  var seq=[];
+  if(hasRolePerm('calendar'))seq.push('calendar');
+  if(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin))seq.push('weather');
+  seq.push('bookings','rseatmap','rloadsheets','saved');
+  if(hasRolePerm('monitoring')||(S.user&&S.user.superAdmin))seq.push('monitoring');
+  if(hasRolePerm('charter'))seq.push('charter');
+  return seq;
+}
+function _opsTabCur(){
+  if(S.section==='weather')return 'weather';
+  if(S.section==='monitoring')return 'monitoring';
+  if(S.section==='operations')return S.tab||'bookings';
+  return null;
+}
+function _opsGoTab(key){
+  if(key==='weather'){S.section='weather';render();return;}
+  if(key==='monitoring'){S.section='monitoring';render();return;}
+  if(typeof window.switchOpsTab==='function')window.switchOpsTab(key);
+}
 // Cycle the tier-2 sub-tabs of the current section (shared by arrow keys and mobile swipe).
 window._cycleTier2=function(dir){
   if(S._rzCheckinDraft||S._rzNewBkDraft||S.showAccount||S._drawerOpen)return;
-  if(S.section==='operations'){
-    var tabs=[];if(typeof hasRolePerm==='function'&&hasRolePerm('calendar'))tabs.push('calendar');tabs.push('bookings','rseatmap','rloadsheets','saved');if(typeof hasRolePerm==='function'&&hasRolePerm('charter'))tabs.push('charter');
-    var cur=tabs.indexOf(S.tab);if(cur<0)cur=0;var nx=(cur+dir+tabs.length)%tabs.length;
-    if(typeof window.switchOpsTab==='function')window.switchOpsTab(tabs[nx]);
+  if(S.section==='operations'||S.section==='weather'||S.section==='monitoring'){
+    var tabs=_opsTabSeq();if(!tabs.length)return;
+    var cur=tabs.indexOf(_opsTabCur());if(cur<0)cur=0;var nx=(cur+dir+tabs.length)%tabs.length;
+    _opsGoTab(tabs[nx]);
   }
 };
 // Mobile: a clear horizontal swipe cycles the tier-2 tabs. Guards so it never hijacks a
@@ -961,17 +983,18 @@ function renderOpsSubTabs(){
   // A stale open-loadsheet tab id (S.activeTabId) must NOT un-highlight Bookings/Seatmap/etc.
   const isLegacyLs=opsTab==='loadsheet'||String(opsTab).indexOf('ls_')===0;
   const savedCount=(S.saved||[]).filter(function(s){return s.status!=='deleted';}).length;
+  var _onOps=S.section==='operations';   // ops-tab highlights only when actually on the Operations section
   var tabs=[];
-  if(hasRolePerm('calendar'))tabs.push({lbl:'Calendar',on:opsTab==='calendar',onclick:"window.switchOpsTab('calendar')"});
-  if(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin))tabs.push({lbl:'Weather',on:false,onclick:"S.section='weather';render()"});
+  if(hasRolePerm('calendar'))tabs.push({lbl:'Calendar',on:_onOps&&opsTab==='calendar',onclick:"window.switchOpsTab('calendar')"});
+  if(hasRolePerm('weather_call')||hasRolePerm('operations')||(S.user&&S.user.superAdmin))tabs.push({lbl:'Weather',on:S.section==='weather',onclick:"S.section='weather';render()"});
   tabs.push(
-    {lbl:'Bookings',on:opsTab==='bookings'&&!isLegacyLs,onclick:"window.switchOpsTab('bookings')"},
-    {lbl:'Seatmap',on:opsTab==='rseatmap'&&!isLegacyLs,onclick:"window.switchOpsTab('rseatmap')"},
-    {lbl:'Loadsheets',on:opsTab==='rloadsheets',onclick:"window.switchOpsTab('rloadsheets')"},
-    {lbl:'Saved ('+savedCount+')',on:opsTab==='saved'&&!isLegacyLs,onclick:"window.switchOpsTab('saved')"}
+    {lbl:'Bookings',on:_onOps&&opsTab==='bookings'&&!isLegacyLs,onclick:"window.switchOpsTab('bookings')"},
+    {lbl:'Seatmap',on:_onOps&&opsTab==='rseatmap'&&!isLegacyLs,onclick:"window.switchOpsTab('rseatmap')"},
+    {lbl:'Loadsheets',on:_onOps&&opsTab==='rloadsheets',onclick:"window.switchOpsTab('rloadsheets')"},
+    {lbl:'Saved ('+savedCount+')',on:_onOps&&opsTab==='saved'&&!isLegacyLs,onclick:"window.switchOpsTab('saved')"}
   );
-  if(hasRolePerm('monitoring')||(S.user&&S.user.superAdmin))tabs.push({lbl:'Monitoring',on:false,onclick:"S.section='monitoring';render()"});
-  if(hasRolePerm('charter'))tabs.push({lbl:'Charter',on:opsTab==='charter'&&!isLegacyLs,onclick:"window.switchOpsTab('charter')"});
+  if(hasRolePerm('monitoring')||(S.user&&S.user.superAdmin))tabs.push({lbl:'Monitoring',on:S.section==='monitoring',onclick:"S.section='monitoring';render()"});
+  if(hasRolePerm('charter'))tabs.push({lbl:'Charter',on:_onOps&&opsTab==='charter'&&!isLegacyLs,onclick:"window.switchOpsTab('charter')"});
   return _tier2(tabs);
 }
 
@@ -1013,7 +1036,7 @@ function _tier2(tabs){if(!tabs||!tabs.length)return '';return '<div class="t2bar
 // The right 2nd-tier strip for the current section — rendered once at the top of the page (below header).
 function renderTier2Bar(){
   var sec=S.section||'operations';
-  if(sec==='operations')return renderOpsSubTabs();
+  if(sec==='operations'||sec==='weather'||sec==='monitoring')return renderOpsSubTabs();   // Weather/Monitoring ride the Ops tab strip
   if(sec==='maintenance')return renderMaintenanceSubTabs();
   if(sec==='settings')return renderSettingsSubTabs();
   if(sec==='pilotbag')return renderPilotBagSubTabs();

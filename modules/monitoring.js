@@ -52,23 +52,59 @@ function _ffLocName(code){if(!code)return '';var m={QN:'Queenstown',ZQN:'Queenst
 // Status is derived from TODAY's flight records (date-aware + realtime-synced → never stuck on old data);
 // the ts_flight_following row only supplies the ETA overlay for the in-progress flight, and a manual
 // ground location fallback when there are no flight records for the aircraft today.
+// Build a Date from a flight record's fr_date (YYYY-MM-DD) + on-blocks time (HH:MM).
+function _ffRecOnDate(r){
+  if(!r||!r.on||!r.fr_date)return null;
+  var mins=(typeof _frMins==='function')?_frMins(r.on):null;if(mins==null)return null;
+  var p=String(r.fr_date).split('-');if(p.length!==3)return null;
+  var d=new Date(+p[0],(+p[1])-1,+p[2],0,0,0,0);d.setMinutes(mins);return isNaN(d.getTime())?null:d;
+}
+// Latest shutdown (on-blocks) across ALL of an aircraft's records — for the "X ago / yesterday" label.
+function _ffLastShutdown(ac){
+  var best=null;
+  try{Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(!r||r.aircraft!==ac)return;var at=_ffRecOnDate(r);if(at&&(!best||at>best.at))best={at:at,to:r.to};});}catch(e){}
+  return best;
+}
+// "Shutdown 17 minutes ago at 13:53" → "1 hour 3 mins ago" (<5h) → "5 hours ago" (same day) → "yesterday at 13:53".
+function _ffShutdownLabel(at){
+  if(!at)return '';
+  var now=new Date();
+  var hm=('0'+at.getHours()).slice(-2)+':'+('0'+at.getMinutes()).slice(-2);
+  var d0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  var d1=new Date(at.getFullYear(),at.getMonth(),at.getDate());
+  var dayDiff=Math.round((d0-d1)/86400000);
+  if(dayDiff===1)return 'Shut down yesterday at '+hm;
+  if(dayDiff>=2){var mons=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return 'Shut down '+at.getDate()+' '+mons[at.getMonth()]+' at '+hm;}
+  if(dayDiff<0)return 'Shut down at '+hm;
+  var mins=Math.max(0,Math.floor((now-at)/60000));
+  if(mins<60)return 'Shutdown '+mins+' minute'+(mins===1?'':'s')+' ago at '+hm;
+  var h=Math.floor(mins/60),m=mins%60;
+  if(mins<300)return 'Shutdown '+h+' hour'+(h===1?'':'s')+' '+m+' min'+(m===1?'':'s')+' ago';
+  return 'Shutdown '+Math.round(mins/60)+' hours ago';
+}
 function _ffStatusOf(ac){
   var ff=(S._ffData||{})[ac]||null;
   var today=(typeof _frToday==='function')?_frToday():'';
+  var lastOn=null;
   try{
     var recs=[];Object.keys(S._frData||{}).forEach(function(k){var r=S._frData[k];if(r&&r.aircraft===ac&&r.fr_date===today)recs.push(r);});
     recs.sort(function(a,b){return ((typeof _frMins==='function'?_frMins(a.off):0)||0)-((typeof _frMins==='function'?_frMins(b.off):0)||0);});
-    var inprog=null,lastOn=null;
+    var inprog=null;
     recs.forEach(function(r){if(r.off&&!r.on)inprog=r;if(r.on)lastOn=r;});
     if(inprog){
       var et=(ff&&ff.flight_id===inprog.id&&ff.eta_type)?ff.eta_type:'ams';
       var etm=(ff&&ff.flight_id===inprog.id)?(ff.eta_time||''):'';
       return {status:'air',frm:inprog.from||'QN',to:inprog.to||'?',pob:+inprog.pob||0,off_time:inprog.off,eta_type:et,eta_time:etm};
     }
-    if(lastOn)return {status:'ground',location:_ffLocName(lastOn.to)||'Queenstown'};
   }catch(e){}
-  if(ff&&ff.status==='ground'&&ff.location)return {status:'ground',location:ff.location};
-  return {status:'ground',location:'Queenstown'};
+  // On the ground — shutdown time = the most recent on-blocks across all days (today, yesterday, …).
+  var shut=_ffLastShutdown(ac);
+  var loc;
+  if(lastOn)loc=_ffLocName(lastOn.to)||'Queenstown';
+  else if(ff&&ff.status==='ground'&&ff.location)loc=ff.location;
+  else if(shut)loc=_ffLocName(shut.to)||'Queenstown';
+  else loc='Queenstown';
+  return {status:'ground',location:loc,shutdownAt:(shut?shut.at:null)};
 }
 
 // Re-pull the following table periodically while the board is open (flight records already realtime-sync;
@@ -91,6 +127,8 @@ function renderMonitoring(){
       line2='<span style="color:#2563eb;font-weight:700">✈ '+_ffEsc((s.frm||'QN'))+' → '+_ffEsc(s.to||'?')+'</span> · POB '+_ffEsc(+s.pob||0)+' · '+eta+(s.off_time?(' · off '+_ffEsc(s.off_time)):'');
     } else {
       line2='<span style="color:#16a34a;font-weight:700">● On ground</span> · '+_ffEsc(s.location||'Queenstown');
+      var _sd=_ffShutdownLabel(s.shutdownAt);
+      if(_sd)line2+=' · <span style="color:var(--text3)">'+_ffEsc(_sd)+'</span>';
     }
     h+='<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border2)">'+
       '<span style="width:14px;height:14px;border-radius:50%;background:'+col+';flex-shrink:0"></span>'+
