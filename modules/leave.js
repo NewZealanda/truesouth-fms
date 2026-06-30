@@ -10,7 +10,9 @@ var LEAVE_SC={
   pending:  {bg:'rgba(245,158,11,.14)', bd:'#f59e0b', col:'#f59e0b', lbl:'Pending'},
   approved: {bg:'rgba(34,197,94,.15)',  bd:'#22c55e', col:'#22c55e', lbl:'Approved'},
   declined: {bg:'rgba(239,68,68,.14)',  bd:'#ef4444', col:'#ef4444', lbl:'Declined'},
-  withdrawn:{bg:'rgba(100,116,139,.14)',bd:'#64748b', col:'#64748b', lbl:'Withdrawn'}
+  withdrawn:{bg:'rgba(100,116,139,.14)',bd:'#64748b', col:'#64748b', lbl:'Withdrawn'},
+  cancel_pending:{bg:'rgba(245,158,11,.14)',bd:'#f59e0b',col:'#f59e0b',lbl:'Cancellation requested'},
+  cancelled:{bg:'rgba(100,116,139,.14)',bd:'#64748b', col:'#64748b', lbl:'Cancelled'}
 };
 
 function _lvEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -173,7 +175,7 @@ function renderLeave(){
   if(!S._rosterLoaded&&window.loadRosterFromCloud){S._rosterLoaded=true;window.loadRosterFromCloud();if(window.loadRosterLeave)window.loadRosterLeave();}
 
   var pendingCt=canApprove&&lv.allReqs
-    ?lv.allReqs.filter(function(r){return r.status==='pending'&&_lvCanApproveReq(r);}).length
+    ?lv.allReqs.filter(function(r){return (r.status==='pending'||r.status==='cancel_pending')&&_lvCanApproveReq(r);}).length
     :0;
 
   var h='<div style="padding:20px 16px;max-width:960px;margin:0 auto">';
@@ -258,7 +260,7 @@ function _renderMyLeave(lv){
   }
 
   var today=(typeof _rIso==='function')?_rIso(new Date()):new Date().toISOString().slice(0,10); // local date (NZ), not UTC
-  var upcoming=reqs.filter(function(r){return r.end_date>=today&&(r.status==='approved'||r.status==='pending');});
+  var upcoming=reqs.filter(function(r){return r.end_date>=today&&(r.status==='approved'||r.status==='pending'||r.status==='cancel_pending');});
   var history=reqs.filter(function(r){return upcoming.indexOf(r)===-1;});
 
   if(upcoming.length>0){
@@ -299,6 +301,12 @@ function _lvCard(r,showUser){
   if(r.status==='pending'){
     h+='<button tabindex="-1" onclick="window.withdrawLeave(\''+r.id+'\')" style="padding:5px 12px;border-radius:7px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:#f87171;font-size:12px;cursor:pointer">Withdraw</button>';
   }
+  if(r.status==='approved'){
+    h+='<button tabindex="-1" onclick="window.lvRequestCancel(\''+r.id+'\')" style="padding:5px 12px;border-radius:7px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:#f87171;font-size:12px;cursor:pointer" title="Request to cancel this approved leave — an approver must confirm before the roster reverts">✕ Cancel leave</button>';
+  }
+  if(r.status==='cancel_pending'){
+    h+='<button tabindex="-1" onclick="window.lvUndoCancelRequest(\''+r.id+'\')" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">↩ Undo cancellation request</button>';
+  }
   h+='<button tabindex="-1" onclick="window.toggleLeaveHistory(\''+r.id+'\')" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:12px;cursor:pointer">🕑 History</button>';
   h+='</div>';
   h+=_lvHistoryHtml(r.id);
@@ -317,7 +325,7 @@ function _renderApprovals(lv,role){
   [{id:'pending',lbl:'Pending'},{id:'approved',lbl:'Approved'},{id:'declined',lbl:'Declined'},{id:'all',lbl:'All'}].forEach(function(s){
     var on=f.status===s.id;
     var cnt=allReqs?allReqs.filter(function(r){
-      return (s.id==='all'||r.status===s.id);   // any approver/manager sees ALL requests here
+      return (s.id==='all'||r.status===s.id||(s.id==='pending'&&r.status==='cancel_pending'));   // cancellation requests show under Pending
     }).length:0;
     h+='<button tabindex="-1" onclick="S._leave.filter.status=\''+s.id+'\';render()" style="padding:5px 12px;border-radius:7px;border:1.5px solid '+(on?'#c084fc':'var(--border2)')+';background:'+(on?'rgba(124,58,237,.18)':'transparent')+';color:'+(on?'#c084fc':'var(--text3)')+';font-size:12px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+s.lbl+(cnt>0?' ('+cnt+')':'')+'</button>';
   });
@@ -337,7 +345,7 @@ function _renderApprovals(lv,role){
   var filtered=allReqs.filter(function(r){
     // Show ALL requests (anyone who reached Approvals can view everyone for planning); the approve/
     // decline/edit controls below are still scoped per-request to the requester's direct manager.
-    if(f.status!=='all'&&r.status!==f.status)return false;
+    if(f.status!=='all'&&r.status!==f.status&&!(f.status==='pending'&&r.status==='cancel_pending'))return false;
     if(f.dateFrom&&r.end_date<f.dateFrom)return false;
     if(f.dateTo&&r.start_date>f.dateTo)return false;
     return true;
@@ -358,7 +366,7 @@ function _renderApprovals(lv,role){
 
     // Conflicts: everyone else with overlapping leave (approved OR pending)
     var overlaps=allReqs.filter(function(o){
-      return o.id!==r.id&&(o.status==='approved'||o.status==='pending')&&o.start_date<=r.end_date&&o.end_date>=r.start_date;
+      return o.id!==r.id&&(o.status==='approved'||o.status==='pending'||o.status==='cancel_pending')&&o.start_date<=r.end_date&&o.end_date>=r.start_date;
     });
 
     h+='<div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px">';
@@ -435,6 +443,18 @@ function _renderApprovals(lv,role){
       }
       h+='</div>';
     }
+    // Cancellation request: the employee asked to cancel already-approved leave — approving reverts the roster.
+    if(r.status==='cancel_pending'){
+      h+='<div style="margin-top:12px;font-size:12px;color:#f59e0b;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:9px 11px">⚠ <b>Cancellation requested</b> — '+_lvEsc(r.user_name||'the employee')+' wants to cancel this approved leave. Approving removes it from the calendar and reverts those roster days to their original state.</div>';
+      if(_canAct){
+        h+='<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">';
+        h+='<button tabindex="-1" onclick="window.lvApproveCancel(\''+r.id+'\')" style="padding:7px 16px;background:#22c55e;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer">✓ Approve cancellation</button>';
+        h+='<button tabindex="-1" onclick="window.lvDeclineCancel(\''+r.id+'\')" style="padding:7px 14px;background:rgba(239,68,68,.12);border:1.5px solid rgba(239,68,68,.5);border-radius:8px;color:#f87171;font-size:13px;font-weight:700;cursor:pointer">✕ Keep the leave</button>';
+        h+='</div>';
+      } else {
+        h+='<div style="margin-top:8px;font-size:11px;color:var(--text3)">👤 Awaiting their manager’s approval (view only)</div>';
+      }
+    }
     // Approver tools: edit the request directly + view full history
     h+='<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">';
     if(_canAct)h+='<button tabindex="-1" onclick="window.leaveEditOpen(\''+r.id+'\')" style="padding:6px 13px;border-radius:7px;border:1px solid rgba(124,58,237,.4);background:rgba(124,58,237,.1);color:#c084fc;font-size:12px;font-weight:600;cursor:pointer">✎ Edit</button>';
@@ -468,6 +488,7 @@ function _notifTargetLabel(n){
     case 'loadsheet_pic':   return 'Loadsheet';
     case 'maintenance':     return 'Maintenance';
     case 'leave_submitted': return 'Approvals';
+    case 'leave_cancel_req': return 'Approvals';
     case 'scheduling':      return 'Scheduling';
     case 'weather_call':    return 'Weather';
     case 'veh_prestart':    return 'Prestart';
@@ -485,7 +506,7 @@ function _notifNavigate(n){
     if(t==='maintenance'&&typeof window.openMaintFromNotif==='function'){window.openMaintFromNotif();return;}
     if(t==='pickup_assigned'){S.section='ground';S._groundSecTab='mypickups';render();return;}
     if(t==='noshow'){S.section='operations';S.tab='bookings';S.activeTabId=null;S._newLsTab=false;render();return;}
-    if(t==='leave_submitted'){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='approvals';render();return;}
+    if(t==='leave_submitted'||t==='leave_cancel_req'){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='approvals';render();return;}
     if(t.indexOf('leave_')===0){S.section='leave';if(typeof _lvInit==='function')_lvInit();if(S._leave)S._leave.tab='my';render();return;}
     if(t==='scheduling'){S.section='resources';render();return;}   // call-in pilot mgmt lives on the Scheduling (Resources) page
     if(t==='weather_call'){S.section='weather';render();return;}
@@ -690,6 +711,88 @@ window.withdrawLeave=async function(id){
   }
 };
 
+// ── Cancellation of ALREADY-APPROVED leave (needs approver sign-off) ──────────
+// The employee requests cancellation (status → cancel_pending). The roster stays
+// stamped until an approver confirms; approving reverts the roster to its original
+// state, declining puts the leave back to approved.
+function _lvFindReq(id){return ((S._leave&&(S._leave.myReqs||[]).concat(S._leave.allReqs||[]))||[]).find(function(r){return r.id===id;});}
+
+async function _notifyLeaveApprovers(req,msg){
+  try{
+    var ids={}; var mgr=_lvManagerOf(req.user_id); if(mgr)ids[mgr]=1;
+    (S.users||[]).forEach(function(u){if(u&&(u.role==='admin'||u.role==='superadmin'))ids[String(u.id)]=1;});
+    if(S.user&&S.user.id)delete ids[String(S.user.id)];   // don't notify the requester themselves
+    var rows=Object.keys(ids).map(function(uid){return {user_id:uid,type:'leave_cancel_req',message:msg,read:false,created_at:new Date().toISOString()};});
+    if(rows.length)await sbU('ts_notifications',rows);
+  }catch(e){}
+}
+
+window.lvRequestCancel=async function(id){
+  var req=_lvFindReq(id); if(!req)return;
+  if(req.status!=='approved'){toast('Only approved leave can be cancelled.','warn');return;}
+  if(!confirm('Request cancellation of this approved leave?\n\nAn approver must confirm before it is removed from the roster.'))return;
+  var me=S.user;
+  var ok=await sbPatch('ts_leave_requests',id,{status:'cancel_pending'});
+  if(ok){
+    try{await sbU('ts_leave_audit',[{request_id:id,action:'cancel_requested',performed_by:me&&me.id,performed_by_name:me&&(me.name||me.email)}]);}catch(e){}
+    var lt=(LEAVE_TYPES.find(function(t){return t.id===req.leave_type;})||{}).lbl||req.leave_type||'leave';
+    _notifyLeaveApprovers(req,(me&&(me.name||me.email)||'An employee')+' has requested to CANCEL their approved '+lt+' ('+_lvFmt(req.start_date)+' → '+_lvFmt(req.end_date)+'). Needs your approval.');
+    S._leave._myLoaded=false; S._leave._allLoaded=false;
+    toast('Cancellation requested — awaiting approval.','info');
+    window.loadMyLeave(); if(typeof window.loadAllLeave==='function')window.loadAllLeave();
+  }
+};
+
+window.lvUndoCancelRequest=async function(id){
+  var req=_lvFindReq(id); if(!req)return;
+  if(req.status!=='cancel_pending')return;
+  if(!confirm('Withdraw your cancellation request? The leave stays approved.'))return;
+  var me=S.user;
+  var ok=await sbPatch('ts_leave_requests',id,{status:'approved'});
+  if(ok){
+    try{await sbU('ts_leave_audit',[{request_id:id,action:'cancel_request_withdrawn',performed_by:me&&me.id,performed_by_name:me&&(me.name||me.email)}]);}catch(e){}
+    S._leave._myLoaded=false; S._leave._allLoaded=false;
+    toast('Cancellation request withdrawn — leave still approved.','info');
+    window.loadMyLeave(); if(typeof window.loadAllLeave==='function')window.loadAllLeave();
+  }
+};
+
+window.lvApproveCancel=async function(id){
+  var me=S.user;
+  var req=(S._leave&&S._leave.allReqs||[]).find(function(r){return r.id===id;})||_lvFindReq(id);
+  if(!req)return;
+  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveReq(req)){toast('Not authorised to approve this cancellation.','warn');return;}
+  if(!confirm('Approve cancellation of '+(req.user_name||'this')+'’s leave?\n\nThis removes it from the calendar and reverts those roster days.'))return;
+  var ok=await sbPatch('ts_leave_requests',id,{
+    status:'cancelled',reviewed_at:new Date().toISOString(),
+    reviewed_by:me&&me.id,reviewed_by_name:me&&(me.name||me.email)
+  });
+  if(ok){
+    try{await _lvUnstampRoster(req);}catch(e){}   // revert the roster to its original state
+    try{await sbU('ts_leave_audit',[{request_id:id,action:'cancellation_approved',performed_by:me&&me.id,performed_by_name:me&&(me.name||me.email)}]);}catch(e){}
+    try{await window._notifyLeaveUser(req.user_id,'cancelled',req.leave_type,req.start_date,req.end_date,null);}catch(e){}
+    S._leave._allLoaded=false; S._leave._myLoaded=false;
+    toast('Leave cancelled and roster reverted.','success');
+    window.loadAllLeave(); if(typeof window.loadMyLeave==='function')window.loadMyLeave();
+  }
+};
+
+window.lvDeclineCancel=async function(id){
+  var me=S.user;
+  var req=(S._leave&&S._leave.allReqs||[]).find(function(r){return r.id===id;})||_lvFindReq(id);
+  if(!req)return;
+  if(!_lvCanApprove(me&&me.role)||!_lvCanApproveReq(req)){toast('Not authorised.','warn');return;}
+  if(!confirm('Keep this leave (decline the cancellation request)?'))return;
+  var ok=await sbPatch('ts_leave_requests',id,{status:'approved'});
+  if(ok){
+    try{await sbU('ts_leave_audit',[{request_id:id,action:'cancellation_declined',performed_by:me&&me.id,performed_by_name:me&&(me.name||me.email)}]);}catch(e){}
+    try{await window._notifyLeaveUser(req.user_id,'cancel_declined',req.leave_type,req.start_date,req.end_date,null);}catch(e){}
+    S._leave._allLoaded=false; S._leave._myLoaded=false;
+    toast('Cancellation declined — leave stays approved.','info');
+    window.loadAllLeave(); if(typeof window.loadMyLeave==='function')window.loadMyLeave();
+  }
+};
+
 // ── Superadmin: permanently delete leave requests (for clearing test data) ──
 window.deleteLeaveRequest=async function(id){
   if((S.user&&S.user.role)!=='superadmin'){toast('Only a superadmin can delete leave requests.','warn');return;}
@@ -840,7 +943,10 @@ window._notifyLeaveUser=async function(userId,action,leaveType,startDate,endDate
   var lt=LEAVE_TYPES.find(function(t){return t.id===leaveType;});
   var ltl=lt?lt.lbl:leaveType;
   var msg='Your '+ltl+' ('+_lvFmt(startDate)+' → '+_lvFmt(endDate)+') has been '
-    +(action==='approved'?'approved ✓':'declined'+(comment?' — '+comment:''));
+    +(action==='approved'?'approved ✓'
+      :action==='cancelled'?'cancelled ✓ — removed from the roster'
+      :action==='cancel_declined'?'kept (your cancellation request was declined)'
+      :'declined'+(comment?' — '+comment:''));
   await sbU('ts_notifications',[{user_id:userId,type:'leave_'+action,message:msg,read:false,created_at:new Date().toISOString()}]);
   if(S.user?.id===userId)window.loadNotifications();
 };

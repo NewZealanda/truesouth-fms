@@ -127,15 +127,15 @@
 
     if(st==='cancelled'){
       h+='<div class="card"><div class="row" style="border:none;padding-bottom:10px"><span class="k" style="font-weight:700;color:var(--tx)">What would you like to do?</span></div>'+
-         '<button class="go" style="background:var(--no)" onclick="act(\'refund\')">Request a refund</button>'+
-         '<button class="sec" onclick="act(\'contact\')">Ask us to reschedule / contact me</button></div>';
+         '<button class="go" onclick="act(\'contact\')">Reschedule my flight</button>'+
+         '<button class="sec" onclick="act(\'refund\')">Request a refund</button></div>';
     } else if(st){
       if(pickup){
         h+='<div class="card"><div class="row" style="border:none;padding-bottom:4px"><span class="k" style="font-weight:700;color:var(--tx)">Your pickup</span></div>';
         if(s.pickup_loc)h+='<div class="row"><span class="k">Location</span><span class="v">'+esc(s.pickup_loc)+'</span></div>';
         if(s.pickup_time)h+='<div class="row"><span class="k">Pickup time</span><span class="v">'+esc(s.pickup_time)+'</span></div>';
         h+='<button class="go" style="margin-top:14px;background:var(--ok)" onclick="act(\'confirmed\')">Confirm — I\'ll be there</button>'+
-           '<button class="sec" onclick="act(\'self_drive\')">No pickup — I\'ll make my own way</button>'+
+           (s.is_self_drive?'':'<button class="sec" onclick="act(\'self_drive\')">No pickup — I\'ll make my own way</button>')+
            '<button class="sec" onclick="act(\'change_pickup\')">I need to change my pickup</button></div>';
       } else {
         h+='<div class="card"><button class="go" style="background:var(--ok)" onclick="act(\'confirmed\')">Confirm — got it</button></div>';

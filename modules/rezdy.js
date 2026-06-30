@@ -1483,7 +1483,8 @@ function _wxSnapFor(b,ono){
   var dlab='';try{var dd=new Date((S.rezdyDate||'')+'T00:00:00');if(!isNaN(dd.getTime()))dlab=dd.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'});}catch(e){}
   return {pax_name:b.customerName||'',dep_key:depKey,dep_time:depTime,dep_label:prodName||destName||'',aircraft:acLbl,fr_date_label:dlab,
           wx_status:(c&&c.status)||'',wx_reasons:reasons,wx_comment:(c&&c.comment)||'',next_day:(c&&c.nextDay)||'',
-          pickup_loc:loc,pickup_time:ptime};
+          pickup_loc:loc,pickup_time:ptime,
+          is_self_drive:(!!(S._rzSelfDrive&&S._rzSelfDrive[ono])||/self.?drive|walk.?in|own (transport|car|vehicle)/i.test(loc||''))};
 }
 function _wxStatusColor(st){return st==='on'?'#22c55e':st==='cancelled'?'#ef4444':st==='final'?'#f59e0b':'#94a3b8';}
 function _wxStatusLabel(st){return st==='on'?'Called ON':st==='cancelled'?'Cancelled':st==='final'?'Final call (office)':'No call yet';}

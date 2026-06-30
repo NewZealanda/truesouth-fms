@@ -23,6 +23,8 @@ function _wxPickupBadge(order){
     return '<span title="Customer confirmed — self-drive as booked" style="display:inline-flex;align-items:center;gap:3px;color:#16a34a;font-weight:800">✓ Self drive</span>';
   }
   if(a==='change_pickup')return '<span title="Customer asked to change their pickup via the weather link — please contact them" style="display:inline-flex;align-items:center;gap:3px;color:#d97706;font-weight:800">⚠ Change pickup</span>';
+  if(a==='refund')return '<span title="Customer requested a refund via the weather link" style="display:inline-flex;align-items:center;gap:3px;color:#dc2626;font-weight:800">⚠ Refund requested</span>';
+  if(a==='contact')return '<span title="Customer asked us to contact them / reschedule via the weather link" style="display:inline-flex;align-items:center;gap:3px;color:#f59e0b;font-weight:800">⚠ Contact / reschedule</span>';
   return '';
 }
 // On each links load: auto-flag self-drive bookings + notify the desk of pickup changes (deduped).
