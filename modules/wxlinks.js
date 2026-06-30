@@ -32,7 +32,17 @@ function _wxProcessActions(){
   try{
     var links=S._wxLinks||{};var dirty=false;var toNotify=[];
     Object.keys(links).forEach(function(order){var r=links[order];if(!r)return;var a=r.action||'';
-      if(a==='self_drive'){S._rzSelfDrive=S._rzSelfDrive||{};if(!S._rzSelfDrive[order]){S._rzSelfDrive[order]=true;dirty=true;}}
+      if(a==='self_drive'){
+        S._rzSelfDrive=S._rzSelfDrive||{};if(!S._rzSelfDrive[order]){S._rzSelfDrive[order]=true;dirty=true;}
+        // Also replace the pickup LOCATION with "Self-drive" so the Transport board stops showing the
+        // old hotel pickup (the booking moves to the Self-drive/walk group AND reads "🚗 Self-drive").
+        try{S._pickupLocOverride=S._pickupLocOverride||{};
+          var bk=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(order);});
+          if(bk)(bk.items||[]).forEach(function(it,ii){if(!it||!it.pickup)return;var pid=String(order)+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;
+            var cur=String((S._pickupLocOverride[pid]!=null&&S._pickupLocOverride[pid]!=='')?S._pickupLocOverride[pid]:it.pickup||'');
+            if(!(typeof _rzIsSelfDrive==='function'&&_rzIsSelfDrive(cur))){S._pickupLocOverride[pid]='Self-drive';dirty=true;}});
+        }catch(e){}
+      }
       // Only ping the desk when a human is actually needed: change-pickup (fix it / call them), or a
       // refund / contact request. A switch to self-drive needs no action — it just shows visually (amber).
       var _notable=(a==='change_pickup'||a==='refund'||a==='contact');
@@ -123,15 +133,22 @@ window.wxMarkSent=function(order,channel){
 };
 // Reset to "live" — clears the customer acknowledgement (un-ticks AUTO), refreshes the snapshot to the
 // latest weather call, and logs a 'reset'. The same link is now active again for the customer.
-window.wxResetLink=function(order){
-  order=String(order);var ex=_wxLinkRow(order);if(!ex)return;
-  if(typeof confirm==='function'&&!confirm('Reset this weather link to live again?\nIt clears the customer’s confirmation and re-arms the same link.'))return;
+// Silent core (no confirm/toast/render) — clears the customer's action so the booking reverts and
+// the 10s poll won't re-apply self-drive. Returns true if a link existed and was reset.
+window._wxResetLinkSilent=function(order){
+  order=String(order);var ex=_wxLinkRow(order);if(!ex)return false;
   var snap=(S._wxSnap||{})[order]||ex.snapshot||{};
   var events=Array.isArray(ex.events)?ex.events.slice():[];
   events.push({t:'reset',at:new Date().toISOString(),src:'staff',by:(S.user&&S.user.name)||''});
   var row=Object.assign({},ex,{snapshot:snap,ack_at:null,action:null,action_at:null,action_note:null,events:events,updated_at:new Date().toISOString()});
   S._wxLinks[order]=row;
   if(typeof sbU==='function')sbU('ts_wx_links',[row]).catch(function(){});
+  return true;
+};
+window.wxResetLink=function(order){
+  order=String(order);var ex=_wxLinkRow(order);if(!ex)return;
+  if(typeof confirm==='function'&&!confirm('Reset this weather link to live again?\nIt clears the customer’s confirmation and re-arms the same link.'))return;
+  window._wxResetLinkSilent(order);
   if(typeof toast==='function')toast('Weather link reset — live again','ok');render();
 };
 window.wxLinkOpen=function(order){_wxLinksEnsure();S._wxLinkOpen=String(order);render();};

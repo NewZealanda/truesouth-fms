@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.85';
+const APP_VER='v28.86';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -15704,16 +15704,21 @@ window.rezdyBookingNote=function(order,val){
 // the weather flag — so the booking shows exactly as it was pulled from Rezdy.
 window.rezdyResetBooking=function(order){
   order=String(order);
-  if(!confirm('Reset this booking to its original Rezdy information?\n\nThis clears the check-in, all entered/declared weights, child/infant tags and the aircraft for this booking only.'))return;
+  if(!confirm('Reset this booking to its original Rezdy information?\n\nThis clears the check-in, all entered/declared weights, child/infant tags, the aircraft, the pickup location/time and any self-drive switch (and re-arms the weather link) for this booking only.'))return;
   if(S._rezdyPaxMeta)delete S._rezdyPaxMeta[order];
   if(S._rzCheckin)delete S._rzCheckin[order];
   if(S._rzBookingCheckedIn)delete S._rzBookingCheckedIn[order];
   if(S._rzBookingAc)delete S._rzBookingAc[order];
   if(S._rzBookingWx)delete S._rzBookingWx[order];
   if(S._rzSchedAttach)delete S._rzSchedAttach[order];
-  // Prune this booking's pickup-location overrides (keyed order|product|time|ii) so they don't
-  // linger and re-attach a stale location if the booking re-appears.
+  // Prune this booking's pickup-location AND pickup-time overrides (keyed order|product|time|ii) so
+  // they don't linger and re-attach a stale location if the booking re-appears.
   if(S._pickupLocOverride)Object.keys(S._pickupLocOverride).forEach(function(k){if(k.indexOf(order+'|')===0)delete S._pickupLocOverride[k];});
+  if(S._pickupTimeOverride)Object.keys(S._pickupTimeOverride).forEach(function(k){if(k.indexOf(order+'|')===0)delete S._pickupTimeOverride[k];});
+  // Clear the manual self-drive flag AND reset the customer's weather link, so the "Self drive" header/
+  // badge reverts too (otherwise the 10s link poll just re-applies self-drive from the stored action).
+  if(S._rzSelfDrive)delete S._rzSelfDrive[order];
+  if(typeof window._wxResetLinkSilent==='function')window._wxResetLinkSilent(order);
   if(window.pickupSave)window.pickupSave(true);
   if(typeof toast==='function')toast('Reset to Rezdy ✓','ok');
   render();
@@ -21683,7 +21688,17 @@ function _wxProcessActions(){
   try{
     var links=S._wxLinks||{};var dirty=false;var toNotify=[];
     Object.keys(links).forEach(function(order){var r=links[order];if(!r)return;var a=r.action||'';
-      if(a==='self_drive'){S._rzSelfDrive=S._rzSelfDrive||{};if(!S._rzSelfDrive[order]){S._rzSelfDrive[order]=true;dirty=true;}}
+      if(a==='self_drive'){
+        S._rzSelfDrive=S._rzSelfDrive||{};if(!S._rzSelfDrive[order]){S._rzSelfDrive[order]=true;dirty=true;}
+        // Also replace the pickup LOCATION with "Self-drive" so the Transport board stops showing the
+        // old hotel pickup (the booking moves to the Self-drive/walk group AND reads "🚗 Self-drive").
+        try{S._pickupLocOverride=S._pickupLocOverride||{};
+          var bk=(S._rezdyBookings||[]).find(function(x){return String(x.orderNumber||'')===String(order);});
+          if(bk)(bk.items||[]).forEach(function(it,ii){if(!it||!it.pickup)return;var pid=String(order)+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;
+            var cur=String((S._pickupLocOverride[pid]!=null&&S._pickupLocOverride[pid]!=='')?S._pickupLocOverride[pid]:it.pickup||'');
+            if(!(typeof _rzIsSelfDrive==='function'&&_rzIsSelfDrive(cur))){S._pickupLocOverride[pid]='Self-drive';dirty=true;}});
+        }catch(e){}
+      }
       // Only ping the desk when a human is actually needed: change-pickup (fix it / call them), or a
       // refund / contact request. A switch to self-drive needs no action — it just shows visually (amber).
       var _notable=(a==='change_pickup'||a==='refund'||a==='contact');
@@ -21774,15 +21789,22 @@ window.wxMarkSent=function(order,channel){
 };
 // Reset to "live" — clears the customer acknowledgement (un-ticks AUTO), refreshes the snapshot to the
 // latest weather call, and logs a 'reset'. The same link is now active again for the customer.
-window.wxResetLink=function(order){
-  order=String(order);var ex=_wxLinkRow(order);if(!ex)return;
-  if(typeof confirm==='function'&&!confirm('Reset this weather link to live again?\nIt clears the customer’s confirmation and re-arms the same link.'))return;
+// Silent core (no confirm/toast/render) — clears the customer's action so the booking reverts and
+// the 10s poll won't re-apply self-drive. Returns true if a link existed and was reset.
+window._wxResetLinkSilent=function(order){
+  order=String(order);var ex=_wxLinkRow(order);if(!ex)return false;
   var snap=(S._wxSnap||{})[order]||ex.snapshot||{};
   var events=Array.isArray(ex.events)?ex.events.slice():[];
   events.push({t:'reset',at:new Date().toISOString(),src:'staff',by:(S.user&&S.user.name)||''});
   var row=Object.assign({},ex,{snapshot:snap,ack_at:null,action:null,action_at:null,action_note:null,events:events,updated_at:new Date().toISOString()});
   S._wxLinks[order]=row;
   if(typeof sbU==='function')sbU('ts_wx_links',[row]).catch(function(){});
+  return true;
+};
+window.wxResetLink=function(order){
+  order=String(order);var ex=_wxLinkRow(order);if(!ex)return;
+  if(typeof confirm==='function'&&!confirm('Reset this weather link to live again?\nIt clears the customer’s confirmation and re-arms the same link.'))return;
+  window._wxResetLinkSilent(order);
   if(typeof toast==='function')toast('Weather link reset — live again','ok');render();
 };
 window.wxLinkOpen=function(order){_wxLinksEnsure();S._wxLinkOpen=String(order);render();};

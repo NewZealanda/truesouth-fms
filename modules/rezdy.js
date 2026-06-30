@@ -837,16 +837,21 @@ window.rezdyBookingNote=function(order,val){
 // the weather flag — so the booking shows exactly as it was pulled from Rezdy.
 window.rezdyResetBooking=function(order){
   order=String(order);
-  if(!confirm('Reset this booking to its original Rezdy information?\n\nThis clears the check-in, all entered/declared weights, child/infant tags and the aircraft for this booking only.'))return;
+  if(!confirm('Reset this booking to its original Rezdy information?\n\nThis clears the check-in, all entered/declared weights, child/infant tags, the aircraft, the pickup location/time and any self-drive switch (and re-arms the weather link) for this booking only.'))return;
   if(S._rezdyPaxMeta)delete S._rezdyPaxMeta[order];
   if(S._rzCheckin)delete S._rzCheckin[order];
   if(S._rzBookingCheckedIn)delete S._rzBookingCheckedIn[order];
   if(S._rzBookingAc)delete S._rzBookingAc[order];
   if(S._rzBookingWx)delete S._rzBookingWx[order];
   if(S._rzSchedAttach)delete S._rzSchedAttach[order];
-  // Prune this booking's pickup-location overrides (keyed order|product|time|ii) so they don't
-  // linger and re-attach a stale location if the booking re-appears.
+  // Prune this booking's pickup-location AND pickup-time overrides (keyed order|product|time|ii) so
+  // they don't linger and re-attach a stale location if the booking re-appears.
   if(S._pickupLocOverride)Object.keys(S._pickupLocOverride).forEach(function(k){if(k.indexOf(order+'|')===0)delete S._pickupLocOverride[k];});
+  if(S._pickupTimeOverride)Object.keys(S._pickupTimeOverride).forEach(function(k){if(k.indexOf(order+'|')===0)delete S._pickupTimeOverride[k];});
+  // Clear the manual self-drive flag AND reset the customer's weather link, so the "Self drive" header/
+  // badge reverts too (otherwise the 10s link poll just re-applies self-drive from the stored action).
+  if(S._rzSelfDrive)delete S._rzSelfDrive[order];
+  if(typeof window._wxResetLinkSilent==='function')window._wxResetLinkSilent(order);
   if(window.pickupSave)window.pickupSave(true);
   if(typeof toast==='function')toast('Reset to Rezdy ✓','ok');
   render();
