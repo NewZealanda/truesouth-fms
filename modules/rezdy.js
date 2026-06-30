@@ -1918,10 +1918,15 @@ function _rzPaxUp(e){
   if(typeof toast==='function')toast(_rzBookingName(order)+note+' ✓','ok');
   render();
 }
-// Calendar drag-lock — ON MOBILE the blocks are easy to nudge by accident, so the calendar starts
-// LOCKED (like the roster) and the operator must tap Unlock before move/resize works. Desktop is never
-// locked (mouse drags are deliberate). Default state = locked (S._rzCalUnlocked falsy).
-function _rzCalLocked(){return !(S&&S._rzCalUnlocked);}
+// Calendar drag-lock — on touch devices (phone / iPad) the blocks are easy to nudge by accident, so the
+// calendar starts LOCKED there (like the roster); on desktop it starts unlocked (mouse drags are deliberate).
+// The operator's Lock/Unlock toggle overrides per session.
+function _rzCalLocked(){
+  // Default: LOCKED on touch devices (phone / iPad — blocks are easy to nudge), FREE on desktop (deliberate
+  // mouse drags). The operator's per-session Lock/Unlock toggle then overrides. Mirrors the roster lock.
+  if(S&&S._rzCalUnlocked===undefined)S._rzCalUnlocked=(typeof _isTouchDevice==='function')?!_isTouchDevice():true;
+  return !(S&&S._rzCalUnlocked);
+}
 window.rzCalToggleLock=function(){S._rzCalUnlocked=!S._rzCalUnlocked;render();};
 window.rzCalDown=function(e,key){
   if(e.button!=null&&e.button!==0)return;

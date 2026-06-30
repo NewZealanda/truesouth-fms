@@ -672,7 +672,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.65';
+const APP_VER='v28.66';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -1623,6 +1623,18 @@ function bD(){return{dep:'NZQN',dest:'NZMF',date:_todayLocal(),etd:'',etdCustom:
 function bF(){return{ac:'',pic:'',coPilot:'',date:_todayLocal(),etd:'',etdCustom:false,dep:'NZQN',dest:'NZMF',seats:{},bags:{},names:{},infantNames:{},cargo:{},gndBurn:null,fuel:'',burnOff:'',paxType:{},paxGroups:{},paxPaymentReq:{},sig:null};}
 function bF_ac(acId){var f=bF();f.ac=acId;return f;}
 
+// Touch/coarse-pointer device (phone / iPad) vs desktop. Drives the DEFAULT lock state for the
+// roster + resource calendar — locked on touch (easy to nudge by accident), free on desktop (deliberate mouse).
+function _isTouchDevice(){
+  try{
+    if(typeof window!=='undefined'&&window.matchMedia){
+      if(window.matchMedia('(pointer: coarse)').matches)return true;
+      if(window.matchMedia('(pointer: fine)').matches)return false;
+    }
+    return (typeof window!=='undefined'&&'ontouchstart' in window)||((typeof navigator!=='undefined'&&navigator.maxTouchPoints)||0)>0;
+  }catch(e){return false;}
+}
+
 let S={
   // Auth
   user:null,users:[],loginEmail:'',loginPw:'',loginErr:null,toasts:[],
@@ -1632,7 +1644,7 @@ let S={
   // Audit
   auditLog:[],
   // Maintenance
-  maintenance:{},maintBookings:{},roster:null,rosterWeek:null,rosterTab:'view',rosterFilter:'all',rosterLocked:true,rosterBuild:null,_rosterLoaded:false,_rosterSaved:false,_rosterLeave:null,_rosterLeaveWeek:null,_rosterColorsLoaded:false,_rosterColorEdit:false,rosterColors:null,_appLoading:false,_leave:null,_notifications:null,_notifOpen:false,uploadProgress:null,driveLastUpload:lsGet('ts_drive_last_upload')||null,wideMode:lsGet('ts_wide_mode')!==false,
+  maintenance:{},maintBookings:{},roster:null,rosterWeek:null,rosterTab:'view',rosterFilter:'all',rosterLocked:_isTouchDevice(),rosterBuild:null,_rosterLoaded:false,_rosterSaved:false,_rosterLeave:null,_rosterLeaveWeek:null,_rosterColorsLoaded:false,_rosterColorEdit:false,rosterColors:null,_appLoading:false,_leave:null,_notifications:null,_notifOpen:false,uploadProgress:null,driveLastUpload:lsGet('ts_drive_last_upload')||null,wideMode:lsGet('ts_wide_mode')!==false,
   // Drive
   driveQueue:[],
   // Manifest / Dispatch
