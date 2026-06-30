@@ -79,10 +79,10 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
   exclude roster RDO/off days and must read the PERSISTED roster (not the live draft/overlay).
 
 ## Useful files
-- `ARCHITECTURE_REVIEW_v24.14.md` — **latest** review (full 6-reviewer bug sweep): fixed in
-  v24.15/v24.16 + the prioritised OPEN backlog + security posture. Earlier snapshots:
-  `ARCHITECTURE_REVIEW_v24.04.md` (A2–A4/R-A now done), `ARCHITECTURE_REVIEW_v23.04.md`,
-  `ARCHITECTURE_REVIEW_v22.87.md`.
+- `ARCHITECTURE_REVIEW_v28.90.md` — **latest** full sweep (kept in the working tree). Older
+  per-version review snapshots (v22.87 → v28.55) were removed from the working tree to declutter;
+  they remain in git history if ever needed (`git show <rev>:ARCHITECTURE_REVIEW_vXX.YY.md`).
+  The dated changelog entries below still reference them by name as historical pointers.
 - `auth_*.sql` + other `*.sql` files in the repo root — Supabase migrations Andrew runs in the
   SQL editor (the RLS / per-role policy work).
 - `build.py` — the concatenation build (now: module-presence check + top-level
@@ -90,7 +90,33 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v28.55 (latest) — nightly sweep: focus-clobber + escaping fixes on the new ground/ops modules.**
+- **v28.90 (latest) — nightly sweep: escape order# in the weather-link modal's inline onclick handlers.**
+  `ARCHITECTURE_REVIEW_v28.90.md` is the latest full sweep (first since v28.55; covers the undocumented
+  **v28.56→v28.89** cycle — the headline being the **customer weather-link system** `modules/wxlinks.js`
+  + standalone `wx.html` page: pilot makes a weather call → desk copies a per-booking `wx.html?t=token`
+  link → customer's ack / pickup choice flows back + auto-ticks Wx. Cycle also: self-drive pickup
+  override, bookings pickup-time, reasons rename Visibility→Poor Visibility +Turbulence, required
+  next-best-day before cancel, 15-language wx page + RTL, leave-cancellation-needs-approval (reverts
+  roster on approve), April-2027 10-Year-Anniversary header). One real fix: **`wxlinks.js` `_wxLinkModal`** —
+  the Copy button JS-escaped the order# in its inline `onclick`, but the sibling Mark-sent/Reset/
+  Clear-history buttons interpolated the bare `order` (latent handler-break/injection if an order ever
+  held a quote; Rezdy orders are alphanumeric so practical risk ~nil). Computed one JS-safe `oj` and used
+  it in all 5 handlers. Verified clean by two parallel deep-audit reviewers + direct reads: weather-link/
+  self-drive/pickup layer (XSS escaped at leaf, every mutator persists+broadcasts via pickupSave/
+  _rzPickupBroadcast/wxSyncDep/sbU, dates `_rIso`-guarded, NaN/null guards), loadsheet per-seat 7-map
+  moves (all move together + autoSaveLS in tapFormSeat/lsDropOnSeat/lsDropOnUnalloc/tapDropUnallocated/
+  dropFormSeat), leave cancellation-approval roster revert (merge-before-write via _rosterApplyAndSave,
+  double perm-gated, rdo/off excluded). build + `node --check` (4 blocks) → 0 errors; index.html rebuilt
+  26,791 lines. ⚠️ **COMMIT BLOCKED:** stale `.git/index.lock` present AND the VM can't write `.git/objects`
+  ("Operation not permitted") — temp-index trick fails too; lock NOT deleted (per rule). v28.90 is built +
+  in the working tree but **UNCOMMITTED**, on top of Andrew's pre-existing **wx-refactor** changeset
+  (`wx.html`→`modules/wxlinks.js` migration: staged deletions of wx.html/wx_links.sql/wxlinks.js +
+  untracked re-adds, build.py/.gitignore edits). Andrew must clear the lock, untangle the wx-refactor
+  staging in GitHub Desktop, commit, then push/merge. ⚠️ **New-table SQL** to apply if not yet: `wx_links.sql`,
+  `vehicle_prestarts.sql`, `ops_notices.sql`, `equipment.sql`, `visitors.sql`, `flight_following.sql`,
+  `vp_delete_own.sql`, `fix_feature_table_grants.sql`, `fix_uuid_user_columns.sql`. OPEN: confirm `ts_wx_links`
+  is in the realtime publication; the 5 ground/ops modules + wx_links still poll/reload-only (not realtime-subscribed).
+- **v28.55 — nightly sweep: focus-clobber + escaping fixes on the new ground/ops modules.**
   `ARCHITECTURE_REVIEW_v28.55.md` is the latest full sweep — first since v28.15; covers the big
   undocumented **v28.16→v28.54** cycle (the 5 new modules `vehprestart`/`opsnotices`/`equipment`/
   `visitors`/`monitoring`, Supabase Storage uploads, the Operations/Crew/Company menu restructure,
