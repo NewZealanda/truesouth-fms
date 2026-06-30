@@ -12,10 +12,16 @@ function _wxLinkExists(order){return !!_wxLinkRow(order);}
 function _wxLinkAcked(order){var r=_wxLinkRow(order);return !!(r&&r.ack_at);}   // customer opened/acknowledged → auto-Wx
 function _wxLinkAction(order){var r=_wxLinkRow(order);return (r&&r.action)||'';}
 // Pickup status badge for a booking, from the customer's link action.
+function _wxHadPickup(order){var r=_wxLinkRow(order);return !!(r&&r.snapshot&&String(r.snapshot.pickup_loc||'').trim());}
 function _wxPickupBadge(order){
   var a=_wxLinkAction(order);if(!a)return '';
   if(a==='confirmed')return '<span title="Customer confirmed their pickup via the weather link" style="display:inline-flex;align-items:center;gap:3px;color:#16a34a;font-weight:800">✓ Confirmed</span>';
-  if(a==='self_drive')return '<span title="Customer changed to self-drive via the weather link — no pickup needed" style="display:inline-flex;align-items:center;gap:3px;color:#d97706;font-weight:800">⚠ Self drive</span>';
+  if(a==='self_drive'){
+    // Amber warning ONLY when they changed FROM a booked pickup to self-drive. If they were already
+    // self-drive (no pickup), it's just a confirmation → green tick.
+    if(_wxHadPickup(order))return '<span title="Customer changed from a pickup to self-drive via the weather link" style="display:inline-flex;align-items:center;gap:3px;color:#d97706;font-weight:800">⚠ Self drive</span>';
+    return '<span title="Customer confirmed — self-drive as booked" style="display:inline-flex;align-items:center;gap:3px;color:#16a34a;font-weight:800">✓ Self drive</span>';
+  }
   if(a==='change_pickup')return '<span title="Customer asked to change their pickup via the weather link — please contact them" style="display:inline-flex;align-items:center;gap:3px;color:#d97706;font-weight:800">⚠ Change pickup</span>';
   return '';
 }
@@ -25,7 +31,9 @@ function _wxProcessActions(){
     var links=S._wxLinks||{};var dirty=false;var toNotify=[];
     Object.keys(links).forEach(function(order){var r=links[order];if(!r)return;var a=r.action||'';
       if(a==='self_drive'){S._rzSelfDrive=S._rzSelfDrive||{};if(!S._rzSelfDrive[order]){S._rzSelfDrive[order]=true;dirty=true;}}
-      if(a==='change_pickup'||a==='self_drive'||a==='refund'||a==='contact'){
+      // Notify on a genuine change/request — self-drive only counts if they HAD a pickup booked.
+      var _notable=(a==='change_pickup'||a==='refund'||a==='contact'||(a==='self_drive'&&!!(r.snapshot&&String(r.snapshot.pickup_loc||'').trim())));
+      if(_notable){
         var ev=Array.isArray(r.events)?r.events:[];var key='notified_'+a;
         if(!ev.some(function(e){return e.t===key;}))toNotify.push({order:order,row:r,action:a,key:key});
       }
