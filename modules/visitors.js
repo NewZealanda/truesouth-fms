@@ -54,6 +54,28 @@ function renderVisitors(){
   if(tab==='history')return bar+_viRenderHistory();
   return bar+_viRenderSignin();
 }
+// Reception QR → the public sign-in page (visit.html), so visitors can sign in on their own phone.
+function _viSignInUrl(){return (typeof location!=='undefined'?location.origin:'')+'/visit.html';}
+function _viQrCard(){
+  if(!_viCanManage())return '';
+  var url=_viSignInUrl();
+  var qr='https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=10&data='+encodeURIComponent(url);
+  return '<div class="card" style="margin-bottom:14px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">'+
+    '<img src="'+qr+'" alt="Sign-in QR" style="width:118px;height:118px;border-radius:10px;background:#fff;padding:6px;flex-shrink:0">'+
+    '<div style="flex:1;min-width:200px">'+
+      '<div class="st" style="font-size:14px;margin:0 0 4px">Reception sign‑in QR</div>'+
+      '<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px">Print this for the front desk — visitors scan it to sign in on their own phone (no app login). New sign‑ins appear under <b>On site</b> automatically.</div>'+
+      '<div style="font-size:11px;color:var(--text3);word-break:break-all;margin-bottom:8px">'+_viEsc(url)+'</div>'+
+      '<button onclick="window.viPrintQr()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:12px;font-weight:700;cursor:pointer">🖨 Print poster</button>'+
+    '</div></div>';
+}
+window.viPrintQr=function(){
+  var url=_viSignInUrl();
+  var qr='https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=12&data='+encodeURIComponent(url);
+  var w=window.open('','_blank','width=720,height=900');if(!w){if(typeof toast==='function')toast('Allow pop-ups to print.','warn');return;}
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Visitor Sign-In</title><style>*{margin:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;text-align:center;padding:40px;color:#111}h1{font-size:42px;margin:10px 0 4px}p{font-size:21px;color:#444;margin:0 0 28px}img{width:380px;height:380px}.u{font-size:14px;color:#666;margin-top:22px;word-break:break-all}.b{font-size:13px;letter-spacing:4px;color:#777;text-transform:uppercase;font-weight:800}</style></head><body><div class="b">True South Flights</div><h1>Visitor Sign‑In</h1><p>Scan to sign in on your phone</p><img src="'+qr+'" alt="QR"><div class="u">'+url+'</div><scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},700);}</scr'+'ipt></body></html>');
+  w.document.close();
+};
 function _viRenderSignin(){
   if(S._visDone){
     return '<div class="card" style="text-align:center;padding:48px 20px"><div style="font-size:48px">✅</div><div style="font-size:22px;font-weight:800;color:var(--text);margin-top:10px">Thank you, '+_viEsc(S._visDone)+'</div><div style="font-size:15px;color:var(--text3);margin-top:6px">You have successfully signed in.</div><div style="font-size:13px;color:var(--text3);margin-top:14px">Please follow all staff instructions while on site.</div><button onclick="S._visDone=null;render()" style="margin-top:22px;padding:12px 26px;border-radius:10px;border:none;background:var(--accent,#7c3aed);color:#fff;font-size:15px;font-weight:700;cursor:pointer">Done</button></div>';
@@ -62,7 +84,7 @@ function _viRenderSignin(){
   var staff=[];try{(S.users||[]).forEach(function(u){if(u&&!u.inactive&&u.name)staff.push(u.name);});(S.crew||[]).forEach(function(c){var n=c&&(c.n||c.name);if(n&&staff.indexOf(n)<0)staff.push(n);});}catch(e){}staff.sort();
   var _i='width:100%;box-sizing:border-box;padding:13px 14px;background:var(--card2);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-size:16px';
   var _lab='font-size:12px;font-weight:700;color:var(--text3);display:block;margin-bottom:4px';
-  var h='<div style="max-width:560px;margin:0 auto"><div class="card"><div class="st" style="text-align:center;font-size:20px">Visitor sign-in</div><p style="text-align:center;font-size:13px;color:var(--text3);margin:2px 0 18px">Welcome — please sign in below.</p>'+
+  var h='<div style="max-width:560px;margin:0 auto">'+_viQrCard()+'<div class="card"><div class="st" style="text-align:center;font-size:20px">Visitor sign-in</div><p style="text-align:center;font-size:13px;color:var(--text3);margin:2px 0 18px">Welcome — please sign in below.</p>'+
     '<div style="display:grid;gap:13px">'+
       '<div><label style="'+_lab+'">Full name *</label><input value="'+_viEsc(d.name)+'" oninput="window.viField(\'name\',this.value)" style="'+_i+'"></div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:13px"><div><label style="'+_lab+'">Company</label><input value="'+_viEsc(d.company)+'" oninput="window.viField(\'company\',this.value)" style="'+_i+'"></div><div><label style="'+_lab+'">Mobile</label><input value="'+_viEsc(d.mobile)+'" inputmode="tel" oninput="window.viField(\'mobile\',this.value)" style="'+_i+'"></div></div>'+

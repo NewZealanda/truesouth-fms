@@ -312,9 +312,36 @@ function _mfWorkOrderHtml(f){
       '<div class="cols"><div>'+ckRow('wo','Work Order completed')+ckRow('techlog','Tech Log completed, no Defects')+ckRow('hours','A/C Hours recorded on Tech Log')+ckRow('engperf','Engine Performance check sighted')+'</div>'+
       '<div>'+ckRow('rts','Return to Service sighted')+ckRow('dupinsp','Duplicate Inspection sighted')+ckRow('toolctrl','Tool Control Records sighted')+ckRow('testflight','Test Flight undertaken')+'</div></div></div>'+
     '<div class="note">Retention Period — Two years post completion. Effective 06/08/24.</div>'+
+    (function(){var att=(d.attachments||[]);if(!att.length)return '';var ref=d.woNo?' · Work Order No. '+_mfEsc(d.woNo):'';return att.map(function(a){
+      if(_mfIsImg(a))return '<div style="page-break-before:always;padding-top:4mm"><div style="font-size:10px;color:#555;margin-bottom:6px">Attachment'+(a.name?' — '+_mfEsc(a.name):'')+ref+'</div><div style="text-align:center"><img src="'+a.data+'" style="max-width:100%;max-height:240mm"></div></div>';
+      return '<div style="page-break-before:always;padding-top:4mm"><div style="font-size:10px;color:#555;margin-bottom:6px">Attachment — '+_mfEsc(a.name||'file')+ref+'</div><div style="font-size:12px;border:1px dashed #999;border-radius:6px;padding:12px">📄 This attachment is a file ('+_mfEsc(a.type||'document')+'). Print it separately and file it with this work order.</div></div>';
+    }).join('');})()+
     '<script>window.onload=function(){window.print();}<\/script></body></html>';
 }
 window.maintFormPrint=function(id){var f=(S._mfData||{})[id];if(!f)return;var w=window.open('','_blank','width=860,height=950');if(!w){if(typeof toast==='function')toast('Allow pop-ups to print.','warn');return;}w.document.write(_mfWorkOrderHtml(f));w.document.close();try{w.document.title='Southern Lakes Aviation Form 13 - Work Order';}catch(e){}};
+
+// ── Attachments (photos / PDFs e.g. aircraft runout) — stored in data.attachments [{name,type,data}] ──
+function _mfStoreFile(file,cb){
+  if(!file)return cb(null);
+  if(file.size>25*1024*1024){if(typeof toast==='function')toast('File too big (max 25MB).','warn');return cb(null);}
+  var isImg=(file.type||'').indexOf('image')===0;
+  var done=function(data){cb({name:file.name||'file',type:file.type||'',data:data});};
+  var rawB64=function(){var rd=new FileReader();rd.onload=function(){done(rd.result);};rd.onerror=function(){cb(null);};rd.readAsDataURL(file);};
+  if(isImg){
+    var rd=new FileReader();rd.onload=function(){var img=new Image();img.onload=function(){
+      var max=1600,w=img.width,h=img.height;if(w>h&&w>max){h=Math.round(h*max/w);w=max;}else if(h>max){w=Math.round(w*max/h);h=max;}
+      var cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);
+      var du=function(){return cv.toDataURL('image/jpeg',0.72);};
+      if(typeof window._tsUploadFile==='function'&&cv.toBlob){cv.toBlob(function(blob){if(!blob)return done(du());window._tsUploadFile(blob,'workorder',(file.name||'photo')+'.jpg').then(function(url){done(url||du());}).catch(function(){done(du());});},'image/jpeg',0.72);}else done(du());
+    };img.onerror=function(){cb(null);};img.src=rd.result;};rd.onerror=function(){cb(null);};rd.readAsDataURL(file);
+  } else {
+    if(typeof window._tsUploadFile==='function'){window._tsUploadFile(file,'workorder',file.name).then(function(url){if(url)done(url);else rawB64();}).catch(rawB64);}
+    else rawB64();
+  }
+}
+window.mfAddAttachment=function(input,id){var f=(S._mfData||{})[id];if(!f||!input||!input.files||!input.files[0])return;_mfStoreFile(input.files[0],function(rec){if(rec){f.data=f.data||{};f.data.attachments=(f.data.attachments||[]);f.data.attachments.push(rec);if(typeof _mfSave==='function')_mfSave(f,true);if(typeof render==='function')render();}});};
+window.mfDelAttachment=function(id,i){var f=(S._mfData||{})[id];if(!f||!f.data||!f.data.attachments)return;f.data.attachments.splice(i,1);if(typeof _mfSave==='function')_mfSave(f,true);if(typeof render==='function')render();};
+function _mfIsImg(a){return (a&&a.type||'').indexOf('image')===0||/\.(png|jpe?g|gif|webp)$/i.test((a&&a.name)||'');}
 
 window.maintFormUpload=async function(id){
   var f=(S._mfData||{})[id];if(!f)return;
@@ -562,6 +589,22 @@ function renderMaintFormEditor(id){
   h+='<div class="card" style="margin-bottom:10px"><div class="st" style="font-size:13px;margin-bottom:4px">SLA Pilot Checklist</div>'+
     '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Tick Done or N/A — your name is recorded against each.</div>'+
     _MF_CHK.map(function(it){return chkRow(it[0],it[1]);}).join('')+'</div>';
+  // Attachments (photos / PDFs — e.g. aircraft runout). Shown below the work order; images print on attached pages.
+  {var _att=(d.attachments||[]);
+   h+='<div class="card" style="margin-bottom:10px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px"><div class="st" style="font-size:13px;margin:0">Attachments</div>'+
+     '<label style="font-size:12px;font-weight:700;color:var(--acc);cursor:pointer">＋ Add photo / file<input type="file" accept="image/*,application/pdf" onchange="window.mfAddAttachment(this,\''+id+'\')" style="display:none"></label></div>'+
+     '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Photos and PDFs (e.g. an aircraft runout). Images print on attached pages after the work order — reference them in the comments above.</div>';
+   if(!_att.length)h+='<p style="font-size:12px;color:var(--text3);margin:0">No attachments yet.</p>';
+   else{h+='<div style="display:flex;flex-wrap:wrap;gap:10px">';_att.forEach(function(a,i){
+     h+='<div style="position:relative;width:132px">'+
+       (_mfIsImg(a)
+         ?'<a href="'+_mfEsc(a.data)+'" target="_blank" rel="noopener"><img src="'+_mfEsc(a.data)+'" style="width:132px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border2)"></a>'
+         :'<a href="'+_mfEsc(a.data)+'" target="_blank" rel="noopener" style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:132px;height:100px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);text-decoration:none;color:var(--text2);gap:6px"><span style="font-size:26px">📄</span><span style="font-size:10px;text-align:center;padding:0 4px;word-break:break-word">'+_mfEsc(a.name||'file')+'</span></a>')+
+       '<button onclick="window.mfDelAttachment(\''+id+'\','+i+')" title="Remove" style="position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:13px;line-height:1">×</button>'+
+       '<div style="font-size:10px;color:var(--text3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_mfEsc(a.name||'')+'</div>'+
+     '</div>';
+   });h+='</div>';}
+   h+='</div>';}
   h+='</div>';
   return h;
 }
