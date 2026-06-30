@@ -152,7 +152,7 @@ window.wxClearHistory=function(order){
 window.wxSyncDep=function(dep){
   try{
     dep=String(dep);var links=S._wxLinks||{};var c=(typeof _wxCall==='function')?_wxCall(dep):null;
-    var REA={cloud:'Cloud',rain:'Rain',wind:'Wind',snow:'Snow',visibility:'Visibility',vis:'Visibility',fog:'Fog'};
+    var REA={cloud:'Cloud',rain:'Rain',wind:'Wind',snow:'Snow',visibility:'Poor Visibility','poor visibility':'Poor Visibility',vis:'Poor Visibility',fog:'Poor Visibility',turbulence:'Turbulence'};
     var reasons=((c&&c.reasons)||[]).map(function(r){return REA[String(r).toLowerCase()]||r;});
     Object.keys(links).forEach(function(order){var r=links[order];if(!r||String(r.dep_key||'')!==dep)return;
       r.snapshot=r.snapshot||{};

@@ -1454,7 +1454,7 @@ window.rezdySetFlybackEnd=function(prod,held,val){
 // flight is called by 0700 latest). Any pilot can record a call per departure. Stored per-date in the
 // pickup blob (S._rzWxCalls, keyed by departure time "HH:MM"). Status: 'on' (green) / 'cancelled' (red,
 // + reason + next-best-day) / 'final' (yellow, final call made in the office). All carry a comment.
-var _WX_REASONS=['Cloud','Rain','Wind','Snow','Visibility'];
+var _WX_REASONS=['Cloud','Rain','Wind','Snow','Poor Visibility','Turbulence'];
 function _wxLeadMin(){return 60;}                       // call due this many minutes before departure
 var _WX_REMIND_MINS=[10,5,1];                           // escalating reminders this many min before the deadline
 function _wxCall(depKey){return (S._rzWxCalls||{})[String(depKey)]||null;}
@@ -1473,7 +1473,7 @@ function _wxSnapFor(b,ono){
   var ac=(typeof _rzBookingAc==='function')?_rzBookingAc(b,ono):'';
   var acLbl=(ac&&ac!=='__none__')?((typeof acDisp==='function')?acDisp(ac):String(ac).replace('ZK-','')):'';
   var c=(typeof _wxCall==='function')?_wxCall(depKey):null;
-  var REA={cloud:'Cloud',rain:'Rain',wind:'Wind',snow:'Snow',visibility:'Visibility',vis:'Visibility',fog:'Fog'};
+  var REA={cloud:'Cloud',rain:'Rain',wind:'Wind',snow:'Snow',visibility:'Poor Visibility','poor visibility':'Poor Visibility',vis:'Poor Visibility',fog:'Poor Visibility',turbulence:'Turbulence'};
   var reasons=((c&&c.reasons)||[]).map(function(r){return REA[String(r).toLowerCase()]||r;});
   var ov=S._pickupLocOverride||{},tov=S._pickupTimeOverride||{},loc='',ptime='';
   (b.items||[]).forEach(function(it,ii){if(!it||!it.pickup)return;var pid=ono+'|'+(it.product||'')+'|'+(it.startTimeLocal||'')+'|'+ii;
@@ -1553,7 +1553,7 @@ function _wxNextDays(date){
   var base=date?new Date(String(date)+'T00:00:00'):new Date();var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];var out=[];
   // base is LOCAL midnight; toISOString().slice(0,10) would emit the day BEFORE in NZ (UTC+12/+13),
   // so the chip's val (the next-day reschedule date) was a day early. Use the local-date helper. (v27.48)
-  for(var i=1;i<=5;i++){var d=new Date(base);d.setDate(d.getDate()+i);out.push({val:(typeof _rIso==='function')?_rIso(d):d.toISOString().slice(0,10),label:i===1?'Tomorrow':days[d.getDay()]});}
+  for(var i=1;i<=7;i++){var d=new Date(base);d.setDate(d.getDate()+i);out.push({val:(typeof _rIso==='function')?_rIso(d):d.toISOString().slice(0,10),label:i===1?'Tomorrow':days[d.getDay()]});}
   return out;
 }
 function _wxCallReasons(c){return (c&&c.reasons&&c.reasons.length)?c.reasons:((c&&c.reason)?[c.reason]:[]);}   // back-compat with the old single-reason field
@@ -1579,7 +1579,8 @@ function _wxBroadcastRecipients(date,excludeId){
 }
 window.wxSubmit=function(status){
   var d=S._wxDraft||{};var dep=d.dep;if(!dep)return;var reasons=(d.reasons||[]).slice();
-  if((status==='cancelled'||status==='final')&&!reasons.length){if(typeof toast==='function')toast('Pick at least one reason (cloud/rain/wind/snow/visibility) first.','warn');return;}
+  if((status==='cancelled'||status==='final')&&!reasons.length){if(typeof toast==='function')toast('Pick at least one weather reason first.','warn');return;}
+  if(status==='cancelled'&&!(d.nextDay)){if(typeof toast==='function')toast('Pick a next best day before cancelling.','warn');return;}
   S._rzWxCalls=S._rzWxCalls||{};
   var _by=(S.user&&(S.user.name||S.user.email))||'',_at=new Date().toISOString();
   var _prev=S._rzWxCalls[String(dep)]||{};
