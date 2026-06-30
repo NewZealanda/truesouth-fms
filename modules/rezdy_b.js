@@ -254,6 +254,7 @@ function _rzBookingDetail(b){
     contactH='<div style="'+_pan+'"><div style="'+sec+'">Contact</div>';
     if(b.phone)contactH+='<div style="font-size:12.5px"><a href="tel:'+_rzEsc(b.phone)+'" style="color:var(--acc);text-decoration:none">📞 '+_rzEsc(b.phone)+'</a></div>';
     if(b.email)contactH+='<div style="font-size:12.5px;word-break:break-all"><a href="mailto:'+_rzEsc(b.email)+'" style="color:var(--acc);text-decoration:none">✉ '+_rzEsc(b.email)+'</a></div>';
+    contactH+=(typeof _rzPrefContactPicker==='function')?_rzPrefContactPicker(String(b.orderNumber||'')):'';
     contactH+='</div>';
   }
   // Pickup location(s) — editable; options are the day's known pickup locations (shared with the
@@ -336,7 +337,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};S._rzBkCalled={};S._rzTravelWith={};S._rzBlockNote={};S._rzCharterDest={};S._rzBkAcPickOpen={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._rzPrefContact={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};S._rzBkCalled={};S._rzTravelWith={};S._rzBlockNote={};S._rzCharterDest={};S._rzBkAcPickOpen={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -746,9 +747,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge','wxCalls','bkCalled','travelWith','blockNote','charterDest'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge','wxCalls','bkCalled','travelWith','blockNote','charterDest','prefContact'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{},wxCalls:S._rzWxCalls||{},bkCalled:S._rzBkCalled||{},travelWith:S._rzTravelWith||{},blockNote:S._rzBlockNote||{},charterDest:S._rzCharterDest||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{},wxCalls:S._rzWxCalls||{},bkCalled:S._rzBkCalled||{},travelWith:S._rzTravelWith||{},blockNote:S._rzBlockNote||{},charterDest:S._rzCharterDest||{},prefContact:S._rzPrefContact||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -767,6 +768,7 @@ function _pkApplyBlob(d){
   S._schedCoPilots=(d.schedCoPilots&&typeof d.schedCoPilots==='object')?d.schedCoPilots:{};
   S._rzBookingAc=(d.bookingAc&&typeof d.bookingAc==='object')?d.bookingAc:{};
   S._rzBookingWx=(d.bookingWx&&typeof d.bookingWx==='object')?d.bookingWx:{};
+  S._rzPrefContact=(d.prefContact&&typeof d.prefContact==='object')?d.prefContact:{};
   S._rzBookingCheckedIn=(d.bookingCheckedIn&&typeof d.bookingCheckedIn==='object')?d.bookingCheckedIn:{};
   S._rzSchedAttach=(d.schedAttach&&typeof d.schedAttach==='object')?d.schedAttach:{};
   S._rzCheckin=(d.checkin&&typeof d.checkin==='object')?d.checkin:{};

@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.68';
+const APP_VER='v28.69';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -15804,6 +15804,17 @@ window.rezdyBookingSetAc=function(order,ac){
 window.rezdyBookingAcPickToggle=function(order){order=String(order);S._rzBkAcPickOpen=S._rzBkAcPickOpen||{};if(S._rzBkAcPickOpen[order])delete S._rzBkAcPickOpen[order];else S._rzBkAcPickOpen[order]=true;render();};
 window.rezdyBookingToggleWx=function(order){order=String(order);S._rzBookingWx=S._rzBookingWx||{};if(S._rzBookingWx[order])delete S._rzBookingWx[order];else S._rzBookingWx[order]=true;if(window.pickupSave)window.pickupSave(true);render();};
 window.rezdyBookingToggleCheckedIn=function(order){order=String(order);S._rzBookingCheckedIn=S._rzBookingCheckedIn||{};if(S._rzBookingCheckedIn[order])delete S._rzBookingCheckedIn[order];else S._rzBookingCheckedIn[order]=true;if(window.pickupSave)window.pickupSave(true);render();};
+// Preferred contact method per booking ('email' | 'call' | 'whatsapp'). Tapping the active one clears it.
+function _rzPrefContact(order){return (S._rzPrefContact||{})[String(order)]||'';}
+window.rezdySetPrefContact=function(order,method){order=String(order);S._rzPrefContact=S._rzPrefContact||{};if(S._rzPrefContact[order]===method)delete S._rzPrefContact[order];else S._rzPrefContact[order]=method;if(window.pickupSave)window.pickupSave(true);render();};
+function _rzPrefContactPicker(order){
+  order=String(order);var cur=_rzPrefContact(order);
+  var opt=[['email','✉','Email'],['call','📞','Call'],['whatsapp','💬','WhatsApp']];
+  return '<div style="display:flex;align-items:center;gap:6px;margin-top:7px;flex-wrap:wrap"><span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;font-weight:700">Preferred</span>'+
+    opt.map(function(o){var on=cur===o[0];
+      return '<button onclick="event.stopPropagation();window.rezdySetPrefContact(\''+_rzEsc(order)+'\',\''+o[0]+'\')" title="'+o[2]+(on?' (preferred — tap to clear)':'')+'" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:14px;cursor:pointer;border:1.5px solid '+(on?'#3b82f6':'var(--border2)')+';background:'+(on?'rgba(59,130,246,.15)':'transparent')+';color:'+(on?'#60a5fa':'var(--text3)')+'">'+(on?'✓ ':'')+o[1]+' '+o[2]+'</button>';
+    }).join('')+'</div>';
+}
 // Click the "Checked in" pill: opens the check-in popup. If already checked in it opens in EDIT
 // mode (captured names/weights pre-filled) so passengers can be amended; the modal has an
 // Un-check button to revert. If not checked in, it's a fresh capture.
@@ -17472,6 +17483,7 @@ function _rzBookingDetail(b){
     contactH='<div style="'+_pan+'"><div style="'+sec+'">Contact</div>';
     if(b.phone)contactH+='<div style="font-size:12.5px"><a href="tel:'+_rzEsc(b.phone)+'" style="color:var(--acc);text-decoration:none">📞 '+_rzEsc(b.phone)+'</a></div>';
     if(b.email)contactH+='<div style="font-size:12.5px;word-break:break-all"><a href="mailto:'+_rzEsc(b.email)+'" style="color:var(--acc);text-decoration:none">✉ '+_rzEsc(b.email)+'</a></div>';
+    contactH+=(typeof _rzPrefContactPicker==='function')?_rzPrefContactPicker(String(b.orderNumber||'')):'';
     contactH+='</div>';
   }
   // Pickup location(s) — editable; options are the day's known pickup locations (shared with the
@@ -17554,7 +17566,7 @@ window.rezdySetDate=function(v){
   // clear the booking-state maps that live in the pickup blob so the new day doesn't briefly render
   // the PREVIOUS day's check-in / aircraft / pickup / pax-meta state before the async blob loads
   // (editing in that window would persist a mixed blob). rezdyLoadPickups repopulates them.
-  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};S._rzBkCalled={};S._rzTravelWith={};S._rzBlockNote={};S._rzCharterDest={};S._rzBkAcPickOpen={};
+  S._rzBookingCheckedIn={};S._rzBookingAc={};S._rzBookingWx={};S._rzPrefContact={};S._pickupLocOverride={};S._rezdyPaxMeta={};S._rzCheckin={};S._rzSchedAttach={};S._rzManDepMerge={};S._schedPilots={};S._schedCoPilots={};S._rzBookingCancel={};S._rzNoShow={};S._rzSelfDrive={};S._rzBkNote={};S._rzFlybackTime={};S._rzFlybackEnd={};S._rzDepTimeOv={};S._rzDepEndOv={};S._rzPlates={};S._rzTransMerge={};S._rzWxCalls={};S._rzBkCalled={};S._rzTravelWith={};S._rzBlockNote={};S._rzCharterDest={};S._rzBkAcPickOpen={};
   render();
   // auto-load cached rows for whichever tab is active
   if(S.rezdyTab==='schedule')window.rezdyLoadSchedule();
@@ -17964,9 +17976,9 @@ window.pickupSetLocation=function(id,val){
 // We now 3-way merge: on save, re-pull the latest cloud blob and only write the fields THIS device
 // actually changed since it loaded (its baseline); every other field keeps the cloud's current
 // value. So Device A's van reorder and Device B's check-in both survive.
-var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge','wxCalls','bkCalled','travelWith','blockNote','charterDest'];
+var _PK_FIELDS=['vans','collected','locOverride','timeOverride','drivers','extraDrivers','spare','order','depOrder','manualBk','paxMeta','schedPilots','schedCoPilots','bookingAc','bookingWx','bookingCheckedIn','schedAttach','checkin','ack','bookingCancel','noShow','selfDriveOv','bkNote','flybackTime','flybackEnd','depTimeOv','depEndOv','plates','transMerge','wxCalls','bkCalled','travelWith','blockNote','charterDest','prefContact'];
 function _pkBlobFromState(){
-  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{},wxCalls:S._rzWxCalls||{},bkCalled:S._rzBkCalled||{},travelWith:S._rzTravelWith||{},blockNote:S._rzBlockNote||{},charterDest:S._rzCharterDest||{}};
+  return {vans:S._pickupVans||[],collected:S._pickupCollected||{},locOverride:S._pickupLocOverride||{},timeOverride:S._pickupTimeOverride||{},drivers:S._pickupDrivers||{},extraDrivers:S._pickupExtraDrivers||[],spare:S._pickupSpare||{},order:S._pickupOrder||{},depOrder:S._rzDepOrder||[],manualBk:S._rzManualBk||[],paxMeta:S._rezdyPaxMeta||{},schedPilots:S._schedPilots||{},schedCoPilots:S._schedCoPilots||{},bookingAc:S._rzBookingAc||{},bookingWx:S._rzBookingWx||{},bookingCheckedIn:S._rzBookingCheckedIn||{},schedAttach:S._rzSchedAttach||{},checkin:S._rzCheckin||{},ack:S._pickupAck||{},bookingCancel:S._rzBookingCancel||{},noShow:S._rzNoShow||{},selfDriveOv:S._rzSelfDrive||{},bkNote:S._rzBkNote||{},flybackTime:S._rzFlybackTime||{},flybackEnd:S._rzFlybackEnd||{},depTimeOv:S._rzDepTimeOv||{},depEndOv:S._rzDepEndOv||{},plates:S._rzPlates||{},transMerge:S._rzTransMerge||{},wxCalls:S._rzWxCalls||{},bkCalled:S._rzBkCalled||{},travelWith:S._rzTravelWith||{},blockNote:S._rzBlockNote||{},charterDest:S._rzCharterDest||{},prefContact:S._rzPrefContact||{}};
 }
 function _pkApplyBlob(d){
   if(!d||typeof d!=='object')return;
@@ -17985,6 +17997,7 @@ function _pkApplyBlob(d){
   S._schedCoPilots=(d.schedCoPilots&&typeof d.schedCoPilots==='object')?d.schedCoPilots:{};
   S._rzBookingAc=(d.bookingAc&&typeof d.bookingAc==='object')?d.bookingAc:{};
   S._rzBookingWx=(d.bookingWx&&typeof d.bookingWx==='object')?d.bookingWx:{};
+  S._rzPrefContact=(d.prefContact&&typeof d.prefContact==='object')?d.prefContact:{};
   S._rzBookingCheckedIn=(d.bookingCheckedIn&&typeof d.bookingCheckedIn==='object')?d.bookingCheckedIn:{};
   S._rzSchedAttach=(d.schedAttach&&typeof d.schedAttach==='object')?d.schedAttach:{};
   S._rzCheckin=(d.checkin&&typeof d.checkin==='object')?d.checkin:{};

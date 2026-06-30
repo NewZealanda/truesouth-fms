@@ -1045,6 +1045,17 @@ window.rezdyBookingSetAc=function(order,ac){
 window.rezdyBookingAcPickToggle=function(order){order=String(order);S._rzBkAcPickOpen=S._rzBkAcPickOpen||{};if(S._rzBkAcPickOpen[order])delete S._rzBkAcPickOpen[order];else S._rzBkAcPickOpen[order]=true;render();};
 window.rezdyBookingToggleWx=function(order){order=String(order);S._rzBookingWx=S._rzBookingWx||{};if(S._rzBookingWx[order])delete S._rzBookingWx[order];else S._rzBookingWx[order]=true;if(window.pickupSave)window.pickupSave(true);render();};
 window.rezdyBookingToggleCheckedIn=function(order){order=String(order);S._rzBookingCheckedIn=S._rzBookingCheckedIn||{};if(S._rzBookingCheckedIn[order])delete S._rzBookingCheckedIn[order];else S._rzBookingCheckedIn[order]=true;if(window.pickupSave)window.pickupSave(true);render();};
+// Preferred contact method per booking ('email' | 'call' | 'whatsapp'). Tapping the active one clears it.
+function _rzPrefContact(order){return (S._rzPrefContact||{})[String(order)]||'';}
+window.rezdySetPrefContact=function(order,method){order=String(order);S._rzPrefContact=S._rzPrefContact||{};if(S._rzPrefContact[order]===method)delete S._rzPrefContact[order];else S._rzPrefContact[order]=method;if(window.pickupSave)window.pickupSave(true);render();};
+function _rzPrefContactPicker(order){
+  order=String(order);var cur=_rzPrefContact(order);
+  var opt=[['email','✉','Email'],['call','📞','Call'],['whatsapp','💬','WhatsApp']];
+  return '<div style="display:flex;align-items:center;gap:6px;margin-top:7px;flex-wrap:wrap"><span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;font-weight:700">Preferred</span>'+
+    opt.map(function(o){var on=cur===o[0];
+      return '<button onclick="event.stopPropagation();window.rezdySetPrefContact(\''+_rzEsc(order)+'\',\''+o[0]+'\')" title="'+o[2]+(on?' (preferred — tap to clear)':'')+'" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:14px;cursor:pointer;border:1.5px solid '+(on?'#3b82f6':'var(--border2)')+';background:'+(on?'rgba(59,130,246,.15)':'transparent')+';color:'+(on?'#60a5fa':'var(--text3)')+'">'+(on?'✓ ':'')+o[1]+' '+o[2]+'</button>';
+    }).join('')+'</div>';
+}
 // Click the "Checked in" pill: opens the check-in popup. If already checked in it opens in EDIT
 // mode (captured names/weights pre-filled) so passengers can be amended; the modal has an
 // Un-check button to revert. If not checked in, it's a fresh capture.
