@@ -350,7 +350,7 @@ window.bizSetPay=function(i,field,value){var p=_bizState();if(!p.payRates[i])ret
 window.bizAddPay=function(){_bizState().payRates.push({code:'NEW',cur:0,nw:0});_bizSave();render();};
 window.bizDelPay=function(i){var p=_bizState();p.payRates.splice(i,1);_bizSave();render();};
 window.bizPaxMonth=function(dir){var m=S._bizPaxMonth||_bizDefaultPaxMonth();var d=new Date(+m.slice(0,4),+m.slice(5,7)-1+dir,1);S._bizPaxMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');render();};
-window.bizSetPax=function(ds,field,value){var p=_bizState();p.paxData[ds]=p.paxData[ds]||{};if(value===''||value==null)delete p.paxData[ds][field];else p.paxData[ds][field]=Math.max(0,Math.round(+value)||0);if(p.paxData[ds].p26==null&&p.paxData[ds].p25==null)delete p.paxData[ds];_bizSave();if(typeof safeRender==='function')safeRender();};
+window.bizSetPax=function(ds,field,value){var p=_bizState();p.paxData[ds]=p.paxData[ds]||{};if(value===''||value==null)delete p.paxData[ds][field];else p.paxData[ds][field]=Math.max(0,Math.round(+value)||0);if(p.paxData[ds].p26==null&&p.paxData[ds].p25==null&&p.paxData[ds].m26==null)delete p.paxData[ds];_bizSave();if(typeof safeRender==='function')safeRender();};
 window.bizPaxView=function(v){S._bizPaxView=v;render();};
 function _bizDefaultPaxMonth(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
 // Monthly target = the FY budget's forecast pax for that month (budget whose 12-month range covers it).
@@ -400,7 +400,7 @@ window.bizPaxSyncRezdy=async function(ym,auto){
     var p=_bizState();
     // Wipe THIS month's 26-Pax first so a day that now has no bookings resets to blank — otherwise a
     // stale value from an earlier sync lingers on days that should read 0.
-    Object.keys(p.paxData).forEach(function(ds){if(ds.slice(0,7)===ym&&p.paxData[ds]){delete p.paxData[ds].p26;if(p.paxData[ds].p25==null)delete p.paxData[ds];}});
+    Object.keys(p.paxData).forEach(function(ds){if(ds.slice(0,7)===ym&&p.paxData[ds]){delete p.paxData[ds].p26;if(p.paxData[ds].p25==null&&p.paxData[ds].m26==null)delete p.paxData[ds];}});
     var n=0;
     Object.keys(byDate).forEach(function(ds){p.paxData[ds]=p.paxData[ds]||{};p.paxData[ds].p26=byDate[ds];n++;});
     p.paxSync=p.paxSync||{};p.paxSync[ym]=new Date().toISOString(); // shared last-updated stamp
@@ -607,8 +607,9 @@ function _bizHeatMinor(val,lo,hi){
   else{var u=(t-0.5)/0.5;r=L(245,34,u);g=L(158,197,u);b=L(11,94,u);}
   return {bg:'rgba('+r+','+g+','+b+',0.20)',fg:'rgb('+r+','+g+','+b+')'};
 }
-function _bizPaxMonths(){var p=_bizState();var o={};Object.keys(p.paxData).forEach(function(ds){if((+p.paxData[ds].p26)>0||(+p.paxData[ds].p25)>0)o[ds.slice(0,7)]=1;});return Object.keys(o).sort();}
-function _bizMonthTot(ym,field){var p=_bizState();var t=0;Object.keys(p.paxData).forEach(function(ds){if(ds.slice(0,7)===ym)t+=(+p.paxData[ds][field]||0);});return t;}
+function _bizPaxMonths(){var p=_bizState();var o={};Object.keys(p.paxData).forEach(function(ds){var r=p.paxData[ds];if((+r.p26)>0||(+r.p25)>0||(+r.m26)>0)o[ds.slice(0,7)]=1;});return Object.keys(o).sort();}
+// Month total. For the 26-Pax field a manual override (m26) wins over the auto/Rezdy value.
+function _bizMonthTot(ym,field){var p=_bizState();var t=0;Object.keys(p.paxData).forEach(function(ds){if(ds.slice(0,7)===ym){var r=p.paxData[ds];t+=((field==='p26'&&r.m26!=null&&r.m26!=='')?(+r.m26||0):(+r[field]||0));}});return t;}
 
 function _bizRenderPax(){
   var p=_bizState();var view=S._bizPaxView||'daily';
@@ -623,14 +624,15 @@ function _bizRenderPaxSummary(){
   var h='<div class="card"><div class="st">Pax summary — months gone by</div><p style="font-size:12px;color:var(--text3);margin:0 0 10px">Each month\'s pax vs the budget target and vs last year. Colour shows how we tracked.</p>';
   h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px">';
   h+='<thead><tr style="background:var(--card2)">'+['Month','Pax','Target','% target','Last Yr','vs Last Yr'].map(function(t,i){return '<th style="text-align:'+(i===0?'left':'right')+';padding:7px 10px;font-size:10px;color:var(--text3)">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
-  var tP=0,tT=0,tL=0;
+  var tP=0,tT=0,tL=0;var _curM=_bizDefaultPaxMonth();
   months.forEach(function(ym){
     var pax=_bizMonthTot(ym,'p26'),ly=_bizMonthTot(ym,'p25'),target=_bizPaxTarget(ym);
     tP+=pax;tT+=(target||0);tL+=ly;
     var pctT=target?pax/target:null;var vsLy=ly?pax/ly:null;
     var ct=pctT!=null?_bizHeat(pctT,0.7,1.1):null;var cl=vsLy!=null?_bizHeatMinor(vsLy,0.7,1.3):null; // vs-last-year (compare) → minor scale
-    h+='<tr style="border-top:1px solid var(--border2)">'+
-      '<td style="padding:5px 10px;font-weight:700;white-space:nowrap">'+_bizMonLabel(ym+'-01')+'</td>'+
+    var _isCur=(ym===_curM);
+    h+='<tr style="border-top:1px solid var(--border2)'+(_isCur?';background:rgba(124,58,237,.14);box-shadow:inset 3px 0 0 #7c3aed':'')+'">'+
+      '<td style="padding:5px 10px;font-weight:700;white-space:nowrap">'+_bizMonLabel(ym+'-01')+(_isCur?' <span style="font-size:8.5px;color:#a78bfa;font-weight:800">THIS MONTH</span>':'')+'</td>'+
       '<td style="padding:5px 10px;text-align:right;font-weight:700">'+pax+'</td>'+
       '<td style="padding:5px 10px;text-align:right;color:var(--text3)">'+(target!=null?target:'—')+'</td>'+
       '<td style="padding:5px 10px;text-align:right;font-weight:700'+(ct?';background:'+ct.bg+';color:'+ct.fg:'') +'">'+(pctT!=null?Math.round(pctT*100)+'%':'—')+'</td>'+
@@ -665,19 +667,22 @@ function _bizRenderPaxDaily(){
       '<button class="btn btn-ghost" style="font-size:12px;border-color:rgba(96,165,250,.5);color:#60a5fa" onclick="window.bizPaxSyncRezdy(\''+ym+'\')" title="Pull 26 Pax from Rezdy seats sold for this month (saved for everyone)">⟳ Sync seats sold</button></div></div>';
   // Headline figures (at the top): confirmed-to-today vs target.
   var _td=(ym===curMonth)?today.getDate():(ym<curMonth?daysIn:0);   // "today" within this month
-  var accumTd=0;for(var _dd=1;_dd<=_td;_dd++){var _r=p.paxData[ym+'-'+String(_dd).padStart(2,'0')];if(_r)accumTd+=(+_r.p26||0);}
+  var accumTd=0;for(var _dd=1;_dd<=_td;_dd++){var _r=p.paxData[ym+'-'+String(_dd).padStart(2,'0')];if(_r)accumTd+=((_r.m26!=null&&_r.m26!=='')?(+_r.m26||0):(+_r.p26||0));}
   var daysLeft=Math.max(0,daysIn-_td);
   var paxToTarget=totT?Math.max(0,totT-accumTd):null;
   var paxPerDay=(paxToTarget!=null&&daysLeft>0)?Math.ceil(paxToTarget/daysLeft):(paxToTarget||0);
   function fig(lbl,val,col){return '<div style="flex:1 1 120px;border:1px solid var(--border2);border-top:3px solid '+(col||'#7c3aed')+';border-radius:9px;padding:10px 12px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700">'+lbl+'</div><div style="font-size:19px;font-weight:800;margin-top:2px">'+val+'</div></div>';}
+  var monthEst=_bizMonthTot(ym,'p26');   // whole-month total incl. forward bookings = Accum on the last day
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
-    fig('Pax/day needed',paxPerDay,'#60a5fa')+
-    fig('Pax to target',(paxToTarget!=null?paxToTarget:'—'),'#f59e0b')+
-    fig('Days left',daysLeft,'#ef4444')+
+    fig('Pax to date',accumTd,'#a78bfa')+
+    fig('Month estimate',monthEst,'#06b6d4')+
     fig('Target',(target!=null?target:'—'),'#22c55e')+
+    fig('Pax to target',(paxToTarget!=null?paxToTarget:'—'),'#f59e0b')+
+    fig('Pax/day needed',paxPerDay,'#60a5fa')+
+    fig('Days left',daysLeft,'#ef4444')+
     '</div>';
   // Fixed-width table (natural width from the colgroup) so headers, inputs and computed cells line up.
-  var W=[78,62,60,72,62,64,72]; // Date,26 Pax,Accum,Tracking,Last Yr,Accum LY,Compare
+  var W=[78,86,60,72,62,64,72]; // Date,26 Pax,Accum,Tracking,Last Yr,Accum LY,Compare
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;table-layout:fixed;width:'+W.reduce(function(a,b){return a+b;},0)+'px">';
   h+='<colgroup>'+W.map(function(w){return '<col style="width:'+w+'px">';}).join('')+'</colgroup>';
   h+='<thead><tr style="background:var(--card2)">'+['Date','26 Pax','Accum','Tracking','Last Yr','Accum LY','Compare'].map(function(t,i){return '<th style="text-align:'+(i===0?'left':'center')+';padding:6px 4px;font-size:9.5px;color:var(--text3);font-weight:700">'+t+'</th>';}).join('')+'</tr></thead><tbody>';
@@ -685,7 +690,8 @@ function _bizRenderPaxDaily(){
   var _tdy=(ym===curMonth)?today.getDate():(ym<curMonth?daysIn:0); // "today" within this month (0 = whole month ahead, daysIn = all past)
   for(var d=1;d<=daysIn;d++){
     var ds=ym+'-'+String(d).padStart(2,'0');var row=p.paxData[ds]||{};
-    var p26=(+row.p26||0);
+    var _man=(row.m26!=null&&row.m26!=='');                 // manual override set for this day
+    var p26=_man?(+row.m26||0):(+row.p26||0);               // manual wins over the auto/Rezdy value
     // Last Yr = the SAME calendar date one year earlier (its 26-Pax actual). Falls back to a stored
     // p25 (the earliest season, which has no prior-year 26-Pax in the data). This lines last year up
     // to the exact date and auto-fills July + months ahead.
@@ -705,7 +711,10 @@ function _bizRenderPaxDaily(){
     var rowStyle='border-top:1px solid var(--border2);'+(isToday?'background:rgba(124,58,237,.14);box-shadow:inset 3px 0 0 #7c3aed;':(isFuture?'opacity:.45;':''));
     h+='<tr style="'+rowStyle+'">'+
       '<td style="padding:3px 4px;white-space:nowrap;font-size:11px"><b>'+d+'</b> <span style="color:var(--text3)">'+dow+'</span>'+(isToday?' <span style="font-size:8.5px;color:#a78bfa;font-weight:800">TODAY</span>':'')+'</td>'+
-      '<td style="padding:2px 3px"><input type="number" value="'+(row.p26!=null?row.p26:'')+'" onchange="window.bizSetPax(\''+ds+'\',\'p26\',this.value)" style="'+_inS+'"></td>'+
+      '<td style="padding:2px 3px"><div style="display:flex;align-items:center;gap:2px">'+
+        '<input type="number" value="'+(_man?row.m26:(row.p26!=null?row.p26:''))+'" onchange="window.bizSetPax(\''+ds+'\',\'m26\',this.value)" title="'+(_man?'Manually set — overrides the auto/Rezdy number. ↺ reverts to auto.':'Auto (Rezdy seats sold). Type a number to override; it then stays.')+'" style="'+_inS+(_man?';border-color:#a78bfa;background:rgba(167,139,250,.14);font-weight:700':'')+'">'+
+        (_man?'<button onclick="window.bizSetPax(\''+ds+'\',\'m26\',\'\')" title="Reset to auto" style="flex-shrink:0;width:17px;height:22px;border:none;background:none;color:#a78bfa;cursor:pointer;font-size:13px;line-height:1;padding:0">↺</button>':'')+
+      '</div></td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700">'+(accum||'')+'</td>'+
       '<td style="padding:3px 4px;text-align:center;font-weight:700'+(ht?';background:'+ht.bg+';color:'+ht.fg:';color:var(--text3)')+'">'+(tracking!=null?(tracking>=0?'+':'')+(tracking*100).toFixed(1)+'%':'—')+'</td>'+
       '<td style="padding:3px 4px;text-align:center;color:var(--text2)">'+(ly||'')+'</td>'+
@@ -714,7 +723,7 @@ function _bizRenderPaxDaily(){
       '</tr>';
   }
   h+='</tbody></table></div>';
-  h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px">Today is highlighted; <span style="opacity:.55">dimmed days are still to come — forward bookings, not yet confirmed flown</span>. Target comes from the FY budget for this month. Tracking = % of target reached − % of the month elapsed (green = ahead of pace). Compare = this year vs last year. "Sync seats sold" pulls 26 Pax from Rezdy bookings.</div>';
+  h+='<div style="font-size:11px;color:var(--text3);padding:6px 2px">Today is highlighted; <span style="opacity:.55">dimmed days are still to come — forward bookings, not yet confirmed flown</span>. <b>26 Pax</b> auto-fills from Rezdy on Sync; type a number to override a day (it goes <span style="color:#a78bfa;font-weight:700">purple</span> and stays even after re-syncing) and tap <span style="color:#a78bfa;font-weight:700">↺</span> to revert to auto. <b>Pax to date</b> = confirmed through today; <b>Month estimate</b> = whole-month total incl. forward bookings. Target comes from the FY budget. Tracking = % of target reached − % of the month elapsed (green = ahead). Compare = this year vs last year.</div>';
   return h;
 }
 
