@@ -901,7 +901,7 @@ function renderDrawer(){
       var _mn=function(lbl,id){return _subBtn(lbl,sec==='maintenance'&&msub===id,"S._drawerOpen=false;S.maintTab='"+id+"';window.setTab('maintenance')");};
       h+=_mn('Overview','overview');
       h+=_mn('Logs','log');
-      h+=_mn('W&B Settings','aircraft');
+      if(_canWbSettings())h+=_mn('W&B Settings','aircraft');
       // Observations + Bookings live in the Logs document hub now.
       if(hasRolePerm('maint_bookings'))h+=_mn('Estimator','estimator');
       h+=_mn('Search','search');
@@ -998,11 +998,15 @@ function renderSettingsSubTabs(){
 var _MAINT_TAB_LBL={overview:'Overview',log:'Logs',aircraft:'W&B Settings',observations:'Observations',bookings:'Bookings',estimator:'Estimator',search:'Search'};
 // Ordered maintenance tier-2 tab ids (permission-aware). Single source of truth for the tab bar
 // AND the ←/→ arrow-key cycling.
+// W&B Settings (aircraft weight & balance specs) — restricted to admin / superadmin / maintenance role only.
+function _canWbSettings(){var r=(S.user&&S.user.role)||'';return !!(S.user&&(S.user.superAdmin||r==='superadmin'||r==='admin'||r==='maint'||r==='maintenance'));}
 function _maintTabIds(){
   // Observations + Bookings moved INTO the Logs document hub (v26.47) — no longer their own tabs.
-  return hasRolePerm('maint_bookings')
-    ?['overview','log','aircraft','estimator','search']
-    :['overview','log','aircraft','search'];
+  var ids=['overview','log'];
+  if(_canWbSettings())ids.push('aircraft');                 // W&B Settings: admin/super/maintenance only
+  if(hasRolePerm('maint_bookings'))ids.push('estimator');
+  ids.push('search');
+  return ids;
 }
 // Unified 2nd-tier segmented tab strip. tabs:[{lbl,on,onclick}]. Same look everywhere.
 function _tier2(tabs){if(!tabs||!tabs.length)return '';return '<div class="t2bar">'+tabs.map(function(t){return '<button tabindex="-1" class="t2tab'+(t.on?' on':'')+'" onclick="'+t.onclick+'">'+t.lbl+'</button>';}).join('')+'</div>';}

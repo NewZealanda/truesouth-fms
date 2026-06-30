@@ -15,7 +15,7 @@ function renderMaintenance(){
 
   if(sub==='overview') return renderMaintOverview();
   if(sub==='log') return renderMaintLog();
-  if(sub==='aircraft') return renderMaintAircraftData();
+  if(sub==='aircraft'){ if(typeof _canWbSettings==='function'&&!_canWbSettings()){S.maintTab='overview';return renderMaintOverview();} return renderMaintAircraftData(); }
   if(sub==='observations') return renderMaintObservations();
 
   if(sub==='bookings'&&isAdmin) return renderMaintBookings();

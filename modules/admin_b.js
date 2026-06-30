@@ -1514,39 +1514,44 @@ window.saveRolePerms=async function(silent){
 function renderAdminPerms(){
   S._permsPageTs=Date.now();   // mark the grid as actively on screen (blocks reload clobber)
   // Permissions grouped by area so the (wide) grid is easy to scan and find things in.
+  // Grid mirrors the redesigned menu: Operations (incl. Weather/Monitoring/Scheduling), Maintenance,
+  // Crew (pilot tools + Roster & Leave), Company (Records/Notices/Visitors/Biz Plan), Admin & System.
+  // Note: charter/calendar/ground/resources/weather all ride the single 'operations' perm.
   var PERM_GROUPS=[
     {cat:'Operations', col:'#2563eb', perms:[
-      {k:'operations',    lbl:'Ops',        tip:'Combined operational access: Bookings, Seatmap, Loadsheets, Charter, Calendar, Ground/Transport, Resources board & Weather calls'},
-      {k:'sign_loadsheet',lbl:'Sign',       tip:'Sign off on loadsheets as PIC'}
+      {k:'operations',    lbl:'Ops',        tip:'Operations — Bookings, Seatmap, Loadsheets, Calendar, Charter, Ground/Transport, Weather & Scheduling'},
+      {k:'sign_loadsheet',lbl:'Sign',       tip:'Sign off on loadsheets as PIC'},
+      {k:'monitoring',    lbl:'Monitoring', tip:'Live flight-following / Monitoring board (under Operations). On by default.'},
+      {k:'vehicle_prestart',lbl:'Prestart', tip:'Complete vehicle prestart checks (Ground). Defaults to the role\'s Operations access.'}
     ]},
     {cat:'Maintenance', col:'#a78bfa', perms:[
-      {k:'maintenance',   lbl:'Maint',      tip:'Access to the maintenance section'},
-      {k:'maint_bookings',lbl:'Bookings',   tip:'Manage maintenance bookings'}
+      {k:'maintenance',   lbl:'Maint',      tip:'Access the Maintenance section (Logs, Work Orders, Overview). W&B Settings stays admin/maintenance-only.'},
+      {k:'maint_bookings',lbl:'Estimator',  tip:'Maintenance estimator + bookings'}
     ]},
-    {cat:'Roster & Leave', col:'#f59e0b', perms:[
-      {k:'roster_leave',  lbl:'Roster & Leave', tip:'View the roster and submit/view own leave requests'},
-      {k:'roster_edit',   lbl:'Roster Edit',    tip:'Edit the roster and build patterns (otherwise view-only)'},
-      {k:'leave_approve', lbl:'Approvals',      tip:'Approve or decline leave requests from staff'},
-      {k:'reports_to',    lbl:'Reports to',     tip:'Access the Reports-to org chart (set who reports to whom) under Roster'},
-      {k:'pay_week',      lbl:'Pay Week',       tip:'See the pay-week (Thu–Wed) roster view'}
-    ]},
-    {cat:'Pilot', col:'#22c55e', perms:[
-      {k:'pilotbag',      lbl:'Pilot Bag',   tip:'Access the Pilot Bag section (Flight Record, Logbooks, Flight & Duty)'},
-      {k:'flightduty',    lbl:'F&D',         tip:'Access Flight & Duty — own record + team summary'},
+    {cat:'Crew', col:'#22c55e', perms:[
+      {k:'pilotbag',      lbl:'Pilot Bag',   tip:'Pilot tools in the Crew section — Flight Record, Logbooks, Flight & Duty'},
+      {k:'flightduty',    lbl:'F&D',         tip:'Flight & Duty — own record + team summary'},
       {k:'flightduty_manage',lbl:'F&D Mgr',  tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'},
-      {k:'flightrecord',  lbl:'Flt Record',  tip:'Access the Flight Record (log flights, aircraft records)'},
-      {k:'flightrecord_manage',lbl:'Flt Rec Mgr',tip:'Flight Record statistics + view/manage all pilots\' logbooks'},
-      {k:'data_recording',lbl:'Data Rec',  tip:'Access the Data Recording section — aircraft records, statistics & the full records table'}
+      {k:'flightrecord',  lbl:'Flt Rec',     tip:'Flight Record — log flights, aircraft records'},
+      {k:'flightrecord_manage',lbl:'Flt Rec Mgr',tip:'Flight Record statistics + view/manage all logbooks'},
+      {k:'roster_leave',  lbl:'Roster & Leave', tip:'View the roster and submit/view own leave requests'},
+      {k:'roster_edit',   lbl:'Roster Edit', tip:'Edit the roster and build patterns (otherwise view-only)'},
+      {k:'leave_approve', lbl:'Approvals',   tip:'Approve or decline leave requests from staff'},
+      {k:'reports_to',    lbl:'Reports to',  tip:'Access the Reports-to org chart (Crew ▸ Roster)'},
+      {k:'pay_week',      lbl:'Pay Week',    tip:'See the pay-week (Thu–Wed) roster view'}
+    ]},
+    {cat:'Company', col:'#f59e0b', perms:[
+      {k:'data_recording',lbl:'Records',     tip:'Records — aircraft records, statistics & the full records table'},
+      {k:'ops_notices_manage',lbl:'Notices', tip:'Create & issue Operations Notices and see read receipts (everyone can read notices applicable to them)'},
+      {k:'visitors',      lbl:'Visitors',    tip:'Visitor sign-in board. On by default — turn off to hide for a role.'},
+      {k:'businessplan',  lbl:'Biz Plan',    tip:'View the confidential TSF Business Plan (also password-gated)'}
     ]},
     {cat:'Admin & System', col:'#ef4444', perms:[
       {k:'settings',      lbl:'Settings',    tip:'Access the Settings section (sub-pages still gated individually)'},
-      {k:'ops_notices_manage',lbl:'Ops Notices',tip:'Create & issue Operations Notices and see read receipts (everyone can read notices applicable to them)'},
-      {k:'admin_crew',    lbl:'Crew',        tip:'View and edit crew profiles and endorsements'},
-      {k:'businessplan',  lbl:'Biz Plan',    tip:'View the confidential TSF Business Plan'}
+      {k:'admin_crew',    lbl:'People',      tip:'View and edit people/crew profiles and endorsements'}
     ]},
     {cat:'Coming soon', col:'#64748b', perms:[
       {k:'sms',           lbl:'SMS',         tip:'Safety Management System (placeholder — coming soon)'},
-      {k:'vehicle_prestart',lbl:'Vehicle Prestart',tip:'Daily vehicle prestart checks (placeholder — coming soon)'},
       {k:'training_mod',  lbl:'Training',    tip:'Training records module (placeholder — coming soon)'}
     ]}
   ];
@@ -1589,9 +1594,13 @@ function renderAdminPerms(){
         var r1=over['roster']!==undefined?over['roster']:base['roster']||false;
         var r2=over['leave']!==undefined?over['leave']:base['leave']||false;
         eff=r1||r2;
-      } else if(col.k==='settings'||col.k==='pilotbag'){
+      } else if(col.k==='settings'||col.k==='pilotbag'||col.k==='monitoring'||col.k==='visitors'||col.k==='ops_notices'){
         // Unlocked by default for every role — show ticked unless explicitly turned off.
         eff=over[col.k]!==undefined?over[col.k]:(base[col.k]!==undefined?base[col.k]:true);
+      } else if(col.k==='vehicle_prestart'){
+        // Defaults to the role's Operations access when not explicitly set.
+        var _op=over['operations']!==undefined?over['operations']:base['operations']||false;
+        eff=over[col.k]!==undefined?over[col.k]:_op;
       } else {
         eff=over[col.k]!==undefined?over[col.k]:base[col.k]||false;
       }
