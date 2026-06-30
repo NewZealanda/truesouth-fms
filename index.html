@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.69';
+const APP_VER='v28.70';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -17145,7 +17145,8 @@ function _rzBookingCard(b){
   if(!cancelled){
     h+=_rzCheckBtn('Wx',wx,'window.rezdyBookingToggleWx(\''+oE+'\')','Weather check called by passenger');
     if(wxAuto)h+='<span title="Confirmed by the customer via their weather link" style="display:inline-flex;align-items:center;font-size:9px;font-weight:800;color:#3b82f6;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);border-radius:10px;padding:1px 6px;margin-left:-3px">AUTO</span>';
-    h+='<button onclick="event.stopPropagation();window.wxLinkOpen(\''+oE+'\')" title="Customer weather link — copy, status &amp; history" style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid var(--border2);background:transparent;color:'+((typeof _wxLinkExists==='function'&&_wxLinkExists(ono))?'#60a5fa':'var(--text3)')+'">🔗 Wx link</button>';
+    var _wxEx=(typeof _wxLinkExists==='function')&&_wxLinkExists(ono);
+    h+='<button onclick="event.stopPropagation();window.wxLinkOpen(\''+oE+'\')" title="Customer weather link — copy, status &amp; history" style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid '+(wxAuto?'#22c55e':(_wxEx?'#60a5fa':'var(--border2)'))+';background:'+(wxAuto?'rgba(34,197,94,.12)':'transparent')+';color:'+(wxAuto?'#16a34a':(_wxEx?'#60a5fa':'var(--text3)'))+'">🔗 Wx link</button>';
     h+=_rzCheckBtn('Checked in',ci,'window.rezdyCheckinClick(\''+oE+'\')','Check in: enter names + actual weights');
     // No-show toggle (red when on) — shows red + excluded from the seatmap push.
     h+='<button onclick="window.rezdyBookingNoShow(\''+oE+'\')" title="No-show — shows red, excluded from pickups AND the seatmap push, and notifies the desk" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;white-space:nowrap;border:1.5px solid '+(noShow?'#ef4444':'var(--border2)')+';background:'+(noShow?'rgba(239,68,68,.15)':'transparent')+';color:'+(noShow?'#f87171':'var(--text3)')+'">'+(noShow?'✕':'○')+' No-show</button>';
