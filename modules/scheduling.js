@@ -820,7 +820,12 @@ function _schedEnsureAuto(){
         dp.departures.forEach(function(d){
           var depM=_schedMinOf(d.time)||0,retM=depM+(_schedDepDurMin(d)||270);
           d.aircraft.forEach(function(a){if(depM<=rm&&rm<retM)busy[a.ac]=1;});   // tied up at the flyback time
-          if(d.dest!==FB_DEST||Math.abs(retM-rm)>120)return;
+          // The flyback pax board at Milford at rm and land in QN ~one return-leg later, so a flight can only
+          // carry them if it's STILL returning from Milford then — its QN-arrival (retM) must be AFTER the
+          // flyback time by ~the return leg. A flight already back in QN before rm (e.g. a morning FCF down by
+          // 13:45) cannot carry a ~15:15 flyback; the old ±2h window wrongly folded it into that early block.
+          var _FB_RET_LEG=40;   // Milford→QN return-leg estimate (matches _rzFbArrivalHHMM)
+          if(d.dest!==FB_DEST||retM<rm+_FB_RET_LEG||retM-rm>170)return;
           var orders=byKey[d.key]||{};
           d.aircraft.forEach(function(a){var pax=0;Object.keys(orders).forEach(function(o){if(map[o]===a.ac)pax+=orders[o];});
             // ride target must be the CALENDAR group key (ac|start|dest) so the attach folds correctly.
