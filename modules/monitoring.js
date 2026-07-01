@@ -212,6 +212,38 @@ function _avGroupSeats(sessions,date,group){
   });
   return seats.length?Math.min.apply(null,seats):null;
 }
+// Per-PRODUCT columns grouped under headings — shows each product's own seats (e.g. Mt Cook can have seats
+// while its guided Heli Hike is full). Milford is by departure (FCF/FLB share, so one column per slot).
+var _AV_COLGROUPS=[
+  {group:'Mt Cook',time:'08:00',cols:[
+    {label:'Expedition',name:'Expedition Aoraki/Mt. Cook',time:'08:00'},
+    {label:'Heli Hike',name:'Glacier Helihike Tasman Glacier',time:'08:00'},
+    {label:'Heli Ski',name:'Mount Cook Heliski',time:'08:00'},
+    {label:'Gl Landing',name:'Mt Cook Helicopter Glacier Landing',time:'08:00'},
+    {label:'Ski Tasman',name:'Ski the Tasman Glacier',time:'08:00'}
+  ]},
+  {group:'Milford',time:'',cols:[
+    {label:'09:30',name:'Milford Sound Fly Cruise Fly',time:'09:30'},
+    {label:'12:00',name:'Milford Sound Fly Cruise Fly',time:'12:00'}
+  ]},
+  {group:'Franz Josef',time:'08:30',cols:[
+    {label:'Gl Landing',name:'Franz Josef Helicopter Glacier Landing',time:'08:30'},
+    {label:'Heli Hike',name:'Glacier Helihike Franz Josef',time:'08:30'},
+    {label:'Scenic',name:'Franz Josef Scenic Flight',time:'08:30'}
+  ]}
+];
+// Seats for ONE product at ONE departure time on a date (null = no departure).
+function _avSeatsProd(sessions,date,name,time){
+  var pn=String(name||'').trim().toLowerCase(),found=null;
+  (sessions||[]).forEach(function(s){
+    if(String(s.startTimeLocal||'').slice(0,10)!==date)return;
+    if(String(s.startTimeLocal||'').slice(11,16)!==time)return;
+    if(String(s.productName||'').trim().toLowerCase()!==pn)return;
+    if(+s.seats>=900)return;
+    if(s.seatsAvailable!=null)found=+s.seatsAvailable;
+  });
+  return found;
+}
 function renderAvailabilityView(){
   var ym=_avMonthStr();
   if((!S._avData||S._avData.ym!==ym)&&!S._avLoading){S._avLoading=true;setTimeout(window.loadAvailability,0);}
@@ -232,18 +264,21 @@ function renderAvailabilityView(){
   var dayset={};sess.forEach(function(s){var dt=String(s.startTimeLocal||'').slice(0,10);if(/^\d{4}-\d{2}-\d{2}$/.test(dt)&&dt.slice(0,7)===ym&&+s.seats<900)dayset[dt]=1;});
   var days=Object.keys(dayset).sort();
   if(!days.length)return h+'<p style="color:var(--text3)">No departures found for '+_avEsc(mLabel)+'.</p></div>';
-  var _cell=function(n){var col=n==null?'var(--text3)':n<=0?'#dc2626':n<=2?'#b45309':'#16a34a';var bg=n==null?'transparent':n<=0?'rgba(239,68,68,.10)':n<=2?'rgba(217,119,6,.10)':'rgba(34,197,94,.10)';return '<td style="text-align:center;padding:7px 8px;font-weight:800;color:'+col+';background:'+bg+'">'+(n==null?'—':n)+'</td>';};
-  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:440px">'+
-    '<thead><tr style="color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em">'+
-      '<th style="text-align:left;padding:7px 8px;position:sticky;left:0;background:var(--card);z-index:1">Day</th>'+
-      _AV_GROUPS.map(function(g){return '<th style="text-align:center;padding:7px 8px;white-space:nowrap">'+_avEsc(g.label)+'<div style="font-weight:400;font-size:10px;text-transform:none">'+_avEsc(g.time)+'</div></th>';}).join('')+
-    '</tr></thead><tbody>';
+  var _cell=function(n,firstInGroup){var col=n==null?'var(--text3)':n<=0?'#dc2626':n<=2?'#b45309':'#16a34a';var bg=n==null?'transparent':n<=0?'rgba(239,68,68,.10)':n<=2?'rgba(217,119,6,.10)':'rgba(34,197,94,.10)';return '<td style="text-align:center;padding:7px 6px;font-weight:800;color:'+col+';background:'+bg+(firstInGroup?';border-left:2px solid var(--border2)':'')+'">'+(n==null?'—':n)+'</td>';};
+  var _totCols=_AV_COLGROUPS.reduce(function(x,g){return x+g.cols.length;},0);
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:'+(120+_totCols*54)+'px">'+
+    '<thead>'+
+      '<tr style="color:var(--text2)"><th rowspan="2" style="text-align:left;padding:7px 8px;position:sticky;left:0;background:var(--card);z-index:2;vertical-align:bottom;font-size:11px;text-transform:uppercase;letter-spacing:.04em">Day</th>'+
+        _AV_COLGROUPS.map(function(g){return '<th colspan="'+g.cols.length+'" style="text-align:center;padding:6px;font-weight:800;font-size:12px;border-left:2px solid var(--border2);border-bottom:1px solid var(--border2)">'+_avEsc(g.group)+(g.time?' <span style="font-weight:400;color:var(--text3)">'+_avEsc(g.time)+'</span>':'')+'</th>';}).join('')+'</tr>'+
+      '<tr style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.03em">'+
+        _AV_COLGROUPS.map(function(g){return g.cols.map(function(c,ci){return '<th style="text-align:center;padding:5px 6px;white-space:nowrap;font-weight:600'+(ci===0?';border-left:2px solid var(--border2)':'')+'">'+_avEsc(c.label)+'</th>';}).join('');}).join('')+'</tr>'+
+    '</thead><tbody>';
   days.forEach(function(dt){
     var dlab;try{dlab=new Date(dt+'T00:00:00').toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'});}catch(e){dlab=dt;}
     h+='<tr style="border-top:1px solid var(--border2)"><td style="padding:7px 8px;white-space:nowrap;font-weight:700;position:sticky;left:0;background:var(--card)">'+_avEsc(dlab)+'</td>'+
-      _AV_GROUPS.map(function(g){return _cell(_avGroupSeats(sess,dt,g));}).join('')+'</tr>';
+      _AV_COLGROUPS.map(function(g){return g.cols.map(function(c,ci){return _cell(_avSeatsProd(sess,dt,c.name,c.time),ci===0);}).join('');}).join('')+'</tr>';
   });
-  h+='</tbody></table></div><p style="font-size:11px;color:var(--text3);margin-top:8px">Seats remaining (fewest across each shared group). “—” = no departure that day · green &gt;2 · amber ≤2 · red sold out.</p>';
+  h+='</tbody></table></div><p style="font-size:11px;color:var(--text3);margin-top:8px">Live seats remaining per product (Milford by departure). “—” = no departure that day · green &gt;2 · amber ≤2 · red sold out.</p>';
   return h+'</div>';
 }
 function renderMonitoring(){
