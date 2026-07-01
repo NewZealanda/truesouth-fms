@@ -713,6 +713,23 @@ function _rzDateRow(sub){
   if(!S.rezdyDate)S.rezdyDate=_rzInitDate();
   var _isToday=S.rezdyDate===_rzToday();
   var noRefresh=(sub==='loadsheets'||sub==='rloadsheets');
+  // MOBILE (iPhone): the pill goes on top and the day buttons sit in a full row UNDERNEATH it — inline
+  // beside the pill they were tucked up under the notch/header and got clipped. Sticky offset by the
+  // safe-area inset so the row never hides behind the status bar.
+  if(S.mobileView){
+    return '<div class="card" style="display:flex;flex-direction:column;gap:8px;position:sticky;top:env(safe-area-inset-top);z-index:50;box-shadow:0 3px 10px rgba(0,0,0,.18)">'+
+      '<div style="position:relative;width:100%">'+
+        '<span style="display:block;text-align:center;font-size:14px;font-weight:700;color:var(--text1);padding:9px 8px;border-radius:8px;background:var(--card2);border:1px solid var(--border2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📅 '+_rzDowLabel(S.rezdyDate)+'</span>'+
+        '<input type="date" value="'+_rzEsc(S.rezdyDate)+'" onchange="window.rezdySetDate(this.value)" onclick="try{this.showPicker&&this.showPicker()}catch(e){}" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;border:none;cursor:pointer">'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<button class="btn btn-ghost" style="font-size:15px;padding:9px 16px;line-height:1;flex:1" title="Previous day" onclick="window.rezdyShiftDate(-1)">◁ Prev</button>'+
+        '<button class="btn btn-ghost" style="font-size:13px;padding:9px 14px;line-height:1'+(_isToday?';opacity:.45':'')+'" title="Jump to today" onclick="window.rezdySetDate(\''+_rzToday()+'\')">Today</button>'+
+        '<button class="btn btn-ghost" style="font-size:15px;padding:9px 16px;line-height:1;flex:1" title="Next day" onclick="window.rezdyShiftDate(1)">Next ▷</button>'+
+        (noRefresh?'':'<button class="btn btn-ghost" style="font-size:15px;padding:9px 12px;line-height:1'+(S._rzSyncing?';opacity:.6':'')+'" title="Refresh from Rezdy" onclick="window.rezdyRefresh()">'+(S._rzSyncing?'⟳':'⟳')+'</button>')+
+      '</div>'+
+    '</div>';
+  }
   // Sticky so the day arrows stay on screen while scrolling; the date label is a FIXED width and
   // centred so ◁ / ▷ never shift between clicks — you can tap the same spot to keep paging days.
   return '<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:50;box-shadow:0 3px 10px rgba(0,0,0,.18)">'+
@@ -1165,6 +1182,16 @@ function _rzBookingLunches(b){
   return out;
 }
 function _rzBookingHasLunch(b){return _rzBookingLunches(b).length>0;}
+// Mount Aspiring add-on — a booking's flight can add an Aspiring loop (rides as a Rezdy "extra"), so the
+// desk + pilot need to see it. Detected like lunches, flagged with an "ASP" pill + shown on the calendar.
+function _rzBookingAspiring(b){
+  var out=[];
+  ((b&&b.items)||[]).forEach(function(it){((it&&it.extras)||[]).forEach(function(e){
+    if(e&&e.name&&/aspiring/i.test(String(e.name)))out.push(e);
+  });});
+  return out;
+}
+function _rzBookingHasAspiring(b){return _rzBookingAspiring(b).length>0;}
 // Self-drive numberplate(s) captured at check-in (we hand-enter these into a separate system later).
 // Stored per order as {plate, done}; persisted in the pickup blob (field 'plates').
 function _rzPlate(order){return (S._rzPlates||{})[String(order||'')]||null;}
@@ -1209,6 +1236,14 @@ function _rzCheckinModal(){
     h+='<div style="background:rgba(245,158,11,.15);border:1px solid #f59e0b;border-radius:9px;padding:11px 13px;margin:0 0 12px">'+
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:22px">🍱</span><div style="font-size:13.5px;font-weight:800;color:#fbbf24">Lunch ordered</div></div>'+
       '<div style="display:flex;flex-direction:column;gap:5px">'+_ciLun.map(function(e){var q=parseInt(e.qty,10)||1;return '<div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700;color:#fde68a"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;background:#f59e0b;color:#3a2c06;font-weight:900;border-radius:6px;font-size:13px">×'+q+'</span>'+_rzEsc(e.name)+'</div>';}).join('')+'</div>'+
+    '</div>';
+  }
+  // Mount Aspiring add-on — flagged prominently so the desk briefs the passenger + the pilot flies it.
+  var _ciAsp=_rzBookingAspiring(b);
+  if(_ciAsp.length){
+    h+='<div style="background:rgba(14,165,233,.14);border:1px solid #0ea5e9;border-radius:9px;padding:11px 13px;margin:0 0 12px">'+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:22px">🏔</span><div style="font-size:13.5px;font-weight:800;color:#38bdf8">Mount Aspiring add-on</div></div>'+
+      '<div style="display:flex;flex-direction:column;gap:5px">'+_ciAsp.map(function(e){var q=parseInt(e.qty,10)||1;return '<div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700;color:#bae6fd"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;background:#0ea5e9;color:#04263a;font-weight:900;border-radius:6px;font-size:13px">×'+q+'</span>'+_rzEsc(e.name)+'</div>';}).join('')+'</div>'+
     '</div>';
   }
   // Self-drive numberplate(s) — recorded here, hand-entered into the separate system later.
@@ -2400,6 +2435,7 @@ function _rzBookingCard(b){
          '<span style="font-size:15px;font-weight:800;color:var(--text1)">'+_rzEsc(b.customerName||ono)+'</span>'+
          ((typeof _rzTwBadge==='function')?_rzTwBadge(ono):'')+
          (_rzBookingHasLunch(b)?'<span title="Lunch / meal ordered" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:#f59e0b;color:#3a2c06;font-weight:900;font-size:11px;border-radius:4px;flex-shrink:0;line-height:1">L</span>':'')+
+         (_rzBookingHasAspiring(b)?'<span title="Mount Aspiring add-on" style="display:inline-flex;align-items:center;justify-content:center;height:18px;padding:0 5px;background:#0ea5e9;color:#04263a;font-weight:900;font-size:10px;border-radius:4px;flex-shrink:0;line-height:1;letter-spacing:.02em">ASP</span>':'')+
          (function(){var _pl=_rzPlate(ono);if(!_pl||!_pl.plate)return '';var _pt='Numberplate '+_pl.plate+(_pl.done?' (entered into system)':' (enter into the separate system)');return '<span title="'+_rzEsc(_pt)+'" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:'+(_pl.done?'#22c55e':'#3b82f6')+';color:#fff;font-weight:900;font-size:11px;border-radius:4px;flex-shrink:0;line-height:1">P</span>';})()+
          '<span style="font-size:11px;color:var(--text3)">#'+_rzEsc(ono)+'</span>'+
        '</div>'+

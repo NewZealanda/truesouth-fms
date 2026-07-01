@@ -149,7 +149,7 @@ function renderRoster(){
   }
   var tab=S.rosterTab||'view';
   var _rRole=S.user&&S.user.role||'desk';
-  var _canEditRoster=_rRole==='superadmin'||_rRole==='admin'||hasRolePerm('roster_edit');
+  var _canEditRoster=hasRolePerm('roster_edit');   // gated purely by the Roster Edit permission (grid) — no hardcoded role bypass
   if(tab==='build'&&!_canEditRoster)tab='view'; // build pattern is edit-only
   var h='<div class="card" style="padding:0;overflow:hidden">';
   h+='<div style="display:flex;align-items:center;border-bottom:2px solid var(--border2)">';
@@ -170,7 +170,7 @@ function _rTabBtn(label,id,active){
 function renderRosterView(){
   var role=S.user&&S.user.role||'desk';
   var isAdminPlus=role==='superadmin'||role==='admin';
-  var canEditRoster=isAdminPlus||hasRolePerm('roster_edit'); // view = roster perm; edit = roster_edit perm
+  var canEditRoster=hasRolePerm('roster_edit'); // view = roster perm; edit = roster_edit perm (grid only, no hardcoded role)
   var canEdit=canEditRoster&&!S.rosterLocked;
   var today=new Date();today.setHours(0,0,0,0);
   var todayStr=_rIso(today);

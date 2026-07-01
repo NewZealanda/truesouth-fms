@@ -1172,7 +1172,9 @@ function _rzRenderSchedule(){
     g.acForced=false;g.acAutoWas=null;
     g.bookings.forEach(function(bk){var ord=String(bk.b.orderNumber||'');var man=(S._rzBookingAc||{})[ord];if(man&&man!=='__none__'){var au=(typeof _schedAutoAcFor==='function')?_schedAutoAcFor(ord):null;if(au&&man!==au){g.acForced=true;g.acAutoWas=au;}}});
     var fbStr=_rzFbSummary(g._fb);   // aggregated, e.g. " + 3A FLB"
-    g.label=(pilot?pilot+(g.coPilot?'+'+g.coPilot:'')+'/':'')+acLbl+' '+_rzBdCompact(gbd)+' '+(g.disp||g.product)+fbStr;g.order=g.key;g._owing=g.owing;
+    // Mount Aspiring add-on on any booking in this block → append " + ASP" so the pilot sees it (e.g. "LH/SLB 13A FCF + ASP").
+    var aspStr=((typeof _rzBookingHasAspiring==='function')&&(g.bookings||[]).some(function(bk){return _rzBookingHasAspiring(bk.b);}))?' + ASP':'';
+    g.label=(pilot?pilot+(g.coPilot?'+'+g.coPilot:'')+'/':'')+acLbl+' '+_rzBdCompact(gbd)+' '+(g.disp||g.product)+fbStr+aspStr;g.order=g.key;g._owing=g.owing;
     return g;
   });
   const _totBk=bkBlocks.reduce(function(s,g){return s+g.bookings.length;},0);

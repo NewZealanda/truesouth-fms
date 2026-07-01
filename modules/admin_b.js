@@ -985,7 +985,7 @@ window.savePerson=async function(){
     const crewRec={id:crewId,n:finalName,w:parseFloat(d.w)||0,endorse:d.endorse||[],
       code:d.code||'',dlNum:d.dlNum||'',caaNum:d.caaNum||'',
       medExpiry:d.medExpiry||'',ocaDue:d.ocaDue||'',firstAid:d.firstAid||'',
-      avsecExpiry:d.avsecExpiry||'',photo:d.photo||''};
+      avsecExpiry:d.avsecExpiry||'',dob:d.dob||'',typeRatings:d.typeRatings||[],photo:d.photo||''};
     const existIdx=S.crew.findIndex(function(cr){return cr.id===crewId;});
     if(existIdx>=0) S.crew[existIdx]=crewRec;else S.crew.push(crewRec);
     lsSet('ts_crew_cache',S.crew);
