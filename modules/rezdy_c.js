@@ -1290,7 +1290,7 @@ function _rzRenderSchedule(){
             '<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">'+
               '<span onpointerdown="window.rzPaxGroupDown(event,\''+ordE+'\')" title="Drag onto the calendar to make a new block, or onto an aircraft heading to reassign" style="cursor:grab;color:var(--text3);font-size:15px;line-height:1;touch-action:none;user-select:none;padding:0 2px">⠿</span>'+
               '<span style="font-weight:700;font-size:13px;color:var(--text1)">'+_rzEsc(b.customerName||ord)+'</span>'+
-              '<span style="font-size:11px;font-weight:800;padding:1px 8px;border-radius:10px;background:'+_bc+'22;border:1px solid '+_bc+'66;color:'+_bc+'">'+_rzBdCompact(_e)+' '+_rzEsc(_code)+'</span>'+
+              '<span style="font-size:11px;font-weight:800;padding:1px 8px;border-radius:10px;background:'+_bc+'22;border:1px solid '+_bc+'66;color:'+_bc+'">'+_rzBdCompact(_e)+' '+_rzEsc(_code)+((typeof _rzBookingHasAspiring==='function'&&_rzBookingHasAspiring(b))?' + ASP':'')+'</span>'+
               (owing?'<span style="color:#ef4444;font-weight:800;font-size:11px">$ TO PAY</span>':'')+
               ((typeof _rzTwBadge==='function')?_rzTwBadge(ord):'')+
             '</div>'+
