@@ -4,16 +4,19 @@
 // that day ground staff rostered on get a reminder notification. Every completion is kept in the item's
 // service log. Persists to ts_equipment.
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
-var EQ_FREQ=[['weekly','Weekly',7],['fortnightly','Fortnightly',14],['monthly','Monthly',null],['quarterly','Quarterly',null],['6monthly','6-monthly',null],['annual','Annual',null]];
+var EQ_FREQ=[['weekly','Weekly',7],['fortnightly','Fortnightly',14],['monthly','Monthly',null],['bimonthly','Bi-monthly (2mo)',null],['quarterly','Quarterly',null],['6monthly','6-monthly',null],['annual','Annual',null]];
 function _eqEsc(s){return (typeof esc==='function')?esc(s):String(s==null?'':s);}
 function _eqToday(){return (typeof _todayLocal==='function')?_todayLocal():new Date().toISOString().slice(0,10);}
 function _eqFmt(d){if(!d)return '—';var p=String(d).split('-');return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):d;}
-function _eqCanManage(){return (typeof hasRolePerm==='function'&&(hasRolePerm('ground')||hasRolePerm('maintenance')))||!!(S.user&&S.user.superAdmin);}
+// Equipment is a shared, self-service tracker — ANY signed-in user who can see it may add items/checks,
+// set cadences, edit the last-checked/next-due dates, mark done, and manage photos.
+function _eqCanManage(){return !!(S.user&&S.user.id);}
 function _eqAddFreq(dateStr,freq){
   var d=dateStr?new Date(String(dateStr)+'T00:00:00'):new Date();
   if(freq==='weekly')d.setDate(d.getDate()+7);
   else if(freq==='fortnightly')d.setDate(d.getDate()+14);
   else if(freq==='monthly')d.setMonth(d.getMonth()+1);
+  else if(freq==='bimonthly')d.setMonth(d.getMonth()+2);
   else if(freq==='quarterly')d.setMonth(d.getMonth()+3);
   else if(freq==='6monthly')d.setMonth(d.getMonth()+6);
   else if(freq==='annual')d.setFullYear(d.getFullYear()+1);
@@ -80,6 +83,8 @@ window.eqItemNotes=function(id,v){var it=(S._eqData||{})[id];if(it)it.notes=v;};
 window.eqSaveNotes=function(id){var it=(S._eqData||{})[id];if(it)_eqSave(it);};
 // Manually set a check's next-due / reminder date (overrides the frequency calc until the next "Mark done").
 window.eqSetNext=function(id,cid,v){var it=(S._eqData||{})[id];if(!it)return;var c=(it.checks||[]).find(function(x){return x.id===cid;});if(c){c.next=v||'';c._notified='';_eqSave(it);render();}};
+// Manually set the last-checked date; recompute the next-due from the frequency off that date.
+window.eqSetLast=function(id,cid,v){var it=(S._eqData||{})[id];if(!it)return;var c=(it.checks||[]).find(function(x){return x.id===cid;});if(c){c.last=v||'';if(v)c.next=_eqAddFreq(v,c.freq);c._notified='';_eqSave(it);render();}};
 // Photos — compressed JPEG → Supabase Storage, data-URI fallback.
 function _eqStorePhoto(file,cb){
   if(!file)return cb(null);
@@ -138,7 +143,9 @@ function _eqRenderItem(id){
         '<button onclick="window.eqMarkDone(\''+it.id+'\',\''+c.id+'\')" style="padding:6px 13px;border-radius:8px;border:none;background:#16a34a;color:#fff;font-size:12px;font-weight:800;cursor:pointer">Mark done</button>'+
         (_eqCanManage()?'<button onclick="window.eqCheckDel(\''+it.id+'\',\''+c.id+'\')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px">×</button>':'')+
       '</div>'+
-      '<div style="font-size:12px;margin-top:6px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:'+(overdue?'#dc2626':duetoday?'#b45309':'var(--text3)')+'">Last: '+_eqFmt(c.last)+' · Next due:'+
+      '<div style="font-size:12px;margin-top:6px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:'+(overdue?'#dc2626':duetoday?'#b45309':'var(--text3)')+'">Last checked:'+
+        (_eqCanManage()?'<input type="date" value="'+_eqEsc(c.last||'')+'" onchange="window.eqSetLast(\''+it.id+'\',\''+c.id+'\',this.value)" style="padding:3px 6px;background:var(--card);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-size:12px">':' '+_eqFmt(c.last))+
+        ' · Next due:'+
         (_eqCanManage()?'<input type="date" value="'+_eqEsc(c.next||'')+'" onchange="window.eqSetNext(\''+it.id+'\',\''+c.id+'\',this.value)" style="padding:3px 6px;background:var(--card);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-size:12px">':' '+_eqFmt(c.next))+
         (overdue?'<span style="font-weight:700">overdue</span>':duetoday?'<span style="font-weight:700">today</span>':'')+'</div>'+
     '</div>';
