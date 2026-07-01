@@ -69,7 +69,7 @@ function _rzVehiclePanel(){
 window.pickupToggleVehicles=function(){S._pickupVehPanel=!S._pickupVehPanel;render();};
 window.pickupVehSet=function(i,field,val){var veh=_rzVehicles();if(!veh[i])return;if(field==='seats')veh[i].seats=Math.max(1,parseInt(val)||11);else veh[i][field]=val;_rzVehSave();render();};
 window.pickupVehAdd=function(){var veh=_rzVehicles();var pal=['#4a99d2','#48925f','#e3683e','#a855f7','#f59e0b','#ec4899','#14b8a6','#ef4444'];veh.push({name:'Van '+(veh.length+1),seats:11,color:pal[veh.length%pal.length]});S._pickupVans=null;_rzVehSave();render();};
-window.pickupVehRemove=function(i){var veh=_rzVehicles();if(veh.length<=1)return;veh.splice(i,1);S._pickupVans=null;_rzVehSave();render();};
+window.pickupVehRemove=function(i){var veh=_rzVehicles();if(veh.length<=1)return;if(typeof confirm==='function'&&!confirm('Delete '+((veh[i]&&veh[i].name)||'this vehicle')+'? It will be removed from the vehicle stock.'))return;veh.splice(i,1);S._pickupVans=null;_rzVehSave();render();};
 // ── Active vs spare (parked) vehicles — PER DEPARTURE ──
 // Drivers, the active/parked van set, and acknowledgement are all tracked per (vehicle, departure)
 // so the same van/driver can change between the 0800 and 1200 runs. Keys are "vi|dep".

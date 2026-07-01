@@ -93,14 +93,17 @@ window.vpSubmit=async function(){
   // require a comment on any Not-OK
   var all=_vpAllItems();for(var i=0;i<all.length;i++){var c=f.checklist[all[i]];if(c&&c.s==='no'&&!(c.c&&c.c.trim())){if(typeof toast==='function')toast('Add a comment for each Not-OK item.','warn');return;}}
   if(!f.sig){if(typeof toast==='function')toast('Please sign at the bottom.','warn');return;}
+  var _isEdit=!!f._editId;
   f.passed=!_vpHasIssue(f);f.time=f.time||_vpNow();
+  if(_isEdit){var _sum=_vpDiff(f._orig,f);f.checklist=f.checklist||{};var _h=Array.isArray(f.checklist._history)?f.checklist._history:[];_h.push({by:(S.user&&S.user.name)||'',at:new Date().toISOString(),summary:_sum});f.checklist._history=_h;}
+  delete f._editId;delete f._orig;
   S._vpData=S._vpData||{};S._vpData[f.id]=JSON.parse(JSON.stringify(f));
   try{lsSet&&lsSet('ts_veh_prestarts_cache',S._vpData);}catch(e){}
   var r=(typeof sbU==='function')?await sbU('ts_vehicle_prestarts',[_vpPayload(f)]):true;
-  if(r){if(typeof toast==='function')toast(f.passed?'Prestart submitted ✓':'Prestart submitted — issues flagged to management','ok');}
+  if(r){if(typeof toast==='function')toast(_isEdit?'Prestart updated ✓':(f.passed?'Prestart submitted ✓':'Prestart submitted — issues flagged to management'),'ok');}
   else{if(typeof toast==='function')toast(typeof _lsUploadFailMsg==='function'?_lsUploadFailMsg():'Saved on this device — will sync when back online','warn');}
-  if(!f.passed)_vpNotifyAdmins(f);
-  S._vpDraft=null;S._vpTab='reports';render();
+  if(!f.passed&&!_isEdit)_vpNotifyAdmins(f);
+  S._vpDraft=null;S._vpTab='reports';if(_isEdit)S._vpOpen=f.id;render();
 };
 function _vpNotifyAdmins(f){
   try{
@@ -123,8 +126,31 @@ function _vpSetupSig(){
   c.onmousemove=c.ontouchmove=function(e){if(!drawing)return;e.preventDefault();var x=c.getContext('2d'),p=pos(e);x.lineWidth=2.4;x.lineCap='round';x.strokeStyle='#111';x.lineTo(p.x,p.y);x.stroke();x.beginPath();x.moveTo(p.x,p.y);};
   c.onmouseup=c.onmouseleave=c.ontouchend=function(){if(drawing){drawing=false;if(S._vpDraft)S._vpDraft.sig=c.toDataURL();}};
 }
-// Delete: admins/superadmin can delete any prestart; the creator can delete their own.
-function _vpCanDelete(r){if(!r)return false;var u=S.user||{};var role=u.role||'';return !!u.superAdmin||role==='admin'||role==='superadmin'||(!!r.user_id&&String(r.user_id)===String(u.id||''));}
+// Managers = Admin / CX Manager / superadmin. Delete is manager-only; the CREATOR can edit their own
+// (managers can edit any). Every edit is appended to a change log kept in checklist._history.
+function _vpIsMgr(){var u=S.user||{};var role=u.role||'';return !!(u.superAdmin||role==='admin'||role==='superadmin'||role==='cx_manager');}
+function _vpCanDelete(r){return !!r&&_vpIsMgr();}
+function _vpCanEdit(r){if(!r)return false;return _vpIsMgr()||(!!r.user_id&&String(r.user_id)===String((S.user&&S.user.id)||''));}
+// Short human summary of what changed between the original report and the edited draft.
+function _vpDiff(o,f){
+  if(!o)return 'edited';
+  var ch=[];
+  if(String(o.odo==null?'':o.odo)!==String(f.odo==null?'':f.odo))ch.push('odometer');
+  if((o.fuel||'')!==(f.fuel||''))ch.push('fuel');
+  if((o.notes||'')!==(f.notes||''))ch.push('notes');
+  var oc=o.checklist||{},nc=f.checklist||{},n=0;
+  _vpAllItems().forEach(function(k){var a=(oc[k]||{}),b=(nc[k]||{});if((a.s||'')!==(b.s||'')||(a.c||'')!==(b.c||'')||(a.p||'')!==(b.p||''))n++;});
+  if(n)ch.push(n+' check'+(n===1?'':'s'));
+  return ch.length?ch.join(', '):'no field changes';
+}
+// Re-open a submitted report as an editable draft (creator or manager). Submit will UPDATE it + log the change.
+window.vpEdit=function(id){
+  var r=(S._vpData||{})[id];if(!r||!_vpCanEdit(r))return;
+  S._vpDraft=JSON.parse(JSON.stringify(r));
+  S._vpDraft._editId=id;
+  S._vpDraft._orig={odo:r.odo,fuel:r.fuel,notes:r.notes,checklist:JSON.parse(JSON.stringify(r.checklist||{}))};
+  S._vpOpen=null;S._vpTab='new';render();
+};
 window.vpDelete=async function(id){
   var r=(S._vpData||{})[id];if(!r||!_vpCanDelete(r))return;
   if(!confirm('Delete this '+(r.vehicle||'')+' prestart from '+(r.date||'')+'? This cannot be undone.'))return;
@@ -155,7 +181,7 @@ function _vpRenderNew(){
     return '<div class="card"><div class="st">Vehicle prestart check</div><p style="font-size:12px;color:var(--text3);margin:0 0 14px">Pick the vehicle you\'re about to drive and complete its prestart check.</p>'+(pick||'<p style="color:var(--text3)">No vehicles configured — add them in Settings ▸ Operations ▸ Vehicles.</p>')+'</div>';
   }
   var f=S._vpDraft;
-  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="st" style="margin:0">'+_vpEsc(f.vehicle)+' — prestart</div><button onclick="window.vpCancel()" style="font-size:12px;color:#f87171;background:none;border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:5px 12px;cursor:pointer">Cancel</button></div>'+
+  var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="st" style="margin:0">'+_vpEsc(f.vehicle)+(f._editId?' — editing':' — prestart')+'</div><button onclick="window.vpCancel()" style="font-size:12px;color:#f87171;background:none;border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:5px 12px;cursor:pointer">Cancel</button></div>'+
     '<div style="font-size:12px;color:var(--text3);margin:4px 0 14px">'+_vpEsc((S.user&&S.user.name)||'')+' · '+_vpEsc(f.date)+'</div>'+
     // odo + fuel
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px">'+
@@ -186,7 +212,7 @@ function _vpRenderNew(){
   h+='<div style="font-size:12px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 6px">Driver sign-off</div>'+
      '<canvas id="vp-sig" width="600" height="130" style="width:100%;height:130px;background:#fff;border:1px solid var(--border2);border-radius:8px;touch-action:none"></canvas>'+
      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span style="font-size:11px;color:var(--text3)">Sign above — '+_vpEsc((S.user&&S.user.name)||'')+'</span><button onclick="window.vpClearSig()" style="font-size:11px;color:var(--text3);background:none;border:none;cursor:pointer">Clear</button></div>'+
-     '<button onclick="window.vpSubmit()" style="width:100%;margin-top:14px;padding:13px;background:var(--accent,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:15px;font-weight:800;cursor:pointer">Submit prestart</button>'+
+     '<button onclick="window.vpSubmit()" style="width:100%;margin-top:14px;padding:13px;background:var(--accent,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:15px;font-weight:800;cursor:pointer">'+(f._editId?'Save changes':'Submit prestart')+'</button>'+
    '</div>';
   return h;
 }
@@ -211,6 +237,7 @@ function _vpRenderReports(){
 function _vpRenderReport(id){
   var r=(S._vpData||{})[id];if(!r){S._vpOpen=null;return _vpRenderReports();}
   var h='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="st" style="margin:0">'+_vpEsc(r.vehicle)+' prestart</div><div style="display:flex;gap:6px">'+
+    (_vpCanEdit(r)?'<button onclick="window.vpEdit(\''+r.id+'\')" style="font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid rgba(124,58,237,.4);background:rgba(124,58,237,.1);color:#c084fc;cursor:pointer">✎ Edit</button>':'')+
     (_vpCanDelete(r)?'<button onclick="window.vpDelete(\''+r.id+'\')" style="font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid rgba(239,68,68,.4);background:none;color:#f87171;cursor:pointer">Delete</button>':'')+
     '<button onclick="S._vpOpen=null;render()" style="font-size:12px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:5px 12px;cursor:pointer;color:var(--text2)">← Back</button></div></div>'+
     '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--text2);margin:8px 0 14px">'+
@@ -230,6 +257,12 @@ function _vpRenderReport(id){
   });
   if(r.notes)h+='<div style="margin-top:12px;font-size:13px;color:var(--text2)"><b>Notes:</b> '+_vpEsc(r.notes)+'</div>';
   if(r.sig)h+='<div style="margin-top:12px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">Driver signature</div><img src="'+r.sig+'" style="height:70px;background:#fff;border:1px solid var(--border2);border-radius:6px"></div>';
+  var _hist=(r.checklist&&Array.isArray(r.checklist._history))?r.checklist._history:[];
+  if(_hist.length){
+    h+='<div style="margin-top:16px;font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Change log</div>';
+    _hist.slice().reverse().forEach(function(e){var dt='';try{dt=new Date(e.at).toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}catch(_){}
+      h+='<div style="font-size:12px;color:var(--text2);padding:5px 0;border-top:1px solid var(--border2)">✎ '+_vpEsc(e.by||'')+' · '+_vpEsc(dt)+' — '+_vpEsc(e.summary||'edited')+'</div>';});
+  }
   h+='</div>';
   return h;
 }
