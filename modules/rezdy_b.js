@@ -1,6 +1,7 @@
 // === MODULE: rezdy_b === v26.24 ===
 function _rzRenderBookings(){
   if(!S._rezdyBookings){if(!S._rezdyLoading)window.rezdyLoadBookings();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading bookings…</div>';}
+  if(typeof window.avEnsureDay==='function')window.avEnsureDay(S.rezdyDate);   // live Rezdy seats for the day's departures
   if(!S._rezdyOpen||typeof S._rezdyOpen!=='object')S._rezdyOpen={};
   const allRows=(S._rezdyBookings||[]).slice();
   const active=allRows.filter(function(b){return !_rzIsCancelled(b);});
@@ -81,6 +82,7 @@ function _rzRenderBookings(){
         '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">'+_rzEsc(_rzDepDisplay(d))+((_rzDepShowProduct(d)&&prod)?' '+_rzEsc(prod):'')+'</span>'+
         '<span style="font-size:10px;font-weight:700;opacity:'+(on?'.9':'.6')+'">'+cnt+' bkg'+(cnt===1?'':'s')+'</span>'+
         '<span style="font-size:9px;font-weight:800;color:'+(on?'#fff':(_rem<0?'#ef4444':_rem<=2?'#f59e0b':'#22c55e'))+';opacity:'+(on?'.95':'1')+'">'+(_rem<0?(Math.abs(_rem)+' over'):(_rem+' seat'+(_rem===1?'':'s')+' left'))+'</span>'+
+        (function(){var _rz=(typeof _avSeatsForDep==='function')?_avSeatsForDep(S.rezdyDate,d):null;if(_rz==null)return '';return '<span title="Live seats remaining on Rezdy" style="font-size:9px;font-weight:800;color:'+(on?'#fff':(_rz<=0?'#ef4444':_rz<=2?'#f59e0b':'#0ea5e9'))+';opacity:'+(on?'.95':'1')+'">Rezdy '+_rz+'</span>';})()+
       '</button>';
     });
     // "Cancelled" pseudo-departure — view the whole day's cancelled bookings in one place.

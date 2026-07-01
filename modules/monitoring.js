@@ -129,6 +129,43 @@ window.loadAvailability=async function(){
   S._avLoading=false;if(typeof render==='function')render();
 };
 function _avShortProd(name){if(typeof _rzProduct==='function'){var c=_rzProduct(name);if(c&&String(c).length<=6)return c;}return String(name||'').slice(0,14);}
+// ── Live seats on the Bookings departures ──────────────────────────────────────
+// Linked products share ONE aircraft's seat pool at a departure slot (selling on any of them reduces the
+// slot), so the seats remaining = the MIN across the linked products' Rezdy availability for that time.
+var _AV_LINKS={
+  '0800':['Expedition Aoraki/Mt. Cook','Glacier Helihike Tasman Glacier','Mount Cook Heliski','Mt Cook Helicopter Glacier Landing','Ski the Tasman Glacier'],
+  '0930':['Milford Sound Fly Cruise Fly','Milford Sound One-Way Flight'],
+  '1200':['Milford Sound Fly Cruise Fly','Milford Sound One-Way Flight']
+};
+// Per-day availability cache for the bookings view (separate from the month view). Refetches every ~3 min.
+window.avEnsureDay=function(date){
+  if(!date||typeof callFn!=='function')return;
+  S._avDayData=S._avDayData||{};
+  var d=S._avDayData[date];
+  if(d&&d.at&&(Date.now()-d.at<180000))return;
+  if(S._avDayFetching===date)return;S._avDayFetching=date;
+  (async function(){
+    try{var res=await callFn('rezdy-sync',{availability:{from:date,to:date}});var body=(res&&res.data)||{};if(res&&res.ok)S._avDayData[date]={sessions:body.sessions||[],at:Date.now()};}catch(e){}
+    S._avDayFetching=null;if(typeof safeRender==='function')safeRender();
+  })();
+};
+// Live Rezdy seats remaining for a departure (HHMM) on a date — MIN across the slot's linked products.
+function _avSeatsForDep(date,dep){
+  var day=S._avDayData&&S._avDayData[date];if(!day||!day.sessions)return null;
+  dep=String(dep||'');var hhmm=(dep.length===4)?(dep.slice(0,2)+':'+dep.slice(2)):dep;
+  var links=_AV_LINKS[dep]||null;var linkSet=links?links.map(function(n){return n.trim().toLowerCase();}):null;
+  var seats=[];
+  (day.sessions||[]).forEach(function(s){
+    if(String(s.startTimeLocal||'').slice(0,10)!==date)return;
+    if(String(s.startTimeLocal||'').slice(11,16)!==hhmm)return;
+    if(+s.seats>=900)return;                                   // skip Charter / unlimited
+    var nm=String(s.productName||'').trim().toLowerCase();
+    if(/coach/.test(nm))return;                                // ignore CCF / coach products
+    if(linkSet){if(linkSet.indexOf(nm)<0)return;}
+    if(s.seatsAvailable!=null)seats.push(+s.seatsAvailable);
+  });
+  return seats.length?Math.min.apply(null,seats):null;
+}
 function renderAvailabilityView(){
   var ym=_avMonthStr();
   if((!S._avData||S._avData.ym!==ym)&&!S._avLoading){S._avLoading=true;setTimeout(window.loadAvailability,0);}
