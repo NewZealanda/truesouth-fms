@@ -172,6 +172,7 @@ serve(async (req) => {
       const code = p.code || p.productCode || ""
       if (!code) continue
       if (String(p.productType || "").toUpperCase().includes("GIFT")) continue
+      if (/rezdy test/i.test(String(p.name || ""))) continue   // skip the YYY/ZZZ Rezdy test products
       nameByCode[code] = p.name || code
       codes.push(code)
     }
@@ -186,22 +187,26 @@ serve(async (req) => {
     const isoT = (dstr: string, add: number) => { const t = new Date(dstr + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + add); return t.toISOString().slice(0, 19) + "Z" }
     const startTime = isoT(from, -1), endTime = isoT(to, 1)
     const sessions: any[] = []
-    for (let i = 0; i < codes.length; i += 20) {
-      const chunk = codes.slice(i, i + 20)
-      let url = `${REZDY_BASE}/availability?apiKey=${REZDY_KEY}&startTime=${encodeURIComponent(startTime)}&endTime=${encodeURIComponent(endTime)}`
-      for (const c of chunk) url += `&productCode=${encodeURIComponent(c)}`
+    const capped: string[] = []
+    // ONE product per call — Rezdy caps ~100 sessions per availability response, and a whole month across
+    // every product blows past that (truncating the month). Per product/month stays well under. Run in
+    // small parallel batches so it's still fast.
+    const fetchOne = async (code: string) => {
+      const url = `${REZDY_BASE}/availability?apiKey=${REZDY_KEY}&startTime=${encodeURIComponent(startTime)}&endTime=${encodeURIComponent(endTime)}&productCode=${encodeURIComponent(code)}`
       try {
-        const ar = await fetch(url)
-        const raw = await ar.text()
+        const ar = await fetch(url); const raw = await ar.text()
         let aj: any = {}; try { aj = JSON.parse(raw) } catch (_) { /* non-json */ }
         const list = aj.sessions || []
-        if (i === 0) debug.avail.push({ ok: ar.ok, status: ar.status, sessionCount: list.length, sample: raw.slice(0, 400) })
-        for (const s of list) {
-          const sa = (s.seatsAvailable != null ? s.seatsAvailable : s.seats)
-          sessions.push({ productCode: s.productCode, productName: nameByCode[s.productCode] || s.productCode, startTimeLocal: s.startTimeLocal || s.startTime || "", seatsAvailable: sa, seats: s.seats })
-        }
-      } catch (e) { if (i === 0) debug.avail.push({ error: String(e) }) }
+        if (list.length >= 100) capped.push(code)
+        if (!debug.avail.length) debug.avail.push({ code, ok: ar.ok, status: ar.status, sessionCount: list.length, sample: raw.slice(0, 300) })
+        return list.map((s: any) => ({ productCode: s.productCode, productName: nameByCode[s.productCode] || s.productCode, startTimeLocal: s.startTimeLocal || s.startTime || "", seatsAvailable: (s.seatsAvailable != null ? s.seatsAvailable : s.seats), seats: s.seats }))
+      } catch (e) { if (!debug.avail.length) debug.avail.push({ code, error: String(e) }); return [] as any[] }
     }
+    for (let i = 0; i < codes.length; i += 6) {
+      const results = await Promise.all(codes.slice(i, i + 6).map(fetchOne))
+      for (const r of results) sessions.push(...r)
+    }
+    debug.capped = capped
     return json({ ok: true, from, to, sessions, products: codes.map((c) => ({ code: c, name: nameByCode[c] })), debug })
   }
 
