@@ -175,7 +175,12 @@ serve(async (req) => {
       nameByCode[code] = p.name || code
       codes.push(code)
     }
-    if (!codes.length) return json({ ok: true, from, to, sessions: [], products: [] })
+    const debug: any = {
+      prodCount: prods.length, codeCount: codes.length,
+      sampleProduct: prods[0] ? { keys: Object.keys(prods[0]).slice(0, 25), code: prods[0].code || prods[0].productCode || null, name: prods[0].name || null, type: prods[0].productType || null } : null,
+      avail: [] as any[],
+    }
+    if (!codes.length) return json({ ok: true, from, to, sessions: [], products: [], debug })
     const startTime = `${from} 00:00:00`, endTime = `${to} 23:59:59`
     const sessions: any[] = []
     for (let i = 0; i < codes.length; i += 20) {
@@ -184,15 +189,17 @@ serve(async (req) => {
       for (const c of chunk) url += `&productCode=${encodeURIComponent(c)}`
       try {
         const ar = await fetch(url)
-        if (!ar.ok) continue
-        const aj: any = await ar.json().catch(() => ({}))
-        for (const s of (aj.sessions || [])) {
+        const raw = await ar.text()
+        let aj: any = {}; try { aj = JSON.parse(raw) } catch (_) { /* non-json */ }
+        const list = aj.sessions || []
+        if (i === 0) debug.avail.push({ ok: ar.ok, status: ar.status, sessionCount: list.length, sample: raw.slice(0, 400) })
+        for (const s of list) {
           const sa = (s.seatsAvailable != null ? s.seatsAvailable : s.seats)
           sessions.push({ productCode: s.productCode, productName: nameByCode[s.productCode] || s.productCode, startTimeLocal: s.startTimeLocal || s.startTime || "", seatsAvailable: sa, seats: s.seats })
         }
-      } catch (_) { /* skip chunk */ }
+      } catch (e) { if (i === 0) debug.avail.push({ error: String(e) }) }
     }
-    return json({ ok: true, from, to, sessions, products: codes.map((c) => ({ code: c, name: nameByCode[c] })) })
+    return json({ ok: true, from, to, sessions, products: codes.map((c) => ({ code: c, name: nameByCode[c] })), debug })
   }
 
   const date = (body.date || "").trim()

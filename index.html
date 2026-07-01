@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.98';
+const APP_VER='v28.99';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -23856,7 +23856,7 @@ window.loadAvailability=async function(){
   S._avLoading=true;if(typeof render==='function')render();
   try{
     var res=(typeof callFn==='function')?await callFn('rezdy-sync',{availability:{from:r.from,to:r.to}}):null;
-    S._avData=(res&&res.ok)?{ym:ym,sessions:res.sessions||[],at:Date.now()}:{ym:ym,error:(res&&(res.error||res.hint))||'failed',sessions:[]};
+    S._avData=(res&&res.ok)?{ym:ym,sessions:res.sessions||[],debug:res.debug,at:Date.now()}:{ym:ym,error:(res&&(res.error||res.hint))||'failed',sessions:[]};
   }catch(e){S._avData={ym:ym,error:String((e&&e.message)||e),sessions:[]};}
   S._avLoading=false;if(typeof render==='function')render();
 };
@@ -23876,7 +23876,7 @@ function renderAvailabilityView(){
   if(!d)return h+'</div>';
   if(d.error)return h+'<p style="color:#dc2626;font-size:13px;line-height:1.5">Couldn’t load availability (<code>'+_avEsc(d.error)+'</code>). The <b>rezdy-sync</b> edge function needs redeploying with the new availability endpoint.</p></div>';
   var sess=d.sessions||[];
-  if(!sess.length)return h+'<p style="color:var(--text3)">No departures found for '+_avEsc(mLabel)+'.</p></div>';
+  if(!sess.length){var _dbg=d.debug?('<div style="font-size:11px;color:var(--text3);margin-top:6px">Diagnostics (share with support):</div><pre style="font-size:11px;white-space:pre-wrap;color:var(--text2);background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px;margin-top:4px;overflow:auto;max-height:320px">'+_avEsc(JSON.stringify(d.debug,null,1))+'</pre>'):'';return h+'<p style="color:var(--text3)">No departures found for '+_avEsc(mLabel)+'.</p>'+_dbg+'</div>';}
   var byDay={};
   sess.forEach(function(s){var dt=String(s.startTimeLocal||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(dt))return;var tm=String(s.startTimeLocal||'').replace('T',' ').slice(11,16);(byDay[dt]=byDay[dt]||[]).push({t:tm,name:s.productName,seats:(s.seatsAvailable==null?null:+s.seatsAvailable)});});
   var days=Object.keys(byDay).sort();
