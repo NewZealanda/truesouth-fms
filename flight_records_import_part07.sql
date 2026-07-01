@@ -1,1 +1,0 @@
--- SUPERSEDED — do not run. Use flight_records_import_0_RESET.sql then flight_records_import_legs_part01..16.sql (leg-split import).

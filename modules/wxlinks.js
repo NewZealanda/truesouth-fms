@@ -206,6 +206,7 @@ function _wxLinkModal(){
   var st=_wxLinkStatus(order);
   var url=r?_wxLinkUrl(r.token):'';
   var ev=(r&&Array.isArray(r.events))?r.events.filter(function(e){return String(e.t||'').indexOf('notified_')!==0;}).slice().reverse():[];
+  var oj=String(order).replace(/\\/g,'\\\\').replace(/'/g,"\\'");  // JS-string-safe order for inline onclick handlers
   var h='<div onclick="window.wxLinkClose()" style="position:fixed;inset:0;z-index:11000;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto">'+
     '<div onclick="event.stopPropagation()" style="background:var(--card);border:1px solid var(--border2);border-radius:16px;max-width:460px;width:100%;padding:18px">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px"><div class="st" style="margin:0">Weather link · #'+_wxEsc(order)+'</div>'+
@@ -215,17 +216,17 @@ function _wxLinkModal(){
   // link + copy
   h+='<div style="display:flex;gap:6px;margin-bottom:10px">'+
        '<input readonly value="'+_wxEsc(url||'(generate the link first)')+'" onclick="this.select()" style="flex:1;min-width:0;font-size:12px;padding:9px 10px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text2)">'+
-       '<button onclick="window.wxCopyLink(\''+_wxEsc(order).replace(/'/g,"\\'")+'\')" style="flex-shrink:0;padding:9px 14px;border-radius:8px;border:none;background:var(--accent,#7c3aed);color:#fff;font-size:13px;font-weight:700;cursor:pointer">'+(r?'Copy':'Create + copy')+'</button>'+
+       '<button onclick="window.wxCopyLink(\''+oj+'\')" style="flex-shrink:0;padding:9px 14px;border-radius:8px;border:none;background:var(--accent,#7c3aed);color:#fff;font-size:13px;font-weight:700;cursor:pointer">'+(r?'Copy':'Create + copy')+'</button>'+
      '</div>';
   if(r){
     h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">'+
-       '<button onclick="window.wxMarkSent(\''+order+'\',\'whatsapp\')" style="font-size:11px;padding:5px 11px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);cursor:pointer">✓ Mark sent · WhatsApp</button>'+
-       '<button onclick="window.wxMarkSent(\''+order+'\',\'email\')" style="font-size:11px;padding:5px 11px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);cursor:pointer">✓ Mark sent · Email</button>'+
-       (r.ack_at?'<button onclick="window.wxResetLink(\''+order+'\')" style="font-size:11px;padding:5px 11px;border-radius:8px;border:1px solid rgba(245,158,11,.45);background:transparent;color:#f59e0b;cursor:pointer;font-weight:700">↺ Reset to live</button>':'')+
+       '<button onclick="window.wxMarkSent(\''+oj+'\',\'whatsapp\')" style="font-size:11px;padding:5px 11px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);cursor:pointer">✓ Mark sent · WhatsApp</button>'+
+       '<button onclick="window.wxMarkSent(\''+oj+'\',\'email\')" style="font-size:11px;padding:5px 11px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);cursor:pointer">✓ Mark sent · Email</button>'+
+       (r.ack_at?'<button onclick="window.wxResetLink(\''+oj+'\')" style="font-size:11px;padding:5px 11px;border-radius:8px;border:1px solid rgba(245,158,11,.45);background:transparent;color:#f59e0b;cursor:pointer;font-weight:700">↺ Reset to live</button>':'')+
      '</div>';
     // history
     h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">History</span>'+
-      ((_wxIsAdmin()&&ev.length)?'<button onclick="window.wxClearHistory(\''+order+'\')" style="font-size:10px;color:#ef4444;background:none;border:1px solid rgba(239,68,68,.4);border-radius:7px;padding:3px 8px;cursor:pointer">Clear history</button>':'')+
+      ((_wxIsAdmin()&&ev.length)?'<button onclick="window.wxClearHistory(\''+oj+'\')" style="font-size:10px;color:#ef4444;background:none;border:1px solid rgba(239,68,68,.4);border-radius:7px;padding:3px 8px;cursor:pointer">Clear history</button>':'')+
     '</div>';
     if(!ev.length)h+='<div style="font-size:12px;color:var(--text3)">No activity yet.</div>';
     else{h+='<div style="display:flex;flex-direction:column;gap:0">';ev.forEach(function(e){

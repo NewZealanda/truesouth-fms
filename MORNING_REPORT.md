@@ -1,45 +1,60 @@
-# Morning Report — TrueSouth FMS nightly sweep (v28.55)
-
-**Date:** 2026-06-30 · **Build:** v28.54 → **v28.55** · **Status:** built + verified, ⚠️ commit blocked by a stuck `.git` lock (your work is safe in the working tree).
+# Morning Report — TrueSouth FMS nightly sweep
+**Run:** 2026-07-01 (early AM) · **Version:** v28.89 → **v28.90** (built, ⚠️ uncommitted)
 
 ## TL;DR
-First full sweep since v28.15 — it covers the whole undocumented **v28.16→v28.54** cycle (the 5 new ground/ops modules, Storage uploads, the menu restructure, festive header). Two small, safe bugs found and fixed, both in the new modules. The heavy modules (rezdy, scheduling, flight records, leave) audited clean. Build + syntax check pass; production loads with no console errors. The only thing needing you: **a stale git lock is blocking the commit** — clear it and commit in GitHub Desktop.
+Clean night. First full sweep since v28.55 — covered the whole undocumented **v28.56→v28.89**
+cycle (the new **customer weather-link** system + `wx.html`, self-drive pickup override, 15-language
+wx page, leave-cancellation approval, anniversary header). **No High/Med bugs.** One small safe
+consistency fix applied. Build + syntax-check pass with 0 errors. **Commit is blocked** by a stale
+`.git/index.lock` + a read-only `.git` in this VM — work is in the working tree for you to commit.
 
 ## What I swept
-Every `modules/*.js`. Read the 5 new modules in full (`vehprestart`, `opsnotices`, `equipment`, `visitors`, `monitoring`); ran two parallel deep reviewers over rezdy×3 and scheduling/flightrecord/leave/training; grepped the whole tree for the recurring classes (per-seat map desync, broadcast-less mutations, XSS, date/UTC off-by-one, duplicate top-level decls); verified the new modules' routing + permission gates in `shell.js`.
+- **Weather-link / self-drive / pickup layer** (`wxlinks.js`, `rezdy.js`, `rezdy_b.js`, `wx.html`) — read `wxlinks.js` in full + a dedicated deep-audit reviewer.
+- **Leave cancellation-approval + roster revert** (`leave.js`) — dedicated deep-audit reviewer.
+- **Loadsheet per-seat 7-map move/swap** (`admin.js`) — read all 5 handlers directly.
+- **Repo-wide greps** for date/UTC off-by-one, XSS sinks, duplicate top-level declarations.
 
-## Bugs found & fixed → v28.55
-1. **Search boxes lost focus while typing (Med).** `render()` only restores focus to inputs that have a stable `id`. The **Ops Notices** list search and the **Visitors → History** Name/Company filters re-rendered on every keystroke with no id, so you had to re-click after each character. Gave them ids (`onSearchBox`, `viSearchName`, `viSearchCo`). (Equipment's search already had one.)
-2. **Unescaped uploaded-file URLs in `src`/`href` (Low).** For consistency with the rest of the app (and `equipment.js`, which already does this), wrapped the upload URL/data-URI in the module's escape helper: Ops-Notice attachment image/link (`_onEsc(fl.data)` — the *edit* view already escaped it, the *view* didn't), and the vehicle-prestart Not-OK photo thumbnails (`_vpEsc(c.p)`).
+## Bugs found & fixed
+- **v28.90 — [Low] escape order# in the weather-link modal's inline `onclick` handlers.**
+  In `wxlinks.js` `_wxLinkModal`, the Copy button already JS-escaped the order#, but Mark-sent
+  (WhatsApp/Email), Reset-to-live and Clear-history interpolated the bare `order`. Rezdy order
+  numbers are alphanumeric so the practical risk was ~nil, but it was an inconsistent latent
+  handler-break/injection gap. Fixed: one JS-safe `oj` used in all 5 inline handlers. No
+  behaviour change.
 
-## Audited clean (no change needed)
-- **Rezdy (bookings/seatmap/loadsheet/calendar):** per-seat 7-map moves intact, every mutator broadcasts, all booking/customer text escaped, dates use local helpers.
-- **Scheduling / flight records / leave / training:** cost math NaN-guarded; leave stamp/unstamp merge-before-write (no last-writer-wins); leave approve/decline gated to admin/superadmin + direct-reports; leave-day counts exclude RDO/off and read the persisted roster; all dates local-helper'd.
-- **New modules:** user fields escaped, dates use `_todayLocal`/`_rIso`, numeric DB columns int-coerced; section routing + perm gates wired correctly through the new menu.
-- **Duplicate top-level declarations:** none (build scan clean).
+## Verified clean (no change needed)
+- **Per-seat field maps** move all 7 together (`names/seats/bags/infantNames/paxGroups/paxType/paxPaymentReq`) and call `autoSaveLS()` in every loadsheet move/swap/bump handler — the recurring TO-PAY/child-orphan class is clean.
+- **Weather-link layer:** all customer/booking text escaped at the render leaf; `wx.html` uses `textContent` for the name + withholds the internal comment; every state mutator persists+broadcasts (`pickupSave`/`_rzPickupBroadcast`/`wxSyncDep`/`sbU`); dates `_rIso`-guarded; NaN/null guards present.
+- **Leave cancellation:** roster revert goes through `_rosterApplyAndSave` (merge-before-write, no last-writer-wins); approve/decline double perm-gated; leave-days exclude rdo/off off the persisted roster.
+- **Duplicate top-level decls:** none (build.py column-0 scan).
+- **Date/UTC:** no bare local-date off-by-one — all `toISOString().slice(0,10)` are guarded fallbacks or deliberate UTC uses.
 
-## Left open (documented, not changed — low risk)
-- The 5 new ground/ops tables (`ts_visitors`, `ts_equipment`, `ts_ops_notices`, `ts_vehicle_prestarts`, `ts_flight_following`) write to Supabase + a local cache but are **not realtime-subscribed**, so a second open device only sees updates on reload (monitoring polls every 30 s). Fine for now; the clean next upgrade is to add them to the realtime reload list. Deferred (larger change).
-- Carried: `saveAircraftDraft` doesn't broadcast W&B spec changes; flight records not realtime-synced; server gating is by permission not row-ownership. (All pre-existing.)
+## Left open (documented, not changed)
+- The 5 ground/ops modules **and** `ts_wx_links` are not realtime-subscribed — they poll/reload only. Worth confirming `ts_wx_links` is in the realtime publication (else a desk off the bookings page won't see customer actions live). Next-upgrade candidate; deferred (larger change).
+- Cosmetic: leave stamp/unstamp asymmetry — revert blanks a cell rather than restoring a prior non-off status (non-destructive of concurrent edits; UI copy slightly overstates fidelity). Pre-existing.
+- Carried: `saveAircraftDraft` no realtime broadcast; flight records not realtime-synced; server gating is by-permission not row-ownership; no CSP.
 
 ## Tests
-- `python3 build.py` → clean, **no duplicate-declaration collisions**; `index.html` rebuilt **26,170 lines / 3,359 KB**.
-- Extracted the 4 inline `<script>` blocks → `node --check` → **0 errors**.
-- Live read-only check of https://truesouth.netlify.app → **no console errors** (this is the deployed bundle; v28.55 is local/unpushed).
+- `python3 build.py` → clean (module-presence + dup-decl scan pass). `index.html` rebuilt **26,791 lines / 3,663 KB**, carries `APP_VER='v28.90'`.
+- `node --check` on all **4** inline `<script>` blocks → **0 errors**.
+- No live mutation. Production (truesouth.netlify.app) serves the deployed v28.89; this sweep's v28.90 is local/unpushed, so a live check wouldn't reflect it.
 
-## Lines of code
-- `modules/*.js` = **25,826**
-- `modules/*.html` = **379**
-- `index.html` (generated) = **26,170**
-- **Combined total = 52,375 lines.**
+## Total lines of code
+**53,618 lines** (`modules/*.js` + `modules/*.html`), with the generated `index.html` at 26,791 lines.
 
-## ⚠️ Blocker — git (needs you)
-Commit could not be made. Two things:
-1. A stale **`.git/index.lock`** is present and can't be removed from my side ("Operation not permitted"), plus a 0-byte **`.git/HEAD.lock`** from the previous session. Per your standing rule I did **not** delete either.
-2. The commit itself fails with `fatal: unable to write new index file` — this session can't write into `.git` at all.
+## ⚠️ Blocker — commit could not be made
+A stale **`.git/index.lock`** is present, and this VM also can't write into `.git/objects`
+("Operation not permitted"), so even the temp-index commit trick fails. **Per the standing rule I
+did NOT delete the lock or touch `.git`.** On top of that, the working tree was already mid-refactor
+before this run — your **`wx.html` → `modules/wxlinks.js`** migration shows as staged deletions of
+`wx.html`/`wx_links.sql`/`modules/wxlinks.js` alongside untracked re-adds, plus `build.py`/`.gitignore`
+edits. That's your in-progress work, not the sweep.
 
-So v28.55 is **built, verified, and sitting in the working tree, uncommitted.** The tree also still contains a pre-existing mid-refactor changeset from before this run (staged SQL-file deletions, `.gitignore`/`build.py` edits) — that's your in-progress work, not mine.
+**To pick up v28.90:** clear `.git/index.lock` (and any `.git/HEAD.lock`) manually → review the
+working tree in GitHub Desktop → untangle the wx-refactor staging → commit → push/merge. This
+sweep's files: `modules/wxlinks.js`, `modules/shared.js` (APP_VER), `index.html`,
+`ARCHITECTURE_REVIEW_v28.90.md`, `CLAUDE.md`, `MORNING_REPORT.md`.
 
-**Files I changed this run:** `modules/opsnotices.js`, `modules/visitors.js`, `modules/vehprestart.js`, `modules/shared.js` (APP_VER→v28.55), `index.html` (rebuilt), `ARCHITECTURE_REVIEW_v28.55.md`, `CLAUDE.md`, `MORNING_REPORT.md`.
-
-**To finish:** clear `.git/index.lock` and `.git/HEAD.lock`, review the working tree in GitHub Desktop, commit, then push/merge. Also apply the new-table SQL if you haven't (`vehicle_prestarts.sql`, `ops_notices.sql`, `equipment.sql`, `visitors.sql`, `flight_following.sql`, `vp_delete_own.sql`, `fix_feature_table_grants.sql`, `fix_uuid_user_columns.sql`).
+**SQL to apply if not done:** `wx_links.sql` + the carried set (`vehicle_prestarts.sql`,
+`ops_notices.sql`, `equipment.sql`, `visitors.sql`, `flight_following.sql`, `vp_delete_own.sql`,
+`fix_feature_table_grants.sql`, `fix_uuid_user_columns.sql`).

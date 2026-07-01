@@ -1,5 +1,0 @@
--- SUPERSEDED — do NOT run this file.
--- Use maintenance_restore_full.sql instead. That version:
---   * restores the full daily TTIS history back to 10 Jun 2025 (+ landings/starts/oil),
---   * MERGES (replaces only hist + oil) so it preserves the next-check/overhaul config you re-entered.
--- This earlier file overwrote the whole maintenance blob with audit-only data and would wipe your config.
