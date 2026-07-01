@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v28.94';
+const APP_VER='v28.95';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -10021,13 +10021,26 @@ window.calcTTIS=function(){
 /* acDisp() moved to shared.js (single canonical definition) */
 
 // --- Role Permissions Table ---
+// Combined grid columns: one checkbox controls several underlying permissions (set together, shown
+// ticked only when ALL are on). Keeps the grid compact while the app still reads the granular perms.
+var _PERM_COMBOS={
+  pilotbag:  ['pilotbag','flightrecord','flightduty'],            // Pilot Bag = Flight Record + Logbooks + F&D
+  roster_leave:['roster','leave'],                                // Roster & Leave
+  roster_mgr:['roster_edit','leave_approve','reports_to','pay_week'] // Roster Mgr = edit + approvals + reports-to + pay week
+};
+// A single perm's effective value for the grid display (honours the "on by default" perms).
+function _permEffState(over,base,k){
+  if(over[k]!==undefined)return !!over[k];
+  if(base[k]!==undefined)return !!base[k];
+  return (k==='settings'||k==='pilotbag'||k==='monitoring'||k==='visitors'||k==='ops_notices');
+}
 let _permSaveTimer=null;
 window.toggleRolePerm=function(role,perm,val){
   var _permOk=(S.user&&(S.user.superAdmin||S.user.role==='superadmin'))||(typeof hasRolePerm==='function'&&hasRolePerm('admin_users'));
   if(!_permOk){toast('Not authorised to change permissions.','warn');return;}
   if(!S.rolePerms)S.rolePerms={};
   if(!S.rolePerms[role])S.rolePerms[role]=Object.assign({},(DEFAULT_ROLE_PERMS[role])||{});
-  S.rolePerms[role][perm]=val;
+  (_PERM_COMBOS[perm]||[perm]).forEach(function(k){S.rolePerms[role][k]=val;});
   // Mark as locally edited so a realtime ts_settings reload won't clobber it, and persist immediately (debounced).
   S._permsEditTs=Date.now();
   lsSet('ts_role_perms',S.rolePerms);
@@ -10064,17 +10077,11 @@ function renderAdminPerms(){
       {k:'maint_bookings',lbl:'Estimator',  tip:'Maintenance estimator + bookings'}
     ]},
     {cat:'Crew', col:'#22c55e', perms:[
-      {k:'pilotbag',      lbl:'Pilot Bag',   tip:'Pilot tools in the Crew section — Flight Record, Logbooks, Flight & Duty'},
-      {k:'flightduty',    lbl:'F&D',         tip:'Flight & Duty — own record + team summary'},
+      {k:'pilotbag',      lbl:'Pilot Bag',   keys:['pilotbag','flightrecord','flightduty'], tip:'Pilot Bag — Flight Record, Logbooks and Flight & Duty (one toggle grants all three)'},
       {k:'flightduty_manage',lbl:'F&D Mgr',  tip:'See & certify all pilots\' Flight & Duty records (Chief Pilot)'},
-      {k:'flightrecord',  lbl:'Flt Rec',     tip:'Flight Record — log flights, aircraft records'},
       {k:'flightrecord_manage',lbl:'Flt Rec Mgr',tip:'Flight Record statistics + view/manage all logbooks'},
-      {k:'roster',        lbl:'Roster',      tip:'View the roster'},
-      {k:'leave',         lbl:'Leave',       tip:'Submit and view own leave requests'},
-      {k:'roster_edit',   lbl:'Roster Edit', tip:'Edit the roster and build patterns (otherwise view-only)'},
-      {k:'leave_approve', lbl:'Approvals',   tip:'Approve or decline leave requests from staff'},
-      {k:'reports_to',    lbl:'Reports to',  tip:'Access the Reports-to org chart (Crew ▸ Roster)'},
-      {k:'pay_week',      lbl:'Pay Week',    tip:'See the pay-week (Thu–Wed) roster view'}
+      {k:'roster_leave',  lbl:'Roster & Leave', keys:['roster','leave'], tip:'View the roster and submit/view own leave requests'},
+      {k:'roster_mgr',    lbl:'Roster Mgr',  keys:['roster_edit','leave_approve','reports_to','pay_week'], tip:'Edit the roster & build patterns, approve leave, Reports-to org chart, and the pay-week view'}
     ]},
     {cat:'Company', col:'#f59e0b', perms:[
       {k:'data_recording',lbl:'Records',     tip:'Records — aircraft records, statistics & the full records table'},
@@ -10126,7 +10133,10 @@ function renderAdminPerms(){
     h+='<tr style="'+bg+'"><td style="padding:7px 8px;font-weight:600;white-space:nowrap;color:var(--text1)">'+row.lbl+'</td>';
     PERM_COLS.forEach(function(col){
       var eff;
-      if(col.k==='settings'||col.k==='pilotbag'||col.k==='monitoring'||col.k==='visitors'||col.k==='ops_notices'){
+      if(col.keys){
+        // Combined column — ticked only when ALL underlying perms are on.
+        eff=col.keys.every(function(k){return _permEffState(over,base,k);});
+      } else if(col.k==='settings'||col.k==='monitoring'||col.k==='visitors'||col.k==='ops_notices'){
         // Unlocked by default for every role — show ticked unless explicitly turned off.
         eff=over[col.k]!==undefined?over[col.k]:(base[col.k]!==undefined?base[col.k]:true);
       } else if(col.k==='vehicle_prestart'){
