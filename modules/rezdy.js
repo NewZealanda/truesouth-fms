@@ -220,6 +220,19 @@ function _rzProductDest(code){var c=_rzProdCfg(code);return c?{short:c.short,apt
 // place combine even if they're different products (e.g. THH + STT both to Mt Cook). Flybacks keep
 // their own code (special return-leg handling). Falls back to the product code when unknown.
 function _rzGroupDest(prod){if(_rzIsFlyback(prod))return prod;var c=_rzProdCfg(prod);return (c&&c.short)?c.short:prod;}
+// Product label for a whole DEPARTURE (Bookings chip + heading) across its bookings. One distinct
+// product → its own code (e.g. "THH"); multiple products that share a destination → the destination
+// group (e.g. "MC"), so a split Mt Cook run (THH on one aircraft + MCGL on another) reads "0800 MC"
+// instead of just picking the first booking's "THH". Mirrors the calendar block's single-vs-mixed disp.
+function _rzDepProdLabel(bookings){
+  var codes={},groups={},first='';
+  (bookings||[]).forEach(function(b){((b&&b.items)||[]).forEach(function(it){
+    var c=_rzProduct(it&&it.product);if(!c)return;if(!first)first=c;
+    codes[c]=true;var g=_rzGroupDest(c);if(g)groups[g]=true;
+  });});
+  var cl=Object.keys(codes);if(cl.length<=1)return first||'';
+  var gl=Object.keys(groups);return (gl.length===1)?gl[0]:(_rzGroupDest(first)||first);
+}
 // Charters (CHT) carry no destination in Rezdy, so the operator sets it manually (calendar block). That
 // override drives the destination/fuel/route everywhere via _rzItemDest. Keyed per order, per-date blob.
 function _rzCharterDestFor(order){var d=(S._rzCharterDest||{})[String(order)];return (d&&String(d).trim())?String(d).trim():'';}

@@ -78,7 +78,7 @@ function _rzRenderBookings(){
       }else{
         _rem=_fleetSeats-(_depPaxBySlot[d]||0)-(_fbBySlot[d]||0);
       }
-      var prod='';depB.some(function(b){var c=_rzProduct((((b.items||[])[0]||{}).product)||'');if(c){prod=c;return true;}return false;});
+      var prod=(typeof _rzDepProdLabel==='function')?_rzDepProdLabel(depB):'';   // split departure (e.g. THH + MCGL) → destination group "MC"
       if(!prod&&typeof _avProdShortForDep==='function')prod=_avProdShortForDep(S.rezdyDate,d);   // no-booking slot → label from availability
       var on=!searching&&depFilter===d;
       depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:800">'+
@@ -138,7 +138,7 @@ function _rzRenderBookings(){
       var ca=(S._rzBookingCheckedIn||{})[String(a.orderNumber||'')]?1:0,cb=(S._rzBookingCheckedIn||{})[String(b.orderNumber||'')]?1:0;return ca-cb; // default: checked-in to the bottom
     });
     var gbd={a:0,c:0,i:0};grp.forEach(function(x){var e=_rzEffBreakdown(x);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
-    var prod=_rzProduct((((grp[0]||{}).items||[])[0]||{}).product||'');
+    var prod=(typeof _rzDepProdLabel==='function')?_rzDepProdLabel(grp):_rzProduct((((grp[0]||{}).items||[])[0]||{}).product||'');   // split departure → destination group (e.g. "MC")
     body+='<div style="margin:16px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:var(--text1)">🛫 <span onclick="window.rezdyRenameDep(\''+_rzEsc(depFilter).replace(/\'/g,"\\'")+'\')" title="Click to rename this heading" style="cursor:pointer;border-bottom:1px dashed var(--border2)">'+_rzEsc(_rzDepDisplay(depFilter))+'</span>'+((_rzDepShowProduct(depFilter)&&prod)?' '+_rzEsc(prod):'')+'</span><span style="font-size:11px;color:var(--text3);font-weight:600">'+grp.length+' booking'+(grp.length===1?'':'s')+' · '+_rzBdText(gbd)+'</span></div>';
     // Sort control: Default (checked-in last) · A–Z by name · Booked (booking order).
     body+='<div style="display:flex;gap:6px;align-items:center;margin:0 0 10px;flex-wrap:wrap"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:800;margin-right:2px">Sort</span>'+
