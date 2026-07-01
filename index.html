@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v29.14';
+const APP_VER='v29.15';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -20738,7 +20738,10 @@ function _rzRenderSchedule(){
         '</div>';
       }
       // Free-text note for this flight — shows on the block (📝) after the title. Keyed per departure.
-      (function(){var _bk=_grp.start+'|'+(_grp.gcode||'');var _bkJs=_rzEsc(_bk).replace(/'/g,"\\'");var _bv=(S._rzBlockNote||{})[_bk]||'';
+      // Key the note by the SAME canonical id the block reads from (_rzBlockNoteKey off g.key = the
+      // HELD/original slot), so a flyback (rendered at its return time) or a time-moved block still
+      // matches — otherwise the note saved under the display time never shows back on the block.
+      (function(){var _bk=(typeof _rzBlockNoteKey==='function')?_rzBlockNoteKey({order:_grp.key}):(_grp.start+'|'+(_grp.gcode||''));var _bkJs=_rzEsc(_bk).replace(/'/g,"\\'");var _bv=(S._rzBlockNote||{})[_bk]||'';
         detailH+='<div style="margin:0 0 8px">'+
           '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:700;margin-bottom:4px">📝 Notes <span style="font-weight:400;text-transform:none;letter-spacing:0">— shown on the block</span></div>'+
           '<textarea oninput="window.rezdySchedBlockNoteInput(\''+_bkJs+'\',this.value)" onchange="window.rezdySchedBlockNoteCommit()" placeholder="Add a note for this flight…" style="width:100%;box-sizing:border-box;min-height:46px;font-size:14px;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:8px">'+_rzEsc(_bv)+'</textarea>'+
