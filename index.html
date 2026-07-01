@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v29.04';
+const APP_VER='v29.05';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -17478,6 +17478,8 @@ function _rzRenderBookings(){
   const cancelledRows=allRows.filter(function(b){return _rzIsCancelled(b);});
   const deps=[];active.forEach(function(b){var d=_rzBookingDep(b);if(deps.indexOf(d)<0)deps.push(d);});
   deps.sort(_rzDepCmp);
+  // Surface EVERY scheduled FCF (Milford Fly-Cruise-Fly) departure as a chip — even slots with no bookings yet.
+  if(typeof _avDepsForProduct==='function'){_avDepsForProduct(S.rezdyDate,'Milford Sound Fly Cruise Fly').forEach(function(t){if(deps.indexOf(t)<0)deps.push(t);});deps.sort(_rzDepCmp);}
   const q=String(S._bkSearch||'').trim();
   const searching=q.length>0;
   // Dedicated "Cancelled" view (a pseudo-departure) showing the whole day's cancelled bookings.
@@ -17547,6 +17549,7 @@ function _rzRenderBookings(){
         _rem=_fleetSeats-(_depPaxBySlot[d]||0)-(_fbBySlot[d]||0);
       }
       var prod='';depB.some(function(b){var c=_rzProduct((((b.items||[])[0]||{}).product)||'');if(c){prod=c;return true;}return false;});
+      if(!prod&&typeof _avProdShortForDep==='function')prod=_avProdShortForDep(S.rezdyDate,d);   // no-booking slot → label from availability
       var on=!searching&&depFilter===d;
       depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:800">'+
         '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">'+_rzEsc(_rzDepDisplay(d))+((_rzDepShowProduct(d)&&prod)?' '+_rzEsc(prod):'')+'</span>'+
@@ -23899,6 +23902,33 @@ function _avSeatsForDep(date,dep){
     if(s.seatsAvailable!=null)seats.push(+s.seatsAvailable);
   });
   return seats.length?Math.min.apply(null,seats):null;
+}
+// Scheduled departure times (HHMM) for a product name on a date, from the day's availability — used to
+// surface departures (e.g. every FCF slot) even when they have no bookings yet.
+function _avDepsForProduct(date,productName){
+  var day=S._avDayData&&S._avDayData[date];if(!day||!day.sessions)return [];
+  var pn=String(productName||'').trim().toLowerCase();var out=[];
+  (day.sessions||[]).forEach(function(s){
+    if(String(s.startTimeLocal||'').slice(0,10)!==date)return;
+    if(String(s.productName||'').trim().toLowerCase()!==pn)return;
+    if(+s.seats>=900)return;
+    var t=String(s.startTimeLocal||'').slice(11,16);if(!t)return;var hhmm=t.replace(':','');
+    if(out.indexOf(hhmm)<0)out.push(hhmm);
+  });
+  return out.sort();
+}
+// Short product code for the first real product at a departure time (fallback label for no-booking slots).
+function _avProdShortForDep(date,dep){
+  var day=S._avDayData&&S._avDayData[date];if(!day||!day.sessions)return '';
+  dep=String(dep||'');var hhmm=(dep.length===4)?(dep.slice(0,2)+':'+dep.slice(2)):dep;var found='';
+  (day.sessions||[]).forEach(function(s){
+    if(found)return;
+    if(String(s.startTimeLocal||'').slice(0,10)!==date)return;
+    if(String(s.startTimeLocal||'').slice(11,16)!==hhmm)return;
+    if(+s.seats>=900)return;var nm=String(s.productName||'').trim().toLowerCase();if(/coach/.test(nm))return;
+    found=s.productName;
+  });
+  return found?((typeof _rzProduct==='function')?_rzProduct(found):found):'';
 }
 function renderAvailabilityView(){
   var ym=_avMonthStr();

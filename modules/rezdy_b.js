@@ -8,6 +8,8 @@ function _rzRenderBookings(){
   const cancelledRows=allRows.filter(function(b){return _rzIsCancelled(b);});
   const deps=[];active.forEach(function(b){var d=_rzBookingDep(b);if(deps.indexOf(d)<0)deps.push(d);});
   deps.sort(_rzDepCmp);
+  // Surface EVERY scheduled FCF (Milford Fly-Cruise-Fly) departure as a chip — even slots with no bookings yet.
+  if(typeof _avDepsForProduct==='function'){_avDepsForProduct(S.rezdyDate,'Milford Sound Fly Cruise Fly').forEach(function(t){if(deps.indexOf(t)<0)deps.push(t);});deps.sort(_rzDepCmp);}
   const q=String(S._bkSearch||'').trim();
   const searching=q.length>0;
   // Dedicated "Cancelled" view (a pseudo-departure) showing the whole day's cancelled bookings.
@@ -77,6 +79,7 @@ function _rzRenderBookings(){
         _rem=_fleetSeats-(_depPaxBySlot[d]||0)-(_fbBySlot[d]||0);
       }
       var prod='';depB.some(function(b){var c=_rzProduct((((b.items||[])[0]||{}).product)||'');if(c){prod=c;return true;}return false;});
+      if(!prod&&typeof _avProdShortForDep==='function')prod=_avProdShortForDep(S.rezdyDate,d);   // no-booking slot → label from availability
       var on=!searching&&depFilter===d;
       depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:800">'+
         '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">'+_rzEsc(_rzDepDisplay(d))+((_rzDepShowProduct(d)&&prod)?' '+_rzEsc(prod):'')+'</span>'+

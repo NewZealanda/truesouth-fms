@@ -166,6 +166,33 @@ function _avSeatsForDep(date,dep){
   });
   return seats.length?Math.min.apply(null,seats):null;
 }
+// Scheduled departure times (HHMM) for a product name on a date, from the day's availability — used to
+// surface departures (e.g. every FCF slot) even when they have no bookings yet.
+function _avDepsForProduct(date,productName){
+  var day=S._avDayData&&S._avDayData[date];if(!day||!day.sessions)return [];
+  var pn=String(productName||'').trim().toLowerCase();var out=[];
+  (day.sessions||[]).forEach(function(s){
+    if(String(s.startTimeLocal||'').slice(0,10)!==date)return;
+    if(String(s.productName||'').trim().toLowerCase()!==pn)return;
+    if(+s.seats>=900)return;
+    var t=String(s.startTimeLocal||'').slice(11,16);if(!t)return;var hhmm=t.replace(':','');
+    if(out.indexOf(hhmm)<0)out.push(hhmm);
+  });
+  return out.sort();
+}
+// Short product code for the first real product at a departure time (fallback label for no-booking slots).
+function _avProdShortForDep(date,dep){
+  var day=S._avDayData&&S._avDayData[date];if(!day||!day.sessions)return '';
+  dep=String(dep||'');var hhmm=(dep.length===4)?(dep.slice(0,2)+':'+dep.slice(2)):dep;var found='';
+  (day.sessions||[]).forEach(function(s){
+    if(found)return;
+    if(String(s.startTimeLocal||'').slice(0,10)!==date)return;
+    if(String(s.startTimeLocal||'').slice(11,16)!==hhmm)return;
+    if(+s.seats>=900)return;var nm=String(s.productName||'').trim().toLowerCase();if(/coach/.test(nm))return;
+    found=s.productName;
+  });
+  return found?((typeof _rzProduct==='function')?_rzProduct(found):found):'';
+}
 function renderAvailabilityView(){
   var ym=_avMonthStr();
   if((!S._avData||S._avData.ym!==ym)&&!S._avLoading){S._avLoading=true;setTimeout(window.loadAvailability,0);}
