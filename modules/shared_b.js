@@ -284,7 +284,7 @@ function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
   // Under Phase A, ts_users SELECT is revoked so it can't be subscribed — drop it.
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs','ts_maint_forms','ts_vehicle_prestarts','ts_ops_notices','ts_ops_notice_reads','ts_equipment','ts_visitors','ts_flight_following','ts_wx_links','ts_native_bookings','ts_session_holds'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs','ts_maint_forms','ts_vehicle_prestarts','ts_ops_notices','ts_ops_notice_reads','ts_equipment','ts_visitors','ts_flight_following','ts_wx_links','ts_native_bookings','ts_session_holds','ts_products'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
     var _rtThisWs=_rtWs;   // guard: a reconnect/refresh may replace _rtWs before this socket opens
@@ -672,6 +672,10 @@ async function reloadTable(table){
     // Availability-engine seat holds changed elsewhere — re-pull so sellable seats update live.
     if(S.rezdyDate&&typeof window.availLoadHolds==='function')window.availLoadHolds(S.rezdyDate).then(function(){if(typeof safeRender==='function')safeRender();});
     return false;
+  } else if(table==='ts_products'){
+    // Product catalog edited elsewhere — re-pull so prices/times/visibility update live.
+    if(typeof window.platformReloadProductsLive==='function')window.platformReloadProductsLive();
+    return false;   // reloads + safeRenders on its own
   } else if(table==='ts_scratchpads'){
     const ps=await sbF('ts_scratchpads','','saved_at');
     if(ps){S.pads=ps.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});return true;}

@@ -90,7 +90,29 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v28.90 (latest) — nightly sweep: escape order# in the weather-link modal's inline onclick handlers.**
+- **v29.28 (latest) — booking platform Phase 1 foundations: product catalog + public booking page skeleton.**
+  On branch **test** (Andrew's choice — commit/deploy to test first). See `PLATFORM_ROADMAP.md`
+  (the authoritative platform doc — it also covers the undocumented v28.91→v29.27 cycle: Phase 0
+  native-bookings store `modules/platform.js`/`ts_native_bookings`, desk New-booking routed
+  native-first, Phase 0.5 availability engine `modules/availability.js` + `ts_session_holds`, both
+  realtime-subscribed). New in v29.28:
+  (1) **`ts_products` catalog** (`products.sql` — APPLY IN SUPABASE): per-product customer name,
+  adult/child/infant NZD prices, standard departure `times[]`, duration, description, `active`
+  (public visibility, default OFF). Anon RLS reads active rows only; realtime-subscribed
+  (shared_b.js tables array + `platformReloadProductsLive` handler). Loaders/editor in
+  `modules/platform.js`; editor tab **Settings ▸ Operations ▸ 🛍 Products** (admin+, registered in
+  rezdy.js `renderAdminOperations`) with one-time seed from `_RZ_PROD_NAME`/`_RZ_PROD_CFG`.
+  (2) **`platform-book` edge function** (`supabase/functions/platform-book/` — DEPLOY with
+  `--no-verify-jwt`): the public funnel's only door (service role). Actions catalog/availability/
+  hold/release/book; books in the canonical shape so the whole FMS consumes it unchanged;
+  `createPaymentSession()` is the pluggable Windcave seam (pay-later until wired).
+  (3) **`book.html`** — standalone public direct-booking page (wx.html pattern): products → date →
+  live-seat slot picker (places a 15-min hold) → pax names/weights → contact → TS- order confirm.
+  NOT linked anywhere yet; go-live checklist in the roadmap (⚠️ incl. the Rezdy-cap coexistence
+  guard the edge fn doesn't have). build + `node --check` (4 blocks) → 0 errors; book.html script
+  node-checked too. NOTE: mid-session Andrew discarded the working tree via GitHub Desktop to
+  switch main→test; the v29.28 work was re-applied cleanly on test afterwards.
+- **v28.90 — nightly sweep: escape order# in the weather-link modal's inline onclick handlers.**
   `ARCHITECTURE_REVIEW_v28.90.md` is the latest full sweep (first since v28.55; covers the undocumented
   **v28.56→v28.89** cycle — the headline being the **customer weather-link system** `modules/wxlinks.js`
   + standalone `wx.html` page: pilot makes a weather call → desk copies a per-booking `wx.html?t=token`

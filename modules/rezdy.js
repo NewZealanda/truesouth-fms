@@ -800,7 +800,7 @@ function renderAdminOperations(){
   // and Scheduling are admin/superadmin only.
   var _adminPlus=!!(S.user&&(S.user.role==='admin'||S.user.role==='superadmin'||S.user.superAdmin));
   var tabs=[{id:'pickuplocs',lbl:'📍 Pickup Locations'},{id:'aerodromes',lbl:'🛬 Aerodromes'}];
-  if(_adminPlus)tabs=tabs.concat([{id:'vehicles',lbl:'🚐 Vehicles'},{id:'fuels',lbl:'⛽ Fuels'},{id:'flightduty',lbl:'🕓 Flight & Duty'},{id:'scheduling',lbl:'💲 Scheduling'}]);
+  if(_adminPlus)tabs=tabs.concat([{id:'vehicles',lbl:'🚐 Vehicles'},{id:'products',lbl:'🛍 Products'},{id:'fuels',lbl:'⛽ Fuels'},{id:'flightduty',lbl:'🕓 Flight & Duty'},{id:'scheduling',lbl:'💲 Scheduling'}]);
   var ids=tabs.map(function(t){return t.id;});
   var sub=(ids.indexOf(S._opsSettingsTab)>=0)?S._opsSettingsTab:'pickuplocs';S._opsSettingsTab=sub;
   var bar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
@@ -808,6 +808,7 @@ function renderAdminOperations(){
   var body;
   if(sub==='vehicles')body='<div class="card" style="margin-bottom:0"><div class="st">Vehicles (pickup vans)</div><p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">Name, colour and seat count for each pickup vehicle. These are the vans you allocate pickups to on Operations ▸ Ground ▸ Pickups.</p></div>'+((typeof _rzVehiclePanel==='function')?_rzVehiclePanel():'');
   else if(sub==='aerodromes')body=(typeof renderAerodromes==='function')?renderAerodromes():'';
+  else if(sub==='products')body=(typeof renderAdminProducts==='function')?renderAdminProducts():'';
   else if(sub==='fuels')body=(typeof renderAdminFuels==='function')?renderAdminFuels():'';
   else if(sub==='flightduty')body=(typeof renderFDLimits==='function')?renderFDLimits():'';
   else if(sub==='scheduling')body=(typeof renderSchedulingSettings==='function')?renderSchedulingSettings():'';

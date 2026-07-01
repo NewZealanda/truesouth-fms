@@ -47,13 +47,12 @@ Why a JSON blob and not fully-normalised tables yet? It keeps the read path (`_r
 `products` / `sessions` / `payments` tables arrive in Phase 0.5 / Phase 1 once we're writing
 bookings natively and know the exact query patterns.
 
-**Next (Phase 0 follow-ups):**
-- Move manual (walk-in/phone) bookings from the per-date pickup blob into `ts_native_bookings` so
-  they get a durable, queryable home (with a one-time migration of existing manual bookings).
-- Realtime-subscribe `ts_native_bookings` (postgres_changes + reconnect backfill) so a native
-  booking created on one device appears on the others without a reload.
-- Normalised catalog table `ts_products` (seeded from `_RZ_PROD_CFG`) so products/prices are
-  editable without a code deploy.
+**Phase 0 follow-ups — status:**
+- ✅ New desk bookings write to `ts_native_bookings` (`rezdyNewBookingSave` routes native-first,
+  legacy pickup-blob only as fallback). Existing old manual bookings stay in their blobs (they
+  age out with their dates — no migration needed).
+- ✅ `ts_native_bookings` realtime-subscribed (+ reconnect backfill → `platformReloadBookingsLive`).
+- ✅ Product catalog `ts_products` (v29.28) — see Phase 1 below.
 
 ### Phase 0.5 — Availability engine  ← **built (v29.26)**
 One source of truth for "sellable seats on this departure right now", consolidating the seat math
@@ -77,13 +76,38 @@ that used to live in the bookings chips + the Rezdy availability table.
 Deliberately compute-on-demand (no materialised `ts_sessions` table to drift): the engine derives
 from the live bookings + fleet + Rezdy availability + holds each call.
 
-### Phase 1 — Direct bookings + payments
+### Phase 1 — Direct bookings + payments  ← **foundations built (v29.28)**
 Customer-facing booking flow → availability engine → `ts_native_bookings` → third-party payment.
 Highest-value, lowest-risk win: every direct sale skips Rezdy's fee and we own the funnel.
-- **Payments:** hosted checkout / drop-in element so cards never touch our servers (lightest PCI
-  tier — matches the standing "never store card data" rule). NZ options: **Stripe** or **Windcave**
-  (NZ-based, common in NZ tourism); Stripe **Connect** if we later want to auto-split agent
-  commissions. Confirmation via provider webhook → write `payments` + flip booking to paid.
+
+**Built in v29.28 (pay-later skeleton, not yet customer-facing):**
+- **`ts_products` catalog** (`products.sql`) — one row per product: customer name, per-pax NZD
+  prices, standard departure `times[]`, duration, description, `active` (public visibility, all OFF
+  by default). Editor at **Settings ▸ Operations ▸ 🛍 Products** (admin+): seed-from-built-in-list
+  button, inline editing, add/delete. Anon RLS reads ACTIVE rows only. Realtime-subscribed.
+  Loaders in `modules/platform.js` (`platformLoadProducts` / `platformProducts` / `platformProduct`).
+- **`platform-book` edge function** (`supabase/functions/platform-book/`) — the public funnel's
+  only door (service role; anon can't write the tables). Actions: `catalog`, `availability`
+  (fleet seats − committed(both stores) − active holds, per HH:MM slot), `hold`/`release`
+  (15-min soft-locks in `ts_session_holds`), `book` (validates product/date/slot/pax + seat check,
+  prices from the catalog, inserts the canonical booking shape → whole FMS picks it up unchanged).
+  Deploy: `supabase functions deploy platform-book --no-verify-jwt`.
+- **`book.html`** — standalone public page (wx.html pattern): product cards → date + live
+  seat-count slot picker (places a hold) → pax names/weights → contact → request booking →
+  confirmation with TS- order number. Pay-later copy; hold released on page-leave via sendBeacon.
+- **Payments (Windcave target, pluggable):** `createPaymentSession()` in the edge fn is the seam —
+  when Windcave goes live it returns the Hosted Payment Page URL (env `WINDCAVE_USER`/`WINDCAVE_KEY`)
+  and book.html already redirects to `payment.url` if present. Card data never touches our servers.
+  Provider webhook → `payments` + flip booking paid is the remaining piece.
+
+**Go-live checklist (before linking book.html anywhere):**
+1. Apply `products.sql`; deploy `platform-book` with `--no-verify-jwt`.
+2. Seed + price products in Settings ▸ Operations ▸ Products; set standard `times`; tick `active`
+   only on what should sell direct.
+3. ⚠️ Coexistence: the edge fn guards with FLEET capacity only — it can't see Rezdy's live
+   availability number. Either wire the Rezdy cap into `platform-book` (via rezdy-sync) or only
+   activate products/slots Rezdy doesn't sell, else a direct sale could oversell a Rezdy channel.
+4. Wire Windcave (or launch pay-later deliberately).
 
 ### Phase 2 — Agent / B2B portal
 Agent login (a new role on the auth we already have) with live availability, net/commission rates,
