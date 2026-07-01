@@ -558,8 +558,15 @@ function render(){
   var _winY=null,_winX=0;
   try{if(_winSig===S._lastViewSig){_winY=window.pageYOffset||window.scrollY||0;_winX=window.pageXOffset||window.scrollX||0;}}catch(e){}
   S._lastViewSig=_winSig;
+  // On the calendar, the visible-hour window is recomputed per day (fits that day's blocks), so a raw
+  // pixel-scroll restore lands on a different TIME each day. Capture the OLD grid start-pixel now; after
+  // the render sets the NEW one (S._rzCalStartPx), shift the restore by the delta so the same hour stays
+  // put as you step days. (delta is 0 on a same-day re-render → no-op.)
+  var _calOn=(S.section==='operations'&&S.tab==='calendar');
+  var _calStartOldPx=_calOn?S._rzCalStartPx:null;
   r.innerHTML=renderApp()+renderAccountModal()+renderToasts()+renderIOSBanner();
   try{Object.keys(_keepScroll).forEach(function(id){var el=document.getElementById(id);if(el){el.scrollLeft=_keepScroll[id].l;el.scrollTop=_keepScroll[id].t;}});}catch(e){}
+  if(_winY!=null&&_calOn&&_calStartOldPx!=null&&S._rzCalStartPx!=null){_winY=Math.max(0,_winY+(_calStartOldPx-S._rzCalStartPx));}
   if(_winY!=null&&(_winY||_winX)){try{window.scrollTo(_winX,_winY);}catch(e){}}
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}

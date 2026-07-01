@@ -1348,6 +1348,10 @@ function _rzRenderSchedule(){
       if(_RZ_SCH_END-_RZ_SCH_START<3)_RZ_SCH_END=Math.min(24,_RZ_SCH_START+3);
     } else {_RZ_SCH_START=6;_RZ_SCH_END=18;}
   })();
+  // Publish the grid's top-of-day pixel offset so render() (a separate script block, can't see this
+  // let/const) can hold the same TIME on screen when you step days — the visible window is recomputed
+  // per day, so a raw pixel-scroll restore would otherwise land on a different hour each day.
+  S._rzCalStartPx=_RZ_SCH_START*60*_RZ_PX_PER_MIN;
   _RZ_COL_W=S.mobileView?98:150;   // zoom the columns out on a phone so more aircraft fit on screen
   // Mobile drag-lock: when locked, blocks must let touch-scroll pass through (touch-action:auto) and the
   // resize edges are inert. Desktop is never locked. _rzCalLocked() lives in rezdy.js.
