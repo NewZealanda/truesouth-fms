@@ -181,7 +181,10 @@ serve(async (req) => {
       avail: [] as any[],
     }
     if (!codes.length) return json({ ok: true, from, to, sessions: [], products: [], debug })
-    const startTime = `${from} 00:00:00`, endTime = `${to} 23:59:59`
+    // Rezdy's startTime/endTime params are ISO8601 (UTC), NOT the local "yyyy-MM-dd HH:mm:ss" format.
+    // Widen the UTC window a day each side so a full NZ (UTC+12/13) month is covered; the client filters by local date.
+    const isoT = (dstr: string, add: number) => { const t = new Date(dstr + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + add); return t.toISOString().slice(0, 19) + "Z" }
+    const startTime = isoT(from, -1), endTime = isoT(to, 1)
     const sessions: any[] = []
     for (let i = 0; i < codes.length; i += 20) {
       const chunk = codes.slice(i, i + 20)
