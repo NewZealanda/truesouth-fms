@@ -520,7 +520,10 @@ function _rzRow(r){return (r&&r.data)?r.data:r||{};}
 // merged separately and never reach here). Returns true = drop it.
 function _rzIsSupplierDup(b){
   var on=String((b&&b.orderNumber)||'');
-  if(!on||/^TSF/i.test(on))return false;
+  // Real customer orders (Rezdy "TSF…") and OUR in-house orders (native "TS-…", manual "M-…") are always
+  // kept. Without the TS-/M- exemption, native bookings (no sourceCode) were wrongly dropped as supplier
+  // dupes on reload — so they never survived a refresh.
+  if(!on||/^TSF/i.test(on)||/^TS-/i.test(on)||/^M-/i.test(on)||b._native||b._manual)return false;
   var rawCode=String((b&&b.sourceCode)||'');
   return (!rawCode||/MARKETPLACE/i.test(rawCode));
 }
@@ -1267,6 +1270,10 @@ function _rzCheckinModal(){
     var _ciCode=(_ciAc&&typeof _rzSchedPilotFor==='function')?_rzSchedPilotFor(_ciAc,_ciDep):null;
     if(_ciCode){var _cr=(S.crew||[]).find(function(c){return String(c.code||'').toUpperCase()===String(_ciCode).toUpperCase();});_ciPilotName=(_cr&&_cr.n)?String(_cr.n).trim().split(/\s+/)[0]:String(_ciCode);}
   }catch(_e){}
+  // Aircraft allocated to this booking — shown as a colour chip beside the pilot in the check-in box.
+  var _ciAcName=(_ciAc&&_ciAc!=='__none__'&&_ciAc!=='__unalloc__')?_ciAc:'';
+  var _ciAcCol=(_ciAcName&&typeof _rzAcCol==='function')?_rzAcCol(_ciAcName):'#60a5fa';
+  var _ciAcTail=_ciAcName?_ciAcName.replace(/^ZK-?/,''):'';
   // Fixed-size box so the check-in looks the SAME regardless of lunches / plate / pax count — uses the
   // desktop real estate; the passenger list scrolls inside for big groups. Still an overlaid modal.
   var _dlg='background:var(--card);border:1px solid var(--border2);border-radius:16px;box-shadow:0 16px 50px rgba(0,0,0,.5);width:560px;max-width:calc(100vw - 24px);height:min(740px,calc(100dvh - 64px));display:flex;flex-direction:column;overflow:hidden';
@@ -1275,7 +1282,10 @@ function _rzCheckinModal(){
     '<div style="flex-shrink:0;padding:16px 18px 12px;border-bottom:1px solid var(--border2)">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><div class="st" style="margin-bottom:0">'+(already?'Edit check-in':'Check in')+' — '+_rzEsc(cust)+'</div><button onclick="window.rezdyCheckinCancel()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>'+
       '<p style="font-size:12px;color:var(--text3);margin:8px 0 0">Enter every passenger’s name. <b>Actual weight</b> is optional — blank falls back to the declared weight (red “(d)”). The toggle cycles <b>A</b>→<b>C</b>→<b>i</b>; an infant is a lap pax.</p>'+
-      (_ciPilotName?'<div style="margin-top:9px;display:inline-flex;align-items:center;gap:7px;background:rgba(96,165,250,.14);border:1px solid rgba(96,165,250,.5);border-radius:9px;padding:5px 12px"><span style="font-size:15px">✈</span><span style="font-size:13px;font-weight:800;color:#60a5fa">Your pilot today: '+_rzEsc(_ciPilotName)+'</span></div>':'')+
+      ((_ciPilotName||_ciAcTail)?'<div style="margin-top:9px;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+        (_ciPilotName?'<span style="display:inline-flex;align-items:center;gap:7px;background:rgba(96,165,250,.14);border:1px solid rgba(96,165,250,.5);border-radius:9px;padding:5px 12px"><span style="font-size:15px">✈</span><span style="font-size:13px;font-weight:800;color:#60a5fa">Your pilot today: '+_rzEsc(_ciPilotName)+'</span></span>':'')+
+        (_ciAcTail?'<span title="Allocated aircraft" style="display:inline-flex;align-items:center;gap:6px;background:'+_ciAcCol+'22;border:1px solid '+_ciAcCol+';border-radius:9px;padding:5px 12px"><span style="font-size:13px;font-weight:900;letter-spacing:.03em;color:'+_ciAcCol+'">'+_rzEsc(_ciAcTail)+'</span></span>':'')+
+      '</div>':'')+
     '</div>'+
     '<div style="flex:1 1 auto;overflow:auto;padding:14px 18px">';
   var _ciBal=b?parseFloat(b.balanceDue):0;
@@ -1299,13 +1309,15 @@ function _rzCheckinModal(){
       '<div style="display:flex;flex-direction:column;gap:5px">'+_ciAsp.map(function(e){var q=parseInt(e.qty,10)||1;return '<div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700;color:#bae6fd"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;background:#0ea5e9;color:#04263a;font-weight:900;border-radius:6px;font-size:13px">×'+q+'</span>'+_rzEsc(e.name)+'</div>';}).join('')+'</div>'+
     '</div>';
   }
-  // Self-drive numberplate(s) — recorded here, hand-entered into the separate system later.
+  // Self-drive numberplate(s) — ONLY shown for self-drive customers (they arrive in their own car).
   var _ciSelf=(typeof _rzManualSelfDrive==='function'&&_rzManualSelfDrive(d.order))||(!!b&&(b.items||[]).some(function(it){return it.pickup&&typeof _rzIsSelfDrive==='function'&&_rzIsSelfDrive(it.pickup);}));
-  h+='<div style="background:'+(_ciSelf?'rgba(59,130,246,.12)':'var(--card2)')+';border:1px solid '+(_ciSelf?'#3b82f6':'var(--border2)')+';border-radius:9px;padding:11px 13px;margin:0 0 12px">'+
-    '<div style="font-size:12.5px;font-weight:800;color:'+(_ciSelf?'#60a5fa':'var(--text2)')+';margin-bottom:6px">🚗 Self-drive numberplate(s)'+(_ciSelf?' — self-drive booking':'')+'</div>'+
-    '<input type="text" value="'+_rzEsc(d.plate||'')+'" oninput="window.rezdyCheckinPlate(this.value)" placeholder="e.g. ABC123 — comma-separate if more than one" style="width:100%;box-sizing:border-box;font-size:16px;padding:9px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px;letter-spacing:.04em;text-transform:uppercase">'+
-    '<div style="font-size:11px;color:var(--text3);margin-top:5px">A <b>P</b> shows on the booking; tick it off in the booking dropdown once it’s in the separate system.</div>'+
-  '</div>';
+  if(_ciSelf){
+    h+='<div style="background:rgba(59,130,246,.12);border:1px solid #3b82f6;border-radius:9px;padding:11px 13px;margin:0 0 12px">'+
+      '<div style="font-size:12.5px;font-weight:800;color:#60a5fa;margin-bottom:6px">🚗 Self-drive numberplate(s)</div>'+
+      '<input type="text" value="'+_rzEsc(d.plate||'')+'" oninput="window.rezdyCheckinPlate(this.value)" placeholder="e.g. ABC123 — comma-separate if more than one" style="width:100%;box-sizing:border-box;font-size:16px;padding:9px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px;letter-spacing:.04em;text-transform:uppercase">'+
+      '<div style="font-size:11px;color:var(--text3);margin-top:5px">A <b>P</b> shows on the booking; tick it off in the booking dropdown once it’s in the separate system.</div>'+
+    '</div>';
+  }
   d.rows.forEach(function(r,i){
     var isInf=r.type==='infant';
     var tl=r.type==='child'?'C':isInf?'i':'A';
