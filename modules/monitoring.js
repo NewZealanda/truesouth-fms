@@ -227,7 +227,7 @@ var _AV_FRANZ={group:'Franz Josef',time:'08:30',cols:[
   {label:'Scenic',name:'Franz Josef Scenic Flight',time:'08:30'}
 ]};
 // Flyback return time by FCF departure slot (matches the calendar flyback defaults; winter + summer).
-var _FB_RETURN={'09:30':'1:00pm','10:30':'2:00pm','12:00':'3:30pm','13:00':'4:15pm'};
+var _FB_RETURN={'09:30':'1:00pm','10:30':'2:00pm','12:00':'3:30pm','13:00':'4:30pm'};
 // Milford columns are built from the month's ACTUAL FCF departure times (winter 0930/1200, summer 1030/1200/1300…),
 // each as an FCF outbound + FLB flyback labelled by its return time — so summer schedules appear automatically.
 function _avMilfordGroup(sess,ym){
