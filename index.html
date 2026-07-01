@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v29.21';
+const APP_VER='v29.22';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -15834,7 +15834,7 @@ window.rezdyResetBooking=function(order){
   render();
 };
 // ── Manual (walk-in / phone) booking ──
-window.rezdyNewBookingOpen=function(){S._rzNewBkDraft={name:'',phone:'',time:'',product:'FCF',a:1,c:0,i:0,ac:'',pickup:''};render();};
+window.rezdyNewBookingOpen=function(){S._rzNewBkDraft={name:'',phone:'',email:'',time:'',product:'FCF',a:1,c:0,i:0,ac:'',pickup:'',owing:'',note:''};render();};
 window.rezdyNewBkField=function(field,val){var d=S._rzNewBkDraft;if(d)d[field]=val;}; // no render (keep focus)
 window.rezdyNewBkCount=function(field,delta){var d=S._rzNewBkDraft;if(!d)return;d[field]=Math.max(0,(parseInt(d[field],10)||0)+delta);render();};
 window.rezdyNewBookingCancel=function(){S._rzNewBkDraft=null;render();};
@@ -15848,7 +15848,11 @@ window.rezdyNewBookingSave=function(){
   var a=parseInt(d.a,10)||0,c=parseInt(d.c,10)||0,i=parseInt(d.i,10)||0;
   if(a+c+i<1){if(typeof toast==='function')toast('Add at least one passenger','warn');return;}
   var prod=String(d.product||'').trim()||'CHT';
-  var order='M-'+Date.now().toString(36).toUpperCase().slice(-6);
+  var owing=parseFloat(d.owing);owing=(isFinite(owing)&&owing>0)?owing:0;
+  // Native (in-house) bookings live in ts_native_bookings — durable, cross-device, and coexisting with
+  // Rezdy. Fall back to the legacy per-date pickup blob only if the platform store isn't available.
+  var useNative=(typeof platformSaveBooking==='function'&&typeof platformNewOrderNo==='function');
+  var order=useNative?platformNewOrderNo():('M-'+Date.now().toString(36).toUpperCase().slice(-6));
   var quantities=[];if(a)quantities.push({label:'Adult',value:a});if(c)quantities.push({label:'Child',value:c});if(i)quantities.push({label:'Infant',value:i});
   var participants=[];for(var k=0;k<a+c;k++)participants.push({name:'',weight:'',age:''}); // infants are lap pax, captured at check-in
   // Pickup location → flows into Transport (_rzPickups reads it.pickup + it.pickupTime). The pickup
@@ -15860,29 +15864,36 @@ window.rezdyNewBookingSave=function(){
     var _pm=(parseInt(tm.slice(0,2),10)*60+parseInt(tm.slice(2),10))-_min;if(_pm<0)_pm=0;
     _pkTime=S.rezdyDate+'T'+String(Math.floor(_pm/60)).padStart(2,'0')+':'+String(_pm%60).padStart(2,'0')+':00';
   }
-  var booking={id:order,orderNumber:order,status:'CONFIRMED',customerName:name,phone:String(d.phone||'').trim(),email:'',comments:'',fields:{},source:'Manual',
-    totalPax:a+c+i,totalAmount:0,totalPaid:0,balanceDue:0,currency:'NZD',
+  var booking={id:order,orderNumber:order,status:'CONFIRMED',customerName:name,phone:String(d.phone||'').trim(),email:String(d.email||'').trim(),comments:String(d.note||'').trim(),fields:{},source:'Manual',
+    totalPax:a+c+i,totalAmount:owing,totalPaid:0,balanceDue:owing,currency:'NZD',
     items:[{product:prod,startTimeLocal:S.rezdyDate+'T'+hhmm+':00',quantity:a+c+i,quantities:quantities,pickup:_pk,pickupTime:_pkTime,extras:[],participants:participants}],
-    _manual:true,_tourDate:S.rezdyDate};
-  S._rzManualBk=S._rzManualBk||[];S._rzManualBk.push(booking);
+    _tourDate:S.rezdyDate};
+  if(useNative)booking._native=true;else booking._manual=true;
   S._rezdyBookings=S._rezdyBookings||[];S._rezdyBookings.push(booking);
   // Default a new booking to UNALLOCATED (Misc) unless an aircraft was chosen — so it sits in the pool
   // for the operator to allocate, and the auto-allocator leaves the existing bookings' aircraft alone.
   S._rzBookingAc=S._rzBookingAc||{};S._rzBookingAc[order]=d.ac?d.ac:'__none__';
   S._bkDepFilter=_rzBookingDep(booking);S._bkSearch='';S._rzNewBkDraft=null;
-  if(window.pickupSave)window.pickupSave(true);
-  if(typeof toast==='function')toast('Booking added','ok');render();
+  if(useNative){platformSaveBooking(booking);}   // → ts_native_bookings (sbU queues + retries if offline)
+  else{S._rzManualBk=S._rzManualBk||[];S._rzManualBk.push(booking);}
+  if(window.pickupSave)window.pickupSave(true);   // persists the aircraft assignment (+ manual blob on the legacy path)
+  if(typeof toast==='function')toast(useNative?'Booking added ✓':'Booking added','ok');render();
 };
-// Delete a manual booking (only manual ones can be deleted).
+// Delete an in-house booking (native or legacy-manual — Rezdy-synced bookings can't be deleted here).
 window.rezdyDeleteManualBooking=function(order){
   order=String(order);
-  if(!confirm('Delete this manual booking?'))return;
-  S._rzManualBk=(S._rzManualBk||[]).filter(function(b){return String(b.orderNumber||'')!==order;});
-  S._rezdyBookings=(S._rezdyBookings||[]).filter(function(b){return String(b.orderNumber||'')!==order;});
+  if(!confirm('Delete this booking?'))return;
+  var b=(S._rezdyBookings||[]).find(function(x){return String((x&&(x.orderNumber||x.id))||'')===order;});
+  var td=(b&&b._tourDate)||S.rezdyDate;
+  S._rzManualBk=(S._rzManualBk||[]).filter(function(x){return String(x.orderNumber||'')!==order;});
+  S._rezdyBookings=(S._rezdyBookings||[]).filter(function(x){return String(x.orderNumber||'')!==order;});
   ['_rzCheckin','_rzBookingCheckedIn','_rzBookingAc','_rzBookingWx','_rezdyPaxMeta','_rzSchedAttach','_rzBkNote'].forEach(function(k){if(S[k])delete S[k][order];});
+  if(b&&b._native&&typeof platformDeleteBooking==='function')platformDeleteBooking(order,td);   // remove from ts_native_bookings
   if(window.pickupSave)window.pickupSave(true);
   if(typeof toast==='function')toast('Booking deleted','info');render();
 };
+// Re-save a native booking after an in-place edit (balance / source) so the change reaches the store.
+function _rzPersistNativeIfAny(order){var b=(S._rezdyBookings||[]).find(function(x){return x&&x._native&&String((x.orderNumber||x.id))===String(order);});if(b&&typeof platformSaveBooking==='function')platformSaveBooking(b);}
 function _rzNewBookingModal(){
   var d=S._rzNewBkDraft;if(!d)return '';
   var fleet=['ZK-SLA','ZK-SLB','ZK-SLD','ZK-SLQ','ZK-SDB'].filter(function(id){return S.aircraft&&S.aircraft[id];});
@@ -15900,7 +15911,7 @@ function _rzNewBookingModal(){
   var h='<div onclick="window.rezdyNewBookingCancel()" class="rzci-overlay">'+
     '<div onclick="event.stopPropagation()" class="rzci-dialog">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px"><div class="st" style="margin-bottom:0">New booking</div><button onclick="window.rezdyNewBookingCancel()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:0 0 12px">A manual walk-in / phone booking for '+_rzEsc(_rzDowLabel(S.rezdyDate))+'. It sits alongside the Rezdy bookings and won’t be wiped by a sync.</p>'+
+    '<p style="font-size:12px;color:var(--text3);margin:0 0 12px">An in-house walk-in / phone booking for '+_rzEsc(_rzDowLabel(S.rezdyDate))+'. Saved to the app’s own store — it sits alongside the Rezdy bookings and won’t be wiped by a sync. (Still enter it in Rezdy too for reconciliation until we switch over.)</p>'+
     '<label style="font-size:11px;color:var(--text3);font-weight:700">CUSTOMER NAME</label>'+
     '<input type="text" value="'+_rzEsc(d.name||'')+'" oninput="window.rezdyNewBkField(\'name\',this.value)" placeholder="Full name" style="'+fst+';margin:2px 0 10px">'+
     '<div style="display:flex;gap:8px;margin-bottom:10px">'+
@@ -15911,10 +15922,16 @@ function _rzNewBookingModal(){
     '<div style="display:flex;gap:8px;margin:4px 0 10px">'+stp('a','Adults')+stp('c','Children')+stp('i','Infants')+'</div>'+
     '<label style="font-size:11px;color:var(--text3);font-weight:700">PICKUP LOCATION (optional)</label>'+
     '<select onchange="window.rezdyNewBkField(\'pickup\',this.value)" style="'+fst+';margin:2px 0 10px"><option value="">— No pickup / self-drive —</option>'+_bkLocs.map(function(L){var nm=String(L.name||'');if(!nm)return '';return '<option value="'+_rzEsc(nm)+'"'+(d.pickup===nm?' selected':'')+'>'+_rzEsc(nm)+(L.min?(' · '+L.min+'m before'):'')+'</option>';}).join('')+'</select>'+
-    '<div style="display:flex;gap:8px;margin-bottom:14px">'+
+    '<div style="display:flex;gap:8px;margin-bottom:10px">'+
       '<div style="flex:1"><label style="font-size:11px;color:var(--text3);font-weight:700">PHONE (optional)</label><input type="tel" value="'+_rzEsc(d.phone||'')+'" oninput="window.rezdyNewBkField(\'phone\',this.value)" placeholder="Phone" style="'+fst+';margin-top:2px"></div>'+
-      '<div style="flex:1"><label style="font-size:11px;color:var(--text3);font-weight:700">AIRCRAFT (optional)</label><select onchange="window.rezdyNewBkField(\'ac\',this.value)" style="'+fst+';margin-top:2px"><option value="">— none —</option>'+fleet.map(function(id){return '<option value="'+id+'"'+(d.ac===id?' selected':'')+'>'+id.replace('ZK-','')+'</option>';}).join('')+'</select></div>'+
+      '<div style="flex:1"><label style="font-size:11px;color:var(--text3);font-weight:700">EMAIL (optional)</label><input type="email" value="'+_rzEsc(d.email||'')+'" oninput="window.rezdyNewBkField(\'email\',this.value)" placeholder="Email" style="'+fst+';margin-top:2px"></div>'+
     '</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:10px">'+
+      '<div style="flex:1"><label style="font-size:11px;color:var(--text3);font-weight:700">AIRCRAFT (optional)</label><select onchange="window.rezdyNewBkField(\'ac\',this.value)" style="'+fst+';margin-top:2px"><option value="">— none —</option>'+fleet.map(function(id){return '<option value="'+id+'"'+(d.ac===id?' selected':'')+'>'+id.replace('ZK-','')+'</option>';}).join('')+'</select></div>'+
+      '<div style="flex:1"><label style="font-size:11px;color:var(--text3);font-weight:700">AMOUNT OWING $ (optional)</label><input type="number" inputmode="decimal" min="0" step="0.01" value="'+_rzEsc(d.owing||'')+'" oninput="window.rezdyNewBkField(\'owing\',this.value)" placeholder="0.00 = paid" style="'+fst+';margin-top:2px"></div>'+
+    '</div>'+
+    '<label style="font-size:11px;color:var(--text3);font-weight:700">NOTE (optional)</label>'+
+    '<textarea oninput="window.rezdyNewBkField(\'note\',this.value)" placeholder="Internal note — special requests, agent, etc." style="'+fst+';margin:2px 0 14px;min-height:44px;resize:vertical">'+_rzEsc(d.note||'')+'</textarea>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end">'+
       '<button class="btn btn-ghost" style="font-size:13px" onclick="window.rezdyNewBookingCancel()">Cancel</button>'+
       '<button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="window.rezdyNewBookingSave()">✓ Add booking</button>'+
@@ -17274,13 +17291,14 @@ window.rezdyPaxCycleType=function(order,idx,cur){
 // "Called — no answer" flag per booking: tap the phone number to mark it (amber + a C), tap again to
 // clear. Persisted per-date in the pickup blob (bkCalled) so all staff see it.
 window.rezdyToggleCalled=function(order){order=String(order);S._rzBkCalled=S._rzBkCalled||{};if(S._rzBkCalled[order])delete S._rzBkCalled[order];else S._rzBkCalled[order]=1;if(window.pickupSave)window.pickupSave(true);if(typeof _rzPickupBroadcast==='function')_rzPickupBroadcast();render();};
-// Edit a MANUAL booking's balance owing / source (persisted in the pickup blob via manualBk).
+// Edit an in-house booking's balance owing / source. Native → re-saved to ts_native_bookings;
+// legacy-manual → persisted in the pickup blob via manualBk.
 window.rezdyManualSetBalance=function(order,val){order=String(order);var n=parseFloat(val);n=isFinite(n)&&n>0?n:0;
-  [S._rzManualBk,S._rezdyBookings].forEach(function(arr){(arr||[]).forEach(function(x){if(x&&x._manual&&String(x.orderNumber||x.id)===order)x.balanceDue=n;});});
-  if(window.pickupSave)window.pickupSave(true);render();};
+  [S._rzManualBk,S._rezdyBookings].forEach(function(arr){(arr||[]).forEach(function(x){if(x&&(x._manual||x._native)&&String(x.orderNumber||x.id)===order){x.balanceDue=n;x.totalAmount=n;}});});
+  _rzPersistNativeIfAny(order);if(window.pickupSave)window.pickupSave(true);render();};
 window.rezdyManualSetSource=function(order,val){order=String(order);var s=String(val||'').trim()||'Manual';
-  [S._rzManualBk,S._rezdyBookings].forEach(function(arr){(arr||[]).forEach(function(x){if(x&&x._manual&&String(x.orderNumber||x.id)===order)x.source=s;});});
-  if(window.pickupSave)window.pickupSave(true);render();};
+  [S._rzManualBk,S._rezdyBookings].forEach(function(arr){(arr||[]).forEach(function(x){if(x&&(x._manual||x._native)&&String(x.orderNumber||x.id)===order)x.source=s;});});
+  _rzPersistNativeIfAny(order);if(window.pickupSave)window.pickupSave(true);render();};
 // Toggle a CHECKED-IN passenger between adult and child (infants are set at check-in via the
 // lap-attach flow, so they're left alone here). Keeps the bubble + expanded list in sync.
 window.rezdyCheckinCycleType=function(order,n){
@@ -17677,8 +17695,8 @@ function _rzBookingDetail(b){
   var _bdOrder=String(b.orderNumber||'');var _bdOE=_rzEsc(_bdOrder).replace(/'/g,"\\'");
   // Passenger bubbles (moved here from the collapsed card) + a per-booking "Reset to Rezdy".
   var bubsH='';var _bub=_rzPaxBubbles(b);
-  var _rst=(b._manual
-    ?'<button onclick="window.rezdyDeleteManualBooking(\''+_bdOE+'\')" title="Delete this manual booking" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#f87171;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.4);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">🗑 Delete booking</button>'
+  var _rst=((b._manual||b._native)
+    ?'<button onclick="window.rezdyDeleteManualBooking(\''+_bdOE+'\')" title="Delete this in-house booking" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#f87171;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.4);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">🗑 Delete booking</button>'
     :'<button onclick="window.rezdyResetBooking(\''+_bdOE+'\')" title="Reset this booking to its original Rezdy info — clears check-in, weights, child/infant tags and aircraft" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:var(--card2);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">↺ Reset to Rezdy</button>');
   bubsH='<div style="display:flex;align-items:stretch;margin-bottom:12px">'+(_bub||'<span style="flex:1"></span>')+_rst+'</div>';
   // Passengers — use the SAME canonical rows as the bubble strip so child/infant tags, names and
@@ -17771,8 +17789,8 @@ function _rzBookingDetail(b){
   const bal=parseFloat(b.balanceDue);
   const owing=isFinite(bal)&&bal>0;
   let balH,srcH;
-  if(b._manual){
-    // Manual (app-created) bookings: balance + source are editable (no Rezdy record behind them).
+  if(b._manual||b._native){
+    // In-house (app-created) bookings: balance + source are editable (no Rezdy record behind them).
     balH='<div style="'+_pan+'"><div style="'+sec+'">Balance owing</div>'+
       '<div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px;font-weight:800;color:var(--text3)">$</span>'+
       '<input type="number" inputmode="decimal" min="0" step="0.01" value="'+_rzEsc(isFinite(bal)?String(bal):'')+'" onchange="window.rezdyManualSetBalance(\''+_bdOE+'\',this.value)" placeholder="0.00" style="flex:1;min-width:0;font-size:15px;font-weight:700;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px"></div>'+

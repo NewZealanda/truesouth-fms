@@ -187,8 +187,8 @@ function _rzBookingDetail(b){
   var _bdOrder=String(b.orderNumber||'');var _bdOE=_rzEsc(_bdOrder).replace(/'/g,"\\'");
   // Passenger bubbles (moved here from the collapsed card) + a per-booking "Reset to Rezdy".
   var bubsH='';var _bub=_rzPaxBubbles(b);
-  var _rst=(b._manual
-    ?'<button onclick="window.rezdyDeleteManualBooking(\''+_bdOE+'\')" title="Delete this manual booking" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#f87171;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.4);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">🗑 Delete booking</button>'
+  var _rst=((b._manual||b._native)
+    ?'<button onclick="window.rezdyDeleteManualBooking(\''+_bdOE+'\')" title="Delete this in-house booking" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#f87171;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.4);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">🗑 Delete booking</button>'
     :'<button onclick="window.rezdyResetBooking(\''+_bdOE+'\')" title="Reset this booking to its original Rezdy info — clears check-in, weights, child/infant tags and aircraft" style="flex-shrink:0;align-self:center;margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);background:var(--card2);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap">↺ Reset to Rezdy</button>');
   bubsH='<div style="display:flex;align-items:stretch;margin-bottom:12px">'+(_bub||'<span style="flex:1"></span>')+_rst+'</div>';
   // Passengers — use the SAME canonical rows as the bubble strip so child/infant tags, names and
@@ -281,8 +281,8 @@ function _rzBookingDetail(b){
   const bal=parseFloat(b.balanceDue);
   const owing=isFinite(bal)&&bal>0;
   let balH,srcH;
-  if(b._manual){
-    // Manual (app-created) bookings: balance + source are editable (no Rezdy record behind them).
+  if(b._manual||b._native){
+    // In-house (app-created) bookings: balance + source are editable (no Rezdy record behind them).
     balH='<div style="'+_pan+'"><div style="'+sec+'">Balance owing</div>'+
       '<div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px;font-weight:800;color:var(--text3)">$</span>'+
       '<input type="number" inputmode="decimal" min="0" step="0.01" value="'+_rzEsc(isFinite(bal)?String(bal):'')+'" onchange="window.rezdyManualSetBalance(\''+_bdOE+'\',this.value)" placeholder="0.00" style="flex:1;min-width:0;font-size:15px;font-weight:700;padding:8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px"></div>'+
