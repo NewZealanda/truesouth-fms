@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v29.23';
+const APP_VER='v29.24';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2333,7 +2333,7 @@ function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
   // Under Phase A, ts_users SELECT is revoked so it can't be subscribed — drop it.
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs','ts_maint_forms','ts_vehicle_prestarts','ts_ops_notices','ts_ops_notice_reads','ts_equipment','ts_visitors','ts_flight_following','ts_wx_links'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs','ts_maint_forms','ts_vehicle_prestarts','ts_ops_notices','ts_ops_notice_reads','ts_equipment','ts_visitors','ts_flight_following','ts_wx_links','ts_native_bookings'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
     var _rtThisWs=_rtWs;   // guard: a reconnect/refresh may replace _rtWs before this socket opens
@@ -2375,6 +2375,7 @@ function initRealtime(){
                 if(typeof window.rezdyReloadPickupLive==='function')window.rezdyReloadPickupLive();
                 if(typeof window.rezdyReloadLsTabsLive==='function')window.rezdyReloadLsTabsLive();
                 if(S.section==='calendar'&&typeof window.rezdyReloadScheduleLive==='function')window.rezdyReloadScheduleLive();
+                if(Array.isArray(S._rezdyBookings)&&typeof window.platformReloadBookingsLive==='function')window.platformReloadBookingsLive();
               }
               // New ground/ops modules: re-pull any that are open so a dropped socket doesn't leave them stale.
               if(S._vpLoaded&&window.loadVehiclePrestarts)window.loadVehiclePrestarts();
@@ -2711,6 +2712,10 @@ async function reloadTable(table){
     // Customer weather links — refresh so the desk sees acknowledgements (auto-Wx) live.
     if(S._wxLinksDate&&typeof window.loadWxLinks==='function')window.loadWxLinks(S.rezdyDate);
     return false;
+  } else if(table==='ts_native_bookings'){
+    // Native (in-house) bookings — a create/edit/delete on another device: re-pull + merge live.
+    if(Array.isArray(S._rezdyBookings)&&typeof window.platformReloadBookingsLive==='function')window.platformReloadBookingsLive();
+    return false;   // reloads + safeRenders on its own
   } else if(table==='ts_scratchpads'){
     const ps=await sbF('ts_scratchpads','','saved_at');
     if(ps){S.pads=ps.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});return true;}
@@ -3640,15 +3645,18 @@ let _rtRenderPending=false;
 let _rtRenderMaxWait=null;
 const _PICKER_TYPES=/^(date|datetime-local|month|week|time|color|range|file|checkbox|radio)$/;
 function _isPickerOpen(){var a=document.activeElement;return !!(a&&a.tagName==='INPUT'&&_PICKER_TYPES.test(a.type||''));}
+// A text-entry modal (New Booking / Check-in) is open — a background render() there rebuilds the DOM,
+// drops focus, and can even eat the tap that closes the modal, so defer just like a focused input.
+function _rzEntryModalOpen(){return !!(typeof S!=='undefined'&&S&&(S._rzNewBkDraft||S._rzCheckinDraft));}
 function safeRender(){
   const ae=document.activeElement;
   const tag=ae&&ae.tagName;
-  if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){
+  if(_rzEntryModalOpen()||tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){
     _rtRenderPending=true;
-    // Safety net: force render after 3s even if input stays focused — but NEVER while a
-    // native date/time picker is open (it would close the picker mid-use), so keep waiting.
+    // Safety net: force render after 3s even if input stays focused — but NEVER while a native
+    // date/time picker OR a text-entry modal is open (it would close them mid-use), so keep waiting.
     if(!_rtRenderMaxWait)_rtRenderMaxWait=setTimeout(function _mw(){
-      if(_isPickerOpen()){_rtRenderMaxWait=setTimeout(_mw,2000);return;}
+      if(_isPickerOpen()||_rzEntryModalOpen()){_rtRenderMaxWait=setTimeout(_mw,2000);return;}
       _rtRenderPending=false;_rtRenderMaxWait=null;render();
     },3000);
   } else {render();}
@@ -3757,6 +3765,7 @@ window._cycleTier2=function(dir){
 // Fire deferred render when focus fully leaves all inputs
 document.addEventListener('focusout',function(e){
   if(!_rtRenderPending)return;
+  if(_rzEntryModalOpen())return;   // never tear down an open text-entry modal when switching fields
   const next=e.relatedTarget;
   const nt=next&&next.tagName;
   if(nt!=='INPUT'&&nt!=='SELECT'&&nt!=='TEXTAREA'){
@@ -17917,12 +17926,17 @@ function _rzBgSync(force){
     if(res&&res.ok){
       sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(date)).then(function(rows){
         if(date!==S.rezdyDate)return;
-        S._rezdyBookings=_rzMapBookings(rows,S.rezdyDate);_rzApplyManualBk();
-        // Do NOT null S._pickupVans here — that discarded the SAVED van layout (manual placement)
-        // and forced a full auto-allocate on every background sync, which is why pickups "reverted
-        // after a little bit" / on refresh. _rzEnsureVans already reconciles the saved layout
-        // against the refreshed bookings (drops cancelled ids, appends new ones to the first van).
-        S._schedBlocks=null;render(); // calendar blocks re-derive; pickup van layout is preserved
+        var _mapped=_rzMapBookings(rows,S.rezdyDate);
+        // Merge native (in-house) bookings too, or a background sync would drop them from the list.
+        Promise.resolve((typeof platformLoadBookings==='function')?platformLoadBookings(S.rezdyDate):[]).then(function(_nat){
+          if(date!==S.rezdyDate)return;
+          if(_nat&&_nat.length&&typeof _rzMergeNativeBookings==='function')_mapped=_rzMergeNativeBookings(_mapped,_nat);
+          S._rezdyBookings=_mapped;_rzApplyManualBk();
+          // Do NOT null S._pickupVans here — that discarded the SAVED van layout (manual placement)
+          // and forced a full auto-allocate on every background sync. _rzEnsureVans reconciles it.
+          // safeRender (not render) so an open New Booking / Check-in modal isn't torn down mid-entry.
+          S._schedBlocks=null;safeRender(); // calendar blocks re-derive; pickup van layout is preserved
+        });
       });
     } else {safeRender();}
   }).catch(function(){S._rzBgSyncing=null;S._rzSyncing=false;safeRender();});
@@ -21931,6 +21945,21 @@ window.platformDeleteBooking=async function(order,td){
 // A fresh in-house order number — clearly non-Rezdy ("TS-…"), unique. Phase 1 moves numbering
 // server-side (a real sequence); the timestamp base keeps it collision-free until then.
 window.platformNewOrderNo=function(){return 'TS-'+Date.now().toString(36).toUpperCase().slice(-7);};
+
+// Live-refresh native bookings into the loaded list (realtime tick / reconnect). Re-pulls the current
+// date's native bookings and re-merges over the existing Rezdy + manual rows — WITHOUT hitting Rezdy —
+// so a create/edit/delete on another device shows up. safeRender defers if a modal/input is active.
+window.platformReloadBookingsLive=async function(){
+  if(!Array.isArray(S._rezdyBookings))return;   // bookings not loaded yet — nothing to merge into
+  try{
+    var nat=await platformLoadBookings(S.rezdyDate);
+    var base=(S._rezdyBookings||[]).filter(function(b){return !(b&&b._native);});   // keep Rezdy + manual rows
+    S._rezdyBookings=(typeof _rzMergeNativeBookings==='function')?_rzMergeNativeBookings(base,nat):base.concat(nat||[]);
+    if(typeof _rzApplyManualBk==='function')_rzApplyManualBk();   // keep manual bookings merged (idempotent)
+    S._schedBlocks=null;                                          // calendar blocks re-derive
+    if(typeof safeRender==='function')safeRender();
+  }catch(e){}
+};
 // Customer weather-call links. A pilot makes a weather call → the desk copies a unique per-booking link
 // (wx.html?t=token) and sends it to the customer (WhatsApp/email). When the customer opens it, the
 // acknowledgement comes back and auto-ticks the booking's Wx ("AUTO"). Full activity history + a

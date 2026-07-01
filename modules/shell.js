@@ -120,15 +120,18 @@ let _rtRenderPending=false;
 let _rtRenderMaxWait=null;
 const _PICKER_TYPES=/^(date|datetime-local|month|week|time|color|range|file|checkbox|radio)$/;
 function _isPickerOpen(){var a=document.activeElement;return !!(a&&a.tagName==='INPUT'&&_PICKER_TYPES.test(a.type||''));}
+// A text-entry modal (New Booking / Check-in) is open — a background render() there rebuilds the DOM,
+// drops focus, and can even eat the tap that closes the modal, so defer just like a focused input.
+function _rzEntryModalOpen(){return !!(typeof S!=='undefined'&&S&&(S._rzNewBkDraft||S._rzCheckinDraft));}
 function safeRender(){
   const ae=document.activeElement;
   const tag=ae&&ae.tagName;
-  if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){
+  if(_rzEntryModalOpen()||tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){
     _rtRenderPending=true;
-    // Safety net: force render after 3s even if input stays focused — but NEVER while a
-    // native date/time picker is open (it would close the picker mid-use), so keep waiting.
+    // Safety net: force render after 3s even if input stays focused — but NEVER while a native
+    // date/time picker OR a text-entry modal is open (it would close them mid-use), so keep waiting.
     if(!_rtRenderMaxWait)_rtRenderMaxWait=setTimeout(function _mw(){
-      if(_isPickerOpen()){_rtRenderMaxWait=setTimeout(_mw,2000);return;}
+      if(_isPickerOpen()||_rzEntryModalOpen()){_rtRenderMaxWait=setTimeout(_mw,2000);return;}
       _rtRenderPending=false;_rtRenderMaxWait=null;render();
     },3000);
   } else {render();}
@@ -237,6 +240,7 @@ window._cycleTier2=function(dir){
 // Fire deferred render when focus fully leaves all inputs
 document.addEventListener('focusout',function(e){
   if(!_rtRenderPending)return;
+  if(_rzEntryModalOpen())return;   // never tear down an open text-entry modal when switching fields
   const next=e.relatedTarget;
   const nt=next&&next.tagName;
   if(nt!=='INPUT'&&nt!=='SELECT'&&nt!=='TEXTAREA'){

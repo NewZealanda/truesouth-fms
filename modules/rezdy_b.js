@@ -386,12 +386,17 @@ function _rzBgSync(force){
     if(res&&res.ok){
       sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(date)).then(function(rows){
         if(date!==S.rezdyDate)return;
-        S._rezdyBookings=_rzMapBookings(rows,S.rezdyDate);_rzApplyManualBk();
-        // Do NOT null S._pickupVans here — that discarded the SAVED van layout (manual placement)
-        // and forced a full auto-allocate on every background sync, which is why pickups "reverted
-        // after a little bit" / on refresh. _rzEnsureVans already reconciles the saved layout
-        // against the refreshed bookings (drops cancelled ids, appends new ones to the first van).
-        S._schedBlocks=null;render(); // calendar blocks re-derive; pickup van layout is preserved
+        var _mapped=_rzMapBookings(rows,S.rezdyDate);
+        // Merge native (in-house) bookings too, or a background sync would drop them from the list.
+        Promise.resolve((typeof platformLoadBookings==='function')?platformLoadBookings(S.rezdyDate):[]).then(function(_nat){
+          if(date!==S.rezdyDate)return;
+          if(_nat&&_nat.length&&typeof _rzMergeNativeBookings==='function')_mapped=_rzMergeNativeBookings(_mapped,_nat);
+          S._rezdyBookings=_mapped;_rzApplyManualBk();
+          // Do NOT null S._pickupVans here — that discarded the SAVED van layout (manual placement)
+          // and forced a full auto-allocate on every background sync. _rzEnsureVans reconciles it.
+          // safeRender (not render) so an open New Booking / Check-in modal isn't torn down mid-entry.
+          S._schedBlocks=null;safeRender(); // calendar blocks re-derive; pickup van layout is preserved
+        });
       });
     } else {safeRender();}
   }).catch(function(){S._rzBgSyncing=null;S._rzSyncing=false;safeRender();});

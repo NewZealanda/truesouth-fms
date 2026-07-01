@@ -57,3 +57,18 @@ window.platformDeleteBooking=async function(order,td){
 // A fresh in-house order number — clearly non-Rezdy ("TS-…"), unique. Phase 1 moves numbering
 // server-side (a real sequence); the timestamp base keeps it collision-free until then.
 window.platformNewOrderNo=function(){return 'TS-'+Date.now().toString(36).toUpperCase().slice(-7);};
+
+// Live-refresh native bookings into the loaded list (realtime tick / reconnect). Re-pulls the current
+// date's native bookings and re-merges over the existing Rezdy + manual rows — WITHOUT hitting Rezdy —
+// so a create/edit/delete on another device shows up. safeRender defers if a modal/input is active.
+window.platformReloadBookingsLive=async function(){
+  if(!Array.isArray(S._rezdyBookings))return;   // bookings not loaded yet — nothing to merge into
+  try{
+    var nat=await platformLoadBookings(S.rezdyDate);
+    var base=(S._rezdyBookings||[]).filter(function(b){return !(b&&b._native);});   // keep Rezdy + manual rows
+    S._rezdyBookings=(typeof _rzMergeNativeBookings==='function')?_rzMergeNativeBookings(base,nat):base.concat(nat||[]);
+    if(typeof _rzApplyManualBk==='function')_rzApplyManualBk();   // keep manual bookings merged (idempotent)
+    S._schedBlocks=null;                                          // calendar blocks re-derive
+    if(typeof safeRender==='function')safeRender();
+  }catch(e){}
+};
