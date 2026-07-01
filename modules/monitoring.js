@@ -223,8 +223,10 @@ var _AV_COLGROUPS=[
     {label:'Ski Tasman',name:'Ski the Tasman Glacier',time:'08:00'}
   ]},
   {group:'Milford',time:'',cols:[
-    {label:'09:30',name:'Milford Sound Fly Cruise Fly',time:'09:30'},
-    {label:'12:00',name:'Milford Sound Fly Cruise Fly',time:'12:00'}
+    {label:'FCF 09:30',name:'Milford Sound Fly Cruise Fly',time:'09:30'},
+    {label:'FLB 09:30',name:'Milford Sound One-Way Flight',time:'09:30'},
+    {label:'FCF 12:00',name:'Milford Sound Fly Cruise Fly',time:'12:00'},
+    {label:'FLB 12:00',name:'Milford Sound One-Way Flight',time:'12:00'}
   ]},
   {group:'Franz Josef',time:'08:30',cols:[
     {label:'Gl Landing',name:'Franz Josef Helicopter Glacier Landing',time:'08:30'},
