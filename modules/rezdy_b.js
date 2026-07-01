@@ -97,7 +97,17 @@ function _rzRenderBookings(){
     }
     depSel+='</div></div>';
   }
-  const top=hdr+searchH+depSel;
+  // Availability engine (Phase 0.5): collapsible per-departure sellable-seats panel.
+  var availH='';
+  if(!searching&&typeof window.renderAvailEnginePanel==='function'){
+    var _avOpen=!!S._availPanelOpen;
+    availH='<div class="card" style="padding:10px 12px">'+
+      '<button onclick="S._availPanelOpen=!S._availPanelOpen;render()" style="width:100%;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--text2);font-size:12px;font-weight:800;padding:0">'+
+        '<span>💺 Sellable seats (availability engine)</span><span style="opacity:.5">'+(_avOpen?'▲':'▼')+'</span></button>'+
+      (_avOpen?'<div style="margin-top:9px">'+window.renderAvailEnginePanel(S.rezdyDate)+'</div>':'')+
+    '</div>';
+  }
+  const top=hdr+searchH+depSel+availH;
   if(!allRows.length){
     return top+'<div class="card" style="text-align:center;padding:36px;color:var(--text3);font-size:13px">No bookings cached for this date.<br>Tap <b>Refresh from Rezdy</b> to pull the latest.</div>';
   }
@@ -367,6 +377,7 @@ window.rezdyLoadBookings=async function(opts){
   render();
   // pull saved pickup arrangement for this date (overrides auto layout if present)
   window.rezdyLoadPickups();
+  if(typeof window.availLoadHolds==='function')window.availLoadHolds(S.rezdyDate).then(function(){if(typeof safeRender==='function')safeRender();}).catch(function(){});   // availability engine: active seat holds for the day
   if(opts.noSync!==true)_rzBgSync();
 };
 

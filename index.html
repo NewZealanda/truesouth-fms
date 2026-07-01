@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v29.25';
+const APP_VER='v29.26';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -2333,7 +2333,7 @@ function initRealtime(){
   if(_rtWs){try{_rtWs.onclose=null;_rtWs.close();}catch{}  _rtWs=null;}
   clearInterval(_rtHb);clearTimeout(_rtRecon);
   // Under Phase A, ts_users SELECT is revoked so it can't be subscribed — drop it.
-  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs','ts_maint_forms','ts_vehicle_prestarts','ts_ops_notices','ts_ops_notice_reads','ts_equipment','ts_visitors','ts_flight_following','ts_wx_links','ts_native_bookings'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
+  const tables=['ts_crew','ts_aircraft','ts_users','ts_loadsheets','ts_manifests','ts_charter_rates','ts_settings','ts_maintenance','ts_flight_records','ts_flightduty','ts_fd_certs','ts_maint_forms','ts_vehicle_prestarts','ts_ops_notices','ts_ops_notice_reads','ts_equipment','ts_visitors','ts_flight_following','ts_wx_links','ts_native_bookings','ts_session_holds'].filter(function(t){return !(_hashFree()&&t==='ts_users');});
   try{
     _rtWs=new WebSocket('wss://wgycephyuwwfogggcbye.supabase.co/realtime/v1/websocket?apikey='+SK+'&vsn=1.0.0');
     var _rtThisWs=_rtWs;   // guard: a reconnect/refresh may replace _rtWs before this socket opens
@@ -2376,6 +2376,7 @@ function initRealtime(){
                 if(typeof window.rezdyReloadLsTabsLive==='function')window.rezdyReloadLsTabsLive();
                 if(S.section==='calendar'&&typeof window.rezdyReloadScheduleLive==='function')window.rezdyReloadScheduleLive();
                 if(Array.isArray(S._rezdyBookings)&&typeof window.platformReloadBookingsLive==='function')window.platformReloadBookingsLive();
+                if(typeof window.availLoadHolds==='function')window.availLoadHolds(S.rezdyDate).then(function(){safeRender();});
               }
               // New ground/ops modules: re-pull any that are open so a dropped socket doesn't leave them stale.
               if(S._vpLoaded&&window.loadVehiclePrestarts)window.loadVehiclePrestarts();
@@ -2716,6 +2717,10 @@ async function reloadTable(table){
     // Native (in-house) bookings — a create/edit/delete on another device: re-pull + merge live.
     if(Array.isArray(S._rezdyBookings)&&typeof window.platformReloadBookingsLive==='function')window.platformReloadBookingsLive();
     return false;   // reloads + safeRenders on its own
+  } else if(table==='ts_session_holds'){
+    // Availability-engine seat holds changed elsewhere — re-pull so sellable seats update live.
+    if(S.rezdyDate&&typeof window.availLoadHolds==='function')window.availLoadHolds(S.rezdyDate).then(function(){if(typeof safeRender==='function')safeRender();});
+    return false;
   } else if(table==='ts_scratchpads'){
     const ps=await sbF('ts_scratchpads','','saved_at');
     if(ps){S.pads=ps.map(function(r){return{id:r.id,title:r.title||'Untitled',content:r.content||'',drawing:r.drawing||[],savedAt:r.saved_at};});return true;}
@@ -17637,7 +17642,17 @@ function _rzRenderBookings(){
     }
     depSel+='</div></div>';
   }
-  const top=hdr+searchH+depSel;
+  // Availability engine (Phase 0.5): collapsible per-departure sellable-seats panel.
+  var availH='';
+  if(!searching&&typeof window.renderAvailEnginePanel==='function'){
+    var _avOpen=!!S._availPanelOpen;
+    availH='<div class="card" style="padding:10px 12px">'+
+      '<button onclick="S._availPanelOpen=!S._availPanelOpen;render()" style="width:100%;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--text2);font-size:12px;font-weight:800;padding:0">'+
+        '<span>💺 Sellable seats (availability engine)</span><span style="opacity:.5">'+(_avOpen?'▲':'▼')+'</span></button>'+
+      (_avOpen?'<div style="margin-top:9px">'+window.renderAvailEnginePanel(S.rezdyDate)+'</div>':'')+
+    '</div>';
+  }
+  const top=hdr+searchH+depSel+availH;
   if(!allRows.length){
     return top+'<div class="card" style="text-align:center;padding:36px;color:var(--text3);font-size:13px">No bookings cached for this date.<br>Tap <b>Refresh from Rezdy</b> to pull the latest.</div>';
   }
@@ -17907,6 +17922,7 @@ window.rezdyLoadBookings=async function(opts){
   render();
   // pull saved pickup arrangement for this date (overrides auto layout if present)
   window.rezdyLoadPickups();
+  if(typeof window.availLoadHolds==='function')window.availLoadHolds(S.rezdyDate).then(function(){if(typeof safeRender==='function')safeRender();}).catch(function(){});   // availability engine: active seat holds for the day
   if(opts.noSync!==true)_rzBgSync();
 };
 
@@ -21959,6 +21975,151 @@ window.platformReloadBookingsLive=async function(){
     S._schedBlocks=null;                                          // calendar blocks re-derive
     if(typeof safeRender==='function')safeRender();
   }catch(e){}
+};
+// ─────────────────────────────────────────────────────────────────────────────
+// Availability engine — Phase 0.5 of the bespoke booking platform.
+//
+// ONE source of truth for "how many seats can I actually sell on this departure
+// right now?", consolidating what used to be scattered across the bookings chips
+// and the Rezdy availability table:
+//   fleet capacity (flyable aircraft seats)
+//     − committed pax already booked at that departure (Rezdy + native bookings)
+//     capped by Rezdy's reported availability (during coexistence, so we never
+//        oversell a channel Rezdy controls)
+//     − active seat HOLDS (soft-locks for in-progress checkouts, Phase 1+)
+//   = sellable.
+//
+// The direct-booking checkout (Phase 1) and the agent portal (Phase 2) both call
+// availForDep()/availDay() and availHold()/availReleaseHold(). Everything fails soft.
+// ─────────────────────────────────────────────────────────────────────────────
+
+var _AV_FLEET=['ZK-SLA','ZK-SLB','ZK-SDB','ZK-SLD','ZK-SLQ'];
+
+// Pure core — kept separate so it's unit-testable without app state.
+// sellable = max(0, min(fleetRemaining, rezdyReported?) − held).
+function _availCompute(fleetSeats,committed,rezdyReported,held){
+  var fleetRemaining=Math.max(0,(fleetSeats||0)-(committed||0));
+  var capBase=(rezdyReported!=null)?Math.min(fleetRemaining,rezdyReported):fleetRemaining;
+  var sellable=Math.max(0,capBase-(held||0));
+  return {fleetRemaining:fleetRemaining,capBase:capBase,sellable:sellable};
+}
+
+// Total flyable fleet seats for a date (a+c capacity; PIC seat already excluded by the cap helper).
+// Matches the bookings-chip fleet calc so the engine and the chips agree.
+function _availFleetSeats(date){
+  var n=0;
+  _AV_FLEET.forEach(function(ac){
+    if(!((S.aircraft||{})[ac]))return;
+    if(typeof _schedAcCanFly==='function'&&!_schedAcCanFly(ac))return;
+    var cap=null;
+    if(typeof _schedTail==='function'){var t=_schedTail(ac);cap=(typeof _schedNum==='function')?_schedNum(t&&t.cap):(t&&t.cap);}
+    if(cap==null&&typeof _schedDefaultCap==='function')cap=_schedDefaultCap(ac);
+    n+=(+cap||0);
+  });
+  return n;
+}
+
+// Committed pax (adults+children; infants are lap) per departure slot for the loaded bookings.
+// Flybacks are counted in the OUTBOUND slot they're held in (mirrors the bookings-chip logic).
+function _availCommittedBySlot(){
+  var bySlot={};
+  (S._rezdyBookings||[]).forEach(function(b){
+    if(typeof _rzIsCancelled==='function'&&_rzIsCancelled(b))return;
+    if(typeof _rzIsNoShow==='function'&&_rzIsNoShow(String((b&&b.orderNumber)||'')))return;
+    var e=(typeof _rzEffBreakdown==='function')?_rzEffBreakdown(b):{a:0,c:0};
+    var pax=(e.a||0)+(e.c||0);if(!pax)return;
+    var slot;
+    if(typeof _rzBookingIsFlyback==='function'&&_rzBookingIsFlyback(b)){
+      var fbIt=((b.items||[]).find(function(it){return _rzIsFlyback(_rzProduct(it&&it.product));}))||{};
+      slot=(typeof _rzDepTime==='function')?_rzDepTime(fbIt.startTimeLocal||''):'';
+    } else {
+      slot=(typeof _rzBookingDep==='function')?_rzBookingDep(b):'';
+    }
+    if(slot)bySlot[slot]=(bySlot[slot]||0)+pax;
+  });
+  return bySlot;
+}
+
+// ── Seat holds (soft-locks) ─────────────────────────────────────────────────
+// S._availHolds = [{id,tour_date,dep,dest,seats,expires_at,by}]. Loaded per date.
+window.availLoadHolds=async function(date){
+  date=date||S.rezdyDate;
+  try{
+    var rows=await sbF('ts_session_holds','&tour_date=eq.'+encodeURIComponent(date),'created_at');
+    S._availHolds=(rows||[]).map(function(r){return {id:r.id,tour_date:r.tour_date,dep:String(r.dep||''),dest:r.dest||'',seats:+r.seats||0,expires_at:r.expires_at,by:r.created_by};});
+  }catch(e){S._availHolds=S._availHolds||[];}
+  return S._availHolds;
+};
+// Active (unexpired) held seats for a departure.
+function _availHeldSeats(date,dep){
+  var now=Date.now(),s=0;
+  (S._availHolds||[]).forEach(function(h){
+    if(h.tour_date!==date||h.dep!==String(dep))return;
+    if(new Date(h.expires_at).getTime()<=now)return;   // expired → ignored
+    s+=(+h.seats||0);
+  });
+  return s;
+}
+// Place a hold: N seats on (date, dep) for `minutes` (default 15). Returns the row (or null).
+window.availHold=async function(date,dep,seats,minutes,dest){
+  date=date||S.rezdyDate;dep=String(dep||'');seats=Math.max(1,parseInt(seats,10)||1);
+  var mins=Math.max(1,parseInt(minutes,10)||15);
+  var id=date+'|'+dep+'|'+Date.now().toString(36).slice(-6);
+  var row={id:id,tour_date:date,dep:dep,dest:dest||'',seats:seats,expires_at:new Date(Date.now()+mins*60000).toISOString(),created_by:(S.user&&S.user.id)||null};
+  S._availHolds=S._availHolds||[];S._availHolds.push({id:id,tour_date:date,dep:dep,dest:dest||'',seats:seats,expires_at:row.expires_at,by:row.created_by});
+  try{await sbU('ts_session_holds',[row]);}catch(e){}
+  if(typeof safeRender==='function')safeRender();
+  return row;
+};
+// Release a hold by id (e.g. checkout completed → convert to booking, or abandoned).
+window.availReleaseHold=async function(id){
+  id=String(id||'');if(!id)return false;
+  S._availHolds=(S._availHolds||[]).filter(function(h){return h.id!==id;});
+  try{await sbDel('ts_session_holds',id);}catch(e){}
+  if(typeof safeRender==='function')safeRender();
+  return true;
+};
+
+// ── Public engine API ───────────────────────────────────────────────────────
+// Sellable seats + the full breakdown for one departure (HHMM) on a date.
+window.availForDep=function(date,dep){
+  date=date||S.rezdyDate;dep=String(dep||'');
+  var fleetSeats=_availFleetSeats(date);
+  var committed=(_availCommittedBySlot()[dep])||0;
+  var rezdyReported=(typeof _avSeatsForDep==='function')?_avSeatsForDep(date,dep):null;
+  var held=_availHeldSeats(date,dep);
+  var c=_availCompute(fleetSeats,committed,rezdyReported,held);
+  return {dep:dep,fleetSeats:fleetSeats,committed:committed,fleetRemaining:c.fleetRemaining,rezdyReported:rezdyReported,held:held,sellable:c.sellable};
+};
+// Every departure with bookings today → its availability breakdown, sorted by time.
+window.availDay=function(date){
+  date=date||S.rezdyDate;
+  var slots={};Object.keys(_availCommittedBySlot()).forEach(function(k){slots[k]=1;});
+  // Include any Rezdy-scheduled departures too (even with no bookings yet).
+  if(typeof _avDepsForProduct==='function'){['Milford Sound Fly Cruise Fly'].forEach(function(pn){(_avDepsForProduct(date,pn)||[]).forEach(function(hhmm){slots[hhmm]=1;});});}
+  return Object.keys(slots).filter(function(d){return d&&d!=='—'&&/^\d{3,4}$/.test(d);}).sort().map(function(d){return window.availForDep(date,d);});
+};
+
+// ── Read-only diagnostic panel (Bookings page) ──────────────────────────────
+// Shows the engine's numbers per departure so the desk can see/verify sellable seats.
+window.renderAvailEnginePanel=function(date){
+  date=date||S.rezdyDate;
+  var rows=window.availDay(date);
+  if(!rows.length)return '<div style="font-size:12px;color:var(--text3)">No departures to price yet for this day.</div>';
+  var cell=function(v,strong,col){return '<td style="padding:5px 9px;text-align:right;font-variant-numeric:tabular-nums;'+(strong?'font-weight:800;':'')+(col?'color:'+col+';':'')+'">'+v+'</td>';};
+  var head=['Departure','Fleet','Booked','Rezdy cap','Held','Sellable'];
+  var h='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:12px">'+
+    '<thead><tr style="color:var(--text3);text-align:right">'+head.map(function(x,i){return '<th style="padding:5px 9px;font-weight:700;'+(i===0?'text-align:left':'')+'">'+x+'</th>';}).join('')+'</tr></thead><tbody>';
+  rows.forEach(function(r){
+    var col=r.sellable<=0?'#ef4444':(r.sellable<=2?'#f59e0b':'#22c55e');
+    h+='<tr style="border-top:1px solid var(--border2)">'+
+      '<td style="padding:5px 9px;font-weight:700;color:var(--text1)">'+_rzEsc((typeof _rzDepDisplay==='function'?_rzDepDisplay(r.dep):r.dep))+'</td>'+
+      cell(r.fleetSeats)+cell(r.committed)+cell(r.rezdyReported==null?'—':r.rezdyReported)+cell(r.held||0)+cell(r.sellable,true,col)+
+    '</tr>';
+  });
+  h+='</tbody></table></div>'+
+    '<div style="font-size:10.5px;color:var(--text3);margin-top:6px">Sellable = flyable fleet seats − booked, capped by Rezdy’s live number, minus any active holds. This is the engine the direct-booking &amp; agent flows will read.</div>';
+  return h;
 };
 // Customer weather-call links. A pilot makes a weather call → the desk copies a unique per-booking link
 // (wx.html?t=token) and sends it to the customer (WhatsApp/email). When the customer opens it, the

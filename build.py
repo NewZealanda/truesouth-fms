@@ -47,6 +47,7 @@ ORDER = [
     ('rezdy_b',     'js'),
     ('rezdy_c',     'js'),
     ('platform',    'js'),
+    ('availability','js'),
     ('wxlinks',     'js'),
     ('flightduty',  'js'),
     ('flightrecord','js'),

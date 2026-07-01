@@ -55,11 +55,27 @@ bookings natively and know the exact query patterns.
 - Normalised catalog table `ts_products` (seeded from `_RZ_PROD_CFG`) so products/prices are
   editable without a code deploy.
 
-### Phase 0.5 — Availability engine
-Formalise inventory as a first-class engine both direct and agent flows read from: per-session
-capacity, holds/soft-locks, the linked-product capacity model we already compute, overbooking
-rules. Table `ts_sessions` (date × product × time × seats). Rezdy availability keeps feeding it
-during coexistence.
+### Phase 0.5 — Availability engine  ← **built (v29.26)**
+One source of truth for "sellable seats on this departure right now", consolidating the seat math
+that used to live in the bookings chips + the Rezdy availability table.
+- **`modules/availability.js`** — `availForDep(date,dep)` / `availDay(date)` return
+  `{fleetSeats, committed, fleetRemaining, rezdyReported, held, sellable}`.
+  `sellable = max(0, min(fleetRemaining, rezdyReported) − held)` where
+  `fleetRemaining = flyable fleet seats − committed pax (Rezdy + native bookings)`. Capping by
+  Rezdy's live number is the coexistence guard against overselling a Rezdy-controlled channel.
+  Pure core `_availCompute` is unit-tested.
+- **Holds (soft-locks):** `ts_session_holds` table + `availHold(date,dep,seats,minutes)` /
+  `availReleaseHold(id)` / `availLoadHolds(date)`. The engine subtracts active (unexpired) holds.
+  No holds UI yet — the checkout (Phase 1) is what will place/release them; this is the plumbing.
+- **Visible:** a collapsible "Sellable seats (availability engine)" panel on the Bookings page
+  (fleet / booked / Rezdy cap / held / sellable per departure) so the desk can see + verify it.
+- **Live:** `ts_session_holds` is realtime-subscribed (+ reconnect backfill) so held seats update
+  across devices.
+- **Apply `session_holds.sql`** in Supabase to switch holds on (the engine works without it — holds
+  just read as 0 until the table exists).
+
+Deliberately compute-on-demand (no materialised `ts_sessions` table to drift): the engine derives
+from the live bookings + fleet + Rezdy availability + holds each call.
 
 ### Phase 1 — Direct bookings + payments
 Customer-facing booking flow → availability engine → `ts_native_bookings` → third-party payment.
