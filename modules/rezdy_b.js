@@ -81,8 +81,7 @@ function _rzRenderBookings(){
       depSel+='<button onclick="S._bkSearch=\'\';S._bkDepFilter=\''+_rzEsc(d).replace(/'/g,"\\'")+'\';render()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:74px;padding:9px 16px;border-radius:12px;cursor:pointer;border:2px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:800">'+
         '<span style="font-size:16px;letter-spacing:.02em;line-height:1.1;white-space:nowrap">'+_rzEsc(_rzDepDisplay(d))+((_rzDepShowProduct(d)&&prod)?' '+_rzEsc(prod):'')+'</span>'+
         '<span style="font-size:10px;font-weight:700;opacity:'+(on?'.9':'.6')+'">'+cnt+' bkg'+(cnt===1?'':'s')+'</span>'+
-        '<span style="font-size:9px;font-weight:800;color:'+(on?'#fff':(_rem<0?'#ef4444':_rem<=2?'#f59e0b':'#22c55e'))+';opacity:'+(on?'.95':'1')+'">'+(_rem<0?(Math.abs(_rem)+' over'):(_rem+' seat'+(_rem===1?'':'s')+' left'))+'</span>'+
-        (function(){var _rz=(typeof _avSeatsForDep==='function')?_avSeatsForDep(S.rezdyDate,d):null;if(_rz==null)return '';return '<span title="Live seats remaining on Rezdy" style="font-size:9px;font-weight:800;color:'+(on?'#fff':(_rz<=0?'#ef4444':_rz<=2?'#f59e0b':'#0ea5e9'))+';opacity:'+(on?'.95':'1')+'">Rezdy '+_rz+'</span>';})()+
+        (function(){var _rz=(typeof _avSeatsForDep==='function')?_avSeatsForDep(S.rezdyDate,d):null;if(_rz==null)return '';return '<span title="Live seats remaining on Rezdy" style="font-size:9px;font-weight:800;color:'+(on?'#fff':(_rz<=0?'#ef4444':_rz<=2?'#f59e0b':'#22c55e'))+';opacity:'+(on?'.95':'1')+'">'+_rz+' seat'+(_rz===1?'':'s')+' left</span>';})()+
       '</button>';
     });
     // "Cancelled" pseudo-departure — view the whole day's cancelled bookings in one place.
