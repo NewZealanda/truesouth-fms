@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v29.22';
+const APP_VER='v29.23';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -15834,9 +15834,11 @@ window.rezdyResetBooking=function(order){
   render();
 };
 // ── Manual (walk-in / phone) booking ──
-window.rezdyNewBookingOpen=function(){S._rzNewBkDraft={name:'',phone:'',email:'',time:'',product:'FCF',a:1,c:0,i:0,ac:'',pickup:'',owing:'',note:''};render();};
+window.rezdyNewBookingOpen=function(){S._rzNewBkDraft={name:'',phone:'',email:'',time:'',product:'FCF',a:1,c:0,i:0,ac:'',pickup:'',owing:'',note:'',adt:[],chd:[],inf:[]};render();};
 window.rezdyNewBkField=function(field,val){var d=S._rzNewBkDraft;if(d)d[field]=val;}; // no render (keep focus)
 window.rezdyNewBkCount=function(field,delta){var d=S._rzNewBkDraft;if(!d)return;d[field]=Math.max(0,(parseInt(d[field],10)||0)+delta);render();};
+// Per-passenger name + DECLARED weight (kind: 'adt'|'chd'|'inf'). No render → keeps input focus.
+window.rezdyNewBkPax=function(kind,idx,field,val){var d=S._rzNewBkDraft;if(!d)return;d[kind]=d[kind]||[];while(d[kind].length<=idx)d[kind].push({});d[kind][idx][field]=val;};
 window.rezdyNewBookingCancel=function(){S._rzNewBkDraft=null;render();};
 window.rezdyNewBookingSave=function(){
   var d=S._rzNewBkDraft;if(!d)return;
@@ -15854,7 +15856,12 @@ window.rezdyNewBookingSave=function(){
   var useNative=(typeof platformSaveBooking==='function'&&typeof platformNewOrderNo==='function');
   var order=useNative?platformNewOrderNo():('M-'+Date.now().toString(36).toUpperCase().slice(-6));
   var quantities=[];if(a)quantities.push({label:'Adult',value:a});if(c)quantities.push({label:'Child',value:c});if(i)quantities.push({label:'Infant',value:i});
-  var participants=[];for(var k=0;k<a+c;k++)participants.push({name:'',weight:'',age:''}); // infants are lap pax, captured at check-in
+  // Participants carry the DECLARED name + weight (raw stated kg; the app adds the +4kg allowance via
+  // _rzDeclared, same as Rezdy). Order: adults, children, infants — matching the form rows.
+  var participants=[];
+  for(var _pa=0;_pa<a;_pa++){var _px=(d.adt&&d.adt[_pa])||{};participants.push({name:String(_px.name||'').trim(),weight:String(_px.wt||'').trim(),age:''});}
+  for(var _pc=0;_pc<c;_pc++){var _px2=(d.chd&&d.chd[_pc])||{};participants.push({name:String(_px2.name||'').trim(),weight:String(_px2.wt||'').trim(),age:'Child'});}
+  for(var _pi=0;_pi<i;_pi++){var _px3=(d.inf&&d.inf[_pi])||{};participants.push({name:String(_px3.name||'').trim(),weight:'',age:'Infant'});} // infants are lap pax — no weight
   // Pickup location → flows into Transport (_rzPickups reads it.pickup + it.pickupTime). The pickup
   // time = departure minus the location's "minutes before" from the master list.
   var _pk=String(d.pickup||'').trim(),_pkTime='';
@@ -15920,6 +15927,22 @@ function _rzNewBookingModal(){
     '</div>'+
     '<label style="font-size:11px;color:var(--text3);font-weight:700">PASSENGERS</label>'+
     '<div style="display:flex;gap:8px;margin:4px 0 10px">'+stp('a','Adults')+stp('c','Children')+stp('i','Infants')+'</div>'+
+    (function(){
+      var na=parseInt(d.a,10)||0,nc=parseInt(d.c,10)||0,ni=parseInt(d.i,10)||0;
+      if(na+nc+ni===0)return '';
+      var wst='font-size:15px;padding:7px 8px;background:var(--card2);color:var(--text);border:1px solid var(--border2);border-radius:7px;outline:none';
+      var row=function(kind,idx,lbl,withWt){var px=(d[kind]||[])[idx]||{};
+        return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px">'+
+          '<span style="font-size:10px;font-weight:800;color:var(--text3);width:54px;flex-shrink:0">'+lbl+'</span>'+
+          '<input type="text" value="'+_rzEsc(px.name||'')+'" oninput="window.rezdyNewBkPax(\''+kind+'\','+idx+',\'name\',this.value)" placeholder="Name" style="'+wst+';flex:1;min-width:0">'+
+          (withWt?'<input type="number" inputmode="decimal" min="0" step="1" value="'+_rzEsc(px.wt||'')+'" oninput="window.rezdyNewBkPax(\''+kind+'\','+idx+',\'wt\',this.value)" placeholder="kg" style="'+wst+';width:64px;flex-shrink:0">':'<span style="width:64px;flex-shrink:0;font-size:10px;color:var(--text3);text-align:center">lap</span>')+
+        '</div>';};
+      var h='<label style="font-size:11px;color:var(--text3);font-weight:700">DECLARED WEIGHTS <span style="font-weight:400;text-transform:none">— optional; a pre-check-in W&amp;B estimate (+4kg allowance added automatically). Actuals are captured at check-in.</span></label><div style="margin:4px 0 10px">';
+      for(var k=0;k<na;k++)h+=row('adt',k,'Adult '+(k+1),true);
+      for(var k=0;k<nc;k++)h+=row('chd',k,'Child '+(k+1),true);
+      for(var k=0;k<ni;k++)h+=row('inf',k,'Infant '+(k+1),false);
+      return h+'</div>';
+    })()+
     '<label style="font-size:11px;color:var(--text3);font-weight:700">PICKUP LOCATION (optional)</label>'+
     '<select onchange="window.rezdyNewBkField(\'pickup\',this.value)" style="'+fst+';margin:2px 0 10px"><option value="">— No pickup / self-drive —</option>'+_bkLocs.map(function(L){var nm=String(L.name||'');if(!nm)return '';return '<option value="'+_rzEsc(nm)+'"'+(d.pickup===nm?' selected':'')+'>'+_rzEsc(nm)+(L.min?(' · '+L.min+'m before'):'')+'</option>';}).join('')+'</select>'+
     '<div style="display:flex;gap:8px;margin-bottom:10px">'+
