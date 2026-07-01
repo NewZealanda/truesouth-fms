@@ -1803,6 +1803,7 @@ window.rezdyManPull=function(depScope,preview){
   if(!S._rezdyBookings){if(window.rezdyLoadBookings)window.rezdyLoadBookings();toast('Loading bookings — tap Push again in a moment.','info');return;}
   var existing={};(S._rzManPax||[]).forEach(function(p){existing[p.id]=p;});
   var fresh=[];var notCheckedIn=0;
+  var _splitMap=(typeof _rzComputeAutoSplits==='function')?_rzComputeAutoSplits(S.rezdyDate):{};   // oversized bookings that ride multiple tails
   (S._rezdyBookings||[]).forEach(function(b){
     if(_rzIsCancelled(b))return;
     if(depScope&&_rzBookingDep(b)!==depScope)return; // only the pushed departure
@@ -1816,12 +1817,21 @@ window.rezdyManPull=function(depScope,preview){
     if(!isCheckedIn)notCheckedIn++;
     var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
     var acHint=_rzBookingAc(b,order);
+    // Split booking: hand each seat-consuming pax the aircraft its portion is assigned to, in row order,
+    // so "Allocate" (which groups the pool by acHint) seats them across the split tails. Infants (lap)
+    // follow their host below.
+    var _spl=_splitMap[order];var _rowAc=null;
+    if(_spl&&_spl.length>1){
+      _rowAc={};var _q=_spl.map(function(p){return {ac:p.ac,seats:(p.a||0)+(p.c||0)};});var _qi=0;
+      rows.forEach(function(r,i){if(r.type==='infant')return;while(_qi<_q.length&&_q[_qi].seats<=0)_qi++;if(_qi<_q.length){_rowAc[i]=_q[_qi].ac;_q[_qi].seats--;}});
+    }
     rows.forEach(function(r,i){
       var id=order+'|c'+i;var ex=existing[id];var isInf=r.type==='infant';
+      var _ah=(_rowAc&&_rowAc[i]!=null)?_rowAc[i]:((_rowAc&&isInf&&r.attach!=null&&_rowAc[r.attach]!=null)?_rowAc[r.attach]:acHint);   // lap infant rides its host's tail
       // Weight = actual if captured, else the declared weight (Rezdy +4kg) flagged as declared.
       var hasA=!isInf&&r.actual!=null;var useDecl=!isInf&&!hasA&&r.declared!=null;
       var wv=isInf?'':(hasA?String(r.actual):(useDecl?String(r.declared):''));
-      fresh.push({id:id,name:r.name||'',weight:wv,declared:(r.declared!=null?r.declared:null),declaredWeight:useDecl,type:isInf?'adult':(r.type==='child'?'child':'adult'),infantName:null,group:((typeof _rzTwGroup==='function')?_rzTwGroup(order):order),paymentReq:owing,ac:ex?ex.ac:null,acHint:acHint,infantOf:isInf?(r.attach!=null?order+'|c'+r.attach:undefined):(ex?ex.infantOf:undefined),_preview:!isCheckedIn});
+      fresh.push({id:id,name:r.name||'',weight:wv,declared:(r.declared!=null?r.declared:null),declaredWeight:useDecl,type:isInf?'adult':(r.type==='child'?'child':'adult'),infantName:null,group:((typeof _rzTwGroup==='function')?_rzTwGroup(order):order),paymentReq:owing,ac:ex?ex.ac:null,acHint:_ah,infantOf:isInf?(r.attach!=null?order+'|c'+r.attach:undefined):(ex?ex.infantOf:undefined),_preview:!isCheckedIn});
     });
   });
   // Lap infants follow their host's aircraft (they aren't seated).

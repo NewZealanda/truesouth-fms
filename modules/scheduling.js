@@ -601,6 +601,77 @@ function _schedPack(groups,chosen){
   });
   return map;
 }
+// ── Oversized-booking auto-split ───────────────────────────────────────────────
+// A single Rezdy order too big for ANY one aircraft (e.g. 20 pax) must ride multiple tails. These two
+// helpers compute a per-order split ACROSS the free fleet at its departure; the calendar then draws a
+// block per aircraft and the seatmap seats each pax onto its assigned tail. This is the deliberate
+// exception to the whole-group rule below (that rule still holds for every booking that DOES fit one AC).
+// Pure distributor: seat a adults + c children (infants ride laps) across `bins` (free-capacity, biggest
+// first), using the fewest bins. Infants attach to bins that carry adults. Totals are always preserved;
+// if the fleet is short, the remainder overbooks the last bin (surfaced by the normal over-cap flag).
+function _rzSplitPortions(a,c,inf,bins){
+  var need=(a||0)+(c||0),out=[],remA=(a||0),remC=(c||0),pool=bins.slice();   // bins: free-cap, sorted desc
+  while(need>0&&pool.length){
+    // Tightest fit: take the SMALLEST single tail that can hold the whole remaining load (so a 20 becomes
+    // caravan+airvan, not caravan+caravan, freeing the big tails); if none fits alone, take the biggest.
+    var idx=-1;for(var k=pool.length-1;k>=0;k--){if(pool[k].cap>=need){idx=k;break;}}
+    if(idx<0)idx=0;
+    var bn=pool.splice(idx,1)[0];var take=Math.min(bn.cap,need);if(take<=0)continue;
+    var pa=Math.min(remA,take),pc=take-pa;if(pc>remC)pc=remC;
+    remA-=pa;remC-=pc;out.push({ac:bn.ac,a:pa,c:pc,i:0,seats:take});need-=take;
+  }
+  if(need>0&&out.length){var last=out[out.length-1];last.a+=remA;last.c+=remC;last.seats+=need;remA=0;remC=0;}
+  var remI=(inf||0);
+  for(var j=0;j<out.length&&remI>0;j++){var ti=Math.min(out[j].a,remI);out[j].i=ti;remI-=ti;}
+  if(remI>0&&out.length)out[0].i+=remI;
+  return out;
+}
+// Scan the day's bookings; for any order whose seats (adults+children) exceed the largest single
+// aircraft, split it across the free fleet at that departure. Returns { order:[{ac,a,c,i,seats}] }.
+// Derived (not persisted) — recomputed from the current bookings + allocation, like the auto-pilots.
+function _rzComputeAutoSplits(date){
+  var out={};
+  try{
+    var FLEET=['ZK-SLA','ZK-SLB','ZK-SDB','ZK-SLD','ZK-SLQ'];
+    var fleet=FLEET.filter(function(ac){return ((S.aircraft||{})[ac])&&(typeof _schedAcCanFly!=='function'||_schedAcCanFly(ac));});
+    if(fleet.length<2)return out;   // need at least two tails to split across
+    var capOf=function(ac){var t=(typeof _schedTail==='function')?_schedTail(ac):null;var n=t&&_schedNum(t.cap);return (n!=null)?n:((typeof _schedDefaultCap==='function')?_schedDefaultCap(ac):0);};
+    var caps={};fleet.forEach(function(ac){caps[ac]=capOf(ac);});
+    var maxCap=Math.max.apply(null,fleet.map(function(ac){return caps[ac];}));
+    var bks=(S._rezdyBookings||[]).filter(function(b){return !(typeof _rzIsCancelled==='function'&&_rzIsCancelled(b));});
+    var byDep={};
+    bks.forEach(function(b){
+      if(typeof _rzBookingIsFlyback==='function'&&_rzBookingIsFlyback(b))return;   // flybacks are held in a slot — not split
+      if(((b.items)||[]).length!==1)return;                                        // multi-item bookings: leave whole (rare)
+      if(((b.items)||[]).some(function(it){return _rzProduct(it&&it.product)==='CHT';}))return; // charters are bespoke
+      var dep=_rzBookingDep(b);(byDep[dep]=byDep[dep]||[]).push(b);
+    });
+    Object.keys(byDep).forEach(function(dep){
+      var list=byDep[dep],used={},oversized=[];
+      list.forEach(function(b){
+        var e=_rzEffBreakdown(b),seats=(e.a||0)+(e.c||0);
+        if(seats>maxCap){oversized.push({b:b,e:e,seats:seats});}
+        else{var ac=_rzBookingAc(b,String(b.orderNumber||''));if(ac&&caps[ac]!=null)used[ac]=(used[ac]||0)+seats;}   // reserve seats the rest of the day's bookings already hold
+      });
+      if(!oversized.length)return;
+      oversized.sort(function(x,y){return y.seats-x.seats;});
+      oversized.forEach(function(o){
+        var bins=fleet.map(function(ac){return {ac:ac,cap:caps[ac]-(used[ac]||0)};}).filter(function(x){return x.cap>0;}).sort(function(x,y){return y.cap-x.cap;});
+        if(bins.length<2)return;                                     // only one free tail — can't split, leave as-is
+        var portions=_rzSplitPortions(o.e.a,o.e.c,o.e.i,bins);
+        if(portions.length<2)return;                                 // fit one tail after all — no split
+        portions.forEach(function(p){used[p.ac]=(used[p.ac]||0)+p.seats;});   // claim so a 2nd oversized order won't reuse the seats
+        out[String(o.b.orderNumber||'')]=portions;
+      });
+    });
+  }catch(e){}
+  return out;
+}
+// Cached accessor — recompute only when the date changes (calendar render refreshes it each pass).
+function _rzAutoSplits(){
+  if(S._rzAutoSplitDate!==S.rezdyDate){S._rzAutoSplit=_rzComputeAutoSplits(S.rezdyDate);S._rzAutoSplitDate=S.rezdyDate;}
+  return S._rzAutoSplit||{};
+}
 // Can these aircraft capacities hold every booking group WHOLE? A group (one order) can't be split
 // across aircraft, so a 14-pax 8+6 load needs a seat-8 aircraft — two 7-seat airvans won't do.
 // Best-fit-decreasing: it actually builds a packing, so `true` is a real fit. A false-negative only

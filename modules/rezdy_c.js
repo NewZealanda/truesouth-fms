@@ -1070,17 +1070,37 @@ function _rzRenderSchedule(){
   S._rzBlockMeta={};   // per-render map: drag key → block info, used by the pointer move/resize handlers
   // Booking-derived blocks: all bookings sharing an aircraft / departure / product are STACKED
   // into ONE block (e.g. "SLB · 13A · FCF"). Click it to see the bookings + passengers inside.
+  // Oversized-booking auto-split: an order too big for any one aircraft rides multiple tails. Refresh the
+  // split map from the current bookings/allocation, then draw a block per assigned aircraft (below).
+  var _splits=(typeof _rzComputeAutoSplits==='function')?_rzComputeAutoSplits(S.rezdyDate):{};
+  S._rzAutoSplit=_splits;S._rzAutoSplitDate=S.rezdyDate;
   const bkGroups={};
+  function _bkGrp(ac,start,prod,order){var key=_rzDepKey(ac,start,prod);return bkGroups[key]||(bkGroups[key]={aircraft:ac,start:start,product:prod,gcode:((typeof _rzItemDest==='function')?_rzItemDest(prod,String(order||'')):_rzGroupDest(prod)),products:{},pax:0,bookings:[],owing:false,key:key,_fromBooking:true,_fb:[]});}
   (S._rezdyBookings||[]).forEach(function(b){
     if(_rzIsCancelled(b))return;
-    var ac=_rzBookingAc(b,String(b.orderNumber||''))||'__unalloc__';
+    var order=String(b.orderNumber||'');
     var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
-    ((b.items)||[]).forEach(function(it){
+    var _sp=_splits[order];var items=(b.items)||[];
+    if(_sp&&items.length===1){
+      // Split order → one block per assigned aircraft, each carrying its portion of the pax.
+      var it0=items[0];var t0=_rzDepTime(it0.startTimeLocal||'');var s0=t0?_rzHHMMcolon(t0):null;
+      if(s0!=null&&_rzMinsFromHHMM(s0)!=null){
+        var prod0=_rzProduct(it0.product);
+        _sp.forEach(function(pt){
+          var g=_bkGrp(pt.ac,s0,prod0,order);g.products[prod0]=true;
+          g.pax+=(pt.a||0)+(pt.c||0)+(pt.i||0);
+          g.bookings.push({b:b,it:it0,_split:{a:pt.a||0,c:pt.c||0,i:pt.i||0},_splitAc:pt.ac});
+          if(owing)g.owing=true;
+        });
+        return;
+      }
+    }
+    var ac=_rzBookingAc(b,order)||'__unalloc__';
+    items.forEach(function(it){
       var t=_rzDepTime(it.startTimeLocal||'');if(!t)return;
       var start=_rzHHMMcolon(t);if(_rzMinsFromHHMM(start)==null)return;
       var prod=_rzProduct(it.product);
-      var key=_rzDepKey(ac,start,prod);   // group by destination so same place+time+aircraft = one flight
-      var g=bkGroups[key]||(bkGroups[key]={aircraft:ac,start:start,product:prod,gcode:((typeof _rzItemDest==='function')?_rzItemDest(prod,String(b.orderNumber||'')):_rzGroupDest(prod)),products:{},pax:0,bookings:[],owing:false,key:key,_fromBooking:true,_fb:[]});
+      var g=_bkGrp(ac,start,prod,order);
       g.products[prod]=true;
       g.pax+=parseInt(it.quantity,10)||0;g.bookings.push({b:b,it:it});if(owing)g.owing=true;
     });
@@ -1154,7 +1174,7 @@ function _rzRenderSchedule(){
       g._origStart=_os2;g.start=_rzMinToHHMM(_startM);g.end=_rzMinToHHMM(_endM);
     }
     var acLbl=g.aircraft==='__unalloc__'?'?':g.aircraft.replace(/^ZK-?/,'');
-    var gbd={a:0,c:0,i:0};g.bookings.forEach(function(bk){var e=_rzEffBreakdown(bk.b);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
+    var gbd={a:0,c:0,i:0};g.bookings.forEach(function(bk){var e=bk._split||_rzEffBreakdown(bk.b);gbd.a+=e.a;gbd.c+=e.c;gbd.i+=e.i;});
     // Overbooked flag: seated pax (adults+children; infants are lap) beyond the aircraft's seat count.
     var _sp=(g.aircraft!=='__unalloc__'&&g.aircraft!=='__misc__'&&typeof _acSpec==='function')?_acSpec(g.aircraft):null;
     g.cap=_sp?((_sp.seats||[]).length-1-(((_sp.removedSeats)||[]).length)):null;   // seats minus PIC + removed
@@ -1286,14 +1306,15 @@ function _rzRenderSchedule(){
       _allBk.forEach(function(bk){
         var b=bk.b;var ord=String(b.orderNumber||'');var ordE=_rzEsc(ord).replace(/'/g,"\\'");var bal=parseFloat(b.balanceDue);var owing=isFinite(bal)&&bal>0;
         var _curAc=(typeof _rzBookingAc==='function')?_rzBookingAc(b,ord):null;
-        var _e=_rzEffBreakdown(b);var _code=_rzProduct((bk.it&&bk.it.product)||'');var _isFb=_rzIsFlyback(_code);
+        var _e=bk._split||_rzEffBreakdown(b);var _code=_rzProduct((bk.it&&bk.it.product)||'');var _isFb=_rzIsFlyback(_code);
         var _bc=_isFb?'#f59e0b':'#60a5fa';
+        var _splitTag=bk._split?' <span title="This booking is split across aircraft (too big for one)" style="font-size:9px;font-weight:800;color:#a855f7;background:rgba(168,85,247,.14);border:1px solid rgba(168,85,247,.45);border-radius:4px;padding:0 4px;vertical-align:middle">⇄ SPLIT</span>':'';
         detailH+='<div style="border-top:1px solid var(--border2);padding-top:8px;margin-top:8px">'+
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
             '<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">'+
               '<span onpointerdown="window.rzPaxGroupDown(event,\''+ordE+'\')" title="Drag onto the calendar to make a new block, or onto an aircraft heading to reassign" style="cursor:grab;color:var(--text3);font-size:15px;line-height:1;touch-action:none;user-select:none;padding:0 2px">⠿</span>'+
               '<span style="font-weight:700;font-size:13px;color:var(--text1)">'+_rzEsc(b.customerName||ord)+'</span>'+
-              '<span style="font-size:11px;font-weight:800;padding:1px 8px;border-radius:10px;background:'+_bc+'22;border:1px solid '+_bc+'66;color:'+_bc+'">'+_rzBdCompact(_e)+' '+_rzEsc(_code)+((typeof _rzBookingHasAspiring==='function'&&_rzBookingHasAspiring(b))?' + ASP':'')+'</span>'+
+              '<span style="font-size:11px;font-weight:800;padding:1px 8px;border-radius:10px;background:'+_bc+'22;border:1px solid '+_bc+'66;color:'+_bc+'">'+_rzBdCompact(_e)+' '+_rzEsc(_code)+((typeof _rzBookingHasAspiring==='function'&&_rzBookingHasAspiring(b))?' + ASP':'')+'</span>'+_splitTag+
               (owing?'<span style="color:#ef4444;font-weight:800;font-size:11px">$ TO PAY</span>':'')+
               ((typeof _rzTwBadge==='function')?_rzTwBadge(ord):'')+
             '</div>'+
