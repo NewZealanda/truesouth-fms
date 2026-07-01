@@ -123,7 +123,8 @@ window.loadAvailability=async function(){
   S._avLoading=true;if(typeof render==='function')render();
   try{
     var res=(typeof callFn==='function')?await callFn('rezdy-sync',{availability:{from:r.from,to:r.to}}):null;
-    S._avData=(res&&res.ok)?{ym:ym,sessions:res.sessions||[],debug:res.debug,at:Date.now()}:{ym:ym,error:(res&&(res.error||res.hint))||'failed',sessions:[]};
+    var body=(res&&res.data)||{};   // callFn wraps the response as {ok,status,data} — the sessions/debug live in .data
+    S._avData=(res&&res.ok)?{ym:ym,sessions:body.sessions||[],debug:body.debug,at:Date.now()}:{ym:ym,error:(body.error||body.hint||('HTTP '+((res&&res.status)||'?')))||'failed',sessions:[]};
   }catch(e){S._avData={ym:ym,error:String((e&&e.message)||e),sessions:[]};}
   S._avLoading=false;if(typeof render==='function')render();
 };
