@@ -215,16 +215,16 @@ function _avGroupSeats(sessions,date,group){
 // Per-PRODUCT columns grouped under headings — shows each product's own seats (e.g. Mt Cook can have seats
 // while its guided Heli Hike is full). Milford is by departure (FCF/FLB share, so one column per slot).
 var _AV_MTCOOK={group:'Mt Cook',time:'08:00',cols:[
-  {label:'Expedition',name:'Expedition Aoraki/Mt. Cook',time:'08:00'},
-  {label:'Heli Hike',name:'Glacier Helihike Tasman Glacier',time:'08:00'},
-  {label:'Heli Ski',name:'Mount Cook Heliski',time:'08:00'},
-  {label:'Gl Landing',name:'Mt Cook Helicopter Glacier Landing',time:'08:00'},
-  {label:'Ski Tasman',name:'Ski the Tasman Glacier',time:'08:00'}
+  {label:'EXP',name:'Expedition Aoraki/Mt. Cook',time:'08:00'},
+  {label:'HH',name:'Glacier Helihike Tasman Glacier',time:'08:00'},
+  {label:'HS',name:'Mount Cook Heliski',time:'08:00'},
+  {label:'GL',name:'Mt Cook Helicopter Glacier Landing',time:'08:00'},
+  {label:'STT',name:'Ski the Tasman Glacier',time:'08:00'}
 ]};
 var _AV_FRANZ={group:'Franz Josef',time:'08:30',cols:[
-  {label:'Gl Landing',name:'Franz Josef Helicopter Glacier Landing',time:'08:30'},
-  {label:'Heli Hike',name:'Glacier Helihike Franz Josef',time:'08:30'},
-  {label:'Scenic',name:'Franz Josef Scenic Flight',time:'08:30'}
+  {label:'GL',name:'Franz Josef Helicopter Glacier Landing',time:'08:30'},
+  {label:'HH',name:'Glacier Helihike Franz Josef',time:'08:30'},
+  {label:'SC',name:'Franz Josef Scenic Flight',time:'08:30'}
 ]};
 // Flyback return time by FCF departure slot (matches the calendar flyback defaults; winter + summer).
 var _FB_RETURN={'09:30':'1:00pm','10:30':'2:00pm','12:00':'3:30pm','13:00':'4:30pm'};
