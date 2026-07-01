@@ -193,6 +193,25 @@ function _avProdShortForDep(date,dep){
   });
   return found?((typeof _rzProduct==='function')?_rzProduct(found):found):'';
 }
+// Departure columns for the availability table — each is a family of products sharing one aircraft/slot.
+var _AV_GROUPS=[
+  {label:'Mt Cook',time:'08:00',names:['Expedition Aoraki/Mt. Cook','Glacier Helihike Tasman Glacier','Mount Cook Heliski','Mt Cook Helicopter Glacier Landing','Ski the Tasman Glacier']},
+  {label:'Franz Josef',time:'08:30',names:['Franz Josef Helicopter Glacier Landing','Glacier Helihike Franz Josef','Franz Josef Scenic Flight']},
+  {label:'Milford',time:'09:30',names:['Milford Sound Fly Cruise Fly','Milford Sound One-Way Flight']},
+  {label:'Milford',time:'12:00',names:['Milford Sound Fly Cruise Fly','Milford Sound One-Way Flight']}
+];
+// Seats remaining for a group on a date = MIN across the group's products at its departure time.
+function _avGroupSeats(sessions,date,group){
+  var names=group.names.map(function(n){return n.trim().toLowerCase();}),seats=[];
+  (sessions||[]).forEach(function(s){
+    if(String(s.startTimeLocal||'').slice(0,10)!==date)return;
+    if(String(s.startTimeLocal||'').slice(11,16)!==group.time)return;
+    if(+s.seats>=900)return;
+    if(names.indexOf(String(s.productName||'').trim().toLowerCase())<0)return;
+    if(s.seatsAvailable!=null)seats.push(+s.seatsAvailable);
+  });
+  return seats.length?Math.min.apply(null,seats):null;
+}
 function renderAvailabilityView(){
   var ym=_avMonthStr();
   if((!S._avData||S._avData.ym!==ym)&&!S._avLoading){S._avLoading=true;setTimeout(window.loadAvailability,0);}
@@ -209,16 +228,22 @@ function renderAvailabilityView(){
   if(d.error)return h+'<p style="color:#dc2626;font-size:13px;line-height:1.5">Couldn’t load availability (<code>'+_avEsc(d.error)+'</code>). The <b>rezdy-sync</b> edge function needs redeploying with the new availability endpoint.</p></div>';
   var sess=d.sessions||[];
   if(!sess.length){var _dbg=d.debug?('<div style="font-size:11px;color:var(--text3);margin-top:6px">Diagnostics (share with support):</div><pre style="font-size:11px;white-space:pre-wrap;color:var(--text2);background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px;margin-top:4px;overflow:auto;max-height:320px">'+_avEsc(JSON.stringify(d.debug,null,1))+'</pre>'):'';return h+'<p style="color:var(--text3)">No departures found for '+_avEsc(mLabel)+'.</p>'+_dbg+'</div>';}
-  var byDay={};
-  sess.forEach(function(s){var dt=String(s.startTimeLocal||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(dt))return;if(dt.slice(0,7)!==ym)return;if(+s.seats>=900)return;/* skip Charter / unlimited on-request products */var tm=String(s.startTimeLocal||'').replace('T',' ').slice(11,16);if(tm==='00:00')return;(byDay[dt]=byDay[dt]||[]).push({t:tm,name:s.productName,seats:(s.seatsAvailable==null?null:+s.seatsAvailable)});});
-  var days=Object.keys(byDay).sort();
+  // Distinct days in the selected month that have any real (non-Charter) session.
+  var dayset={};sess.forEach(function(s){var dt=String(s.startTimeLocal||'').slice(0,10);if(/^\d{4}-\d{2}-\d{2}$/.test(dt)&&dt.slice(0,7)===ym&&+s.seats<900)dayset[dt]=1;});
+  var days=Object.keys(dayset).sort();
+  if(!days.length)return h+'<p style="color:var(--text3)">No departures found for '+_avEsc(mLabel)+'.</p></div>';
+  var _cell=function(n){var col=n==null?'var(--text3)':n<=0?'#dc2626':n<=2?'#b45309':'#16a34a';var bg=n==null?'transparent':n<=0?'rgba(239,68,68,.10)':n<=2?'rgba(217,119,6,.10)':'rgba(34,197,94,.10)';return '<td style="text-align:center;padding:7px 8px;font-weight:800;color:'+col+';background:'+bg+'">'+(n==null?'—':n)+'</td>';};
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:440px">'+
+    '<thead><tr style="color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.04em">'+
+      '<th style="text-align:left;padding:7px 8px;position:sticky;left:0;background:var(--card);z-index:1">Day</th>'+
+      _AV_GROUPS.map(function(g){return '<th style="text-align:center;padding:7px 8px;white-space:nowrap">'+_avEsc(g.label)+'<div style="font-weight:400;font-size:10px;text-transform:none">'+_avEsc(g.time)+'</div></th>';}).join('')+
+    '</tr></thead><tbody>';
   days.forEach(function(dt){
-    var list=byDay[dt].sort(function(a,b){return a.t<b.t?-1:a.t>b.t?1:0;});
-    var tot=list.reduce(function(x,s){return x+(s.seats>0?s.seats:0);},0);
     var dlab;try{dlab=new Date(dt+'T00:00:00').toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'});}catch(e){dlab=dt;}
-    h+='<div style="border-top:1px solid var(--border2);padding:9px 0"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px"><b style="font-size:13px">'+_avEsc(dlab)+'</b><span style="font-size:11px;color:var(--text3)">'+tot+' seats · '+list.length+' departure'+(list.length===1?'':'s')+'</span></div>'+
-      '<div style="display:flex;flex-wrap:wrap;gap:5px">'+list.map(function(s){var n=s.seats;var col=n==null?'var(--text3)':n<=0?'#dc2626':n<=2?'#b45309':'#16a34a';var bg=n==null?'var(--card2)':n<=0?'rgba(239,68,68,.12)':n<=2?'rgba(217,119,6,.12)':'rgba(34,197,94,.12)';return '<span title="'+_avEsc(s.name)+'" style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:14px;background:'+bg+';font-size:11.5px;color:'+col+';font-weight:700"><b>'+_avEsc(s.t||'—')+'</b> '+_avEsc(_avShortProd(s.name))+' · '+(n==null?'?':n)+'</span>';}).join('')+'</div></div>';
+    h+='<tr style="border-top:1px solid var(--border2)"><td style="padding:7px 8px;white-space:nowrap;font-weight:700;position:sticky;left:0;background:var(--card)">'+_avEsc(dlab)+'</td>'+
+      _AV_GROUPS.map(function(g){return _cell(_avGroupSeats(sess,dt,g));}).join('')+'</tr>';
   });
+  h+='</tbody></table></div><p style="font-size:11px;color:var(--text3);margin-top:8px">Seats remaining (fewest across each shared group). “—” = no departure that day · green &gt;2 · amber ≤2 · red sold out.</p>';
   return h+'</div>';
 }
 function renderMonitoring(){
