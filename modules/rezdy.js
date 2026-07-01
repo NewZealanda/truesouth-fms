@@ -971,7 +971,7 @@ function _rzNewBookingModal(){
   var h='<div onclick="window.rezdyNewBookingCancel()" class="rzci-overlay">'+
     '<div onclick="event.stopPropagation()" class="rzci-dialog">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px"><div class="st" style="margin-bottom:0">New booking</div><button onclick="window.rezdyNewBookingCancel()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button></div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:0 0 12px">An in-house walk-in / phone booking for '+_rzEsc(_rzDowLabel(S.rezdyDate))+'. Saved to the app’s own store — it sits alongside the Rezdy bookings and won’t be wiped by a sync. (Still enter it in Rezdy too for reconciliation until we switch over.)</p>'+
+    '<p style="font-size:12px;color:var(--text3);margin:0 0 12px">An in-house booking for '+_rzEsc(_rzDowLabel(S.rezdyDate))+' that <b>won’t be entered in Rezdy</b> — saved to the app’s own store and synced across devices. <b>A normal walk-in you’ll also put in Rezdy? Enter it in Rezdy instead</b> (it syncs in automatically) so it doesn’t show up twice.</p>'+
     '<label style="font-size:11px;color:var(--text3);font-weight:700">CUSTOMER NAME</label>'+
     '<input type="text" value="'+_rzEsc(d.name||'')+'" oninput="window.rezdyNewBkField(\'name\',this.value)" placeholder="Full name" style="'+fst+';margin:2px 0 10px">'+
     '<div style="display:flex;gap:8px;margin-bottom:10px">'+
