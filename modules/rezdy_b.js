@@ -354,7 +354,11 @@ window.rezdyLoadBookings=async function(opts){
   opts=opts||{};
   S._rezdyLoading=true;safeRender();
   const rows=await sbF('ts_rezdy_bookings','&tour_date=eq.'+encodeURIComponent(S.rezdyDate));
-  S._rezdyBookings=_rzMapBookings(rows,S.rezdyDate);_rzApplyManualBk();
+  var _mapped=_rzMapBookings(rows,S.rezdyDate);
+  // Coexistence: merge NATIVE (in-house) bookings from ts_native_bookings on top of the Rezdy rows.
+  // Fails soft — if the table/module isn't present this is a no-op and behaviour is unchanged.
+  try{if(typeof platformLoadBookings==='function'){var _nat=await platformLoadBookings(S.rezdyDate);if(_nat&&_nat.length&&typeof _rzMergeNativeBookings==='function')_mapped=_rzMergeNativeBookings(_mapped,_nat);}}catch(e){}
+  S._rezdyBookings=_mapped;_rzApplyManualBk();
   // Do NOT null S._pickupVans here — that discarded the SAVED manual van layout and forced a full
   // auto-allocate on every bookings load (day change / "Refresh from Rezdy"), which is why allocated
   // pickups "reverted to their original state". _rzEnsureVans reconciles the saved layout against the
