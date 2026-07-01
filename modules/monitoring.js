@@ -247,11 +247,6 @@ function renderAvailabilityView(){
   return h+'</div>';
 }
 function renderMonitoring(){
-  var _mTab=(S._monTab==='avail')?'avail':'fleet';
-  var _mBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
-    '<button class="sub-tab '+(_mTab==='fleet'?'on':'')+'" onclick="S._monTab=\'fleet\';render()">🛩 Fleet status</button>'+
-    '<button class="sub-tab '+(_mTab==='avail'?'on':'')+'" onclick="S._monTab=\'avail\';render()">💺 Seat availability</button></div>';
-  if(_mTab==='avail')return _mBar+renderAvailabilityView();
   if(!S._ffLoaded){S._ffLoaded=true;if(window.loadFlightFollowing)window.loadFlightFollowing();}
   if(!S._frLoaded&&window.loadFlightRecords){S._frLoaded=true;window.loadFlightRecords();}   // so status derives from today's records (live)
   _ffStartPoll();
@@ -277,5 +272,5 @@ function renderMonitoring(){
     '</div>';
   });
   h+='</div>';
-  return _mBar+h;
+  return h;
 }

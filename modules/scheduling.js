@@ -382,7 +382,13 @@ function _resChipStyle(state,col){
 
 function renderResources(){
   if(typeof hasRolePerm==='function'&&!hasRolePerm('resources'))return '<div class="page"><div class="card" style="text-align:center;padding:40px;color:var(--text3)">Not available.</div></div>';
-  if(!_schedEnabled())return '<div class="page"><div class="card" style="text-align:center;padding:40px;color:var(--text3)">Cost-aware scheduling is OFF. Turn it on in Settings ▸ Operations ▸ Scheduling.</div></div>';
+  // Tab bar: aircraft resource availability + live Rezdy seat availability (moved here from Monitoring).
+  var _rTab=(S._resTab==='seats')?'seats':'resource';
+  var _rBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
+    '<button class="sub-tab '+(_rTab==='resource'?'on':'')+'" onclick="S._resTab=\'resource\';render()">🛩 Resource availability</button>'+
+    '<button class="sub-tab '+(_rTab==='seats'?'on':'')+'" onclick="S._resTab=\'seats\';render()">💺 Seat availability</button></div>';
+  if(_rTab==='seats')return '<div class="page">'+_rBar+((typeof renderAvailabilityView==='function')?renderAvailabilityView():'')+'</div>';
+  if(!_schedEnabled())return '<div class="page">'+_rBar+'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Cost-aware scheduling is OFF. Turn it on in Settings ▸ Operations ▸ Scheduling.</div></div>';
   var acIds=Object.keys((S&&S.aircraft)||{});
   var today=_resToday();
   var ym=S._resMonth||_resYMnow();S._resMonth=ym;
@@ -391,7 +397,7 @@ function renderResources(){
   var first=new Date(Y,M-1,1);var offset=(first.getDay()+6)%7;var dim=new Date(Y,M,0).getDate();
   var monLbl=first.toLocaleString('en-NZ',{month:'long',year:'numeric'});
 
-  var h='<div class="page">';
+  var h='<div class="page">'+_rBar;
   h+='<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
     '<div><div class="st" style="margin-bottom:0">Resource availability</div>'+
       '<p style="font-size:12px;color:var(--text3);margin:2px 0 0">Tap a day to set times; tap an aircraft chip to toggle it off/on for that day. No entry = available all day.</p></div>'+
