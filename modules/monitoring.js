@@ -113,7 +113,55 @@ function _ffStartPoll(){
   if(S._ffPoll)return;
   S._ffPoll=setInterval(function(){try{if(S.section!=='monitoring')return;if(typeof document!=='undefined'&&document.visibilityState!=='visible')return;if(window.loadFlightFollowing)window.loadFlightFollowing();}catch(e){}},30000);
 }
+// ── Live seat availability (Rezdy) ─────────────────────────────────────────────
+function _avEsc(s){return (typeof esc==='function')?esc(s):String(s==null?'':s);}
+function _avMonthStr(){return S._avMonth||(new Date()).toISOString().slice(0,7);}   // 'YYYY-MM'
+function _avMonthRange(ym){var y=+ym.slice(0,4),m=+ym.slice(5,7);var last=new Date(y,m,0).getDate();return {from:ym+'-01',to:ym+'-'+String(last).padStart(2,'0')};}
+window.avShiftMonth=function(delta){var ym=_avMonthStr();var d=new Date(+ym.slice(0,4),+ym.slice(5,7)-1+delta,1);S._avMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');S._avData=null;window.loadAvailability();};
+window.loadAvailability=async function(){
+  var ym=_avMonthStr();var r=_avMonthRange(ym);
+  S._avLoading=true;if(typeof render==='function')render();
+  try{
+    var res=(typeof callFn==='function')?await callFn('rezdy-sync',{availability:{from:r.from,to:r.to}}):null;
+    S._avData=(res&&res.ok)?{ym:ym,sessions:res.sessions||[],at:Date.now()}:{ym:ym,error:(res&&(res.error||res.hint))||'failed',sessions:[]};
+  }catch(e){S._avData={ym:ym,error:String((e&&e.message)||e),sessions:[]};}
+  S._avLoading=false;if(typeof render==='function')render();
+};
+function _avShortProd(name){if(typeof _rzProduct==='function'){var c=_rzProduct(name);if(c&&String(c).length<=6)return c;}return String(name||'').slice(0,14);}
+function renderAvailabilityView(){
+  var ym=_avMonthStr();
+  if((!S._avData||S._avData.ym!==ym)&&!S._avLoading){S._avLoading=true;setTimeout(window.loadAvailability,0);}
+  var d=(S._avData&&S._avData.ym===ym)?S._avData:null;
+  var mLabel;try{mLabel=new Date(ym+'-01T00:00:00').toLocaleDateString('en-NZ',{month:'long',year:'numeric'});}catch(e){mLabel=ym;}
+  var h='<div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">'+
+    '<button onclick="window.avShiftMonth(-1)" class="btn btn-ghost" style="padding:6px 12px">◁</button>'+
+    '<div style="font-weight:800;font-size:15px;min-width:150px;text-align:center">'+_avEsc(mLabel)+'</div>'+
+    '<button onclick="window.avShiftMonth(1)" class="btn btn-ghost" style="padding:6px 12px">▷</button>'+
+    '<button onclick="window.loadAvailability()" class="btn btn-ghost" style="margin-left:auto;padding:6px 12px;font-size:12px">'+(S._avLoading?'⟳ Loading…':'⟳ Refresh')+'</button></div>'+
+    '<p style="font-size:12px;color:var(--text3);margin:0 0 12px">Live seats remaining per departure, pulled from Rezdy.</p>';
+  if(S._avLoading&&!d)return h+'<p style="color:var(--text3)">Loading availability…</p></div>';
+  if(!d)return h+'</div>';
+  if(d.error)return h+'<p style="color:#dc2626;font-size:13px;line-height:1.5">Couldn’t load availability (<code>'+_avEsc(d.error)+'</code>). The <b>rezdy-sync</b> edge function needs redeploying with the new availability endpoint.</p></div>';
+  var sess=d.sessions||[];
+  if(!sess.length)return h+'<p style="color:var(--text3)">No departures found for '+_avEsc(mLabel)+'.</p></div>';
+  var byDay={};
+  sess.forEach(function(s){var dt=String(s.startTimeLocal||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(dt))return;var tm=String(s.startTimeLocal||'').replace('T',' ').slice(11,16);(byDay[dt]=byDay[dt]||[]).push({t:tm,name:s.productName,seats:(s.seatsAvailable==null?null:+s.seatsAvailable)});});
+  var days=Object.keys(byDay).sort();
+  days.forEach(function(dt){
+    var list=byDay[dt].sort(function(a,b){return a.t<b.t?-1:a.t>b.t?1:0;});
+    var tot=list.reduce(function(x,s){return x+(s.seats>0?s.seats:0);},0);
+    var dlab;try{dlab=new Date(dt+'T00:00:00').toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'});}catch(e){dlab=dt;}
+    h+='<div style="border-top:1px solid var(--border2);padding:9px 0"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px"><b style="font-size:13px">'+_avEsc(dlab)+'</b><span style="font-size:11px;color:var(--text3)">'+tot+' seats · '+list.length+' departure'+(list.length===1?'':'s')+'</span></div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:5px">'+list.map(function(s){var n=s.seats;var col=n==null?'var(--text3)':n<=0?'#dc2626':n<=2?'#b45309':'#16a34a';var bg=n==null?'var(--card2)':n<=0?'rgba(239,68,68,.12)':n<=2?'rgba(217,119,6,.12)':'rgba(34,197,94,.12)';return '<span title="'+_avEsc(s.name)+'" style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:14px;background:'+bg+';font-size:11.5px;color:'+col+';font-weight:700"><b>'+_avEsc(s.t||'—')+'</b> '+_avEsc(_avShortProd(s.name))+' · '+(n==null?'?':n)+'</span>';}).join('')+'</div></div>';
+  });
+  return h+'</div>';
+}
 function renderMonitoring(){
+  var _mTab=(S._monTab==='avail')?'avail':'fleet';
+  var _mBar='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'+
+    '<button class="sub-tab '+(_mTab==='fleet'?'on':'')+'" onclick="S._monTab=\'fleet\';render()">🛩 Fleet status</button>'+
+    '<button class="sub-tab '+(_mTab==='avail'?'on':'')+'" onclick="S._monTab=\'avail\';render()">💺 Seat availability</button></div>';
+  if(_mTab==='avail')return _mBar+renderAvailabilityView();
   if(!S._ffLoaded){S._ffLoaded=true;if(window.loadFlightFollowing)window.loadFlightFollowing();}
   if(!S._frLoaded&&window.loadFlightRecords){S._frLoaded=true;window.loadFlightRecords();}   // so status derives from today's records (live)
   _ffStartPoll();
@@ -139,5 +187,5 @@ function renderMonitoring(){
     '</div>';
   });
   h+='</div>';
-  return h;
+  return _mBar+h;
 }

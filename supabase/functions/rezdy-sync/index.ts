@@ -150,6 +150,51 @@ serve(async (req) => {
     return json({ ok: true, imported: fetched.map((n) => n.orderNumber), misses })
   }
 
+  // Live seat availability: list products (for codes + names), then pull Rezdy availability sessions
+  // for the date range. Returns one entry per session (departure) with seatsAvailable.
+  if (body.availability) {
+    const from = String(body.availability.from || "").slice(0, 10)
+    const to = String(body.availability.to || "").slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return json({ ok: false, error: "bad_range" }, 400)
+    const prods: any[] = []
+    try {
+      for (let off = 0; off < 6; off++) {
+        const pr = await fetch(`${REZDY_BASE}/products?apiKey=${REZDY_KEY}&limit=100&offset=${off * 100}`)
+        const pj: any = await pr.json().catch(() => ({}))
+        const list = pj.products || pj.data || []
+        prods.push(...list)
+        if (list.length < 100) break
+      }
+    } catch (_) { /* keep going */ }
+    const nameByCode: Record<string, string> = {}
+    const codes: string[] = []
+    for (const p of prods) {
+      const code = p.code || p.productCode || ""
+      if (!code) continue
+      if (String(p.productType || "").toUpperCase().includes("GIFT")) continue
+      nameByCode[code] = p.name || code
+      codes.push(code)
+    }
+    if (!codes.length) return json({ ok: true, from, to, sessions: [], products: [] })
+    const startTime = `${from} 00:00:00`, endTime = `${to} 23:59:59`
+    const sessions: any[] = []
+    for (let i = 0; i < codes.length; i += 20) {
+      const chunk = codes.slice(i, i + 20)
+      let url = `${REZDY_BASE}/availability?apiKey=${REZDY_KEY}&startTime=${encodeURIComponent(startTime)}&endTime=${encodeURIComponent(endTime)}`
+      for (const c of chunk) url += `&productCode=${encodeURIComponent(c)}`
+      try {
+        const ar = await fetch(url)
+        if (!ar.ok) continue
+        const aj: any = await ar.json().catch(() => ({}))
+        for (const s of (aj.sessions || [])) {
+          const sa = (s.seatsAvailable != null ? s.seatsAvailable : s.seats)
+          sessions.push({ productCode: s.productCode, productName: nameByCode[s.productCode] || s.productCode, startTimeLocal: s.startTimeLocal || s.startTime || "", seatsAvailable: sa, seats: s.seats })
+        }
+      } catch (_) { /* skip chunk */ }
+    }
+    return json({ ok: true, from, to, sessions, products: codes.map((c) => ({ code: c, name: nameByCode[c] })) })
+  }
+
   const date = (body.date || "").trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ ok: false, error: "missing_or_bad_date" }, 400)
 
