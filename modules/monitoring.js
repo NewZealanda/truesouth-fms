@@ -149,7 +149,9 @@ window.avEnsureDay=function(date){
     S._avDayFetching=null;if(typeof safeRender==='function')safeRender();
   })();
 };
-// Live Rezdy seats remaining for a departure (HHMM) on a date — MIN across the slot's linked products.
+// Live Rezdy seats remaining for a departure (HHMM) on a date — MAX across the slot's linked products.
+// We take the HIGHEST-available linked product so a guide-limited helihike reading 0 doesn't drag the
+// whole Mt Cook departure to "0 seats left" when the aircraft (or an added caravan) still has seats.
 function _avSeatsForDep(date,dep){
   var day=S._avDayData&&S._avDayData[date];if(!day||!day.sessions)return null;
   dep=String(dep||'');var hhmm=(dep.length===4)?(dep.slice(0,2)+':'+dep.slice(2)):dep;
@@ -164,7 +166,7 @@ function _avSeatsForDep(date,dep){
     if(linkSet){if(linkSet.indexOf(nm)<0)return;}
     if(s.seatsAvailable!=null)seats.push(+s.seatsAvailable);
   });
-  return seats.length?Math.min.apply(null,seats):null;
+  return seats.length?Math.max.apply(null,seats):null;
 }
 // Scheduled departure times (HHMM) for a product name on a date, from the day's availability — used to
 // surface departures (e.g. every FCF slot) even when they have no bookings yet.
