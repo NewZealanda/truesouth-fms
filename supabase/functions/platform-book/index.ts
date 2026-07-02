@@ -275,12 +275,14 @@ serve(async (req) => {
         productTimes[String(p.id)] = times
         for (const t of times) {
           const nat = nativeCommitted[t] ?? 0, hld = held[t] ?? 0
-          // SEATS = Rezdy's live number for this product's session (the true availability) − buffer −
-          // our native bookings − holds; if Rezdy has no session for this slot (outage / off-Rezdy),
-          // fall back to the conservative fleet guard so the configured departure is still bookable.
-          const s = (rz && rz[t] != null)
-            ? Math.max(0, rz[t] - SEAT_BUFFER - nat - hld)
-            : Math.max(0, fleet - (bothCommitted[t] ?? 0) - hld)
+          // SEATS = Rezdy's live number for this product's session (true availability) − buffer − our
+          // native bookings − holds. When Rezdy is UP but has NO session for this configured slot
+          // (sold out / not running that day), it reads 0 = unavailable — we do NOT fall back to fleet,
+          // which would wrongly show a departure Rezdy isn't selling. The fleet guard is used ONLY when
+          // Rezdy is unreachable (rz === null), so an outage never blocks bookings.
+          let s: number
+          if (rz) s = (rz[t] != null) ? Math.max(0, rz[t] - SEAT_BUFFER - nat - hld) : 0
+          else s = Math.max(0, fleet - (bothCommitted[t] ?? 0) - hld)
           slots[t] = (slots[t] == null) ? s : Math.min(slots[t], s)   // tightest if products share a slot
         }
       }

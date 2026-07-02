@@ -88,6 +88,10 @@ var SLOTS=null;                  // availability for sel.date {dep:sellable}
 var PTIMES=null;                 // per-product timetable resolved for sel.date (summer/winter)
 var HOLD=null;                   // {holdId, expiresAt}
 var BUSY=false, ERR='', DONE=null;
+// Staff/QA view (book.html?staff=1): show the EXACT seat count + whether Rezdy live data drove it,
+// so we can verify the availability engine. Customers (no flag) still see the capped "5+".
+var STAFF=/[?&](staff|debug)=1/i.test((typeof location!=='undefined'&&location.search)||'');
+var REZDY_OK=null;               // did the last availability response use Rezdy live data?
 
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 // JS-string escape for values interpolated into inline onclick='fn(\'…\')' handlers —
@@ -113,8 +117,9 @@ function loadAvail(){
   api({action:'availability',date:sel.date,product:sel.prod&&sel.prod.id}).then(function(r){
     SLOTS=(r&&r.ok)?(r.slots||{}):{};
     PTIMES=(r&&r.ok)?(r.productTimes||null):null;
+    REZDY_OK=(r&&r.ok)?!!r.rezdy:null;
     render();
-  }).catch(function(){SLOTS={};PTIMES=null;render();});
+  }).catch(function(){SLOTS={};PTIMES=null;REZDY_OK=null;render();});
 }
 // Hold seats when a departure is picked (released + re-placed on change).
 // Sequenced: the old hold is released BEFORE the new one is requested (otherwise the two
@@ -239,13 +244,14 @@ function render(){
         times.forEach(function(t){
           var left=(SLOTS&&SLOTS[t]!=null)?SLOTS[t]:null,need=sel.a+sel.c;
           var full=(left!=null&&left<need);
-          // Don't expose the raw seat count to customers: show "5+" once there's plenty, the exact
-          // number only when it's getting tight (<5), and "full" when it can't take the party.
-          var lbl=(left==null)?'':(full?'full':(left>=5?'5+ seats':(left+' seat'+(left===1?'':'s')+' left')));
+          // Customer view: "5+" once there's plenty, the exact number only when tight (<5), "full" when
+          // it can't take the party. Staff view (?staff=1): always the EXACT number, to verify the engine.
+          var lbl=(left==null)?'':(full?(STAFF?(left+' left'):'full'):(STAFF?(left+' seat'+(left===1?'':'s')):(left>=5?'5+ seats':(left+' seat'+(left===1?'':'s')+' left'))));
           h+='<button class="slot'+(sel.dep===t?' on':'')+(full?' full':'')+'" onclick="pickDep(\''+esc(jsq(t))+'\','+(full?'true':'false')+')">'+esc(t)+
             (lbl?'<small>'+lbl+'</small>':'')+'</button>';
         });
         h+='</div>';
+        if(STAFF)h+='<div style="font-size:11px;color:var(--tx3);margin-top:8px;line-height:1.5">👁 Staff view — exact seats shown. Source: '+(REZDY_OK===true?'Rezdy live ✓':(REZDY_OK===false?'fleet fallback (Rezdy unreachable)':'—'))+'. Sellable = Rezdy live − 1 buffer − our web bookings − holds.</div>';
       }
     }
     h+='</div>';
