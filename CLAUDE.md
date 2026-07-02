@@ -90,7 +90,13 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.32 (latest) — roster day/month views + mobile initials; products table sticky scroll.**
+- **v29.33 (latest) — Records: 🛬 Landings-by-location breakdown.** The Records browser's
+  Breakdown panel (flightrecord.js `_frRenderBrowse`) gains a third mode alongside By pilot /
+  By aircraft: landings aggregated by the record's `to` (destination — where the landing happens),
+  place-named via `_frPlaceName`, sorted by landings desc. Respects all existing filters (date
+  range / pilot / aircraft / type / search). A landings column was added to all three breakdown
+  modes. build + node --check clean.
+- **v29.32 — roster day/month views + mobile initials; products table sticky scroll.**
   (1) **Roster views** (roster.js): Day | Week | Month selector in the toolbar (`S._rosterView`,
   persisted `ts_roster_view`, week default). Generalised the days array — `S.rosterWeek` stays the
   anchor (day = that date, month = snapped to the 1st); prev/next buttons, `rosterShiftWeek`
