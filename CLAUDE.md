@@ -90,7 +90,11 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.33 (latest) — Records: 🛬 Landings-by-location breakdown.** The Records browser's
+- **v29.34 (latest) — roster week view fits an iPhone screen.** On `S.mobileView`, week view
+  uses the compact month-style cells (`_cmp` flag: 44px / 9px font) so 46px initials col +
+  7×44px ≈ 354px — all 7 days visible without sideways scroll; table min-width 560→0 on mobile.
+  Month view unchanged (still scrolls on mobile); day view stays 92px.
+- **v29.33 — Records: 🛬 Landings-by-location breakdown.** The Records browser's
   Breakdown panel (flightrecord.js `_frRenderBrowse`) gains a third mode alongside By pilot /
   By aircraft: landings aggregated by the record's `to` (destination — where the landing happens),
   place-named via `_frPlaceName`, sorted by landings desc. Respects all existing filters (date

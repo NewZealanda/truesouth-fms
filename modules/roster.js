@@ -218,7 +218,10 @@ function renderRosterView(){
     wkLbl=d0.getDate()+' '+MONTHS[d0.getMonth()]+(d0.getFullYear()!==d6.getFullYear()?' '+d0.getFullYear():'')+' – '+d6.getDate()+' '+MONTHS[d6.getMonth()]+' '+d6.getFullYear();
   }
   S._rosterRangeDays=days.length;                       // leave loader fetches this many days
-  var cellW=(view==='month')?44:(view==='day'?92:66);   // month = compact cells
+  // Compact cells: month view always; week view on MOBILE too, so all 7 days fit an iPhone
+  // screen without sideways scrolling (46px initials col + 7×44px ≈ 354px).
+  var _cmp=(view==='month')||(!!S.mobileView&&view==='week');
+  var cellW=(view==='day')?92:(_cmp?44:66);
   var _colspan=days.length+1;
 
   var allUsers=(S.users||[]).filter(function(u){return u.id&&u.name&&!u.inactive;});
@@ -305,7 +308,7 @@ function renderRosterView(){
 
   // ── Table ──
   h+='<div style="overflow:auto;max-height:calc(100vh - 220px)">';
-  h+='<table style="width:100%;border-collapse:collapse;min-width:560px">';
+  h+='<table style="width:100%;border-collapse:collapse;min-width:'+(S.mobileView?'0':'560px')+'">';
 
   // Sticky header
   h+='<thead style="position:sticky;top:0;z-index:20">';
@@ -408,7 +411,7 @@ function renderRosterView(){
               h+='<button tabindex="-1" onclick="window.rosterOtherCancel()" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:10px;cursor:pointer">X</button>';
               h+='</div></div>';
             }else{
-            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?esc(otherNote):'')+'" style="padding:4px '+(view==='month'?'0':'3px')+';border-radius:6px;border:1px solid '+(st?cfg.bd:'var(--border)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'var(--text3)')+';font-size:'+(view==='month'?'9px':'11px')+';font-weight:700;cursor:pointer;width:'+cellW+'px;text-align:center">';
+            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?esc(otherNote):'')+'" style="padding:4px '+(_cmp?'0':'3px')+';border-radius:6px;border:1px solid '+(st?cfg.bd:'var(--border)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'var(--text3)')+';font-size:'+(_cmp?'9px':'11px')+';font-weight:700;cursor:pointer;width:'+cellW+'px;text-align:center">';
             ROSTER_ORDER.forEach(function(s){
               var c=_rSC(s);
               h+='<option value="'+s+'"'+(rawSt===s?' selected':'')+'>'+c.lbl+'</option>';
@@ -417,7 +420,7 @@ function renderRosterView(){
             if(isOther&&otherNote){h+='<div style="font-size:8px;color:#94a3b8;line-height:1;margin-top:1px;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(otherNote)+'</div>';}
             }
           } else {
-            h+='<span'+(isOther?' title="'+esc(otherNote)+'"':'')+' style="display:inline-block;padding:4px '+(view==='month'?'1px':'3px')+';border-radius:6px;border:1px solid '+(st?cfg.bd:'var(--border)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'var(--text3)')+';font-size:'+(view==='month'?'9px':'11px')+';font-weight:700;min-width:'+(cellW-10)+'px;overflow:hidden;text-overflow:ellipsis;max-width:'+cellW+'px;vertical-align:middle">'+dispLbl+'</span>';
+            h+='<span'+(isOther?' title="'+esc(otherNote)+'"':'')+' style="display:inline-block;padding:4px '+(_cmp?'1px':'3px')+';border-radius:6px;border:1px solid '+(st?cfg.bd:'var(--border)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'var(--text3)')+';font-size:'+(_cmp?'9px':'11px')+';font-weight:700;min-width:'+(cellW-10)+'px;overflow:hidden;text-overflow:ellipsis;max-width:'+cellW+'px;vertical-align:middle">'+dispLbl+'</span>';
           }
           h+='</td>';
         });
