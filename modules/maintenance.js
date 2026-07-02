@@ -549,7 +549,7 @@ function renderMaintLog(){
     var cumStarts=_maintCum('_starts','_startTot');
     var cumLandings=_maintCum('_landings','_landTot');
     const oil=oe[ac]||null;
-    const hasFlightData=ttis!=null||starts!=null||landings!=null||oil!=null||e.comment;
+    const hasFlightData=ttis!=null||starts!=null||landings!=null||oil!=null||e[ac+'_comment']||e.comment;
     const cwDone=cwDoneMap[ds];
     const adasDone=adasDoneMap[ds];
     const isWe=[0,6].includes(new Date(ds+'T00:00:00').getDay());
@@ -575,7 +575,7 @@ function renderMaintLog(){
       ${isCaravan?`<td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${starts||''}" placeholder="—" title="${cumStarts!=null?'Total starts to date: '+cumStarts:''}" onblur="window.saveMaintField('${ds}','${ac}','starts',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${starts!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td><td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${landings||''}" placeholder="—" title="${cumLandings!=null?'Total landings to date: '+cumLandings:''}" onblur="window.saveMaintField('${ds}','${ac}','landings',this.value)" style="width:36px;background:transparent;border:none;border-bottom:1px solid var(--border2);border-radius:2px;color:${landings!=null?'var(--text)':'var(--text3)'};font-size:12px;font-weight:700;text-align:right;padding:2px 4px;outline:none;cursor:text" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>`:''}
       <td style="padding:2px 4px;text-align:right"><input type="number" step="1" value="${oil||''}" placeholder="—" oninput="this.style.color=this.value?'var(--text)':('var(--border)')" onblur="window.saveMaintField('${ds}','${ac}','oil',this.value)" style="width:44px;background:transparent;border:none;border-bottom:1px solid transparent;color:${oil!=null?'#f59e0b':'var(--border)'};font-size:12px;font-weight:700;text-align:right;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
       ${cwTd}${adasTd}
-      <td style="padding:2px 4px"><input type="text" value="${esc(e.comment||'')}" placeholder="notes…" onblur="window.saveMaintField('${ds}','${ac}','comment',this.value)" style="width:100%;min-width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-size:11px;font-style:italic;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
+      <td style="padding:2px 4px"><input type="text" value="${esc((e[ac+'_comment']!=null?e[ac+'_comment']:e.comment)||'')}" placeholder="notes…" onblur="window.saveMaintField('${ds}','${ac}','comment',this.value)" style="width:100%;min-width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-size:11px;font-style:italic;padding:2px 0;outline:none" onfocus="this.style.borderBottomColor='var(--accent)';this.style.background='var(--card2)'"></td>
       <td style="padding:5px 6px;white-space:nowrap">${delBtn}</td>
     </tr>`;
   }).join('');
@@ -932,8 +932,11 @@ function renderMaintSearch(){
       else{val=e[ac];display=val!=null?val.toFixed(1):'—';}
       return'<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(val!=null?'var(--text)':'var(--text3)')+'">'+display+'</td>';
     }).join('');
+    // Notes column: legacy shared comment + any per-aircraft notes (tagged with the tail).
+    var _cmts=[];if(e.comment)_cmts.push(e.comment);
+    Object.keys(e).forEach(function(k){if(k.slice(-8)==='_comment'&&e[k])_cmts.push(k.slice(0,-8).replace('ZK-','')+': '+e[k]);});
     return'<tr><td style="padding:5px 8px;font-size:12px;color:var(--text3)">'+fmtMaintDate(e.date)+'</td>'+cols+
-      (e.comment?'<td style="padding:5px 8px;font-size:11px;color:var(--text3);font-style:italic">'+esc(e.comment)+'</td>':'<td></td>')+'</tr>';
+      (_cmts.length?'<td style="padding:5px 8px;font-size:11px;color:var(--text3);font-style:italic">'+esc(_cmts.join(' · '))+'</td>':'<td></td>')+'</tr>';
   }).join('');
 
   return form+summaryHtml+`<div class="card" style="overflow-x:auto">
@@ -968,7 +971,14 @@ window.saveMaintField=function(date,ac,field,rawVal){
       if(field==='ttis'){const v=parseFloat(val);if(!isNaN(v)&&v>0)existing[ac]=v;else delete existing[ac];}
       else if(field==='starts'){const v=parseInt(val);if(!isNaN(v)&&v>=0)existing[ac+'_starts']=v;else delete existing[ac+'_starts'];}
       else if(field==='landings'){const v=parseInt(val);if(!isNaN(v)&&v>=0)existing[ac+'_landings']=v;else delete existing[ac+'_landings'];}
-      else if(field==='comment'){if(val)existing.comment=val;else delete existing.comment;}
+      else if(field==='comment'){
+        // Notes are PER AIRCRAFT (ac_comment), like ttis/starts/landings — one shared `comment`
+        // per date was the old bug (editing one tail's note changed them all). Legacy shared
+        // `comment` stays visible as a fallback until a tail gets its own note; explicitly
+        // CLEARING a note also clears the legacy shared one (that's what the user is removing).
+        if(val)existing[ac+'_comment']=val;
+        else{delete existing[ac+'_comment'];delete existing.comment;}
+      }
     }
   }
   saveMaintenance();
@@ -1017,7 +1027,7 @@ window.addMaintEntry=function(){
   existing[ac]=hours;
   if(starts>0){existing[ac+'_starts']=starts;}
   if(landings>0){existing[ac+'_landings']=landings;}
-  if(comment) existing.comment=comment;
+  if(comment) existing[ac+'_comment']=comment;   // per-aircraft note (see saveMaintField)
   // Update oil separately
   if(oil>0){
     S.maintenance.oil=S.maintenance.oil||[];

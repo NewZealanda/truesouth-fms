@@ -90,7 +90,14 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.38 (latest) — no more "Loading…" flash on a calendar day change (all three sub-views).**
+- **v29.39 (latest) — maintenance log notes are now PER AIRCRAFT.** Bug: the hours-log Notes
+  column wrote one shared `comment` per DATE row (`hist` entry) while ttis/starts/landings were
+  per-tail keys — editing one aircraft's note changed every aircraft's. Now `saveMaintField` +
+  `addMaintEntry` write `<ac>_comment`; the log cell reads the per-tail note falling back to the
+  legacy shared `comment` (still visible until a tail gets its own); explicitly CLEARING a note
+  also deletes the legacy shared one; the Search results Notes column shows legacy + per-tail
+  notes tagged with the tail short code. `hasFlightData` row-visibility includes per-tail notes.
+- **v29.38 — no more "Loading…" flash on a calendar day change (all three sub-views).**
   The calendar body (header cards + grid / movement columns) is wrapped in `#rzCalBody`;
   `rezdySetDate` snapshots its innerHTML (`S._calSnap`) before clearing the day's caches, and the
   loading branches of ALL THREE calendar sub-views (`_rzRenderSchedule` / `_rzRenderMovements` /
