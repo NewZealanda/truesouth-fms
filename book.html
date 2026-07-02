@@ -28,9 +28,9 @@
   .st{font-size:15px;font-weight:800;margin-bottom:10px}
   .prod{display:block;width:100%;text-align:left;background:var(--card2);border:1.5px solid var(--bd);border-radius:12px;padding:13px 15px;margin-bottom:9px;cursor:pointer;font:inherit;color:var(--tx)}
   .prod.on{border-color:var(--acc);background:#eaf0f8}
-  .prod .pn{font-weight:800;font-size:15px}
-  .prod .pd{font-size:12px;color:var(--tx2);margin-top:2px;line-height:1.4}
-  .prod .pp{font-size:13px;font-weight:700;color:var(--acc);margin-top:4px}
+  .prod .pn{display:block;font-weight:800;font-size:15px}
+  .prod .pd{display:block;font-size:12px;color:var(--tx2);margin-top:3px;line-height:1.4}
+  .prod .pp{display:block;font-size:13px;font-weight:700;color:var(--acc);margin-top:6px}
   label.f{display:block;font-size:11px;font-weight:700;color:var(--tx3);margin:10px 0 3px;text-transform:uppercase;letter-spacing:.4px}
   input,textarea{width:100%;padding:11px 12px;border:1px solid var(--bd);border-radius:10px;font:inherit;font-size:15px;color:var(--tx);background:#fff}
   .slots{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
@@ -192,10 +192,13 @@ function render(){
   PRODUCTS.forEach(function(p){
     var tr=tierFor(p,sel.date);      // card prices follow the chosen flight date
     var pr=money(tr.a);
+    // Until a date is chosen the price is INDICATIVE (seasonal pricing varies by flight date), so show
+    // it as "from $X". Once a date is picked, tierFor resolves the exact price for that date.
+    var fromLbl=(!sel.date&&pr)?'from ':'';
     h+='<button class="prod'+(sel.prod&&sel.prod.id===p.id?' on':'')+'" onclick="pickProd(\''+esc(p.id)+'\')">'+
       '<span class="pn">'+esc(p.name)+'</span>'+
       (p.description?'<span class="pd">'+esc(p.description)+'</span>':'')+
-      '<span class="pp">'+(pr?pr+' adult':'Price on application')+(tr.c!=null?' · '+money(tr.c)+' child':'')+(p.duration_min?' · '+Math.round(p.duration_min/60*10)/10+' h':'')+'</span></button>';
+      '<span class="pp">'+(pr?fromLbl+pr+' adult':'Price on application')+(tr.c!=null?' · '+money(tr.c)+' child':'')+(p.duration_min?' · '+Math.round(p.duration_min/60*10)/10+' h':'')+'</span></button>';
   });
   h+='</div>';
   // 2 — date + time
