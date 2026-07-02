@@ -90,7 +90,19 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.31 (latest) — summer/winter departure timetables on the product catalog.**
+- **v29.32 (latest) — roster day/month views + mobile initials; products table sticky scroll.**
+  (1) **Roster views** (roster.js): Day | Week | Month selector in the toolbar (`S._rosterView`,
+  persisted `ts_roster_view`, week default). Generalised the days array — `S.rosterWeek` stays the
+  anchor (day = that date, month = snapped to the 1st); prev/next buttons, `rosterShiftWeek`
+  (arrow keys) and `rosterJump` (date picker) are all view-aware; pay-week toggle only shows in
+  week view; weekend shading now by getDay (was index). Month view uses compact 44px cells /
+  9px font; colspans dynamic (`_colspan`); `loadRosterLeave` always fetches ≥31 days.
+  (2) **Mobile initials**: on `S.mobileView` the sticky Crew column shows just the 2-letter code
+  badge (title = full name), col shrinks 155px→46px so more days fit on iPhone.
+  (3) **Products editor**: table container is now `overflow:auto;max-height:65vh` with a sticky
+  header row — the horizontal scrollbar sits at the bottom of the panel, no more scrolling the
+  whole page to reach it. build + node --check clean.
+- **v29.31 — summer/winter departure timetables on the product catalog.**
   `ts_products` gains `times_winter` (`products_winter_times.sql` — APPLY IN SUPABASE); a global
   recurring winter window (MM-DD..MM-DD, default 05-01..09-30, may wrap year-end) lives in
   ts_settings key `platform_cfg`, editable at the top of Settings ▸ Operations ▸ Products

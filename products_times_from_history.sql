@@ -25,12 +25,12 @@ with bk as (
   from public.ts_rezdy_bookings b,
        jsonb_array_elements(coalesce(b.data->'items','[]'::jsonb)) it
   where b.tour_date >= current_date - 400
-    and coalesce(b.status, b.data->>'status', '') not ilike '%cancel%'
-    and coalesce(b.data->>'status','')            not ilike '%abandoned%'
+    and coalesce(b.data->>'status','') not ilike '%cancel%'
+    and coalesce(b.data->>'status','') not ilike '%abandoned%'
 ),
 mapped as (
   select tour_date,
-         substring(stl from 'T(\d{2}:\d{2})') as tm,
+         substring(stl from '[T ](\d{2}:\d{2})') as tm,   -- startTimeLocal is "YYYY-MM-DD HH:MM:SS" (space) or ISO "…T…"
          case
            when pname ~* 'one.?way'                             then 'FLB'
            when pname ~* 'coach.*cruise.*fly'                   then 'CCF'

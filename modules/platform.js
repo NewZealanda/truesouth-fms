@@ -243,11 +243,14 @@ function renderAdminProducts(){
     h+='<div style="text-align:center;padding:18px 8px;color:var(--text3);font-size:13px">No products yet.'+
       '<div style="margin-top:12px"><button class="btn" onclick="window.platformProdSeed()">Seed from built-in product list</button></div></div>';
   } else {
-    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1420px">'+
-      '<tr style="color:var(--text3);text-align:left"><th style="padding:4px 6px">Code</th><th style="padding:4px 6px">Name</th><th style="padding:4px 6px">Dest</th>'+
-      '<th style="padding:4px 6px">Adult $</th><th style="padding:4px 6px">Child $</th><th style="padding:4px 6px">Infant $</th>'+
-      '<th style="padding:4px 6px;border-left:1px solid var(--border2)">From</th><th style="padding:4px 6px">Next A$</th><th style="padding:4px 6px">Next C$</th><th style="padding:4px 6px;border-right:1px solid var(--border2)">Next I$</th>'+
-      '<th style="padding:4px 6px">☀ Times</th><th style="padding:4px 6px">❄ Winter times</th><th style="padding:4px 6px">Min</th><th style="padding:4px 6px">Sort</th><th style="padding:4px 6px">Public</th><th></th></tr>';
+    // max-height + overflow:auto keeps the horizontal scrollbar visible at the bottom of the
+    // panel (no scrolling to the page bottom first); the header row stays pinned while scrolling.
+    var thS='padding:4px 6px;position:sticky;top:0;background:var(--card);z-index:2';
+    h+='<div style="overflow:auto;max-height:65vh"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1420px">'+
+      '<tr style="color:var(--text3);text-align:left"><th style="'+thS+'">Code</th><th style="'+thS+'">Name</th><th style="'+thS+'">Dest</th>'+
+      '<th style="'+thS+'">Adult $</th><th style="'+thS+'">Child $</th><th style="'+thS+'">Infant $</th>'+
+      '<th style="'+thS+';border-left:1px solid var(--border2)">From</th><th style="'+thS+'">Next A$</th><th style="'+thS+'">Next C$</th><th style="'+thS+';border-right:1px solid var(--border2)">Next I$</th>'+
+      '<th style="'+thS+'">☀ Times</th><th style="'+thS+'">❄ Winter times</th><th style="'+thS+'">Min</th><th style="'+thS+'">Sort</th><th style="'+thS+'">Public</th><th style="'+thS+'"></th></tr>';
     list.forEach(function(p){
       var code=esc(p.id),cj=String(p.id).replace(/[^A-Z0-9_-]/gi,'');
       h+='<tr style="border-top:1px solid var(--border2)">'+

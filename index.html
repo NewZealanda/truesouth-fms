@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v29.31';
+const APP_VER='v29.32';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -13165,16 +13165,40 @@ function renderRosterView(){
   var _payAllowed=role==='superadmin'||role==='admin'||(typeof hasRolePerm==='function'&&hasRolePerm('pay_week'));
   if(typeof S._rosterPayWeek==='undefined')S._rosterPayWeek=lsGet('ts_roster_payweek')||false;
   var _payWeek=_payAllowed&&!!S._rosterPayWeek;
-  // Align the displayed week to the active mode: Mon–Sun normally, Thu–Wed for pay week.
+  // ── View mode: day | week (default) | month — per-device, persisted. ──
+  var view=S._rosterView||(S._rosterView=lsGet('ts_roster_view')||'week');
+  if(['day','week','month'].indexOf(view)<0)view='week';
   var _anchor=S.rosterWeek?new Date(S.rosterWeek+'T00:00:00'):new Date(today);
-  var weekStart=_payWeek?_rThursday(_anchor):_rMonday(_anchor);
-  S.rosterWeek=_rIso(weekStart);
-  var days=[];
-  for(var _i=0;_i<7;_i++){var _d=new Date(weekStart);_d.setDate(_d.getDate()+_i);days.push(_d);}
-  var prevStart=new Date(weekStart);prevStart.setDate(prevStart.getDate()-7);
-  var nextStart=new Date(weekStart);nextStart.setDate(nextStart.getDate()+7);
-  var d0=days[0],d6=days[6];
-  var wkLbl=d0.getDate()+' '+MONTHS[d0.getMonth()]+(d0.getFullYear()!==d6.getFullYear()?' '+d0.getFullYear():'')+' – '+d6.getDate()+' '+MONTHS[d6.getMonth()]+' '+d6.getFullYear();
+  if(isNaN(_anchor.getTime()))_anchor=new Date(today);
+  var days=[],prevStart,nextStart,wkLbl;
+  if(view==='day'){
+    var dd=new Date(_anchor);S.rosterWeek=_rIso(dd);
+    days=[dd];
+    prevStart=new Date(dd);prevStart.setDate(prevStart.getDate()-1);
+    nextStart=new Date(dd);nextStart.setDate(nextStart.getDate()+1);
+    var _DFULL=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    wkLbl=_DFULL[dd.getDay()]+' '+dd.getDate()+' '+MONTHS[dd.getMonth()]+' '+dd.getFullYear();
+  } else if(view==='month'){
+    var m0=new Date(_anchor.getFullYear(),_anchor.getMonth(),1);S.rosterWeek=_rIso(m0);
+    var _mn=new Date(m0.getFullYear(),m0.getMonth()+1,0).getDate();
+    for(var _mi=0;_mi<_mn;_mi++)days.push(new Date(m0.getFullYear(),m0.getMonth(),1+_mi));
+    prevStart=new Date(m0.getFullYear(),m0.getMonth()-1,1);
+    nextStart=new Date(m0.getFullYear(),m0.getMonth()+1,1);
+    var _MFULL=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    wkLbl=_MFULL[m0.getMonth()]+' '+m0.getFullYear();
+  } else {
+    // Week: aligned to the active mode — Mon–Sun normally, Thu–Wed for pay week.
+    var weekStart=_payWeek?_rThursday(_anchor):_rMonday(_anchor);
+    S.rosterWeek=_rIso(weekStart);
+    for(var _i=0;_i<7;_i++){var _d=new Date(weekStart);_d.setDate(_d.getDate()+_i);days.push(_d);}
+    prevStart=new Date(weekStart);prevStart.setDate(prevStart.getDate()-7);
+    nextStart=new Date(weekStart);nextStart.setDate(nextStart.getDate()+7);
+    var d0=days[0],d6=days[6];
+    wkLbl=d0.getDate()+' '+MONTHS[d0.getMonth()]+(d0.getFullYear()!==d6.getFullYear()?' '+d0.getFullYear():'')+' – '+d6.getDate()+' '+MONTHS[d6.getMonth()]+' '+d6.getFullYear();
+  }
+  S._rosterRangeDays=days.length;                       // leave loader fetches this many days
+  var cellW=(view==='month')?44:(view==='day'?92:66);   // month = compact cells
+  var _colspan=days.length+1;
 
   var allUsers=(S.users||[]).filter(function(u){return u.id&&u.name&&!u.inactive;});
   var displayUsers=allUsers.filter(function(u){
@@ -13208,7 +13232,14 @@ function renderRosterView(){
   h+='</label>';
   h+='<button tabindex="-1" onclick="window._navAway(function(){S.rosterWeek=\''+_rIso(nextStart)+'\';S._rosterLeaveWeek=null;render()})" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:13px;cursor:pointer">▶</button>';
   h+='<button tabindex="-1" onclick="window._navAway(function(){S.rosterWeek=null;S._rosterLeaveWeek=null;render()})" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.08);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer">Today</button>';
-  if(_payAllowed){
+  // Day / Week / Month view selector
+  h+='<div style="display:inline-flex;border:1px solid var(--border2);border-radius:8px;overflow:hidden">';
+  [['day','Day'],['week','Week'],['month','Month']].forEach(function(vv){
+    var on=view===vv[0];
+    h+='<button tabindex="-1" onclick="window.rosterSetView(\''+vv[0]+'\')" style="padding:5px 11px;border:none;background:'+(on?'rgba(167,139,250,.18)':'var(--card2)')+';color:'+(on?'#a78bfa':'var(--text3)')+';font-size:11px;font-weight:700;cursor:pointer">'+vv[1]+'</button>';
+  });
+  h+='</div>';
+  if(_payAllowed&&view==='week'){
     h+='<button tabindex="-1" onclick="window.rosterTogglePayWeek()" title="Toggle pay-week display (Thursday–Wednesday)" style="padding:5px 10px;border-radius:8px;border:1px solid '+(_payWeek?'rgba(34,197,94,.5)':'var(--border2)')+';background:'+(_payWeek?'rgba(34,197,94,.12)':'var(--card2)')+';color:'+(_payWeek?'#4ade80':'var(--text3)')+';font-size:11px;font-weight:700;cursor:pointer">'+(_payWeek?'Pay wk · Thu–Wed':'Pay week')+'</button>';
   }
   if(canEditRoster){
@@ -13258,10 +13289,10 @@ function renderRosterView(){
   // Sticky header
   h+='<thead style="position:sticky;top:0;z-index:20">';
   h+='<tr style="background:var(--card2)">';
-  h+='<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:155px;position:sticky;left:0;z-index:21;background:var(--card2);border-right:1px solid var(--border)">Crew</th>';
+  h+='<th style="padding:8px '+(S.mobileView?'6px':'12px')+';text-align:left;font-size:11px;font-weight:700;color:var(--text3);min-width:'+(S.mobileView?'46px':'155px')+';position:sticky;left:0;z-index:21;background:var(--card2);border-right:1px solid var(--border)">Crew</th>';
   days.forEach(function(d,i){
-    var ds=_rIso(d),isTdy=ds===todayStr,isWe=i>=5;
-    h+='<th style="padding:5px 3px;text-align:center;min-width:66px;background:'+(isTdy?'rgba(124,58,237,.14)':'var(--card2)')+';border-bottom:1px solid var(--border)">';
+    var ds=_rIso(d),isTdy=ds===todayStr,isWe=d.getDay()===0||d.getDay()===6;
+    h+='<th style="padding:5px 3px;text-align:center;min-width:'+cellW+'px;background:'+(isTdy?'rgba(124,58,237,.14)':'var(--card2)')+';border-bottom:1px solid var(--border)">';
     var _DSHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     h+='<div style="font-size:10px;font-weight:700;color:'+(isTdy?'#a78bfa':'var(--text3)')+'">'+_DSHORT[d.getDay()]+'</div>';
     h+='<div style="font-size:16px;font-weight:800;color:'+(isTdy?'#a78bfa':'var(--text1)')+'">'+d.getDate()+'</div>';
@@ -13291,7 +13322,7 @@ function renderRosterView(){
   // ── Body ──
   h+='<tbody>';
   if(!displayUsers.length){
-    h+='<tr><td colspan="8" style="padding:32px;text-align:center;color:var(--text3);font-size:13px">No users found.</td></tr>';
+    h+='<tr><td colspan="'+_colspan+'" style="padding:32px;text-align:center;color:var(--text3);font-size:13px">No users found.</td></tr>';
   } else {
     var grouped=[];
     ROLE_GROUPS.forEach(function(g){
@@ -13303,7 +13334,7 @@ function renderRosterView(){
 
     grouped.forEach(function(grp){
       h+='<tr style="background:var(--card2)">';
-      h+='<td colspan="8" style="padding:4px 12px;font-size:10px;font-weight:800;color:'+grp.g.col+';text-transform:uppercase;letter-spacing:.08em;position:sticky;left:0">'+grp.g.label+'</td>';
+      h+='<td colspan="'+_colspan+'" style="padding:4px 12px;font-size:10px;font-weight:800;color:'+grp.g.col+';text-transform:uppercase;letter-spacing:.08em;position:sticky;left:0">'+grp.g.label+'</td>';
       h+='</tr>';
 
       grp.members.forEach(function(u){
@@ -13312,8 +13343,11 @@ function renderRosterView(){
         var rowCol=rc?rc.col:'#94a3b8';
         var isPilot=!!(u.role==='pilot'||(typeof _picEligible==='function'&&_picEligible(u)));
         h+='<tr style="border-top:1px solid var(--border)">';
-        // Sticky name cell
-        h+='<td style="padding:5px 10px;white-space:nowrap;position:sticky;left:0;z-index:1;background:var(--card);border-right:1px solid var(--border)">';
+        // Sticky name cell — on mobile just the 2-letter initials (tap/hover shows the full name).
+        h+='<td style="padding:5px '+(S.mobileView?'6px':'10px')+';white-space:nowrap;position:sticky;left:0;z-index:1;background:var(--card);border-right:1px solid var(--border)">';
+        if(S.mobileView){
+          h+='<span title="'+esc(u.name)+'" style="font-size:12px;font-weight:800;padding:2px 6px;border-radius:5px;background:'+rowCol+'1a;color:'+rowCol+'">'+ini+'</span>';
+        } else {
         h+='<div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:2px">'+u.name+'</div>';
         h+='<div style="display:flex;gap:2px;flex-wrap:wrap;align-items:center">';
         h+='<span style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:'+rowCol+'1a;color:'+rowCol+'">'+ini+'</span>';
@@ -13328,11 +13362,12 @@ function renderRosterView(){
           });
         }
         h+='</div>';
+        }
         h+='</td>';
 
         days.forEach(function(d,i){
           var ds=_rIso(d);
-          var isTdy=ds===todayStr,isWe=i>=5;
+          var isTdy=ds===todayStr,isWe=d.getDay()===0||d.getDay()===6;
           var st=_rGetStatus(u,ds,roster);
           var isOther=st&&st.indexOf('other:')===0;
           var rawSt=isOther?'other':st;
@@ -13341,7 +13376,7 @@ function renderRosterView(){
           var cfg=_rSC(rawSt||'');
           var dispLbl=isOther?esc(otherNote||'?'):cfg.lbl;
           h+='<td style="padding:3px 2px;text-align:center;background:'+(isTdy?'rgba(124,58,237,.06)':(isWe?'var(--card2)':'transparent'))+'">';
-          if(isHidden){h+='<span style="display:inline-block;width:66px;height:24px"></span>';}else if(canEdit){
+          if(isHidden){h+='<span style="display:inline-block;width:'+cellW+'px;height:24px"></span>';}else if(canEdit){
             var _oe=S._rosterOtherEdit;
             var _editingOther=_oe&&_oe.uid===u.id&&_oe.ds===ds;
             if(_editingOther){
@@ -13352,7 +13387,7 @@ function renderRosterView(){
               h+='<button tabindex="-1" onclick="window.rosterOtherCancel()" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:10px;cursor:pointer">X</button>';
               h+='</div></div>';
             }else{
-            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?esc(otherNote):'')+'" style="padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'var(--border)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'var(--text3)')+';font-size:11px;font-weight:700;cursor:pointer;width:66px;text-align:center">';
+            h+='<select tabindex="-1" onchange="window.rosterSetCell(\''+u.id+'\',\''+ini+'\',\''+ds+'\',this.value)" title="'+(isOther?esc(otherNote):'')+'" style="padding:4px '+(view==='month'?'0':'3px')+';border-radius:6px;border:1px solid '+(st?cfg.bd:'var(--border)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'var(--text3)')+';font-size:'+(view==='month'?'9px':'11px')+';font-weight:700;cursor:pointer;width:'+cellW+'px;text-align:center">';
             ROSTER_ORDER.forEach(function(s){
               var c=_rSC(s);
               h+='<option value="'+s+'"'+(rawSt===s?' selected':'')+'>'+c.lbl+'</option>';
@@ -13361,7 +13396,7 @@ function renderRosterView(){
             if(isOther&&otherNote){h+='<div style="font-size:8px;color:#94a3b8;line-height:1;margin-top:1px;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(otherNote)+'</div>';}
             }
           } else {
-            h+='<span'+(isOther?' title="'+esc(otherNote)+'"':'')+' style="display:inline-block;padding:4px 3px;border-radius:6px;border:1px solid '+(st?cfg.bd:'var(--border)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'var(--text3)')+';font-size:11px;font-weight:700;min-width:56px">'+dispLbl+'</span>';
+            h+='<span'+(isOther?' title="'+esc(otherNote)+'"':'')+' style="display:inline-block;padding:4px '+(view==='month'?'1px':'3px')+';border-radius:6px;border:1px solid '+(st?cfg.bd:'var(--border)')+';background:'+(st?cfg.bg:'transparent')+';color:'+(st?cfg.col:'var(--text3)')+';font-size:'+(view==='month'?'9px':'11px')+';font-weight:700;min-width:'+(cellW-10)+'px;overflow:hidden;text-overflow:ellipsis;max-width:'+cellW+'px;vertical-align:middle">'+dispLbl+'</span>';
           }
           h+='</td>';
         });
@@ -13786,7 +13821,7 @@ window.loadRosterLeave=async function(){
   var weekStart=S.rosterWeek;
   if(!weekStart)return;
   var endD=new Date(weekStart+'T00:00:00');
-  endD.setDate(endD.getDate()+6);
+  endD.setDate(endD.getDate()+Math.max(31,(S._rosterRangeDays||7))-1);   // always ≥31 days so day/week/month views are all covered (loader can run before the view computes its range)
   var weekEnd=endD.getFullYear()+'-'+String(endD.getMonth()+1).padStart(2,'0')+'-'+String(endD.getDate()).padStart(2,'0');
   try{
     var r=await fetch(SB+'/rest/v1/ts_leave_requests?select=*&status=eq.approved&start_date=lte.'+weekEnd+'&end_date=gte.'+weekStart,{headers:SH});
@@ -13809,13 +13844,22 @@ window.loadRosterLeave=async function(){
 };
 
 
-// Shift the displayed roster week by ±1 (arrow keys), mirroring the ◁ ▷ buttons. Routes through
-// _navAway so an unsaved draft prompts to save first. S.rosterWeek is already mode-aligned.
+// Switch the roster view mode (day | week | month). Persisted per device.
+window.rosterSetView=function(v){
+  if(['day','week','month'].indexOf(v)<0)v='week';
+  S._rosterView=v;try{lsSet('ts_roster_view',v);}catch(e){}
+  S._rosterLeaveWeek=null;render();
+};
+// Shift the displayed roster period by ±1 (arrow keys), mirroring the ◁ ▷ buttons — a day, week
+// or month depending on the active view. Routes through _navAway so an unsaved draft prompts first.
 window.rosterShiftWeek=function(delta){
   window._navAway(function(){
     var base=S.rosterWeek?new Date(S.rosterWeek+'T00:00:00'):new Date();
     if(isNaN(base.getTime()))base=new Date();
-    base.setDate(base.getDate()+(delta||0)*7);
+    var v=S._rosterView||'week';
+    if(v==='day')base.setDate(base.getDate()+(delta||0));
+    else if(v==='month')base.setMonth(base.getMonth()+(delta||0));
+    else base.setDate(base.getDate()+(delta||0)*7);
     S.rosterWeek=_rIso(base);S._rosterLeaveWeek=null;render();
   });
 };
@@ -13824,9 +13868,9 @@ window.rosterJump=function(v){
   var d=new Date(v+'T00:00:00');
   if(isNaN(d.getTime()))return;
   window._navAway(function(){
-    var day=d.getDay();
-    var diff=day===0?-6:1-day;
-    d.setDate(d.getDate()+diff);
+    var vw=S._rosterView||'week';
+    if(vw==='week'){var day=d.getDay();var diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);}      // snap to Monday
+    else if(vw==='month'){d=new Date(d.getFullYear(),d.getMonth(),1);}                               // snap to 1st
     var iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     S.rosterWeek=iso;
     S._rosterLeaveWeek=null;
@@ -22168,11 +22212,14 @@ function renderAdminProducts(){
     h+='<div style="text-align:center;padding:18px 8px;color:var(--text3);font-size:13px">No products yet.'+
       '<div style="margin-top:12px"><button class="btn" onclick="window.platformProdSeed()">Seed from built-in product list</button></div></div>';
   } else {
-    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1420px">'+
-      '<tr style="color:var(--text3);text-align:left"><th style="padding:4px 6px">Code</th><th style="padding:4px 6px">Name</th><th style="padding:4px 6px">Dest</th>'+
-      '<th style="padding:4px 6px">Adult $</th><th style="padding:4px 6px">Child $</th><th style="padding:4px 6px">Infant $</th>'+
-      '<th style="padding:4px 6px;border-left:1px solid var(--border2)">From</th><th style="padding:4px 6px">Next A$</th><th style="padding:4px 6px">Next C$</th><th style="padding:4px 6px;border-right:1px solid var(--border2)">Next I$</th>'+
-      '<th style="padding:4px 6px">☀ Times</th><th style="padding:4px 6px">❄ Winter times</th><th style="padding:4px 6px">Min</th><th style="padding:4px 6px">Sort</th><th style="padding:4px 6px">Public</th><th></th></tr>';
+    // max-height + overflow:auto keeps the horizontal scrollbar visible at the bottom of the
+    // panel (no scrolling to the page bottom first); the header row stays pinned while scrolling.
+    var thS='padding:4px 6px;position:sticky;top:0;background:var(--card);z-index:2';
+    h+='<div style="overflow:auto;max-height:65vh"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1420px">'+
+      '<tr style="color:var(--text3);text-align:left"><th style="'+thS+'">Code</th><th style="'+thS+'">Name</th><th style="'+thS+'">Dest</th>'+
+      '<th style="'+thS+'">Adult $</th><th style="'+thS+'">Child $</th><th style="'+thS+'">Infant $</th>'+
+      '<th style="'+thS+';border-left:1px solid var(--border2)">From</th><th style="'+thS+'">Next A$</th><th style="'+thS+'">Next C$</th><th style="'+thS+';border-right:1px solid var(--border2)">Next I$</th>'+
+      '<th style="'+thS+'">☀ Times</th><th style="'+thS+'">❄ Winter times</th><th style="'+thS+'">Min</th><th style="'+thS+'">Sort</th><th style="'+thS+'">Public</th><th style="'+thS+'"></th></tr>';
     list.forEach(function(p){
       var code=esc(p.id),cj=String(p.id).replace(/[^A-Z0-9_-]/gi,'');
       h+='<tr style="border-top:1px solid var(--border2)">'+
