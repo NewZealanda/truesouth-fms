@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v29.37';
+const APP_VER='v29.38';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -17971,6 +17971,9 @@ window.rezdyShiftDate=function(delta){
   window.rezdySetDate(_rzYmd(d));
 };
 window.rezdySetDate=function(v){
+  // Calendar day-step: snapshot the on-screen grid FIRST, so the loading render shows the old day
+  // dimmed in place (no "Loading…" flash, page height preserved) — see _rzRenderSchedule.
+  try{var _cg=(S.section==='operations'&&S.tab==='calendar')?document.getElementById('rzCalGrid'):null;S._calSnap=_cg?_cg.outerHTML:null;}catch(e){S._calSnap=null;}
   S.rezdyDate=v||_rzToday();
   try{sessionStorage.setItem('ts_rezdy_date',S.rezdyDate);}catch(e){} // survive a refresh on Bookings/Seatmap/Loadsheets
   // clear date-scoped caches so each tab reloads for the new date
@@ -20763,11 +20766,20 @@ function _rzMaintFerryDir(b){
 }
 
 function _rzRenderSchedule(){
-  if(S._schedLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading schedule…</div>';
-  if(!S._schedBlocks){
-    if(!S._schedLoading&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
+  if(S._schedLoading||!S._schedBlocks){
+    if(!S._schedLoading&&!S._schedBlocks&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
+    // Smooth day-stepping: keep the PREVIOUS day's grid on screen (dimmed, non-interactive, with a
+    // loading pill) instead of collapsing to a placeholder — no flash, and the page keeps its
+    // height so the scroll position genuinely never moves. Snapshot is taken in rezdySetDate.
+    if(S._calSnap){
+      return '<div style="position:relative">'+
+        '<div style="opacity:.45;pointer-events:none;filter:saturate(.5)">'+S._calSnap+'</div>'+
+        '<div style="position:sticky;top:70px;z-index:70;height:0;text-align:center"><span style="display:inline-block;background:var(--card);border:1px solid var(--border2);border-radius:20px;padding:6px 16px;font-size:12px;font-weight:700;color:var(--text2);box-shadow:0 2px 10px rgba(0,0,0,.18)">Loading '+((typeof _rzDowLabel==='function')?_rzEsc(_rzDowLabel(S.rezdyDate)):_rzEsc(S.rezdyDate||''))+'…</span></div>'+
+        '</div>';
+    }
     return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading calendar…</div>';
   }
+  S._calSnap=null;   // real grid is rendering — drop the day-step snapshot
   const blocks=S._schedBlocks||[];
   S._rzBlockMeta={};   // per-render map: drag key → block info, used by the pointer move/resize handlers
   // Booking-derived blocks: all bookings sharing an aircraft / departure / product are STACKED

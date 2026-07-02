@@ -90,7 +90,14 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.37 (latest) — calendar keeps its scroll position when stepping between days.** The
+- **v29.38 (latest) — no more "Loading calendar…" flash on a day change.** `rezdySetDate`
+  snapshots the on-screen `rzCalGrid` outerHTML (`S._calSnap`) before clearing the day's caches;
+  `_rzRenderSchedule`'s loading branch renders that snapshot dimmed (opacity .45, saturate .5,
+  pointer-events none) with a sticky "Loading <day>…" pill instead of the 40px placeholder —
+  page height is preserved so the scroll genuinely never moves; the snapshot is dropped the
+  moment the real grid renders. Complements v29.37's clamped-scroll carry (which remains the
+  fallback when there's no snapshot, e.g. first calendar open).
+- **v29.37 — calendar keeps its scroll position when stepping between days.** The
   existing keep-scroll machinery (window-scroll restore keyed on section|tab + the
   `_rzCalStartPx` hour-alignment delta) was defeated by the intermediate **"Loading calendar…"**
   render on a day change: the short placeholder page CLAMPED the scroll to ~0, and the final

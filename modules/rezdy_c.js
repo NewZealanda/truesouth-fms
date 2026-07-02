@@ -1061,11 +1061,20 @@ function _rzMaintFerryDir(b){
 }
 
 function _rzRenderSchedule(){
-  if(S._schedLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading schedule…</div>';
-  if(!S._schedBlocks){
-    if(!S._schedLoading&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
+  if(S._schedLoading||!S._schedBlocks){
+    if(!S._schedLoading&&!S._schedBlocks&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
+    // Smooth day-stepping: keep the PREVIOUS day's grid on screen (dimmed, non-interactive, with a
+    // loading pill) instead of collapsing to a placeholder — no flash, and the page keeps its
+    // height so the scroll position genuinely never moves. Snapshot is taken in rezdySetDate.
+    if(S._calSnap){
+      return '<div style="position:relative">'+
+        '<div style="opacity:.45;pointer-events:none;filter:saturate(.5)">'+S._calSnap+'</div>'+
+        '<div style="position:sticky;top:70px;z-index:70;height:0;text-align:center"><span style="display:inline-block;background:var(--card);border:1px solid var(--border2);border-radius:20px;padding:6px 16px;font-size:12px;font-weight:700;color:var(--text2);box-shadow:0 2px 10px rgba(0,0,0,.18)">Loading '+((typeof _rzDowLabel==='function')?_rzEsc(_rzDowLabel(S.rezdyDate)):_rzEsc(S.rezdyDate||''))+'…</span></div>'+
+        '</div>';
+    }
     return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading calendar…</div>';
   }
+  S._calSnap=null;   // real grid is rendering — drop the day-step snapshot
   const blocks=S._schedBlocks||[];
   S._rzBlockMeta={};   // per-render map: drag key → block info, used by the pointer move/resize handlers
   // Booking-derived blocks: all bookings sharing an aircraft / departure / product are STACKED

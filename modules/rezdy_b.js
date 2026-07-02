@@ -339,6 +339,9 @@ window.rezdyShiftDate=function(delta){
   window.rezdySetDate(_rzYmd(d));
 };
 window.rezdySetDate=function(v){
+  // Calendar day-step: snapshot the on-screen grid FIRST, so the loading render shows the old day
+  // dimmed in place (no "Loading…" flash, page height preserved) — see _rzRenderSchedule.
+  try{var _cg=(S.section==='operations'&&S.tab==='calendar')?document.getElementById('rzCalGrid'):null;S._calSnap=_cg?_cg.outerHTML:null;}catch(e){S._calSnap=null;}
   S.rezdyDate=v||_rzToday();
   try{sessionStorage.setItem('ts_rezdy_date',S.rezdyDate);}catch(e){} // survive a refresh on Bookings/Seatmap/Loadsheets
   // clear date-scoped caches so each tab reloads for the new date
