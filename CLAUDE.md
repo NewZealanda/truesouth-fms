@@ -90,7 +90,12 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.34 (latest) — roster week view fits an iPhone screen.** On `S.mobileView`, week view
+- **v29.35 (latest) — roster DAY view tidied on iPhone.** With only 2 columns the browser was
+  stretching the Crew column across half the screen and the 92px select floated lost in the wide
+  day column. Now: Crew column pinned (46px on mobile, 155px on desktop day view) so the day
+  column takes the rest; the day-view status select/pill fills its column (94%, max 300px,
+  13px font, taller padding) — one clean full-width tappable widget per crew row (`_dayWide`).
+- **v29.34 — roster week view fits an iPhone screen.** On `S.mobileView`, week view
   uses the compact month-style cells (`_cmp` flag: 44px / 9px font) so 46px initials col +
   7×44px ≈ 354px — all 7 days visible without sideways scroll; table min-width 560→0 on mobile.
   Month view unchanged (still scrolls on mobile); day view stays 92px.
