@@ -90,7 +90,16 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.36 (latest) — Records browse grid: Tab flows cleanly box-to-box.** Root cause: every
+- **v29.37 (latest) — calendar keeps its scroll position when stepping between days.** The
+  existing keep-scroll machinery (window-scroll restore keyed on section|tab + the
+  `_rzCalStartPx` hour-alignment delta) was defeated by the intermediate **"Loading calendar…"**
+  render on a day change: the short placeholder page CLAMPED the scroll to ~0, and the final
+  data render then faithfully restored the clamped position. Fix (shell.js render()): when the
+  restore falls short AND the `rzCalGrid` isn't on screen, the intended Y is carried in
+  `S._winPendY` and used on the next render(s); cleared as soon as the grid is back (or on
+  leaving the calendar) so later manual scrolling is never yanked. Day-stepping now visually
+  holds the same spot, still hour-aligned across differing per-day time windows.
+- **v29.36 — Records browse grid: Tab flows cleanly box-to-box.** Root cause: every
   `frEditField` called `safeRender()`, whose 3s deferred force-render rebuilt the DOM mid-Tab and
   dumped focus (browse inputs had no id/data attrs for the restore). Now: all browse-grid
   inputs/selects carry `data-row`/`data-field` (render()'s existing focus-restore mechanism),

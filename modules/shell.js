@@ -560,7 +560,16 @@ function render(){
   // navigation still lands at the top. (Keyed on section|tab, NOT the date, so day-stepping keeps place.)
   var _winSig=String(S.section||'')+'|'+String(S.tab||'');
   var _winY=null,_winX=0;
-  try{if(_winSig===S._lastViewSig){_winY=window.pageYOffset||window.scrollY||0;_winX=window.pageXOffset||window.scrollX||0;}}catch(e){}
+  try{
+    if(_winSig===S._lastViewSig){
+      _winY=window.pageYOffset||window.scrollY||0;_winX=window.pageXOffset||window.scrollX||0;
+      // A previous restore was CLAMPED by a short intermediate page (the calendar's "Loading…"
+      // card on a day change collapses the page, so the browser forces the scroll to ~0). Carry
+      // the INTENDED position forward instead of the clamped one — once the new day's grid
+      // renders, the calendar stays visually in the same place as you step between days.
+      if(S._winPendY!=null&&S._winPendY>_winY)_winY=S._winPendY;
+    } else {S._winPendY=null;}
+  }catch(e){}
   S._lastViewSig=_winSig;
   // On the calendar, the visible-hour window is recomputed per day (fits that day's blocks), so a raw
   // pixel-scroll restore lands on a different TIME each day. Capture the OLD grid start-pixel now; after
@@ -572,6 +581,15 @@ function render(){
   try{Object.keys(_keepScroll).forEach(function(id){var el=document.getElementById(id);if(el){el.scrollLeft=_keepScroll[id].l;el.scrollTop=_keepScroll[id].t;}});}catch(e){}
   if(_winY!=null&&_calOn&&_calStartOldPx!=null&&S._rzCalStartPx!=null){_winY=Math.max(0,_winY+(_calStartOldPx-S._rzCalStartPx));}
   if(_winY!=null&&(_winY||_winX)){try{window.scrollTo(_winX,_winY);}catch(e){}}
+  // Track whether the restore actually landed (calendar only): if the grid ISN'T on screen (loading
+  // placeholder) and we fell short, remember the intended Y for the next render; once the grid is
+  // back, stop carrying it (so a user scrolling up later is never yanked back down).
+  try{
+    if(_calOn&&_winY!=null){
+      var _gY=window.pageYOffset||window.scrollY||0;
+      S._winPendY=(!document.getElementById('rzCalGrid')&&(_winY-_gY)>4)?_winY:null;
+    } else if(!_calOn){S._winPendY=null;}
+  }catch(e){}
   if(S.tab&&S.tab.startsWith('ls_'))setTimeout(_applyLsFlash,50);
   if(S._pendingFlash&&S._pendingFlash.length){var _pf=S._pendingFlash;S._pendingFlash=[];setTimeout(function(){_triggerFlash(_pf);},50);}
   if((S.tab==='loadsheet'&&S.activeTabId)||S.tab.startsWith('ls_')||(S._rzLsActiveId&&S.activeTabId&&S.tab==='rloadsheets')){setupSig();var lf=S.form;if(lf&&lf.dep&&lf.dest&&S._lsMapOpen)renderRouteMap('ls-map',[{from:lf.dep,to:lf.dest}]);}
