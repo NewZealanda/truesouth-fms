@@ -157,10 +157,13 @@ async function rezdySessions(date: string): Promise<any[] | null> {
 // in winter — Rezdy simply doesn't return it, which is how we block off-season departures).
 function rezdyByProductSlot(sessions: any[], product: any, date: string): Record<string, number> {
   const out: Record<string, number> = {}
-  const pname = String(product?.name ?? "").trim().toLowerCase()
+  // Match on a NORMALISED name (strip spaces / hyphens / punctuation, lowercase) so the customer name
+  // "Milford Sound Fly-Cruise-Fly" (ts_products) lines up with Rezdy's "Milford Sound Fly Cruise Fly".
+  const norm = (x: any) => String(x ?? "").toLowerCase().replace(/[^a-z0-9]/g, "")
+  const pname = norm(product?.name)
   if (!pname) return out
   for (const s of sessions ?? []) {
-    if (String(s?.productName ?? "").trim().toLowerCase() !== pname) continue
+    if (norm(s?.productName) !== pname) continue
     const stl = String(s?.startTimeLocal ?? "")
     if (stl.slice(0, 10) !== date) continue
     if (Number(s?.seats) >= 900) continue // Charter / unlimited — ignore
