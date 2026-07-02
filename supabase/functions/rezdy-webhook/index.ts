@@ -98,6 +98,7 @@ function normalize(b: any) {
     phone: c.phone || c.mobile || "",
     email: c.email || "",
     comments: b.comments || "",
+    internalNotes: b.internalNotes || "",   // Rezdy staff internal notes → shown in the app's internal-note box
     fields: fieldsToObj(b.fields),
     source: _agentName || _rawSource || "",
     sourceCode: _rawSource,

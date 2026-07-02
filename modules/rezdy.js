@@ -2533,8 +2533,12 @@ function _rzBookingCard(b){
   // Internal note (office only) — always visible (collapsed + expanded), right-aligned under the
   // buttons. Saved on blur.
   if(!cancelled){
+    // Rezdy's staff INTERNAL NOTES (synced read-only — edit them in Rezdy; they follow the sync).
+    var _rzIN=String(b.internalNotes||'').trim();
     var _bkNote=_rzEsc((S._rzBkNote||{})[ono]||'');
-    h+='<div style="display:flex;justify-content:flex-end;margin-top:6px"><textarea onblur="window.rezdyBookingNote(\''+oE+'\',this.value)" placeholder="📝 Internal note…" rows="1" '+
+    h+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-top:6px">'+
+      (_rzIN?'<div style="width:240px;max-width:100%;box-sizing:border-box;font-size:11px;line-height:1.4;padding:4px 8px;border-radius:7px;border:1px dashed var(--border2);color:var(--text2);white-space:pre-wrap">🗒 <b>Rezdy:</b> '+_rzEsc(_rzIN)+'</div>':'')+
+      '<textarea onblur="window.rezdyBookingNote(\''+oE+'\',this.value)" placeholder="📝 Internal note…" rows="1" '+
       'style="width:240px;max-width:100%;box-sizing:border-box;resize:vertical;min-height:24px;font-family:inherit;font-size:11px;line-height:1.4;padding:4px 8px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text1)">'+_bkNote+'</textarea></div>';
   }
   // Passenger bubbles + aircraft selector live inside the expanded detail (dropdown).

@@ -109,6 +109,17 @@ Highest-value, lowest-risk win: every direct sale skips Rezdy's fee and we own t
    activate products/slots Rezdy doesn't sell, else a direct sale could oversell a Rezdy channel.
 4. Wire Windcave (or launch pay-later deliberately).
 
+**Pricing architecture — DESIGN CONSTRAINT (Andrew, Jul 2026):** the end goal is **dynamic /
+live pricing** — a floating price that moves up and down with availability (and potentially
+lead time / demand). Seasonal pricing (v29.29: `next_from` + next-season columns, resolved by
+flight date) is the current model. To keep the dynamic option open, ALL price resolution must
+stay funnelled through the single per-(product, flight-date) resolver seam:
+`platformPriceFor()` (app), `priceFor()` (platform-book edge fn), `tierFor()` (book.html
+display; the edge fn's number is authoritative at booking time). Dynamic pricing later =
+extend the edge-fn resolver with an availability input (the engine already computes
+sellable-per-departure) + a pricing-rules table. NEVER hardcode a price anywhere else, and
+never trust a client-computed price when booking.
+
 ### Phase 2 — Agent / B2B portal
 Agent login (a new role on the auth we already have) with live availability, net/commission rates,
 book-on-account or card, and voucher/confirmation PDFs.

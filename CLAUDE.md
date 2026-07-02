@@ -90,7 +90,17 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.29 (latest) — SEASONAL product pricing (priced by flight date) + season price loads.**
+- **v29.30 (latest) — Rezdy INTERNAL NOTES synced into the app + live-pricing design constraint.**
+  Both Rezdy edge fns (`rezdy-sync`, `rezdy-webhook`) now map `b.internalNotes` into the canonical
+  booking; the booking card shows it read-only ("🗒 Rezdy: …", dashed border) directly above the
+  desk's own editable 📝 internal-note textarea (rezdy.js, same width/stack — edits to the Rezdy
+  note happen IN RezDY and follow the sync; the app note `S._rzBkNote` is unchanged/separate).
+  ⚠️ Re-deploy BOTH rezdy-sync + rezdy-webhook; existing cached rows show the note after their
+  next sync/webhook touch. Also: PLATFORM_ROADMAP.md gains the **dynamic/live pricing design
+  constraint** — all pricing must stay funnelled through the per-(product,flight-date) resolver
+  seam (platformPriceFor / edge-fn priceFor / book.html tierFor) so availability-driven floating
+  prices can slot in later without rework.
+- **v29.29 — SEASONAL product pricing (priced by flight date) + season price loads.**
   `ts_products` gains `next_from` + `next_price_adult/child/infant` (added by
   `products_prices_2026-27.sql`). Resolution everywhere is by the FLIGHT (tour) date:
   `platformPriceFor(p,date)` (platform.js), `priceFor()` in the platform-book edge fn (book action
