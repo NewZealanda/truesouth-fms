@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v29.30';
+const APP_VER='v29.31';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -22033,6 +22033,41 @@ window.platformPriceFor=function(p,date){
   return nx?{adult:p.next_price_adult,child:p.next_price_child,infant:(p.next_price_infant!=null?p.next_price_infant:0),next:true}
            :{adult:p.price_adult,child:p.price_child,infant:(p.price_infant!=null?p.price_infant:0),next:false};
 };
+
+// ── Platform config (ts_settings key 'platform_cfg') ────────────────────────
+// Currently: the recurring WINTER timetable window (MM-DD .. MM-DD, every year).
+var _PF_CFG_DEFAULT={winterFrom:'05-01',winterTo:'09-30'};
+window.platformCfg=function(){var c=S._pfCfg;return (c&&typeof c==='object')?Object.assign({},_PF_CFG_DEFAULT,c):Object.assign({},_PF_CFG_DEFAULT);};
+window.platformCfgLoad=function(){
+  if(S._pfCfgLoaded)return;S._pfCfgLoaded=true;
+  try{var cch=lsGet('ts_platform_cfg');if(cch&&typeof cch==='object')S._pfCfg=cch;}catch(e){}
+  try{fetch(SB+'/rest/v1/ts_settings?key=eq.platform_cfg&select=value',{headers:SH})
+    .then(function(r){return r.ok?r.json():[];})
+    .then(function(rows){var v=rows&&rows[0]&&rows[0].value;if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}
+      if(v&&typeof v==='object'){S._pfCfg=v;try{lsSet('ts_platform_cfg',v);}catch(e){}render();}}).catch(function(){});
+  }catch(e){}
+};
+window.platformCfgSet=function(field,val){
+  var v=String(val||'').trim();
+  if(!/^\d{2}-\d{2}$/.test(v)){if(typeof toast==='function')toast('Use MM-DD, e.g. 05-01','warn');render();return;}
+  S._pfCfg=Object.assign(platformCfg(),{});S._pfCfg[field]=v;
+  try{lsSet('ts_platform_cfg',S._pfCfg);}catch(e){}
+  if(typeof sbMergeSave==='function')sbMergeSave('platform_cfg',S._pfCfg,function(m){S._pfCfg=m;try{lsSet('ts_platform_cfg',m);}catch(e){}});
+  render();
+};
+// Is a YYYY-MM-DD flight date inside the recurring winter window?
+window.platformIsWinter=function(date){
+  var m=/^\d{4}-(\d{2}-\d{2})$/.exec(String(date||'').slice(0,10));if(!m)return false;
+  var c=platformCfg(),d=m[1];
+  return (c.winterFrom<=c.winterTo)?(d>=c.winterFrom&&d<=c.winterTo):(d>=c.winterFrom||d<=c.winterTo); // window may wrap year-end
+};
+// Departure times for a product on a FLIGHT date: winter timetable when the date
+// falls in the winter window AND the product has winter times; else the default.
+window.platformTimesFor=function(p,date){
+  if(!p)return [];
+  var w=(p.times_winter||[]);
+  return (platformIsWinter(date)&&w.length)?w:(p.times||[]);
+};
 // Upsert one product row (id = product code).
 window.platformSaveProduct=async function(p){
   if(!p||!p.id)return null;
@@ -22083,9 +22118,11 @@ window.platformProdSet=function(code,field,val){
 };
 window.platformProdActive=function(code,on){var p=platformProduct(code);if(!p)return;p.active=!!on;platformSaveProduct(p);render();};
 // Times: comma-separated "08:00, 09:30" → normalised ["08:00","09:30"].
-window.platformProdTimes=function(code,val){
+// field = 'times' (summer/default) or 'times_winter' (winter timetable).
+window.platformProdTimes=function(code,val,field){
   var p=platformProduct(code);if(!p)return;
-  p.times=String(val||'').split(',').map(function(s){
+  field=(field==='times_winter')?'times_winter':'times';
+  p[field]=String(val||'').split(',').map(function(s){
     var m=/^\s*(\d{1,2})[:.]?(\d{2})\s*$/.exec(s);if(!m)return null;
     var hh=parseInt(m[1],10),mm=parseInt(m[2],10);
     if(hh>23||mm>59)return null;
@@ -22113,21 +22150,29 @@ window.platformProdSeed=function(){platformSeedProducts().then(function(ok){if(t
 
 function renderAdminProducts(){
   if(!S._productsLoaded&&!S._productsLoading){platformLoadProducts().then(function(){render();});}
+  platformCfgLoad();
   var esc=(typeof _rzEsc==='function')?_rzEsc:function(s){return String(s==null?'':s);};
   var list=platformProducts();
+  var cfg=platformCfg();
   var ist='padding:6px 8px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text);font-size:12px';
   var h='<div class="card"><div class="st" style="margin-bottom:6px">Products &amp; Pricing</div>'+
-    '<p style="font-size:12px;color:var(--text3);margin:-2px 0 12px;line-height:1.5">The commercial catalog behind the booking platform: customer-facing name, per-passenger prices (NZD incl. GST), standard departure times and public visibility. '+
-    '<b>Public ✓</b> = offered on the direct booking page. <b>Next-season prices</b> apply automatically to flights on/after the From date (both here and on the public page). Fuel/burn stays in the ⛽ Fuels tab. Requires <code>products.sql</code> applied in Supabase.</p>';
+    '<p style="font-size:12px;color:var(--text3);margin:-2px 0 8px;line-height:1.5">The commercial catalog behind the booking platform: customer-facing name, per-passenger prices (NZD incl. GST), standard departure times and public visibility. '+
+    '<b>Public ✓</b> = offered on the direct booking page. <b>Next-season prices</b> apply automatically to flights on/after the From date (both here and on the public page). Fuel/burn stays in the ⛽ Fuels tab. Requires <code>products.sql</code> applied in Supabase.</p>'+
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;color:var(--text2)">'+
+      '<b>❄ Winter timetable window (every year):</b>'+
+      '<input id="pf_wfrom" type="text" value="'+esc(cfg.winterFrom)+'" placeholder="05-01" onchange="window.platformCfgSet(\'winterFrom\',this.value)" style="'+ist+';width:64px" title="MM-DD">'+
+      '<span>to</span>'+
+      '<input id="pf_wto" type="text" value="'+esc(cfg.winterTo)+'" placeholder="09-30" onchange="window.platformCfgSet(\'winterTo\',this.value)" style="'+ist+';width:64px" title="MM-DD">'+
+      '<span style="color:var(--text3)">MM-DD · flights inside this window use each product’s ❄ Winter times (blank = same as summer).</span></div>';
   if(!list.length){
     h+='<div style="text-align:center;padding:18px 8px;color:var(--text3);font-size:13px">No products yet.'+
       '<div style="margin-top:12px"><button class="btn" onclick="window.platformProdSeed()">Seed from built-in product list</button></div></div>';
   } else {
-    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1280px">'+
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1420px">'+
       '<tr style="color:var(--text3);text-align:left"><th style="padding:4px 6px">Code</th><th style="padding:4px 6px">Name</th><th style="padding:4px 6px">Dest</th>'+
       '<th style="padding:4px 6px">Adult $</th><th style="padding:4px 6px">Child $</th><th style="padding:4px 6px">Infant $</th>'+
       '<th style="padding:4px 6px;border-left:1px solid var(--border2)">From</th><th style="padding:4px 6px">Next A$</th><th style="padding:4px 6px">Next C$</th><th style="padding:4px 6px;border-right:1px solid var(--border2)">Next I$</th>'+
-      '<th style="padding:4px 6px">Times (comma-sep)</th><th style="padding:4px 6px">Min</th><th style="padding:4px 6px">Sort</th><th style="padding:4px 6px">Public</th><th></th></tr>';
+      '<th style="padding:4px 6px">☀ Times</th><th style="padding:4px 6px">❄ Winter times</th><th style="padding:4px 6px">Min</th><th style="padding:4px 6px">Sort</th><th style="padding:4px 6px">Public</th><th></th></tr>';
     list.forEach(function(p){
       var code=esc(p.id),cj=String(p.id).replace(/[^A-Z0-9_-]/gi,'');
       h+='<tr style="border-top:1px solid var(--border2)">'+
@@ -22141,12 +22186,13 @@ function renderAdminProducts(){
         '<td style="padding:4px 6px"><input id="pr_'+cj+'_na" type="number" min="0" step="1" value="'+(p.next_price_adult!=null?esc(p.next_price_adult):'')+'" placeholder="POA" onchange="window.platformProdSet(\''+cj+'\',\'next_price_adult\',this.value)" style="'+ist+';width:70px"></td>'+
         '<td style="padding:4px 6px"><input id="pr_'+cj+'_nc" type="number" min="0" step="1" value="'+(p.next_price_child!=null?esc(p.next_price_child):'')+'" placeholder="POA" onchange="window.platformProdSet(\''+cj+'\',\'next_price_child\',this.value)" style="'+ist+';width:70px"></td>'+
         '<td style="padding:4px 6px;border-right:1px solid var(--border2)"><input id="pr_'+cj+'_ni" type="number" min="0" step="1" value="'+(p.next_price_infant!=null?esc(p.next_price_infant):'')+'" onchange="window.platformProdSet(\''+cj+'\',\'next_price_infant\',this.value)" style="'+ist+';width:60px"></td>'+
-        '<td style="padding:4px 6px"><input id="pr_'+cj+'_tm" type="text" value="'+esc((p.times||[]).join(', '))+'" placeholder="08:00, 09:30" onchange="window.platformProdTimes(\''+cj+'\',this.value)" style="'+ist+';width:150px"></td>'+
+        '<td style="padding:4px 6px"><input id="pr_'+cj+'_tm" type="text" value="'+esc((p.times||[]).join(', '))+'" placeholder="08:00, 09:30" onchange="window.platformProdTimes(\''+cj+'\',this.value,\'times\')" style="'+ist+';width:130px"></td>'+
+        '<td style="padding:4px 6px"><input id="pr_'+cj+'_tw" type="text" value="'+esc((p.times_winter||[]).join(', '))+'" placeholder="same as ☀" onchange="window.platformProdTimes(\''+cj+'\',this.value,\'times_winter\')" style="'+ist+';width:130px"></td>'+
         '<td style="padding:4px 6px"><input id="pr_'+cj+'_dm" type="number" min="0" step="5" value="'+(p.duration_min!=null?esc(p.duration_min):'')+'" onchange="window.platformProdSet(\''+cj+'\',\'duration_min\',this.value)" style="'+ist+';width:56px"></td>'+
         '<td style="padding:4px 6px"><input id="pr_'+cj+'_so" type="number" step="10" value="'+(p.sort!=null?esc(p.sort):'')+'" onchange="window.platformProdSet(\''+cj+'\',\'sort\',this.value)" style="'+ist+';width:56px"></td>'+
         '<td style="padding:4px 6px;text-align:center"><input type="checkbox" '+(p.active?'checked':'')+' onchange="window.platformProdActive(\''+cj+'\',this.checked)"></td>'+
         '<td style="padding:4px 6px"><button onclick="window.platformProdDel(\''+cj+'\')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px" title="Delete">✕</button></td></tr>';
-      h+='<tr><td></td><td colspan="14" style="padding:0 6px 6px"><input id="pr_'+cj+'_ds" type="text" value="'+esc(p.description||'')+'" placeholder="Short public description (optional)" onchange="window.platformProdSet(\''+cj+'\',\'description\',this.value)" style="'+ist+';width:100%;font-size:11px;color:var(--text2)"></td></tr>';
+      h+='<tr><td></td><td colspan="15" style="padding:0 6px 6px"><input id="pr_'+cj+'_ds" type="text" value="'+esc(p.description||'')+'" placeholder="Short public description (optional)" onchange="window.platformProdSet(\''+cj+'\',\'description\',this.value)" style="'+ist+';width:100%;font-size:11px;color:var(--text2)"></td></tr>';
     });
     h+='</table></div>';
   }

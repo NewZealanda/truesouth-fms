@@ -66,6 +66,28 @@ function priceFor(p: any, date: string): { adult: number | null; child: number |
     : { adult: p.price_adult, child: p.price_child, infant: p.price_infant ?? 0, next: false }
 }
 
+// ── Winter timetable (ts_settings key 'platform_cfg': {winterFrom,winterTo} MM-DD) ──
+async function winterWindow(): Promise<{ from: string; to: string }> {
+  try {
+    const { data } = await supabase.from("ts_settings").select("value").eq("key", "platform_cfg").maybeSingle()
+    let v: any = data?.value
+    if (typeof v === "string") { try { v = JSON.parse(v) } catch { v = null } }
+    return { from: v?.winterFrom || "05-01", to: v?.winterTo || "09-30" }
+  } catch { return { from: "05-01", to: "09-30" } }
+}
+function isWinter(date: string, w: { from: string; to: string }): boolean {
+  const m = /^\d{4}-(\d{2}-\d{2})$/.exec(String(date ?? "").slice(0, 10))
+  if (!m) return false
+  const d = m[1]
+  return (w.from <= w.to) ? (d >= w.from && d <= w.to) : (d >= w.from || d <= w.to) // window may wrap year-end
+}
+// Departure times for a product on a FLIGHT date: winter timetable inside the
+// winter window (when the product has one), else the summer/default times.
+function timesFor(p: any, date: string, w: { from: string; to: string }): string[] {
+  const wt: string[] = p?.times_winter ?? []
+  return (isWinter(date, w) && wt.length) ? wt : (p?.times ?? [])
+}
+
 // ── Availability (fleet-capacity guard; see coexistence note above) ─────────
 // Fleet seats: the scheduling config's per-tail caps, skipping tails marked down.
 async function fleetSeats(): Promise<number> {
@@ -171,15 +193,22 @@ serve(async (req) => {
     if (action === "availability") {
       const date = String(body?.date ?? "")
       if (!DATE_RE.test(date) || date < nzToday()) return J({ ok: false, error: "Invalid date" }, 400)
-      const [fleet, committed, held] = await Promise.all([fleetSeats(), committedBySlot(date), heldBySlot(date)])
+      const [fleet, committed, held, w, products] = await Promise.all([
+        fleetSeats(), committedBySlot(date), heldBySlot(date), winterWindow(), getProducts(),
+      ])
       const slots: Record<string, number> = {}
+      const productTimes: Record<string, string[]> = {}   // per-product timetable RESOLVED for this date
       const deps = new Set<string>([...Object.keys(committed), ...Object.keys(held)])
-      for (const p of await getProducts()) for (const t of (p.times ?? [])) deps.add(t)
+      for (const p of products) {
+        const ts = timesFor(p, date, w)
+        productTimes[String(p.id)] = ts
+        for (const t of ts) deps.add(t)
+      }
       for (const dep of deps) {
         if (!DEP_RE.test(dep)) continue
         slots[dep] = Math.max(0, fleet - (committed[dep] ?? 0) - (held[dep] ?? 0))
       }
-      return J({ ok: true, date, fleetSeats: fleet, slots })
+      return J({ ok: true, date, fleetSeats: fleet, slots, productTimes })
     }
 
     // ── hold ──
@@ -212,7 +241,7 @@ serve(async (req) => {
 
       const product = (await getProducts()).find((p: any) => String(p.id).toUpperCase() === code)
       if (!product) return J({ ok: false, error: "Unknown product" }, 400)
-      const times: string[] = product.times ?? []
+      const times: string[] = timesFor(product, date, await winterWindow())   // date-resolved (summer/winter timetable)
       if (times.length && !times.includes(dep)) return J({ ok: false, error: "Departure not offered" }, 400)
 
       const clean = (s: unknown, max: number) => String(s ?? "").trim().slice(0, max)

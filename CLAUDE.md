@@ -90,7 +90,18 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.30 (latest) — Rezdy INTERNAL NOTES synced into the app + live-pricing design constraint.**
+- **v29.31 (latest) — summer/winter departure timetables on the product catalog.**
+  `ts_products` gains `times_winter` (`products_winter_times.sql` — APPLY IN SUPABASE); a global
+  recurring winter window (MM-DD..MM-DD, default 05-01..09-30, may wrap year-end) lives in
+  ts_settings key `platform_cfg`, editable at the top of Settings ▸ Operations ▸ Products
+  (`platformCfgLoad/Set`, cache `ts_platform_cfg`). Resolution is by FLIGHT date everywhere:
+  `platformTimesFor(p,date)`/`platformIsWinter` (platform.js), `timesFor()/winterWindow()` in the
+  platform-book edge fn — availability now returns `productTimes` (per-product timetable resolved
+  for the requested date) and the book action validates the dep against the date-resolved set;
+  book.html's slot picker consumes `productTimes` (falls back to default times). Editor grid:
+  ☀ Times + ❄ Winter times columns (blank winter = same as summer), `platformProdTimes` gains a
+  field arg. ⚠️ Re-deploy **platform-book**; run `products_winter_times.sql`. build+node-check clean.
+- **v29.30 — Rezdy INTERNAL NOTES synced into the app + live-pricing design constraint.**
   Both Rezdy edge fns (`rezdy-sync`, `rezdy-webhook`) now map `b.internalNotes` into the canonical
   booking; the booking card shows it read-only ("🗒 Rezdy: …", dashed border) directly above the
   desk's own editable 📝 internal-note textarea (rezdy.js, same width/stack — edits to the Rezdy

@@ -80,6 +80,7 @@ var FN=SB+'/functions/v1/platform-book';
 var PRODUCTS=[];                 // active catalog
 var sel={prod:null,date:'',dep:'',a:1,c:0,i:0,adt:[],chd:[],inf:[],name:'',phone:'',email:'',note:''};
 var SLOTS=null;                  // availability for sel.date {dep:sellable}
+var PTIMES=null;                 // per-product timetable resolved for sel.date (summer/winter)
 var HOLD=null;                   // {holdId, expiresAt}
 var BUSY=false, ERR='', DONE=null;
 
@@ -100,10 +101,12 @@ function loadCatalog(){
     .catch(function(){PRODUCTS=[];render();});
 }
 function loadAvail(){
-  SLOTS=null;render();
+  SLOTS=null;PTIMES=null;render();
   api({action:'availability',date:sel.date}).then(function(r){
-    SLOTS=(r&&r.ok)?(r.slots||{}):{};render();
-  }).catch(function(){SLOTS={};render();});
+    SLOTS=(r&&r.ok)?(r.slots||{}):{};
+    PTIMES=(r&&r.ok)?(r.productTimes||null):null;
+    render();
+  }).catch(function(){SLOTS={};PTIMES=null;render();});
 }
 // Hold seats when a departure is picked (released + re-placed on change).
 function placeHold(){
@@ -200,7 +203,9 @@ function render(){
     h+='<div class="card"><div class="st">2 · Date &amp; departure</div>'+
       '<label class="f">Date</label><input type="date" min="'+todayNZ()+'" value="'+esc(sel.date)+'" onchange="setDate(this.value)">';
     if(sel.date){
-      var times=(sel.prod.times&&sel.prod.times.length)?sel.prod.times:(SLOTS?Object.keys(SLOTS).sort():[]);
+      // Timetable resolved by the server for THIS date (summer/winter); fall back to the default list.
+      var times=(PTIMES&&PTIMES[sel.prod.id]&&PTIMES[sel.prod.id].length)?PTIMES[sel.prod.id]:
+                ((sel.prod.times&&sel.prod.times.length)?sel.prod.times:(SLOTS?Object.keys(SLOTS).sort():[]));
       if(SLOTS===null)h+='<div class="load" style="padding:14px">Checking seats…</div>';
       else if(!times.length)h+='<div class="load" style="padding:14px">No departure times published for this flight — please call us.</div>';
       else{
