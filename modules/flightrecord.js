@@ -273,7 +273,15 @@ window.frEditField=function(id,field,val){var r=(S._frData||{})[id];if(!r)return
   else r[field]=val;   // from / to / product / note / user_id (PIC)
   if(r.off&&r.on){var blk=_frMins(r.on)-_frMins(r.off);if(blk<0)blk+=1440;r.flightTime=Math.round(Math.round(blk/6)*0.1*10)/10;} // block time
   if(r.endHours!=null&&r.startHours!=null)r.tacho=Math.round((r.endHours-(+r.startHours||0))*10)/10; // TTIS used
-  _frSave(r);if(typeof safeRender==='function')safeRender();};
+  _frSave(r);
+  // In the Records browse grid, update the computed cell IN PLACE instead of re-rendering — a
+  // render (even the deferred safeRender) rebuilds the DOM mid-Tab and dumps focus out of the
+  // grid. Totals/breakdown panels above catch up on the next natural render.
+  var _frbT=document.getElementById('frbTable');
+  if(_frbT){
+    var _fte=_frbT.querySelector('[data-row="'+id+'"][data-field="flightTime"]');
+    if(_fte&&document.activeElement!==_fte)_fte.value=(r.flightTime!=null?r.flightTime:'');
+  } else if(typeof safeRender==='function')safeRender();};
 window.frEditDone=function(id){S._frEditId=null;_frSave((S._frData||{})[id]);if(typeof toast==='function')toast('Updated ✓ (aircraft hours not auto-recalculated)','ok');render();};
 window.frEditDelete=function(id){S._frDelConfirm=id;render();};            // show the in-app confirm screen
 window.frEditDeleteCancel=function(){S._frDelConfirm=null;render();};
@@ -470,8 +478,10 @@ window.frbMore=function(){S._frbLimit=(S._frbLimit||_FRB_PAGE)+_FRB_PAGE;render(
 window.frbBreak=function(v){S._frbBreak=v;render();};
 function _frbChip(on){return 'padding:5px 11px;border-radius:8px;border:1px solid '+(on?'var(--accent)':'var(--border2)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-size:11px;font-weight:800;cursor:pointer';}
 var _FRB_IN='font-size:12px;padding:4px 5px;border:1px solid var(--border2);border-radius:5px;background:var(--card2);color:var(--text);text-align:center';
-function _frbInput(id,field,val,type,w){return '<input type="'+(type||'text')+'"'+(type==='number'?' step="0.1"':'')+' value="'+_frEsc(val==null?'':val)+'" onchange="window.frEditField(\''+id+'\',\''+field+'\',this.value)" style="'+_FRB_IN+';width:'+(w||60)+'px">';}
-function _frbSelectCell(id,field,cur,opts){return '<select onchange="window.frEditField(\''+id+'\',\''+field+'\',this.value)" style="'+_FRB_IN+'">'+opts.map(function(o){return '<option value="'+_frEsc(o)+'"'+(String(cur||'')===String(o)?' selected':'')+'>'+_frEsc(String(o).replace('ZK-',''))+'</option>';}).join('')+'</select>';}
+// data-row/data-field: render()'s focus-restore keys on these, so Tab flows box-to-box through the
+// table without a re-render (or the 3s deferred one) kicking focus out of the grid.
+function _frbInput(id,field,val,type,w){return '<input type="'+(type||'text')+'"'+(type==='number'?' step="0.1"':'')+' data-row="'+_frEsc(id)+'" data-field="'+field+'" value="'+_frEsc(val==null?'':val)+'" onchange="window.frEditField(\''+id+'\',\''+field+'\',this.value)" style="'+_FRB_IN+';width:'+(w||60)+'px">';}
+function _frbSelectCell(id,field,cur,opts){return '<select data-row="'+_frEsc(id)+'" data-field="'+field+'" onchange="window.frEditField(\''+id+'\',\''+field+'\',this.value)" style="'+_FRB_IN+'">'+opts.map(function(o){return '<option value="'+_frEsc(o)+'"'+(String(cur||'')===String(o)?' selected':'')+'>'+_frEsc(String(o).replace('ZK-',''))+'</option>';}).join('')+'</select>';}
 // All assignable pilots: real app accounts first, then any placeholder/imported pilots present in the
 // data (value = user_id). Reassigning a record's PIC re-homes it into that pilot's logbook.
 function _frPilotOptions(){
@@ -489,7 +499,7 @@ function _frbPicCell(r){
   if(!opts.some(function(o){return String(o.id)===String(cur);}))opts=opts.concat([{id:cur,label:_frPilotLabel(cur),real:false}]);
   var reals=opts.filter(function(o){return o.real;}),phs=opts.filter(function(o){return !o.real;});
   function optTags(list){return list.map(function(o){return '<option value="'+_frEsc(o.id)+'"'+(String(cur)===String(o.id)?' selected':'')+'>'+_frEsc(o.label)+'</option>';}).join('');}
-  return '<select onchange="window.frbSetPic(\''+r.id+'\',this.value)" style="'+_FRB_IN+';text-align:left;max-width:150px">'+
+  return '<select data-row="'+_frEsc(r.id)+'" data-field="pic" onchange="window.frbSetPic(\''+r.id+'\',this.value)" style="'+_FRB_IN+';text-align:left;max-width:150px">'+
     (reals.length?'<optgroup label="Current crew">'+optTags(reals)+'</optgroup>':'')+
     (phs.length?'<optgroup label="Historical / other">'+optTags(phs)+'</optgroup>':'')+'</select>';
 }
@@ -549,7 +559,7 @@ function _frRenderBrowse(){
   var th=function(t){return '<th style="text-align:left;padding:6px 7px;font-size:9px;color:var(--text3);font-weight:700;white-space:nowrap;background:var(--card2)">'+t+'</th>';};
   h+='<div class="card" style="padding:0;overflow-x:auto">'+
      '<div style="padding:8px 12px;font-size:11px;color:var(--text3)">Showing '+shown.length+' of '+n+' flights'+(shown.length<n?' — narrow the filters or load more':'')+'</div>'+
-     '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1000px"><thead><tr>'+
+     '<table id="frbTable" style="width:100%;border-collapse:collapse;font-size:12px;min-width:1000px"><thead><tr>'+
        ['Date','PIC','Aircraft','Type','From','To','POB','Off','On','Flt h','Ldg','Notes',''].map(th).join('')+'</tr></thead><tbody>';
   shown.forEach(function(r){
     h+='<tr style="border-top:1px solid var(--border2)">'+
@@ -565,7 +575,7 @@ function _frRenderBrowse(){
       '<td style="padding:3px 6px">'+_frbInput(r.id,'flightTime',r.flightTime,'number',54)+'</td>'+
       '<td style="padding:3px 6px">'+_frbInput(r.id,'landings',r.landings,'number',44)+'</td>'+
       '<td style="padding:3px 6px">'+_frbInput(r.id,'note',r.note,'text',170)+'</td>'+
-      '<td style="padding:3px 6px"><button onclick="window.frCancelFlight(\''+r.id+'\')" title="Delete this record" style="background:none;border:none;color:#ef4444;font-size:14px;cursor:pointer;padding:4px 6px">🗑</button></td>'+
+      '<td style="padding:3px 6px"><button tabindex="-1" onclick="window.frCancelFlight(\''+r.id+'\')" title="Delete this record" style="background:none;border:none;color:#ef4444;font-size:14px;cursor:pointer;padding:4px 6px">🗑</button></td>'+
     '</tr>';
   });
   h+='</tbody></table>';

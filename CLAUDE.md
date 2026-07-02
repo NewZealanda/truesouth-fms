@@ -90,7 +90,15 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.35 (latest) — roster DAY view tidied on iPhone.** With only 2 columns the browser was
+- **v29.36 (latest) — Records browse grid: Tab flows cleanly box-to-box.** Root cause: every
+  `frEditField` called `safeRender()`, whose 3s deferred force-render rebuilt the DOM mid-Tab and
+  dumped focus (browse inputs had no id/data attrs for the restore). Now: all browse-grid
+  inputs/selects carry `data-row`/`data-field` (render()'s existing focus-restore mechanism),
+  `frEditField` updates the computed Flt-h cell IN PLACE when the grid is on screen
+  (`#frbTable`) instead of re-rendering (falls back to safeRender elsewhere — Today's-record
+  flows unchanged), and the 🗑 buttons are tabindex=-1 so Tab skips straight to the next row.
+  Totals/breakdown panels above the grid catch up on the next natural render.
+- **v29.35 — roster DAY view tidied on iPhone.** With only 2 columns the browser was
   stretching the Crew column across half the screen and the 92px select floated lost in the wide
   day column. Now: Crew column pinned (46px on mobile, 155px on desktop day view) so the day
   column takes the rest; the day-view status select/pill fills its column (94%, max 300px,
