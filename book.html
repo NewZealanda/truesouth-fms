@@ -102,7 +102,7 @@ function loadCatalog(){
 }
 function loadAvail(){
   SLOTS=null;PTIMES=null;render();
-  api({action:'availability',date:sel.date}).then(function(r){
+  api({action:'availability',date:sel.date,product:sel.prod&&sel.prod.id}).then(function(r){
     SLOTS=(r&&r.ok)?(r.slots||{}):{};
     PTIMES=(r&&r.ok)?(r.productTimes||null):null;
     render();
@@ -113,7 +113,7 @@ function placeHold(){
   var seats=sel.a+sel.c;if(!sel.date||!sel.dep||seats<1)return;
   var old=HOLD;HOLD=null;
   if(old)api({action:'release',holdId:old.holdId});
-  api({action:'hold',date:sel.date,dep:sel.dep,seats:seats}).then(function(r){
+  api({action:'hold',date:sel.date,dep:sel.dep,seats:seats,product:sel.prod&&sel.prod.id}).then(function(r){
     if(r&&r.ok)HOLD={holdId:r.holdId,expiresAt:r.expiresAt};
   });
 }
@@ -203,18 +203,21 @@ function render(){
     h+='<div class="card"><div class="st">2 · Date &amp; departure</div>'+
       '<label class="f">Date</label><input type="date" min="'+todayNZ()+'" value="'+esc(sel.date)+'" onchange="setDate(this.value)">';
     if(sel.date){
-      // Timetable resolved by the server for THIS date (summer/winter); fall back to the default list.
-      var times=(PTIMES&&PTIMES[sel.prod.id]&&PTIMES[sel.prod.id].length)?PTIMES[sel.prod.id]:
-                ((sel.prod.times&&sel.prod.times.length)?sel.prod.times:(SLOTS?Object.keys(SLOTS).sort():[]));
+      // Offered times come STRICTLY from the server (Rezdy live sessions, resolved for THIS date) —
+      // no client-side fallback to the summer catalog, so off-season slots never appear.
+      var times=(PTIMES&&PTIMES[sel.prod.id])?PTIMES[sel.prod.id]:(SLOTS?Object.keys(SLOTS).sort():[]);
       if(SLOTS===null)h+='<div class="load" style="padding:14px">Checking seats…</div>';
-      else if(!times.length)h+='<div class="load" style="padding:14px">No departure times published for this flight — please call us.</div>';
+      else if(!times.length)h+='<div class="load" style="padding:14px">No departures available for this flight on '+esc(fmtDate(sel.date))+' — please pick another date or call us.</div>';
       else{
         h+='<label class="f">Departure time</label><div class="slots">';
         times.forEach(function(t){
           var left=(SLOTS&&SLOTS[t]!=null)?SLOTS[t]:null,need=sel.a+sel.c;
           var full=(left!=null&&left<need);
+          // Don't expose the raw seat count to customers: show "5+" once there's plenty, the exact
+          // number only when it's getting tight (<5), and "full" when it can't take the party.
+          var lbl=(left==null)?'':(full?'full':(left>=5?'5+ seats':(left+' seat'+(left===1?'':'s')+' left')));
           h+='<button class="slot'+(sel.dep===t?' on':'')+(full?' full':'')+'" onclick="pickDep(\''+esc(t)+'\','+(full?'true':'false')+')">'+esc(t)+
-            (left!=null?'<small>'+(full?'full':left+' seats')+'</small>':'')+'</button>';
+            (lbl?'<small>'+lbl+'</small>':'')+'</button>';
         });
         h+='</div>';
       }
@@ -224,7 +227,7 @@ function render(){
   // 3 — passengers
   if(sel.prod&&sel.date&&sel.dep){
     h+='<div class="card"><div class="st">3 · Passengers</div>';
-    [['a','Adults','13+ years'],['c','Children','3–12 years'],['i','Infants','under 3, on a lap — free seat']].forEach(function(r){
+    [['a','Adults','14+ years'],['c','Children','3–13 years'],['i','Infants','0–2 yrs / 15 kg or under — free, on a lap']].forEach(function(r){
       h+='<div class="steps"><div class="lb">'+r[1]+'<small>'+r[2]+'</small></div>'+
         '<button onclick="cnt(\''+r[0]+'\',-1)">−</button><div class="n">'+sel[r[0]]+'</div><button onclick="cnt(\''+r[0]+'\',1)">+</button></div>';
     });

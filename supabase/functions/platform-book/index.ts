@@ -50,6 +50,7 @@ function nzToday(): string {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const DEP_RE = /^\d{2}:\d{2}$/
 const MAX_PAX = 13 // largest cabin (C208B)
+const SEAT_BUFFER = 1 // hold back 1 seat off Rezdy's number (safety margin / crew) per Andrew
 
 // ── Catalog ──────────────────────────────────────────────────────────────────
 async function getProducts() {
@@ -106,11 +107,12 @@ async function fleetSeats(): Promise<number> {
   return 7
 }
 
-// Committed pax (adults+children; infants are lap) per departure "HH:MM" for a date,
-// across BOTH stores (Rezdy-synced + native), skipping cancelled bookings.
-async function committedBySlot(date: string): Promise<Record<string, number>> {
+// Committed pax (adults+children; infants are lap) per departure "HH:MM" for a date.
+// `tables` picks the store(s): NATIVE only (our own bookings, invisible to Rezdy) is what we
+// subtract on top of Rezdy's live number; BOTH stores is the fleet-guard fallback.
+async function committedBySlot(date: string, tables = ["ts_rezdy_bookings", "ts_native_bookings"]): Promise<Record<string, number>> {
   const bySlot: Record<string, number> = {}
-  for (const table of ["ts_rezdy_bookings", "ts_native_bookings"]) {
+  for (const table of tables) {
     const { data } = await supabase.from(table).select("data,status").eq("tour_date", date)
     for (const row of data ?? []) {
       const b: any = row?.data ?? {}
@@ -134,6 +136,44 @@ async function committedBySlot(date: string): Promise<Record<string, number>> {
   return bySlot
 }
 
+// ── Rezdy live availability (the TRUE seats — same source as the app's Seat Availability view) ──
+// We reuse the rezdy-sync function (it already handles the Rezdy /availability fetch + ISO dates +
+// per-product batching) rather than re-implement the Rezdy API here. Returns its sessions[] or null
+// on any failure (→ callers fall back to the fleet guard so a Rezdy outage never blocks a booking).
+async function rezdySessions(date: string): Promise<any[] | null> {
+  try {
+    const r = await fetch(`${SB_URL}/functions/v1/rezdy-sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SB_SERVICE_KEY}`, "apikey": SB_SERVICE_KEY },
+      body: JSON.stringify({ availability: { from: date, to: date } }),
+    })
+    if (!r.ok) return null
+    const d = await r.json()
+    return (d && d.ok && Array.isArray(d.sessions)) ? d.sessions : null
+  } catch { return null }
+}
+// Rezdy seats per "HH:MM" for ONE product on a date, matched by product NAME (same match the app's
+// Seat Availability uses). {} if the product has no Rezdy sessions that day (e.g. a summer-only slot
+// in winter — Rezdy simply doesn't return it, which is how we block off-season departures).
+function rezdyByProductSlot(sessions: any[], product: any, date: string): Record<string, number> {
+  const out: Record<string, number> = {}
+  const pname = String(product?.name ?? "").trim().toLowerCase()
+  if (!pname) return out
+  for (const s of sessions ?? []) {
+    if (String(s?.productName ?? "").trim().toLowerCase() !== pname) continue
+    const stl = String(s?.startTimeLocal ?? "")
+    if (stl.slice(0, 10) !== date) continue
+    if (Number(s?.seats) >= 900) continue // Charter / unlimited — ignore
+    const m = /[T ](\d{2}):(\d{2})/.exec(stl)
+    if (!m) continue
+    const t = `${m[1]}:${m[2]}`
+    const seats = parseInt(s?.seatsAvailable, 10)
+    if (!isFinite(seats)) continue
+    out[t] = (out[t] == null) ? seats : Math.min(out[t], seats) // tightest if duplicated
+  }
+  return out
+}
+
 // Active (unexpired) held seats per departure, optionally excluding one hold id.
 async function heldBySlot(date: string, excludeId?: string): Promise<Record<string, number>> {
   const bySlot: Record<string, number> = {}
@@ -149,11 +189,25 @@ async function heldBySlot(date: string, excludeId?: string): Promise<Record<stri
   return bySlot
 }
 
-async function sellableFor(date: string, dep: string, excludeHoldId?: string): Promise<number> {
-  const [fleet, committed, held] = await Promise.all([
-    fleetSeats(), committedBySlot(date), heldBySlot(date, excludeHoldId),
+// TRUE sellable seats for one product's departure:
+//   Rezdy live seats − SEAT_BUFFER − our native bookings − active holds.
+// Rezdy's number already reflects Rezdy-channel bookings, so we only subtract OUR native bookings
+// on top. If Rezdy is unreachable, fall back to the fleet guard so a booking is never wrongly blocked.
+async function sellableFor(date: string, dep: string, product: any, excludeHoldId?: string): Promise<number> {
+  const [sessions, nativeCommitted, held] = await Promise.all([
+    rezdySessions(date),
+    committedBySlot(date, ["ts_native_bookings"]),
+    heldBySlot(date, excludeHoldId),
   ])
-  return Math.max(0, fleet - (committed[dep] ?? 0) - (held[dep] ?? 0))
+  const nat = nativeCommitted[dep] ?? 0, hld = held[dep] ?? 0
+  if (sessions && product) {
+    const rz = rezdyByProductSlot(sessions, product, date)
+    if (rz[dep] != null) return Math.max(0, rz[dep] - SEAT_BUFFER - nat - hld)
+    return 0 // Rezdy responded but has no session for this product+slot → not offered / sold out
+  }
+  // Rezdy unreachable → conservative fleet guard (subtract BOTH stores' committed pax).
+  const [fleet, bothCommitted] = await Promise.all([fleetSeats(), committedBySlot(date)])
+  return Math.max(0, fleet - (bothCommitted[dep] ?? 0) - hld)
 }
 
 // ── Payments (pluggable; Windcave target) ────────────────────────────────────
@@ -190,33 +244,57 @@ serve(async (req) => {
     }
 
     // ── availability ──
+    // Seats + offered times come from Rezdy's LIVE sessions (the app's Seat Availability source):
+    // sellable = Rezdy − SEAT_BUFFER − our native bookings − holds. The offered times are Rezdy's
+    // actual sessions for the product+date, so an off-season slot (e.g. a summer-only 13:00 in winter)
+    // simply isn't returned. Falls back to the fleet guard + configured timetable if Rezdy is down.
     if (action === "availability") {
       const date = String(body?.date ?? "")
       if (!DATE_RE.test(date) || date < nzToday()) return J({ ok: false, error: "Invalid date" }, 400)
-      const [fleet, committed, held, w, products] = await Promise.all([
-        fleetSeats(), committedBySlot(date), heldBySlot(date), winterWindow(), getProducts(),
+      const code = String(body?.product ?? "").toUpperCase()
+      const products = await getProducts()
+      const targets = code ? products.filter((p: any) => String(p.id).toUpperCase() === code) : products
+
+      const [sessions, nativeCommitted, held, bothCommitted, fleet, w] = await Promise.all([
+        rezdySessions(date),
+        committedBySlot(date, ["ts_native_bookings"]),
+        heldBySlot(date),
+        committedBySlot(date),
+        fleetSeats(),
+        winterWindow(),
       ])
+
       const slots: Record<string, number> = {}
-      const productTimes: Record<string, string[]> = {}   // per-product timetable RESOLVED for this date
-      const deps = new Set<string>([...Object.keys(committed), ...Object.keys(held)])
-      for (const p of products) {
-        const ts = timesFor(p, date, w)
-        productTimes[String(p.id)] = ts
-        for (const t of ts) deps.add(t)
+      const productTimes: Record<string, string[]> = {}
+      for (const p of targets) {
+        const rz = sessions ? rezdyByProductSlot(sessions, p, date) : null
+        // OFFERED TIMES come from the APP's product timetable (summer `times` / winter `times_winter`,
+        // resolved for this flight date) — the single source the desk edits in Settings ▸ Operations ▸
+        // Products. So a winter date offers only what the winter timetable lists.
+        const times: string[] = timesFor(p, date, w).filter((t) => DEP_RE.test(t)).sort()
+        productTimes[String(p.id)] = times
+        for (const t of times) {
+          const nat = nativeCommitted[t] ?? 0, hld = held[t] ?? 0
+          // SEATS = Rezdy's live number for this product's session (the true availability) − buffer −
+          // our native bookings − holds; if Rezdy has no session for this slot (outage / off-Rezdy),
+          // fall back to the conservative fleet guard so the configured departure is still bookable.
+          const s = (rz && rz[t] != null)
+            ? Math.max(0, rz[t] - SEAT_BUFFER - nat - hld)
+            : Math.max(0, fleet - (bothCommitted[t] ?? 0) - hld)
+          slots[t] = (slots[t] == null) ? s : Math.min(slots[t], s)   // tightest if products share a slot
+        }
       }
-      for (const dep of deps) {
-        if (!DEP_RE.test(dep)) continue
-        slots[dep] = Math.max(0, fleet - (committed[dep] ?? 0) - (held[dep] ?? 0))
-      }
-      return J({ ok: true, date, fleetSeats: fleet, slots, productTimes })
+      return J({ ok: true, date, slots, productTimes, rezdy: !!sessions })
     }
 
     // ── hold ──
     if (action === "hold") {
       const date = String(body?.date ?? ""), dep = String(body?.dep ?? "")
+      const code = String(body?.product ?? "").toUpperCase()
       const seats = Math.min(MAX_PAX, Math.max(1, parseInt(body?.seats, 10) || 1))
       if (!DATE_RE.test(date) || date < nzToday() || !DEP_RE.test(dep)) return J({ ok: false, error: "Invalid date/departure" }, 400)
-      if (await sellableFor(date, dep) < seats) return J({ ok: false, error: "Not enough seats" }, 409)
+      const product = code ? (await getProducts()).find((p: any) => String(p.id).toUpperCase() === code) : null
+      if (await sellableFor(date, dep, product) < seats) return J({ ok: false, error: "Not enough seats" }, 409)
       const id = `${date}|${dep.replace(":", "")}|w${crypto.randomUUID().slice(0, 8)}`
       const expires_at = new Date(Date.now() + 15 * 60000).toISOString()
       const { error } = await supabase.from("ts_session_holds").upsert([{
@@ -241,8 +319,11 @@ serve(async (req) => {
 
       const product = (await getProducts()).find((p: any) => String(p.id).toUpperCase() === code)
       if (!product) return J({ ok: false, error: "Unknown product" }, 400)
-      const times: string[] = timesFor(product, date, await winterWindow())   // date-resolved (summer/winter timetable)
-      if (times.length && !times.includes(dep)) return J({ ok: false, error: "Departure not offered" }, 400)
+      // Offered departures come from the APP timetable (summer/winter, resolved for the flight date) —
+      // the same source the desk edits in the Products editor, so a winter-only booking of a summer slot
+      // is rejected here per the configured winter timetable.
+      const times: string[] = timesFor(product, date, await winterWindow())
+      if (times.length && !times.includes(dep)) return J({ ok: false, error: "That departure isn’t available on this date" }, 400)
 
       const clean = (s: unknown, max: number) => String(s ?? "").trim().slice(0, max)
       const cust = body?.customer ?? {}
@@ -257,7 +338,7 @@ serve(async (req) => {
       if (a + c < 1 || a + c > MAX_PAX) return J({ ok: false, error: "Invalid passenger count" }, 400)
 
       // Seat check — the customer's own hold covers their seats, so exclude it from held.
-      const avail = await sellableFor(date, dep, holdId)
+      const avail = await sellableFor(date, dep, product, holdId)
       if (avail < a + c) return J({ ok: false, error: "Not enough seats left" }, 409)
 
       // Price from the catalog, resolved by FLIGHT date (seasonal pricing) —
