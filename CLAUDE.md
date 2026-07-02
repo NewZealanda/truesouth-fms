@@ -90,7 +90,22 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.28 (latest) — booking platform Phase 1 foundations: product catalog + public booking page skeleton.**
+- **v29.29 (latest) — SEASONAL product pricing (priced by flight date) + season price loads.**
+  `ts_products` gains `next_from` + `next_price_adult/child/infant` (added by
+  `products_prices_2026-27.sql`). Resolution everywhere is by the FLIGHT (tour) date:
+  `platformPriceFor(p,date)` (platform.js), `priceFor()` in the platform-book edge fn (book action
+  + catalog now returns the next-season fields), and `tierFor()` in book.html (product cards +
+  total follow the chosen date; a "Season pricing from …" note shows when the next set applies).
+  So a 30 Sep 2026 flight prices at current rates and 1 Oct 2026 at 2026-27 rates with no
+  changeover step. Products editor gains From/Next-A$/C$/I$ columns. **Price loads from the
+  marketing sheet:** `products_prices_2025-26.sql` (current prices; run now) +
+  `products_prices_2026-27.sql` (adds the columns + loads next-season prices effective
+  2026-10-01; safe to run now). Mapping calls flagged in the SQL headers: GL→MCGL+FJGL,
+  QT OH→QNLS, MCOH-inc-landing→MCOH, new inactive codes CCFPK/MFOHL/FOXFJ/MCFLB (NOT in
+  _RZ_PROD_CFG yet — add dest/fuel before selling), "Mt Asp add on" skipped (extras not
+  modelled), THH/FJHH next-season child = POA per sheet, STT/MCHS next TBC (omitted).
+  ⚠️ Re-deploy the **platform-book** edge fn (code changed). build + node --check clean.
+- **v29.28 — booking platform Phase 1 foundations: product catalog + public booking page skeleton.**
   On branch **test** (Andrew's choice — commit/deploy to test first). See `PLATFORM_ROADMAP.md`
   (the authoritative platform doc — it also covers the undocumented v28.91→v29.27 cycle: Phase 0
   native-bookings store `modules/platform.js`/`ts_native_bookings`, desk New-booking routed

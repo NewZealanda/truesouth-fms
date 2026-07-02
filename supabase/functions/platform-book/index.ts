@@ -57,6 +57,15 @@ async function getProducts() {
   return data ?? []
 }
 
+// SEASONAL price resolution — the price set for a product on a given FLIGHT date.
+// If next_from is set and tour date ≥ next_from, the next-season prices apply.
+function priceFor(p: any, date: string): { adult: number | null; child: number | null; infant: number; next: boolean } {
+  const nx = !!(p?.next_from && date && date >= String(p.next_from).slice(0, 10))
+  return nx
+    ? { adult: p.next_price_adult, child: p.next_price_child, infant: p.next_price_infant ?? 0, next: true }
+    : { adult: p.price_adult, child: p.price_child, infant: p.price_infant ?? 0, next: false }
+}
+
 // ── Availability (fleet-capacity guard; see coexistence note above) ─────────
 // Fleet seats: the scheduling config's per-tail caps, skipping tails marked down.
 async function fleetSeats(): Promise<number> {
@@ -151,6 +160,8 @@ serve(async (req) => {
         code: p.id, name: p.name, description: p.description ?? "",
         durationMin: p.duration_min, times: p.times ?? [],
         priceAdult: p.price_adult, priceChild: p.price_child, priceInfant: p.price_infant ?? 0,
+        nextFrom: p.next_from ?? null, nextPriceAdult: p.next_price_adult ?? null,
+        nextPriceChild: p.next_price_child ?? null, nextPriceInfant: p.next_price_infant ?? null,
         sort: p.sort ?? 100,
       })).sort((a: any, b: any) => (a.sort - b.sort) || String(a.code).localeCompare(b.code))
       return J({ ok: true, products })
@@ -220,10 +231,11 @@ serve(async (req) => {
       const avail = await sellableFor(date, dep, holdId)
       if (avail < a + c) return J({ ok: false, error: "Not enough seats left" }, 409)
 
-      // Price from the catalog (null price = POA → 0 owing, desk follows up).
-      const pa = product.price_adult, pc = product.price_child, pi = product.price_infant ?? 0
-      const poa = (a > 0 && pa == null) || (c > 0 && pc == null)
-      const total = poa ? 0 : Math.round(((a * (pa ?? 0)) + (c * (pc ?? 0)) + (i * (pi ?? 0))) * 100) / 100
+      // Price from the catalog, resolved by FLIGHT date (seasonal pricing) —
+      // null price in the applicable season = POA → 0 owing, desk follows up.
+      const pr = priceFor(product, date)
+      const poa = (a > 0 && pr.adult == null) || (c > 0 && pr.child == null)
+      const total = poa ? 0 : Math.round(((a * (pr.adult ?? 0)) + (c * (pr.child ?? 0)) + (i * (pr.infant ?? 0))) * 100) / 100
 
       // Canonical booking — SAME shape as the desk's "New booking" (rezdyNewBookingSave).
       const order = "TS-" + Date.now().toString(36).toUpperCase().slice(-7) + Math.floor(Math.random() * 36).toString(36).toUpperCase()

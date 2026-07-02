@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v29.28';
+const APP_VER='v29.29';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -22020,6 +22020,15 @@ window.platformProducts=function(){
   return (S._products||[]).slice().sort(function(a,b){return ((+a.sort||100)-(+b.sort||100))||String(a.id).localeCompare(String(b.id));});
 };
 window.platformProduct=function(code){code=String(code||'').toUpperCase();return (S._products||[]).find(function(p){return String(p.id).toUpperCase()===code;})||null;};
+// SEASONAL price resolution: the price for a product on a given FLIGHT date.
+// If next_from is set and the tour date is on/after it, the next-season price
+// set applies (null price in the active set = POA). ISO string compare is safe.
+window.platformPriceFor=function(p,date){
+  if(!p)return {adult:null,child:null,infant:0,next:false};
+  var nx=!!(p.next_from&&date&&String(date)>=String(p.next_from).slice(0,10));
+  return nx?{adult:p.next_price_adult,child:p.next_price_child,infant:(p.next_price_infant!=null?p.next_price_infant:0),next:true}
+           :{adult:p.price_adult,child:p.price_child,infant:(p.price_infant!=null?p.price_infant:0),next:false};
+};
 // Upsert one product row (id = product code).
 window.platformSaveProduct=async function(p){
   if(!p||!p.id)return null;
@@ -22058,12 +22067,13 @@ window.platformReloadProductsLive=function(){
 };
 
 // ── Settings ▸ Operations ▸ Products editor ─────────────────────────────────
-var _PROD_FIELDS={name:'s',dest_short:'s',price_adult:'n',price_child:'n',price_infant:'n',duration_min:'i',sort:'i',description:'s'};
+var _PROD_FIELDS={name:'s',dest_short:'s',price_adult:'n',price_child:'n',price_infant:'n',duration_min:'i',sort:'i',description:'s',next_from:'d',next_price_adult:'n',next_price_child:'n',next_price_infant:'n'};
 window.platformProdSet=function(code,field,val){
   var p=platformProduct(code);if(!p||!(field in _PROD_FIELDS))return;
   var t=_PROD_FIELDS[field];
   if(t==='n'){var n=parseFloat(val);p[field]=isFinite(n)?n:null;}
   else if(t==='i'){var k=parseInt(val,10);p[field]=isFinite(k)?k:null;}
+  else if(t==='d'){var ds=String(val||'').slice(0,10);p[field]=/^\d{4}-\d{2}-\d{2}$/.test(ds)?ds:null;}
   else p[field]=String(val||'');
   platformSaveProduct(p);
 };
@@ -22104,14 +22114,15 @@ function renderAdminProducts(){
   var ist='padding:6px 8px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text);font-size:12px';
   var h='<div class="card"><div class="st" style="margin-bottom:6px">Products &amp; Pricing</div>'+
     '<p style="font-size:12px;color:var(--text3);margin:-2px 0 12px;line-height:1.5">The commercial catalog behind the booking platform: customer-facing name, per-passenger prices (NZD incl. GST), standard departure times and public visibility. '+
-    '<b>Public ✓</b> = offered on the direct booking page. Fuel/burn stays in the ⛽ Fuels tab. Requires <code>products.sql</code> applied in Supabase.</p>';
+    '<b>Public ✓</b> = offered on the direct booking page. <b>Next-season prices</b> apply automatically to flights on/after the From date (both here and on the public page). Fuel/burn stays in the ⛽ Fuels tab. Requires <code>products.sql</code> applied in Supabase.</p>';
   if(!list.length){
     h+='<div style="text-align:center;padding:18px 8px;color:var(--text3);font-size:13px">No products yet.'+
       '<div style="margin-top:12px"><button class="btn" onclick="window.platformProdSeed()">Seed from built-in product list</button></div></div>';
   } else {
-    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:920px">'+
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1280px">'+
       '<tr style="color:var(--text3);text-align:left"><th style="padding:4px 6px">Code</th><th style="padding:4px 6px">Name</th><th style="padding:4px 6px">Dest</th>'+
       '<th style="padding:4px 6px">Adult $</th><th style="padding:4px 6px">Child $</th><th style="padding:4px 6px">Infant $</th>'+
+      '<th style="padding:4px 6px;border-left:1px solid var(--border2)">From</th><th style="padding:4px 6px">Next A$</th><th style="padding:4px 6px">Next C$</th><th style="padding:4px 6px;border-right:1px solid var(--border2)">Next I$</th>'+
       '<th style="padding:4px 6px">Times (comma-sep)</th><th style="padding:4px 6px">Min</th><th style="padding:4px 6px">Sort</th><th style="padding:4px 6px">Public</th><th></th></tr>';
     list.forEach(function(p){
       var code=esc(p.id),cj=String(p.id).replace(/[^A-Z0-9_-]/gi,'');
@@ -22122,12 +22133,16 @@ function renderAdminProducts(){
         '<td style="padding:4px 6px"><input id="pr_'+cj+'_pa" type="number" min="0" step="1" value="'+(p.price_adult!=null?esc(p.price_adult):'')+'" placeholder="POA" onchange="window.platformProdSet(\''+cj+'\',\'price_adult\',this.value)" style="'+ist+';width:70px"></td>'+
         '<td style="padding:4px 6px"><input id="pr_'+cj+'_pc" type="number" min="0" step="1" value="'+(p.price_child!=null?esc(p.price_child):'')+'" placeholder="POA" onchange="window.platformProdSet(\''+cj+'\',\'price_child\',this.value)" style="'+ist+';width:70px"></td>'+
         '<td style="padding:4px 6px"><input id="pr_'+cj+'_pi" type="number" min="0" step="1" value="'+(p.price_infant!=null?esc(p.price_infant):'')+'" onchange="window.platformProdSet(\''+cj+'\',\'price_infant\',this.value)" style="'+ist+';width:60px"></td>'+
+        '<td style="padding:4px 6px;border-left:1px solid var(--border2)"><input id="pr_'+cj+'_nf" type="date" value="'+esc(p.next_from?String(p.next_from).slice(0,10):'')+'" onchange="window.platformProdSet(\''+cj+'\',\'next_from\',this.value)" style="'+ist+';width:128px"></td>'+
+        '<td style="padding:4px 6px"><input id="pr_'+cj+'_na" type="number" min="0" step="1" value="'+(p.next_price_adult!=null?esc(p.next_price_adult):'')+'" placeholder="POA" onchange="window.platformProdSet(\''+cj+'\',\'next_price_adult\',this.value)" style="'+ist+';width:70px"></td>'+
+        '<td style="padding:4px 6px"><input id="pr_'+cj+'_nc" type="number" min="0" step="1" value="'+(p.next_price_child!=null?esc(p.next_price_child):'')+'" placeholder="POA" onchange="window.platformProdSet(\''+cj+'\',\'next_price_child\',this.value)" style="'+ist+';width:70px"></td>'+
+        '<td style="padding:4px 6px;border-right:1px solid var(--border2)"><input id="pr_'+cj+'_ni" type="number" min="0" step="1" value="'+(p.next_price_infant!=null?esc(p.next_price_infant):'')+'" onchange="window.platformProdSet(\''+cj+'\',\'next_price_infant\',this.value)" style="'+ist+';width:60px"></td>'+
         '<td style="padding:4px 6px"><input id="pr_'+cj+'_tm" type="text" value="'+esc((p.times||[]).join(', '))+'" placeholder="08:00, 09:30" onchange="window.platformProdTimes(\''+cj+'\',this.value)" style="'+ist+';width:150px"></td>'+
         '<td style="padding:4px 6px"><input id="pr_'+cj+'_dm" type="number" min="0" step="5" value="'+(p.duration_min!=null?esc(p.duration_min):'')+'" onchange="window.platformProdSet(\''+cj+'\',\'duration_min\',this.value)" style="'+ist+';width:56px"></td>'+
         '<td style="padding:4px 6px"><input id="pr_'+cj+'_so" type="number" step="10" value="'+(p.sort!=null?esc(p.sort):'')+'" onchange="window.platformProdSet(\''+cj+'\',\'sort\',this.value)" style="'+ist+';width:56px"></td>'+
         '<td style="padding:4px 6px;text-align:center"><input type="checkbox" '+(p.active?'checked':'')+' onchange="window.platformProdActive(\''+cj+'\',this.checked)"></td>'+
         '<td style="padding:4px 6px"><button onclick="window.platformProdDel(\''+cj+'\')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px" title="Delete">✕</button></td></tr>';
-      h+='<tr><td></td><td colspan="10" style="padding:0 6px 6px"><input id="pr_'+cj+'_ds" type="text" value="'+esc(p.description||'')+'" placeholder="Short public description (optional)" onchange="window.platformProdSet(\''+cj+'\',\'description\',this.value)" style="'+ist+';width:100%;font-size:11px;color:var(--text2)"></td></tr>';
+      h+='<tr><td></td><td colspan="14" style="padding:0 6px 6px"><input id="pr_'+cj+'_ds" type="text" value="'+esc(p.description||'')+'" placeholder="Short public description (optional)" onchange="window.platformProdSet(\''+cj+'\',\'description\',this.value)" style="'+ist+';width:100%;font-size:11px;color:var(--text2)"></td></tr>';
     });
     h+='</table></div>';
   }
