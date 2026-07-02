@@ -1,119 +1,124 @@
-# Architecture Review — TrueSouth FMS v28.90
+# Architecture Review — TrueSouth FMS v29.43 (nightly sweep, 3 Jul 2026)
 
-Nightly automated sweep. First full sweep since **v28.55**; covers the undocumented
-**v28.56 → v28.89** cycle, whose headline work was the **customer weather-link system**
-(`modules/wxlinks.js` + the standalone `wx.html` customer page): a pilot makes a weather call,
-the desk copies a unique per-booking link (`wx.html?t=token`) and sends it to the customer,
-and the customer's acknowledgement / pickup choice flows back and auto-ticks the booking's Wx.
-Surrounding work in the cycle: self-drive toggle that overrides the pickup location, the
-bookings card showing pickup time, weather-call reasons rename (Visibility → Poor Visibility,
-+ Turbulence), a required next-best-day before a cancellation, multi-language (15-language) wx
-page with RTL, leave-cancellation-needs-approval (reverts roster on approve), and the April-2027
-10-Year-Anniversary header.
+First full sweep since **v28.90**; covers the **v28.91 → v29.42** cycle. That cycle's headline
+work is the **bespoke booking platform** (Phases 0–1): native bookings store (`modules/platform.js`
+/ `ts_native_bookings`), availability engine + session holds (`modules/availability.js` /
+`ts_session_holds`), product catalog with seasonal prices + summer/winter timetables
+(`ts_products`, Settings ▸ Operations ▸ Products), the `platform-book` edge function (the public
+funnel's only door), and the standalone public booking page **book.html** — v29.41 wired true
+Rezdy live-seat availability into it and v29.42 polished the product cards. Around it: roster
+Day|Week|Month views + iPhone fits (v29.32–35), Records browse-grid Tab flow + landings-by-location
+(v29.33/36), calendar day-step scroll hold + dimmed-snapshot loading (v29.37–38), per-aircraft
+maintenance log notes (v29.39), and the Declared-vs-Loadsheet weights stats panel (v29.40).
 
 ## Scope & method
-- Recurring bug classes checked: per-seat field-map desync (the 7 `S.form` maps must move
-  together on a seat move/swap), realtime mutate-without-broadcast, W&B/CoG NaN guards, XSS
-  (unescaped booking/customer/user text into innerHTML), date/UTC off-by-one, duplicate
-  top-level declarations, focus-clobbering full renders, permission gating, leave-day counting.
-- Method: read the new `wxlinks.js` module in full; two parallel deep-audit reviewers — (a) the
-  weather-link/self-drive/pickup layer (`wxlinks.js` / `rezdy.js` / `rezdy_b.js` / `wx.html`)
-  and (b) the leave-cancellation-approval + roster-revert path (`leave.js`); plus direct
-  verification of the loadsheet per-seat-map move/swap handlers (`admin.js`) and repo-wide greps
-  for the date/XSS/dup-decl classes.
-- Tests: `python3 build.py` (module-presence + top-level duplicate-declaration scan) → clean,
-  no collisions; inline `<script>` blocks (4) `node --check` → **0 errors**; `index.html`
-  rebuilt at **26,791 lines / 3,663 KB**, carrying `APP_VER='v28.90'`. (No live mutation; prod
-  https://truesouth.netlify.app serves the deployed v28.89 — this sweep's v28.90 is local/unpushed.)
+- Recurring classes checked: per-seat 7-map desync, mutate-without-broadcast, W&B/NaN guards, XSS
+  (booking/customer/user text into innerHTML), date/UTC off-by-one, duplicate top-level
+  declarations, focus-clobbering renders, permission gating.
+- Focus areas read in full: `book.html`, `supabase/functions/platform-book/index.ts`,
+  `modules/platform.js`, `modules/availability.js` (the public-facing layer — highest stakes),
+  plus targeted reads of the v29.32–v29.40 change sites (`admin.js` statLoadDeclared,
+  `maintenance.js` per-tail notes, `rezdy_b/c.js` calendar snapshot, `shell.js` scroll carry,
+  `roster.js` views, `flightrecord.js` browse-grid edit) and re-verification of all five
+  loadsheet per-seat move/swap handlers in `admin.js`.
+- Tests: `python3 build.py` → clean, no duplicate-declaration warnings; inline `<script>` blocks
+  (4 in index.html + 1 in book.html) `node --check` → **0 errors**; `index.html` rebuilt at
+  **27,927 lines / 3,752 KB**, `APP_VER='v29.43'`. (No live checks this run — browser tools were
+  unavailable in the session; nothing in the changes touches boot/login paths.)
 
-## Bugs found & fixed (this sweep → v28.90)
+## Bugs found & fixed (this sweep → v29.43) — all in book.html (public page)
 
-1. **[Low · XSS/consistency] Order number interpolated raw into inline `onclick` handlers in the
-   weather-link modal.** In `wxlinks.js` `_wxLinkModal`, the **Copy** button (then ~L218) already
-   built its `onclick` with a JS-escaped order (`_wxEsc(order).replace(/'/g,"\\'")`), but the
-   sibling buttons — **Mark sent · WhatsApp/Email** (`wxMarkSent`), **Reset to live**
-   (`wxResetLink`) and **Clear history** (`wxClearHistory`) — interpolated the bare `order`
-   straight into `onclick="...('+order+'...)"`. Rezdy order numbers are alphanumeric (no quotes),
-   so the practical risk was near-nil, but the asymmetry was a latent handler-breakage / injection
-   gap if an order value ever carried a quote. Fixed by computing one JS-string-safe value
-   (`var oj=String(order).replace(/\\/g,'\\\\').replace(/'/g,"\\'")`) once and using it in all
-   five inline handlers (Copy, both Mark-sent, Reset, Clear-history). Pure consistency hardening;
-   no behaviour change for normal order numbers.
+1. **[Med · race/leak] `placeHold()` raced the release against the new hold.** The old hold's
+   `release` and the new `hold` were fired concurrently, so (a) with tight seats the new hold
+   could be spuriously rejected ("Not enough seats") because the not-yet-released old hold still
+   counted against availability, and (b) two rapid changes (e.g. clicking +pax twice) could let a
+   STALE hold response land after a newer one and overwrite `HOLD` — the newer hold's id was then
+   lost and never released, blocking seats for other customers for 15 min. Fixed: release is now
+   awaited before the hold is requested, and a `HOLDSEQ` token ensures only the latest response
+   wins — a superseded response releases its own hold instead of leaking it.
+2. **[Low · injection-hardening] Product id / departure time interpolated into inline `onclick`
+   JS strings with HTML-escaping only.** `esc()` doesn't escape single quotes, so a `'` in a
+   product id would break out of `pickProd('…')` (same latent class as the v28.90 wx-modal fix;
+   practical risk ~nil — ids are admin-set codes, times are server HH:MM). Added `jsq()` (JS-string
+   escape) applied inside `esc()` at both sites.
+3. **[Low · UX/validation] Adults+children could exceed the 13-seat combined cabin cap
+   client-side** (each capped at 13 individually), only failing at submit with the server's
+   "Invalid passenger count". `cnt()` now clamps the combined a+c at 13 (matching the edge fn's
+   `MAX_PAX`), so the limit is enforced where the customer sets it.
 
 ## Verified clean (no changes needed)
 
-- **Weather-link / self-drive / pickup layer** — all four target classes clean.
-  Every customer/user string (`pax_name`, `dep_label`, `dep_time`, pickup location, weather-call
-  comment, event labels, `e.by`) is escaped at the render leaf with `_wxEsc`/`_rzEsc`/`esc`; the
-  public `wx.html` sets `pax_name` via `textContent` and deliberately does NOT render the internal
-  `wx_comment` to the customer (the v28.89 change). Every state-mutating handler persists +
-  broadcasts: `wxSubmit`/`wxClear` → `pickupSave(true)`+`_rzPickupBroadcast()`+`wxSyncDep()`;
-  `rezdyBookingSelfDrive`/`pickupSetLocation` → `pickupSave(true)`; `_wxProcessActions` →
-  `pickupSave(true)` only when dirty; the `wx*` row writers all `sbU('ts_wx_links',[row])` and the
-  10 s poll + realtime reconverge other devices. All `toISOString().slice(0,10)` sites in the
-  layer are guarded `_rIso`/`_todayLocal` fallbacks; `_wxNextDays` (next-best-day chips) uses
-  `_rIso` on a local-midnight base. NaN/null guards present throughout (`_wxSnapFor`, `wxSyncDep`,
-  `_wxEvTime` `isNaN` guard, try/catch around `_wxProcessActions`).
-- **Loadsheet per-seat field maps** — clean. Every move/swap/bump handler in `admin.js`
-  (`tapFormSeat`, `lsDropOnSeat`, `lsDropOnUnalloc`, `tapDropUnallocated`, `dropFormSeat`) moves
-  **all 7 maps together** (`names`, `seats`, `bags`, `infantNames`, `paxGroups`, `paxType`,
-  `paxPaymentReq`) and calls `autoSaveLS()` to persist+broadcast. No map left behind (the
-  recurring TO-PAY/child/infant-orphan bug class).
-- **Leave cancellation-approval + roster revert** — clean. The new `lvApproveCancel` reverts the
-  roster via `_lvUnstampRoster` → `_rosterApplyAndSave` (merge-before-write, `_RDEL` deltas — no
-  last-writer-wins blob overwrite); approve/decline-cancel are double-gated by `_lvCanApprove(role)`
-  **and** `_lvCanApproveReq(req)` (direct-reports scoping). Leave-day counts read the persisted
-  `S.roster` and exclude `{rdo,off}`. All output `_lvEsc`-escaped; all local dates via `_rIso`.
-- **Duplicate top-level declarations** — `build.py` column-0 scan across all modules: none.
-- **Date/UTC** — repo-wide, every `toISOString().slice(0,10)` is either a guarded
-  `_rIso`/`_todayLocal` fallback or a deliberate UTC use (`maintenance.js` `Date.UTC` round-trip;
-  `shared.js` `_fetchSince` lower-bound). No bare local-date off-by-one.
+- **platform-book edge function** — validates date (`DATE_RE`, ≥ NZ today), dep (`DEP_RE`),
+  product existence + timetable membership server-side; pax counts clamped 1..13 combined, weights
+  clamped 0..250, all strings length-clamped via `clean()`; hold TTL enforced server-side on every
+  read (`expires_at` check); seat check re-runs at book time excluding only the caller's own hold;
+  hold ids carry 8 random UUID chars (not guessable); errors return generic messages, no secret
+  leakage; Rezdy-unreachable falls back to the conservative fleet guard. Seasonal `priceFor` /
+  winter `timesFor` use plain ISO-string comparison (no UTC parse) — consistent with the client's
+  `tierFor` and platform.js's `platformPriceFor`/`platformIsWinter` (same string compares, same
+  wrap-over-year-end window logic). `book.html`'s `todayNZ()` uses `Pacific/Auckland` correctly.
+- **book.html rendering** — every dynamic value (`p.name`, `p.description`, order, dates, times,
+  pax names/weights, ERR) is `esc()`-escaped at the leaf; prices go through `money()` (numeric).
+  `pagehide` beacon releases an abandoned hold.
+- **platform.js / availability.js** — Products editor sanitises inline-handler ids
+  (`replace(/[^A-Z0-9_-]/gi,'')`) and escapes all field values; product writes propagate via the
+  `ts_products` realtime subscription (no missing broadcast); `_availCompute` clamps ≥0 with
+  null-safe rezdy cap; holds expire client-side on read. No duplicate top-level names introduced.
+- **Declared-vs-Loadsheet stats (v29.40, admin.js)** — passenger names `esc()`-escaped in the
+  top-5 table; `_dwCmpLoading` resets on the error path; zero/infant/co-pilot seats excluded as
+  documented; per-range cache keyed `from|to`.
+- **Per-aircraft maintenance notes (v29.39)** — `<ac>_comment` values escaped at both render
+  sites (log input + search results); writes persist via `saveMaintenance()` (existing broadcast
+  path).
+- **Calendar snapshot + scroll carry (v29.37–38)** — snapshot rendered `pointer-events:none` (no
+  live stale handlers), dropped by all three sub-views on real render; `S._winPendY` cleared on
+  view change and once the grid is on screen (no scroll yank); loading pill escapes the date.
+- **Roster views (v29.32–35)** — all date math is local `Date`+`setDate` with `_rIso` formatting;
+  view choice is deliberately per-device (`ts_roster_view`); leave loader always fetches ≥31 days.
+- **Records browse grid (v29.36)** — `frEditField` persists each edit via `_frSave`; the in-place
+  Flt-h update only touches the unfocused computed cell, falls back to `safeRender` off-grid;
+  all values `_frEsc`-escaped.
+- **Loadsheet per-seat 7-maps** — re-verified: all five handlers (`tapFormSeat`, `lsDropOnSeat`,
+  `lsDropOnUnalloc`, `tapDropUnallocated`, `dropFormSeat`) move/swap all 7 maps together and call
+  `autoSaveLS()`.
+- **Duplicate top-level declarations** — build.py scan: none. **Date/UTC** — no new bare
+  `toISOString().slice(0,10)` sites; remaining matches are comments/guarded fallbacks.
 
-## Open / deferred (low risk, documented — NOT changed this sweep)
+## Open / deferred (documented, NOT changed)
 
-- **New ground/ops modules still not realtime-subscribed** (carried from v28.55): `ts_visitors`,
-  `ts_equipment`, `ts_ops_notices`, `ts_vehicle_prestarts`, `ts_flight_following` write to
-  Supabase + a local cache but have no websocket subscription — a second open device only sees
-  changes on reload or (monitoring) its 30 s poll. The obvious next upgrade: add each table to the
-  realtime reload list + a receiver, mirroring the pickup/roster pattern. Larger change; deferred.
-- **`ts_wx_links` relies on the 10 s poll + (if subscribed) realtime** to converge customer
-  actions across devices; the poll only runs while on the operations/bookings page and the tab is
-  visible. Acceptable, but if `ts_wx_links` is NOT in the realtime publication, a desk on a
-  different section won't see a customer action until they return to bookings. Worth confirming
-  the table is in the realtime publication (see `wx_links.sql` / `realtime_*.sql`).
-- **Leave stamp/unstamp asymmetry (cosmetic, pre-existing):** `_lvUnstampRoster` only clears a
-  cell that still equals the stamped leave code; if `_lvStampRoster` had overwritten a
-  pre-existing *non-off* status, the revert blanks the cell rather than restoring the prior
-  status. Non-destructive of concurrent edits (the data-loss contract holds); the UI copy
-  ("reverts those days to their original state") just slightly overstates fidelity. No fix.
-- **Carried:** `saveAircraftDraft` (admin_b.js) writes `ts_aircraft` without a realtime broadcast
-  (stale W&B specs on other devices until reload); flight records not realtime-synced;
-  breakdown-undo cache (superadmin WIP); `shell.js` login uses innerHTML (app-controlled fields).
-- **Server gating is by permission, not row-ownership** (pre-existing): any `operations` user can
-  delete any loadsheet/manifest; no CSP (incompatible with the inline-handler UI). See
-  ARCHITECTURE_REVIEW_v24.04 §2.
+- **platform-book `hold` doesn't take a `replaceId`** — the client now sequences release→hold, but
+  an edge-fn-side atomic replace (exclude-and-delete the old hold in the hold action) would remove
+  the remaining tiny window and one round-trip. Needs a redeploy; queue with the next edge-fn change.
+- **Rezdy-down fallback can oversell a Rezdy-controlled slot** (documented in the edge fn header):
+  when Rezdy is unreachable the fleet guard can't see Rezdy-channel bookings made in the outage.
+  Accepted coexistence risk per the roadmap's go-live checklist.
+- **`book`/`hold` accept any dep when a product has NO configured times** (`times.length &&` guard)
+  — deliberate fail-soft, but worth revisiting before go-live: an empty timetable + Rezdy outage
+  means any HH:MM books against the fleet guard.
+- **Infant count is uncapped relative to adults** (client and server) — 1 adult + 13 infants would
+  book; desk follows up. Cosmetic.
+- **Carried from earlier sweeps:** 5 ground/ops modules + `ts_wx_links` still poll/reload-only
+  (not realtime-subscribed); `saveAircraftDraft` writes `ts_aircraft` without broadcast; flight
+  records not realtime-synced; server gating by permission not row-ownership; no CSP; RLS
+  migrations need confirming applied live; leave stamp/unstamp fidelity cosmetic.
 
 ## Security posture
-No surviving XSS sinks from the v28.56→v28.89 cycle: customer/booking text is escaped at the
-render leaf throughout (`_wxEsc`/`_rzEsc`/`esc`/`_lvEsc`), the public `wx.html` uses `textContent`
-for the name and withholds the internal comment, and this sweep closed the last raw-`order`
-interpolation in the wx modal handlers. RLS/`has_perm()` policies still depend on Andrew confirming
-the migrations are applied live (carried). New feature tables (`ts_wx_links` and the five
-ground/ops tables) still need their RLS/grants applied — see `wx_links.sql`, `vehicle_prestarts.sql`,
-`ops_notices.sql`, `equipment.sql`, `visitors.sql`, `flight_following.sql`, `vp_delete_own.sql`,
-`fix_feature_table_grants.sql`, `fix_uuid_user_columns.sql`.
+The public booking layer is in good shape: all customer-visible rendering escapes at the leaf, the
+edge function is the only writer (anon has no table writes), inputs are validated/clamped
+server-side, and this sweep closed the last raw-interpolation sites in book.html plus the hold-leak
+race. Standing items: confirm RLS migrations applied live; the go-live checklist in
+PLATFORM_ROADMAP.md (Rezdy-cap coexistence guard) still applies before pointing real traffic at
+book.html. ⚠️ **The book.html fixes do NOT need an edge-fn redeploy** (client-only).
 
-## Git — ⚠️ COMMIT BLOCKED (stale lock + read-only .git, NOT modified)
-Branch `test`, HEAD at `46b307c` (v28.89). A stale **`.git/index.lock`** is present, AND the
-sandbox cannot write into `.git/objects` ("Operation not permitted") — so even the temp-index
-commit trick fails (`unable to write new index file` / `unable to unlink .git/objects/...`). Per
-the standing rule I did **not** delete the lock or touch `.git`. The working tree was ALSO already
-in a large mid-refactor state before this run — the `wx.html` → `modules/wxlinks.js` migration
-shows up as staged deletions of `wx.html`/`wx_links.sql`/`modules/wxlinks.js` alongside untracked
-re-adds, plus `build.py`/`.gitignore`/several-module edits. That is Andrew's pre-existing
-in-progress work, not from this sweep. This sweep's changes are built + syntax-checked + in the
-working tree but **UNCOMMITTED**: `modules/wxlinks.js` (5 escaped onclick handlers + `oj` helper),
-`modules/shared.js` (APP_VER → v28.90), `index.html` (rebuilt), plus this review + the
-`CLAUDE.md`/`MORNING_REPORT.md` updates. **Action for Andrew:** clear `.git/index.lock` (and any
-`.git/HEAD.lock`) manually, review the working tree in GitHub Desktop, sort out the wx-refactor
-staging, commit, then push/merge.
+## Git
+Branch `main`, HEAD `ee11641` (v29.42) at sweep start; working tree matched HEAD. NOTE: the git
+INDEX held a stale staged snapshot (inverse of v29.41–42, likely GitHub Desktop leftovers) and a
+zero-byte `.git/index.lock` appeared during the sweep's read-only `git diff` (sandbox couldn't
+unlink it) — **not deleted, per rule**; the temp-index commit trick sidesteps both. See
+MORNING_REPORT.md for the commit result.
+
+## Previous sweeps (one line each)
+- v28.90 (2 Jul): wx-modal onclick order-escaping; wx/self-drive/pickup + leave-cancel layers clean; commit blocked by lock.
+- v28.55: focus-clobber ids on opsnotices/visitors search; escaping on upload URLs/photos; commit blocked by lock.
+- v28.12: printed-loadsheet pax/PIC name XSS escaped; committed 5023e5b.
+- v27.79: loadsheet lsAc change-aircraft now persists+broadcasts; commit blocked by lock.

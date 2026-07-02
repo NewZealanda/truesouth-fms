@@ -90,7 +90,24 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.40 (latest) — Booking stats: ⚖ Declared vs Loadsheet Weights panel.** In
+- **v29.43 (latest) — nightly sweep: book.html hold race/leak + escaping hardening.**
+  `ARCHITECTURE_REVIEW.md` (rolling) is the latest full sweep — first since v28.90, covers the
+  v28.91→v29.42 booking-platform cycle. Three fixes, all in the public `book.html`: (1) **placeHold
+  race/leak** — release + new hold were fired concurrently, so with tight seats the new hold could
+  be spuriously rejected, and a stale out-of-order hold response could overwrite `HOLD` and LEAK an
+  unreleased 15-min seat block; now sequenced (release awaited first) with a `HOLDSEQ` token so
+  only the latest response wins (a superseded one releases itself). (2) `jsq()` JS-string escaping
+  on the `pickProd`/`pickDep` inline onclick interpolations (same class as the v28.90 wx-modal
+  fix). (3) `cnt()` clamps combined adults+children at 13 (the edge fn's MAX_PAX) client-side.
+  Verified clean: platform-book edge fn (server-side validation/clamps, hold TTL, no secret leaks,
+  price/timetable resolution consistent with client via ISO-string compares), platform.js editor
+  escaping + realtime, v29.40 stats-panel escaping, v29.39 per-tail notes, v29.37–38 calendar
+  snapshot/scroll carry, roster views date math, browse-grid edit persistence, loadsheet 7-maps.
+  build + node --check (4 index blocks + book.html) → 0 errors. Client-only — NO edge-fn redeploy
+  needed. Committed on `main` (Andrew to push). NOTE: v29.41–v29.42 (committed by Andrew's session
+  2 Jul: true Rezdy live-seat availability on book.html; stacked product cards + "from $X"
+  indicative price) are documented in those commit messages + HANDOFF.md.
+- **v29.40 — Booking stats: ⚖ Declared vs Loadsheet Weights panel.** In
   `renderAdminStatistics` (admin.js): an on-demand comparison of what each passenger DECLARED at
   booking (participant weight + 4kg allowance via `_rzDeclared`) against the weight that actually
   flew on the signed loadsheet. `window.statLoadDeclared(from,to)` fetches ts_rezdy_bookings +
