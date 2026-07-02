@@ -782,7 +782,9 @@ function renderCalendar(){
     '<button class="sub-tab '+(_cv==='pilots'?'on':'')+'" onclick="S._calView=\'pilots\';render()">🧑‍✈️ Pilot movements</button>'+
   '</div>';
   var _body=(_cv==='moves')?_rzRenderMovements():(_cv==='pilots')?_rzRenderPilotMovements():_rzRenderSchedule();
-  return _rzDateRow('schedule')+_toggle+_body+_rzModals();
+  // rzCalBody wraps the whole view body (header cards + grid/columns) — rezdySetDate snapshots it
+  // so a day change shows the previous day dimmed in place instead of a "Loading…" flash.
+  return _rzDateRow('schedule')+_toggle+'<div id="rzCalBody">'+_body+'</div>'+_rzModals();
 }
 // GROUND — tier-1 Ground section body (Transport / My Pickups). The Transport/My Pickups/Vehicle
 // Prestart selector is the tier-2 bar (renderGroundSubTabs); this just renders the chosen pickup view.

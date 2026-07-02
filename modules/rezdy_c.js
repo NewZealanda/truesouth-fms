@@ -1060,19 +1060,21 @@ function _rzMaintFerryDir(b){
   return '';
 }
 
+// Smooth day-stepping: keep the PREVIOUS day's calendar body on screen (dimmed, non-interactive,
+// with a loading pill) instead of collapsing to a placeholder — no flash, and the page keeps its
+// height so the scroll position genuinely never moves. Snapshot is taken in rezdySetDate; used by
+// all three calendar sub-views (Bookings grid / Aircraft movements / Pilot movements).
+function _rzCalLoadingHold(){
+  if(!S._calSnap)return null;
+  return '<div style="position:relative">'+
+    '<div style="opacity:.45;pointer-events:none;filter:saturate(.5)">'+S._calSnap+'</div>'+
+    '<div style="position:sticky;top:70px;z-index:70;height:0;text-align:center"><span style="display:inline-block;background:var(--card);border:1px solid var(--border2);border-radius:20px;padding:6px 16px;font-size:12px;font-weight:700;color:var(--text2);box-shadow:0 2px 10px rgba(0,0,0,.18)">Loading '+((typeof _rzDowLabel==='function')?_rzEsc(_rzDowLabel(S.rezdyDate)):_rzEsc(S.rezdyDate||''))+'…</span></div>'+
+    '</div>';
+}
 function _rzRenderSchedule(){
   if(S._schedLoading||!S._schedBlocks){
     if(!S._schedLoading&&!S._schedBlocks&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
-    // Smooth day-stepping: keep the PREVIOUS day's grid on screen (dimmed, non-interactive, with a
-    // loading pill) instead of collapsing to a placeholder — no flash, and the page keeps its
-    // height so the scroll position genuinely never moves. Snapshot is taken in rezdySetDate.
-    if(S._calSnap){
-      return '<div style="position:relative">'+
-        '<div style="opacity:.45;pointer-events:none;filter:saturate(.5)">'+S._calSnap+'</div>'+
-        '<div style="position:sticky;top:70px;z-index:70;height:0;text-align:center"><span style="display:inline-block;background:var(--card);border:1px solid var(--border2);border-radius:20px;padding:6px 16px;font-size:12px;font-weight:700;color:var(--text2);box-shadow:0 2px 10px rgba(0,0,0,.18)">Loading '+((typeof _rzDowLabel==='function')?_rzEsc(_rzDowLabel(S.rezdyDate)):_rzEsc(S.rezdyDate||''))+'…</span></div>'+
-        '</div>';
-    }
-    return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading calendar…</div>';
+    return _rzCalLoadingHold()||'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading calendar…</div>';
   }
   S._calSnap=null;   // real grid is rendering — drop the day-step snapshot
   const blocks=S._schedBlocks||[];
@@ -1657,11 +1659,11 @@ function _rzAcMovements(){
 }
 
 function _rzRenderMovements(){
-  if(S._schedLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading…</div>';
-  if(!S._schedBlocks){
-    if(!S._schedLoading&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
-    return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading movements…</div>';
+  if(S._schedLoading||!S._schedBlocks){
+    if(!S._schedLoading&&!S._schedBlocks&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
+    return _rzCalLoadingHold()||'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading movements…</div>';
   }
+  S._calSnap=null;   // real view is rendering — drop the day-step snapshot
   var legs=_rzAcMovements();
   // Columns: every configured aircraft (+ any that only appear in a leg). No "unallocated".
   var acIds=Object.keys((S&&S.aircraft)||{});
@@ -1753,7 +1755,7 @@ function _rzRenderMovements(){
     nowLine='<div id="rzNowLine" style="position:absolute;left:0;right:0;top:'+_ny+'px;height:2px;background:#ef4444;z-index:60;pointer-events:none;display:'+(_inR?'block':'none')+'"><div style="position:absolute;left:2px;top:-4px;width:8px;height:8px;border-radius:50%;background:#ef4444"></div><div id="rzNowTime" style="position:absolute;right:4px;top:-9px;font-size:9px;font-weight:800;color:#ef4444">'+String(_n.getHours()).padStart(2,'0')+':'+String(_n.getMinutes()).padStart(2,'0')+'</div></div>';
     if(!S._rzNowTimer)S._rzNowTimer=setInterval(_rzTickNowLine,60000);
   }
-  var grid='<div class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+headH+
+  var grid='<div id="rzMovGrid" data-keepscroll="1" class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+headH+
     '<div style="display:flex;position:relative">'+axis+colsH+nowLine+'</div></div></div>';
   return hdr+grid;
 }
@@ -1864,8 +1866,11 @@ function _rzPilotMovements(){
   return byPilot;
 }
 function _rzRenderPilotMovements(){
-  if(S._schedLoading)return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading…</div>';
-  if(!S._schedBlocks){if(window.rezdyLoadSchedule)window.rezdyLoadSchedule();return '<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading pilot movements…</div>';}
+  if(S._schedLoading||!S._schedBlocks){
+    if(!S._schedLoading&&!S._schedBlocks&&window.rezdyLoadSchedule)window.rezdyLoadSchedule();
+    return _rzCalLoadingHold()||'<div class="card" style="text-align:center;padding:40px;color:var(--text3)">Loading pilot movements…</div>';
+  }
+  S._calSnap=null;   // real view is rendering — drop the day-step snapshot
   var byPilot=_rzPilotMovements();var avail=_rzAvailablePilots()||[];
   var codes=[],seen={},nameOf={},offOf={};
   avail.forEach(function(p){if(!seen[p.code]){seen[p.code]=1;codes.push(p.code);}nameOf[p.code]=p.name;offOf[p.code]=!p.rostered;});
@@ -1919,7 +1924,7 @@ function _rzRenderPilotMovements(){
   if(S.rezdyDate===_rzToday()){var _n=new Date(),_nm=_n.getHours()*60+_n.getMinutes(),_inR=(_nm>=_RZ_SCH_START*60&&_nm<=_RZ_SCH_END*60),_ny=(_nm-_RZ_SCH_START*60)*_RZ_PX_PER_MIN;
     nowLine='<div id="rzNowLine" style="position:absolute;left:0;right:0;top:'+_ny+'px;height:2px;background:#ef4444;z-index:60;pointer-events:none;display:'+(_inR?'block':'none')+'"></div>';if(!S._rzNowTimer)S._rzNowTimer=setInterval(_rzTickNowLine,60000);}
   var formH=_rzSchedEditForm();
-  var grid='<div class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+headH+'<div style="display:flex;position:relative">'+axis+colsH+nowLine+'</div></div></div>';
+  var grid='<div id="rzPilotGrid" data-keepscroll="1" class="card" style="padding:0;overflow-x:auto"><div style="display:inline-block;min-width:100%">'+headH+'<div style="display:flex;position:relative">'+axis+colsH+nowLine+'</div></div></div>';
   return hdr+formH+grid;
 }
 // ── Aircraft breakdown & recovery (suggestion only — nothing changes until a plan is confirmed) ────
