@@ -1047,7 +1047,7 @@ function aptOpts(sel, isOther){
     +'<optgroup label="South Island">'+south.map(opt).join('')+'</optgroup>'
     +'<optgroup label="North Island">'+north.map(opt).join('')+'</optgroup>';
 }
-const APP_VER='v29.39';
+const APP_VER='v29.40';
 const AC_COL={
   "ZK-SLA":"#a75aba","ZK-SLB":"#7c7c7c","ZK-SLD":"#48925f","ZK-SLQ":"#4a99d2","ZK-SDB":"#e3683e"
 };
@@ -6927,14 +6927,98 @@ function renderAdminStatistics(){
     }).join('')
     +'</div>':'';
 
+  // ── Declared vs LOADSHEET weights — what each passenger DECLARED at booking (pre-check-in,
+  // incl. the +4kg allowance) lined up against the weight that actually flew on the signed
+  // loadsheet. Matched by passenger name + flight date; pax with no declared weight (or no
+  // name match on that day's bookings) are ignored. Booking history is fetched on demand.
+  var dwH='';
+  (function(){
+    var dates=signed.map(function(s){return s.form&&s.form.date;}).filter(Boolean).sort();
+    if(!dates.length)return;
+    var dFrom=dates[0],dTo=dates[dates.length-1],dwKey=dFrom+'|'+dTo;
+    var cmp=S._dwCmp,inner;
+    if(S._dwCmpLoading){inner='<div style="font-size:12px;color:var(--text3);padding:8px 0">Loading booking history '+dFrom+' … '+dTo+'…</div>';}
+    else if(!cmp||cmp.key!==dwKey){
+      inner='<div style="font-size:12px;color:var(--text3);margin-bottom:8px">Lines every loadsheet passenger up against the weight they declared at booking (before check-in). Passengers with no declared weight, and names that don’t match a booking on the day, are ignored.</div>'
+        +'<button onclick="window.statLoadDeclared(\''+dFrom+'\',\''+dTo+'\')" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border2);background:var(--card);color:var(--text2);font-size:12px;font-weight:700;cursor:pointer">⚖ Compare declared → loadsheet weights ('+dFrom+' … '+dTo+')</button>';
+    } else {
+      var rows=[];
+      signed.forEach(function(s){
+        var f=s.form,a2=S.aircraft[f.ac];if(!a2||!f.date)return;
+        var isCp=!!f.coPilot;
+        for(var i=1;i<a2.seats.length;i++){
+          var nm=((f.names||{})[i]||'').trim();if(!nm)continue;
+          if(i===1&&isCp)continue;
+          if((f.infantNames||{})[i])continue;
+          var wt=parseFloat((f.seats||{})[i]||0);if(!wt)continue;
+          var typ=(f.paxType||{})[i]||'A';
+          if(sf.paxType==='A'&&typ!=='A')continue;
+          if(sf.paxType==='C'&&typ!=='C')continue;
+          var dec=cmp.map[f.date+'|'+nm.toLowerCase().replace(/\s+/g,' ')];
+          if(dec==null)continue;
+          rows.push({n:nm,date:f.date,d:dec,w:wt,diff:Math.round((wt-dec)*10)/10});
+        }
+      });
+      if(!rows.length){inner='<div style="font-size:12px;color:var(--text3)">No loadsheet passengers matched a declared weight in this range.</div>';}
+      else{
+        var avgD=rows.reduce(function(t,r){return t+r.d;},0)/rows.length;
+        var avgW=rows.reduce(function(t,r){return t+r.w;},0)/rows.length;
+        var avgDiff=avgW-avgD;
+        var chg=rows.filter(function(r){return Math.abs(r.diff)>0.5;});
+        var up=chg.filter(function(r){return r.diff>0;});
+        var avgUp=up.length?up.reduce(function(t,r){return t+r.diff;},0)/up.length:0;
+        var top=rows.slice().sort(function(a,b){return Math.abs(b.diff)-Math.abs(a.diff);}).slice(0,5);
+        inner='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:10px">'
+          +statCard('Compared',rows.length,'pax with declared wt','#a78bfa')
+          +statCard('Avg declared',avgD.toFixed(1)+'kg','incl. +4kg allowance')
+          +statCard('Avg on loadsheet',avgW.toFixed(1)+'kg','what actually flew')
+          +statCard('Avg difference',(avgDiff>=0?'+':'')+avgDiff.toFixed(1)+'kg','loadsheet − declared',avgDiff>0.2?'#f87171':'#4ade80')
+          +statCard('Adjusted at check-in',chg.length,Math.round(chg.length/rows.length*100)+'% of compared')
+          +statCard('Heavier than declared',up.length,up.length?('avg +'+avgUp.toFixed(1)+'kg'):'','#f87171')
+          +'</div>'
+          +(top.length?'<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Largest differences</div>'
+            +'<table style="border-collapse:collapse;font-size:12px">'+top.map(function(r){return '<tr><td style="padding:2px 14px 2px 0;color:var(--text3);white-space:nowrap">'+r.date+'</td><td style="padding:2px 14px 2px 0;font-weight:700">'+esc(r.n)+'</td><td style="padding:2px 14px 2px 0;text-align:right;white-space:nowrap">'+r.d.toFixed(0)+' → '+r.w.toFixed(0)+'kg</td><td style="padding:2px 0;text-align:right;font-weight:800;color:'+(r.diff>0?'#f87171':'#4ade80')+'">'+(r.diff>0?'+':'')+r.diff+'kg</td></tr>';}).join('')+'</table>':'')
+          +'<div style="font-size:11px;color:var(--text3);margin-top:8px">A zero difference usually means the passenger wasn’t re-weighed at check-in — the declared figure flowed straight through to the loadsheet.</div>';
+      }
+    }
+    dwH='<div style="padding:12px;background:var(--card2);border-radius:8px;border:1px solid var(--border2);margin-bottom:14px">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">⚖ Declared vs Loadsheet Weights</div>'+inner+'</div>';
+  })();
+
   return filterBar
     +'<div class="card"><div class="st">Statistics</div>'
     +sourceLine
     +statsGrid
     +distH
+    +dwH
     +(acBarH||routeH?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;flex-wrap:wrap">'+(acBarH||'')+(routeH||'')+'</div>':'')
     +'</div>';
 }
+// Fetch booking history for the stats range and build the date|name → declared-weight map used by
+// the Declared-vs-Loadsheet panel. Declared = the participant's stated kg + 4kg allowance
+// (_rzDeclared — the same figure the seatmap/loadsheet starts from). Covers Rezdy + native bookings.
+window.statLoadDeclared=async function(from,to){
+  if(S._dwCmpLoading)return;S._dwCmpLoading=true;render();
+  var map={};
+  function harvest(rows){(rows||[]).forEach(function(r){
+    var b=(r&&r.data)||r||{};var date=r.tour_date||b._tourDate;if(!date)return;
+    var st=String(r.status||b.status||'').toUpperCase();
+    if(st.indexOf('CANCEL')>=0||st.indexOf('ABANDON')>=0)return;
+    (b.items||[]).forEach(function(it){(it&&it.participants||[]).forEach(function(p){
+      if(!p||!p.name||!String(p.name).trim())return;
+      if(String(p.age||'').toLowerCase()==='infant')return;
+      var d=(typeof _rzDeclared==='function')?_rzDeclared(p.weight):(function(){var n=parseFloat(p.weight);return isNaN(n)?null:n+4;})();
+      if(d==null)return;
+      map[String(date)+'|'+String(p.name).trim().toLowerCase().replace(/\s+/g,' ')]=d;
+    });});
+  });}
+  try{
+    var q='&tour_date=gte.'+encodeURIComponent(from)+'&tour_date=lte.'+encodeURIComponent(to);
+    harvest(await sbF('ts_rezdy_bookings',q,'tour_date'));
+    try{harvest(await sbF('ts_native_bookings',q,'tour_date'));}catch(e){}
+  }catch(e){}
+  S._dwCmp={key:from+'|'+to,map:map};S._dwCmpLoading=false;render();
+};
 function renderAdminGDrive(){
   const enabled=S.gdriveEnabled;
   if(!S._woFoldersLoaded){S._woFoldersLoaded=true;if(window.loadWoFolders)window.loadWoFolders();}

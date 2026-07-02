@@ -90,7 +90,17 @@ a seatmap workspace, crew roster, leave management, aircraft maintenance, and no
 - `versions/` — version snapshots.
 
 ## Current state (update this when it changes)
-- **v29.39 (latest) — maintenance log notes are now PER AIRCRAFT.** Bug: the hours-log Notes
+- **v29.40 (latest) — Booking stats: ⚖ Declared vs Loadsheet Weights panel.** In
+  `renderAdminStatistics` (admin.js): an on-demand comparison of what each passenger DECLARED at
+  booking (participant weight + 4kg allowance via `_rzDeclared`) against the weight that actually
+  flew on the signed loadsheet. `window.statLoadDeclared(from,to)` fetches ts_rezdy_bookings +
+  ts_native_bookings for the filtered loadsheets' date span (cancelled/abandoned skipped, infants
+  skipped) → map `date|normalized-name → declared`; the panel matches loadsheet pax by name+date
+  (same seat exclusions as the other stats: co-pilot, infants, empty/zero, paxType filter) and
+  IGNORES pax with no declared weight or no match. Cards: compared n, avg declared, avg loadsheet,
+  avg diff, adjusted-at-check-in count (|diff|>0.5kg), heavier-than-declared (+avg), plus a top-5
+  largest-differences table. Cached per date-range key (`S._dwCmp`), re-fetch on range change.
+- **v29.39 — maintenance log notes are now PER AIRCRAFT.** Bug: the hours-log Notes
   column wrote one shared `comment` per DATE row (`hist` entry) while ttis/starts/landings were
   per-tail keys — editing one aircraft's note changed every aircraft's. Now `saveMaintField` +
   `addMaintEntry` write `<ac>_comment`; the log cell reads the per-tail note falling back to the
